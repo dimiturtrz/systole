@@ -10,6 +10,12 @@ session (teacher + me as learner). These are the grid's "MRI theory" deliverable
 4. [03_work-principle.md](03_work-principle.md) — slice selection, encoding, the echo, the pulse sequence.
 5. [04_k-space.md](04_k-space.md) — the raw data grid and what it means.
 6. [05_to-image.md](05_to-image.md) — Fourier transform → the picture (+ timing & the moving heart).
+7. [06_cardiac-mri.md](06_cardiac-mri.md) — A2: imaging the moving heart (bSSFP cine, gating, short-axis).
+8. [07_artifacts.md](07_artifacts.md) — artifacts as segmentation/EF failure modes.
+9. [08_acdc-dataset.md](08_acdc-dataset.md) — the ACDC dataset (structure, labels, loading).
+
+Then the **cross-modality** theory in [../common/](../common/) — anatomy, ejection
+fraction, geometry/volumetry, segmentation theory, evaluation theory.
 
 Plus:
 - [curriculum.md](curriculum.md) — the ordered study plan (status of each sub-topic).

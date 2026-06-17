@@ -29,20 +29,21 @@ build a scanner or design pulse sequences.*
 calibration) · clinical metric (**EF**) + agreement vs ground truth · the
 clinical-grade gap.
 
-## Coverage checklist (tick as we go)
-**Per modality** — MRI · CT · echo:
-- [ ] acquisition principle
-- [ ] contrast mechanism + intensity (un)calibration
-- [ ] geometry / units / spacing + key artifacts
-- [ ] dataset conventions
-**Cross-cutting:**
-- [ ] geometry: voxel→volume→EF, Simpson's, meshing
-- [ ] segmentation theory (U-Net; 2D/3D; leakage)
-- [ ] evaluation: Dice / Hausdorff / failure analysis / calibration
-- [ ] clinical metric (EF) + validation gap
+## Coverage checklist (tick as we go) — ✅ done · ⬜ pending
+**Per modality** (MRI ✅ theory · CT ⬜ · echo ⬜):
+- [x] acquisition principle — MRI ✅ (`mri/01,02,06`)
+- [x] contrast mechanism + intensity (un)calibration — MRI ✅ (`mri/02`)
+- [x] geometry / units / spacing + key artifacts — MRI ✅ (`mri/07`)
+- [x] dataset conventions — MRI/ACDC ✅ (`mri/08`)
+**Cross-cutting (theory done — reused by all modalities):**
+- [x] geometry: voxel→volume→EF, Simpson's, meshing (`common/geometry-and-volumetry`)
+- [x] segmentation theory: U-Net; 2D/3D; leakage (`common/segmentation-theory`)
+- [x] evaluation: Dice / Hausdorff / failure / calibration (`common/evaluation-theory`)
+- [x] clinical metric (EF) + validation gap (`common/ejection-fraction`, `evaluation-theory`)
 
-**MRI status:** acquisition + contrast + geometry-of-imaging ✅ (A1). Cardiac
-specifics (A2) 🔄. MRI dataset/seg/eval ⬜.
+**MRI status:** **theory complete** — physics (A1), cardiac (A2), artifacts, dataset,
++ all cross-cutting analysis theory. **Remaining = Phase D hands-on (code)**, where the
+artifact/eval theory gets applied to real ACDC data. CT/echo: theory pending (reuse `common/`).
 
 ## "Are we done?" rule
 For our lane, **enough** = Stack A at the depth that **explains the data's failure

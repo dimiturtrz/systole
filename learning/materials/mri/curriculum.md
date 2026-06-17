@@ -19,25 +19,32 @@ Covered in depth (machine + protons + method + k-space + image):
 - [05_to-image.md](05_to-image.md) — Fourier → image, + acquisition timing.
 *(Quiz pending — say "quiz me" to lock it in.)*
 
-### A2 · From MRI to *cardiac* MRI 🔄
-Imaging a moving organ: ECG gating, cine, bSSFP, short-axis stack, anisotropy.
-Partially covered (timing/cine bridge in [05_to-image.md](05_to-image.md)); needs its
-own writeup. IMAIOS e-MRI Ch.13 = Cardiac MRI.
+### A2 · From MRI to *cardiac* MRI ✅
+Imaging a moving organ: bSSFP cine, ECG gating (prospective/retrospective), segmented
+k-space, short-axis stack, ED/ES, anisotropy → 2D. → [06_cardiac-mri.md](06_cardiac-mri.md).
+
+### A3 · Artifacts (failure modes) ✅
+Motion/ghosting, bSSFP banding, partial volume, flow, Gibbs, bias field, aliasing — as
+segmentation/EF failure modes. → [07_artifacts.md](07_artifacts.md). *(Applied for real
+in Phase D failure analysis.)*
 
 ---
 
-## Phase B — The heart & the measurement
-- **B1 · Cardiac anatomy & the cardiac cycle** ⬜ — chambers, myocardium, ED/ES.
-- **B2 · Ejection fraction — what & why** ⬜ — `EF=(EDV−ESV)/EDV`; CMR as gold standard.
-- **B3 · From image to number — geometry** ⬜ — voxel→volume, Simpson's method.
+## Phase B — The heart & the measurement ✅ (cross-modality → `../common/`)
+- **B1 · Cardiac anatomy & cycle** ✅ → [../common/cardiac-anatomy-and-cycle.md](../common/cardiac-anatomy-and-cycle.md)
+- **B2 · Ejection fraction** ✅ → [../common/ejection-fraction.md](../common/ejection-fraction.md)
+- **B3 · Geometry & volumetry** ✅ → [../common/geometry-and-volumetry.md](../common/geometry-and-volumetry.md)
 
-## Phase C — The data & the task (leads toward code)
-- **C1 · The ACDC dataset** ⬜ — structure, labels, format, splits.
-- **C2 · Segmentation, in theory** ⬜ — U-Net; 2D vs 3D given anisotropy; leakage.
+## Phase C — The data & the task ✅
+- **C1 · The ACDC dataset** ✅ → [08_acdc-dataset.md](08_acdc-dataset.md)
+- **C2 · Segmentation theory** ✅ → [../common/segmentation-theory.md](../common/segmentation-theory.md)
+- **Evaluation theory** ✅ → [../common/evaluation-theory.md](../common/evaluation-theory.md)
 
-## Phase D — Hands-on (code)
-EDA → 2D U-Net baseline → EF pipeline → failure analysis → clinical-grade gap.
-Maps to beads `mri-eda → mri-model → mri-ef`. *Not before the theory above.*
+## Phase D — Hands-on (code) ⬜  ← only thing left
+EDA → 2D U-Net baseline → EF vs GT → **failure analysis** (apply A3 artifacts) →
+clinical-grade gap. Maps to beads `mri-eda → mri-model → mri-ef`.
+**Theory is now prepared; the remaining work is doing D with honest evaluation.**
+First D step: verify ACDC label encoding with `np.unique` on a real mask.
 
 ---
 
