@@ -4,9 +4,9 @@
 """
 import numpy as np
 
-from src.synth import make_volume, ed_es_pair
-from src.measure import ejection_fraction
-from src.evaluate import dice, dice_all
+from src.modalities.mri.synth import make_volume, ed_es_pair
+from src.core.measure import ejection_fraction
+from src.core.evaluate import dice, dice_all
 
 
 def test_synth_shapes():

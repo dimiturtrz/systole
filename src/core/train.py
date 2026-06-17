@@ -1,6 +1,7 @@
 """Minimal training loop. `--synthetic` trains on generated data, so it runs with no real dataset.
 
-Wire the ACDC path (src/data.py) into a real Dataset/DataLoader once data lands.
+Wire a modality loader (e.g. src/modalities/mri/data.py) into a real
+Dataset/DataLoader once data lands.
 """
 import argparse
 
@@ -8,7 +9,7 @@ import argparse
 def train_synthetic(steps=20, device="cpu"):
     import torch
     from monai.losses import DiceCELoss
-    from .synth import make_volume
+    from ..modalities.mri.synth import make_volume
     from .model import build_unet
 
     model = build_unet().to(device)
@@ -35,4 +36,5 @@ if __name__ == "__main__":
     if args.synthetic:
         train_synthetic(steps=args.steps)
     else:
-        print("Real-data training: implement the ACDC Dataset in src/data.py, then wire here.")
+        print("Real-data training: implement the ACDC Dataset in "
+              "src/modalities/mri/data.py, then wire here.")
