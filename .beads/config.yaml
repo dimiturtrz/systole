@@ -54,3 +54,7 @@
 # - github.repo
 
 sync.remote: "git+https://github.com/dimiturtrz/cardiac-imaging.git"
+
+dolt.auto-push: false
+
+export.git-push: false
