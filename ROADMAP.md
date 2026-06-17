@@ -8,6 +8,21 @@ rhythm of *understand the data → look at the data → solve a bounded problem*
 Status tags: ✅ done · 🔄 doing · ⬜ planned. Each cell is meant to leave the repo
 in a presentable, honest snapshot (see README *Status*).
 
+## How this is driven — the circuit
+Field understanding drives the roadmap (I can't fully spec a deliverable before I
+understand the field, so understanding sharpens the plan bottom-up). Each topic runs
+the loop:
+
+1. **Research** — teacher grounds it (internal + web) → `research/` (tracked; cited
+   raw material behind the writeups).
+2. **Theory** — study writeup → `learning/<date>_<topic>.md`.
+3. **Quiz (on demand)** — when I ask, open-form questions on that theory; my answers
+   + honest assessment + score logged into the topic file.
+4. **Sharpen** — update the relevant grid cell; set the next concrete step.
+
+Build log = git history. Theory artifacts = `learning/`. The grid below is the
+current best understanding of the plan, refined each cycle.
+
 ## The grid
 Three modalities × three steps. All three converge on **cardiac function (EF)**, so
 they tell one story, not three. Public datasets exist for every cell — each "problem

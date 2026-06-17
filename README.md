@@ -66,4 +66,6 @@ decisions, the measurement correctness, and the evaluation. The EF/volume math i
 spacing-aware and unit-checked by hand; the metrics and failure ranking are the
 point. What transfers from my audio / acoustic-signal ML background is data-structure
 reasoning (how data correlates along each axis → the right inductive bias) and
-evaluation discipline; the clinical specifics I'm learning as I go.
+evaluation discipline; the clinical specifics I'm learning as I go — via a
+research → theory → quiz → log circuit (see [learning/](learning/) and
+[ROADMAP.md](ROADMAP.md)).
