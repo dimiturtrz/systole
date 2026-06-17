@@ -64,11 +64,6 @@ visualization keeps the theory honest against the actual data; the evaluation
 - Dice per structure + ≥1 failure case shown in README.
 - Pre-public review (secrets / data / honesty). Flip repo public.
 
-## Log
-- **2026-06-17** — Scaffold + restructure. Agent-built skeleton: synthetic fixture,
-  spacing-aware EF/volume math, Dice/Hausdorff/failure ranking, MONAI U-Net factory,
-  synthetic training loop, ACDC NIfTI loader stub. Verified by hand: EF units
-  (EDV > ESV > 0, EF in 0–100%) and self-Dice = 1.0 via smoke tests (3 passed).
-  Reorganised into `core/` + `modalities/mri/`; data root made env-configurable
-  (`CARDIAC_DATA_ROOT`); docs consolidated into README + ROADMAP; project framed as
-  multimodal (cardiac-imaging) on the 3×3 grid above.
+---
+*Build log lives in the git history. Diary / research / per-modality theory
+writeups will live under `notes/` once the first one is written.*
