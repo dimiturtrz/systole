@@ -1,0 +1,10 @@
+torch
+monai
+nibabel
+numpy
+scipy
+scikit-image
+vtk
+matplotlib
+tqdm
+pytest
