@@ -2,6 +2,7 @@ import { SpinSystem } from '../model/SpinSystem';
 import { Simulator } from '../model/Simulator';
 import { Acquisition } from '../model/Acquisition';
 import { directionFromAngles } from '../model/physics';
+import { stageAt } from '../model/sequence';
 import { magnitudeGrid } from '../model/fft';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from '../view/SpinView';
@@ -39,8 +40,8 @@ export class Presenter {
   private peIndex = 0; // phase-encode step counter (gradient changes each TR)
   private peStep = 0; // current phase-encode value, −1…1
 
-  private tr = 2.0; // repetition time (s)
-  private te = 0.5; // echo/readout time after the pulse (s)
+  private tr = 0.5; // repetition time (s) — T1w spin-echo-ish (real MRI: ms–seconds)
+  private te = 0.015; // echo time (s) ≈ 15 ms (real TE is much shorter than TR)
   private speed = 1;
   private cycleTime = 0;
   private readThisCycle = false;
@@ -130,15 +131,12 @@ export class Presenter {
 
   /** Active gradient direction now (slice/phase/freq), or null when idle. */
   private gradientDirNow(): Vec3 | null {
-    const { tr, te } = this;
-    const ct = this.cycleTime;
-    const rfW = Math.max(0.08 * tr, 0.12);
-    const peW = 0.06 * tr;
-    const roHalf = Math.max(0.05 * tr, 0.1);
-    if (ct < rfW) return this.sliceDir; // slice select (during RF)
-    if (ct < rfW + 0.02 * tr + peW) return this.phaseDir; // phase encode
-    if (Math.abs(ct - te) <= roHalf) return this.freqDir; // frequency encode (readout)
-    return null;
+    switch (stageAt(this.tr, this.te, this.cycleTime)) {
+      case 'slice': return this.sliceDir;
+      case 'phase': return this.phaseDir;
+      case 'freq': return this.freqDir;
+      default: return null;
+    }
   }
 
   /** When a gradient is on, color spins by local Larmor (position along its direction). */

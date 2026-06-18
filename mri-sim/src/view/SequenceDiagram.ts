@@ -2,6 +2,8 @@
 // 1) slice select (Gz + RF), 2) phase encode (Gy), 3) frequency encode / readout (Gx + ADC).
 // The active stage is highlighted as the playhead sweeps. View only.
 
+import { seqWindows, stageAt } from '../model/sequence';
+
 export interface SeqState {
   tr: number;
   te: number;
@@ -46,31 +48,28 @@ export function mountSequenceDiagram(): SequenceView {
 
   return {
     draw({ tr, te, cycleTime, peStep }: SeqState): void {
-      const tx = (t: number): number => padL + (Math.max(0, Math.min(t, tr)) / tr) * plot;
+      const w = seqWindows(tr, te);
+      // Real TE ≪ TR → zoom the x-axis to the encode window; the long TR wait is captioned.
+      const span = Math.min(tr, w.roEnd * 1.3);
+      const truncated = tr > span * 1.02;
+      const tx = (t: number): number => padL + (Math.max(0, Math.min(t, span)) / span) * plot;
       const yMid = (i: number): number => padT + i * rowH + rowH / 2;
       const amp = rowH * 0.34;
 
-      // stage windows within the TR
-      const rfW = Math.max(0.08 * tr, 0.12);
-      const peStart = rfW + 0.02 * tr;
-      const peW = 0.06 * tr;
-      const roHalf = Math.max(0.05 * tr, 0.1);
       const ct = cycleTime;
-      let stage: 'slice' | 'phase' | 'freq' | 'idle' = 'idle';
-      if (ct < rfW) stage = 'slice';
-      else if (ct < peStart + peW) stage = 'phase';
-      else if (ct >= te - roHalf && ct <= te + roHalf) stage = 'freq';
+      const stage = stageAt(tr, te, ct);
       const a = (on: boolean): number => (on ? 1 : 0.3);
 
       ctx.clearRect(0, 0, W, H);
       ctx.font = '10px system-ui';
 
       // caption
+      const waitMs = Math.max(0, (tr - ct) * 1000);
       const caption =
         stage === 'slice' ? '1 · slice select  (Gz + RF)' :
         stage === 'phase' ? '2 · phase encode  (Gy)' :
         stage === 'freq' ? '3 · frequency encode / readout  (Gx + ADC)' :
-        '· relaxation / wait';
+        `· relaxation / wait — ${waitMs.toFixed(0)} ms to TR`;
       ctx.fillStyle = stage === 'idle' ? '#7b8a9c' : '#e8edf4';
       ctx.fillText(caption, padL, 13);
 
@@ -98,24 +97,24 @@ export function mountSequenceDiagram(): SequenceView {
 
       // Gz slice-select block during RF (row 1)
       ctx.fillStyle = `rgba(${BLUE},${a(stage === 'slice') * 0.7})`;
-      ctx.fillRect(x0 - 5, yMid(1) - amp, tx(rfW) - x0 + 5, amp);
+      ctx.fillRect(x0 - 5, yMid(1) - amp, tx(w.sliceEnd) - x0 + 5, amp);
 
       // Gy phase-encode blip, height steps with peStep (row 2)
       const peH = amp * 0.9 * peStep;
       ctx.fillStyle = `rgba(${ORANGE},${a(stage === 'phase') * 0.85})`;
-      const gx = tx(peStart);
-      ctx.fillRect(gx, yMid(2) - Math.max(0, peH), tx(peStart + peW) - gx, Math.abs(peH) || 1);
+      const gx = tx(w.peStart);
+      ctx.fillRect(gx, yMid(2) - Math.max(0, peH), tx(w.peEnd) - gx, Math.abs(peH) || 1);
 
       // Gx readout gradient during ADC (row 3)
       ctx.fillStyle = `rgba(${GREEN},${a(stage === 'freq') * 0.7})`;
-      ctx.fillRect(tx(te - roHalf), yMid(3) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
+      ctx.fillRect(tx(w.roStart), yMid(3) - amp, tx(w.roEnd) - tx(w.roStart), amp);
 
       // ADC window (row 4)
       ctx.fillStyle = `rgba(${CYAN},${a(stage === 'freq') * 0.4})`;
-      ctx.fillRect(tx(te - roHalf), yMid(4) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
+      ctx.fillRect(tx(w.roStart), yMid(4) - amp, tx(w.roEnd) - tx(w.roStart), amp);
       ctx.strokeStyle = `rgba(${CYAN},${a(stage === 'freq')})`;
       ctx.lineWidth = 1;
-      ctx.strokeRect(tx(te - roHalf), yMid(4) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
+      ctx.strokeRect(tx(w.roStart), yMid(4) - amp, tx(w.roEnd) - tx(w.roStart), amp);
 
       // TE marker
       ctx.strokeStyle = `rgba(${ORANGE},.8)`;
@@ -134,11 +133,20 @@ export function mountSequenceDiagram(): SequenceView {
       ctx.lineTo(tx(ct), H - padB);
       ctx.stroke();
 
-      // labels
+      // axis-break marker: the plotted span is only the encode window; TR is far later
+      if (truncated) {
+        ctx.fillStyle = '#7b8a9c';
+        ctx.fillText('⋯ wait', W - padR - 38, padT - 9);
+      }
+
+      // labels (ms — real MRI units)
+      const ms = (s: number): string => (s < 1 ? `${(s * 1000).toFixed(s < 0.1 ? 1 : 0)} ms` : `${s.toFixed(2)} s`);
       ctx.fillStyle = '#9aa7b8';
-      ctx.fillText(`TR=${tr.toFixed(1)}s`, W - padR - 56, H - 3);
+      ctx.textAlign = 'right';
+      ctx.fillText(`TR=${ms(tr)}`, W - padR, H - 3);
+      ctx.textAlign = 'left';
       ctx.fillStyle = `rgb(${ORANGE})`;
-      ctx.fillText(`TE=${te.toFixed(2)}s`, padL, H - 3);
+      ctx.fillText(`TE=${ms(te)}`, padL, H - 3);
     },
   };
 }

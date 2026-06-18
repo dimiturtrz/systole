@@ -80,7 +80,7 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     p.start(); // cycleTime 0 → slice-select gradient on
     expect(v.lastColors).toBeDefined();
     expect(v.lastColors!.length).toBeGreaterThan(0);
-    p.tick(0.36); // land in the idle gap between phase-encode and readout (tr=2)
+    p.tick(0.36); // ct well past the readout window (te≈15 ms) → relaxation/wait, no gradient
     expect(v.lastColors).toBeUndefined();
   });
 
