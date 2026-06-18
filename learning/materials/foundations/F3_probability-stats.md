@@ -47,4 +47,31 @@ The loss is a likelihood, softmax is a distribution, evaluation is estimation un
 variance, EF agreement is Bland-Altman. Getting the *statistics* right is what
 separates "a number" from "a trustworthy number" — the whole point of the repo.
 
+## Focused re-lesson (from the F1–F3 quiz misses)
+
+### Softmax is shift-invariant
+```
+softmax(x)_i = exp(x_i) / Σ_j exp(x_j)
+```
+Add the same constant c to **every** logit → it **cancels**:
+```
+softmax(x+c)_i = exp(x_i+c)/Σ exp(x_j+c) = e^c·exp(x_i) / (e^c·Σ exp(x_j)) = softmax(x)_i
+```
+- **Only the *differences* between logits matter**, not their absolute values.
+- **Free numerical-stability trick:** subtract `max(x)` before `exp` (avoid overflow) —
+  valid *because* of shift-invariance.
+- What **does** change softmax: **scaling** the logits (`x/T`, temperature). Shift ≠ scale.
+
+### Cross-entropy = maximum likelihood
+For one example, true class y: `CE = −log(p_y)` (p_y = softmax prob of the true class).
+```
+min −log(p_y)  ⇔  max log(p_y)  ⇔  max p_y   (probability assigned to the truth)
+```
+Minimizing mean CE = **maximizing the likelihood of the training labels** = MLE. So CE
+"secretly maximizes the probability of the correct class."
+- MSE is *also* MLE — but Gaussian (regression); CE is MLE for categorical
+  (classification). Both MLE, different output distribution.
+- **softmax+CE gradient = `p − y`** (predicted minus one-hot truth) — clean + stable;
+  why this pairing is the classification default.
+
 ### (deepen via teaching / quiz on demand)
