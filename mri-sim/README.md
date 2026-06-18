@@ -3,7 +3,8 @@
 Interactive 3D MRI pipeline visualizer (spins → pulse sequence → k-space → image).
 Educational; see [SPEC.md](SPEC.md) for the full design.
 
-**Status: M0** — scene scaffold (grid of magnetization arrows at equilibrium, vtk.js).
+**Status: M1** — animated: 90° RF tip + free precession (spins sweep the transverse
+plane). Engine is pure TS + unit-tested; renderer verified by an asserting visual smoke.
 
 ## Stack
 TypeScript + [vtk.js](https://kitware.github.io/vtk-js/) + Vite. Architecture is
@@ -26,7 +27,7 @@ npm run build    # typecheck + production build (dist/)
 ```
 
 ## Milestones
-M0 scene ✓ · M1 precession + RF tip · M2 slice-select · M3 phase/freq encode ·
+M0 scene ✓ · M1 precession + RF tip ✓ · M2 slice-select · M3 phase/freq encode ·
 M4 k-space fills → live inverse-FFT image (honest, from the spins) · M5 controls + timeline.
 
 *Lives in the cardiac-imaging repo for now; will split to its own repo as it grows.*

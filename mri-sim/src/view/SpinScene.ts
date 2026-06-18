@@ -4,15 +4,15 @@ import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkArrowSource from '@kitware/vtk.js/Filters/Sources/ArrowSource';
 import type { Vec3 } from '../model/types';
-
-const DEG = 180 / Math.PI;
+import { directionToAxisAngleDeg } from '../model/physics';
+import type { SpinView } from './SpinView';
 
 /**
  * The VIEW: draws spins as arrow glyphs via vtk.js. No physics here.
- * M0: one arrow actor per spin (simple + reliable; revisit Glyph3DMapper /
- * instancing for large grids). Renderer is swappable behind this class.
+ * M0/M1: one arrow actor per spin (simple + reliable; revisit instancing for large
+ * grids). Renderer is swappable behind the SpinView interface.
  */
-export class SpinScene {
+export class SpinScene implements SpinView {
   private readonly renderer: any;
   private readonly renderWindow: any;
   private readonly arrowSource: any;
@@ -28,47 +28,41 @@ export class SpinScene {
 
   /** Build one arrow actor per spin, oriented along its magnetization vector. */
   renderSpins(positions: Vec3[], magnetization: Vec3[]): void {
-    try {
-      const scale = 0.9;
-      for (let k = 0; k < positions.length; k++) {
-        const mapper = vtkMapper.newInstance();
-        mapper.setInputConnection(this.arrowSource.getOutputPort());
-        const actor = vtkActor.newInstance();
-        actor.setMapper(mapper);
-        actor.getProperty().setColor(0.36, 0.82, 0.77);
-        actor.setScale(scale, scale, scale);
-        actor.setPosition(...positions[k]);
-        this.orientAlong(actor, magnetization[k]);
-        this.renderer.addActor(actor);
-        this.actors.push(actor);
-      }
-
-      this.renderer.resetCamera();
-      const cam = this.renderer.getActiveCamera();
-      cam.azimuth(35);
-      cam.elevation(-25);
-      this.renderer.resetCameraClippingRange();
-      this.renderWindow.render();
-      // eslint-disable-next-line no-console
-      console.log(`[mri-sim] rendered ${this.actors.length} spin arrows`);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[mri-sim] renderSpins failed:', e);
+    const scale = 0.9;
+    for (let k = 0; k < positions.length; k++) {
+      const mapper = vtkMapper.newInstance();
+      mapper.setInputConnection(this.arrowSource.getOutputPort());
+      const actor = vtkActor.newInstance();
+      actor.setMapper(mapper);
+      actor.getProperty().setColor(0.36, 0.82, 0.77);
+      actor.setScale(scale, scale, scale);
+      actor.setPosition(...positions[k]);
+      this.orientAlong(actor, magnetization[k]);
+      this.renderer.addActor(actor);
+      this.actors.push(actor);
     }
+    this.renderer.resetCamera();
+    const cam = this.renderer.getActiveCamera();
+    cam.azimuth(35);
+    cam.elevation(-25);
+    this.renderer.resetCameraClippingRange();
+    this.renderWindow.render();
   }
 
-  /** Rotate an actor so the arrow's +X axis aligns with unit-ish direction d. */
-  private orientAlong(actor: any, d: Vec3): void {
-    const len = Math.hypot(d[0], d[1], d[2]) || 1;
-    const x = d[0] / len, y = d[1] / len, z = d[2] / len;
-    const dot = Math.max(-1, Math.min(1, x)); // dot with +X axis
-    const angle = Math.acos(dot) * DEG;
-    // rotation axis = cross(+X, d) = (0, -z, y)
-    let ax = 0, ay = -z, az = y;
-    if (Math.hypot(ax, ay, az) < 1e-6) {
-      // d parallel to ±X: pick any perpendicular axis
-      ay = 1;
+  /** Re-orient existing arrows to new magnetization (per frame). */
+  updateSpins(magnetization: Vec3[]): void {
+    const n = Math.min(this.actors.length, magnetization.length);
+    for (let k = 0; k < n; k++) {
+      const actor = this.actors[k];
+      actor.setOrientation(0, 0, 0); // reset before applying absolute rotation
+      this.orientAlong(actor, magnetization[k]);
     }
-    actor.rotateWXYZ(angle, ax, ay, az);
+    this.renderWindow.render();
+  }
+
+  /** Rotate an actor so the arrow's +X axis aligns with direction d. */
+  private orientAlong(actor: any, d: Vec3): void {
+    const { axis, angleDeg } = directionToAxisAngleDeg(d);
+    actor.rotateWXYZ(angleDeg, axis[0], axis[1], axis[2]);
   }
 }
