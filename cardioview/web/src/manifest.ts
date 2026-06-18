@@ -8,6 +8,9 @@ export interface HeartEntry {
   pred: Vols;
   gt: Vols;
   glb: { ED?: string; ES?: string };
+  frames?: string[]; // beating-cycle glb files, in time order (if animated)
+  ed_idx?: number; // index into frames for ED (full)
+  es_idx?: number; // index into frames for ES (empty)
 }
 
 const DATA = 'data';

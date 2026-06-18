@@ -15,6 +15,8 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.setViewport({ width: 1000, height: 800 });
 page.on('console', (m) => console.log('[page]', m.text()));
+page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+page.on('requestfailed', (r) => console.log('[reqfail]', r.url(), r.failure()?.errorText));
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await new Promise((r) => setTimeout(r, WAIT));
 

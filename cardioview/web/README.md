@@ -4,11 +4,15 @@ Browser viewer for the segmented hearts — TypeScript + Vite + [vtk.js](https:/
 same stack as `mri-sim`. Pure rendering: all inference/geometry is precomputed offline by
 [`../export_web.py`](../export_web.py) and shipped as **glb meshes + an EF manifest**.
 
-**Status: foundation.** Rotatable 3D colored chambers (LV cavity / myocardium / RV) loaded
-from glb; side panel with **EDV (full) · ESV (empty) · LVEF %** + category, stroke volume,
-GT EF and the pred-vs-GT error, plus a `held-out` / `train-seen` honesty tag. Patient picker
-and ED/ES toggle. Myocardium is re-made translucent in-viewer (glTF drops opacity) with depth
-peeling so the cavities read through it.
+**Status: beating heart.** Rotatable 3D colored chambers (LV cavity / myocardium / RV) with
+a **beating-cycle animation** — every 4D cine frame is segmented offline and the web loops
+them (play/pause, scrub, ED/ES jump). Side panel: **EDV (full) · ESV (empty) · LVEF %** +
+category, stroke volume, GT EF and the pred-vs-GT error, plus a `held-out` / `train-seen`
+honesty tag; chamber color legend top-right. Patient picker. Myocardium is re-made
+translucent in-viewer (glTF drops opacity) with depth peeling so the cavities read through it.
+
+The cycle keeps only **3 actors** (one per chamber) and swaps their polydata per frame
+(extracted from each frame's glTF) — not one actor per frame, which exhausts WebGL.
 
 ## Run
 ```bash
