@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Presenter } from '../../src/presenter/Presenter';
 import type { SpinView } from '../../src/view/SpinView';
+import type { Panels } from '../../src/view/Panels';
+import { diskPhantom } from '../../src/model/phantom';
 import type { Vec3 } from '../../src/model/types';
 
 const REST_Z = Math.cos(0.12); // Presenter's rest tilt → resting proton z-component
@@ -64,5 +66,32 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     p2.tick(0.3);
     const a2 = v2.last()[i];
     expect(Math.hypot(a2[0] - b2[0], a2[1] - b2[1])).toBeGreaterThan(1e-2); // moved
+  });
+});
+
+class FakePanels implements Panels {
+  draws = 0;
+  drawKspace(): void {
+    this.draws++;
+  }
+  drawImage(): void {
+    this.draws++;
+  }
+}
+
+describe('Presenter k-space acquisition (synced to speed)', () => {
+  it('ticking acquires k-space lines (panels redraw); speed 0 freezes acquisition', () => {
+    const panels = new FakePanels();
+    const p = new Presenter(new FakeView(), panels, diskPhantom(8));
+    p.start();
+    const afterStart = panels.draws;
+
+    p.setSpeed(0);
+    p.tick(1.0);
+    expect(panels.draws).toBe(afterStart); // frozen → no new lines
+
+    p.setSpeed(1);
+    p.tick(1.0); // ≥ several LINE_DT of sim time → acquires lines → redraws
+    expect(panels.draws).toBeGreaterThan(afterStart);
   });
 });
