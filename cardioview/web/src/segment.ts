@@ -11,8 +11,17 @@ ort.env.wasm.numThreads = 1; // single-thread: no SharedArrayBuffer / COOP-COEP 
 export class Segmenter {
   private session: ort.InferenceSession | null = null;
 
+  provider = 'wasm';
+
   async load(src: string | Uint8Array): Promise<void> {
-    this.session = await ort.InferenceSession.create(src as any, { executionProviders: ['wasm'] });
+    // Use the visitor's GPU via WebGPU when available; fall back to CPU/wasm otherwise.
+    try {
+      this.session = await ort.InferenceSession.create(src as any, { executionProviders: ['webgpu'] });
+      this.provider = 'webgpu';
+    } catch {
+      this.session = await ort.InferenceSession.create(src as any, { executionProviders: ['wasm'] });
+      this.provider = 'wasm';
+    }
   }
 
   /**

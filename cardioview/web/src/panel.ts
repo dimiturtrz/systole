@@ -115,14 +115,18 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
       for (const f of files) {
         status(`segmenting ${f.name}…`);
         const v = await readNifti(f);
+        const t0 = performance.now();
         const masks = await seg.segmentVolume(v.data, v.d, v.h, v.w, v.spacingYX);
+        const secs = (performance.now() - t0) / 1000;
         const polys = chamberPolys(masks, v.zSpacing);
         const vox = TARGET_MM * TARGET_MM * v.zSpacing;
         const cav = volumeMl(countLabel(masks, 3), vox);
         const myo = volumeMl(countLabel(masks, 2), vox);
         const rv = volumeMl(countLabel(masks, 1), vox);
         const name = uniqueName(f.name, imported);
-        imported.set(name, { name, polys, readout: importedReadout(name, cav, myo, rv) });
+        const ro = importedReadout(name, cav, myo, rv) +
+          `<div style="color:#8aa0b6;">${v.d} slices · ${seg.provider} · ${secs.toFixed(1)} s</div>`;
+        imported.set(name, { name, polys, readout: ro });
         upsertOption(heartSel, name, `${name} (imported)`, IMPORT);
         last = name;
       }
