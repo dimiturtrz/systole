@@ -52,7 +52,7 @@ export class Presenter {
     phantom?: number[][],
     private readonly seq?: SequenceView,
   ) {
-    this.spins = new SpinSystem(6, 6, 1.2, 7, 1.0, 0.12);
+    this.spins = new SpinSystem(8, 8, 1.0, 8, 0.9, 0.12); // 512 spins — batched renderer has the headroom
     this.sim = new Simulator(0.5, 0.12, 2.5);
     this.positions = this.spins.positions;
     this.theta = [...this.spins.theta];

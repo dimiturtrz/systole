@@ -85,19 +85,19 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
   });
 
   it('setSliceAngle selects a different (oblique) slab', () => {
-    const tippedCount = (angle: number): number => {
+    const tippedIdx = (angle: number): number[] => {
       const v = new FakeView();
       const p = new Presenter(v);
       p.setSliceAngle(angle);
       p.start();
       p.tick(0.2); // complete the tip ramp
-      return v.last().filter((m) => Math.abs(m[2]) < 1e-6).length;
+      return v.last().flatMap((m, i) => (Math.abs(m[2]) < 1e-6 ? [i] : []));
     };
-    const axial = tippedCount(0); // slice ⟂ z
-    const oblique = tippedCount(90); // slice ⟂ x → a different set of spins
-    expect(axial).toBeGreaterThan(0);
-    expect(oblique).toBeGreaterThan(0);
-    expect(oblique).not.toBe(axial);
+    const axial = tippedIdx(0); // slice ⟂ z
+    const oblique = tippedIdx(90); // slice ⟂ x → a different set of spins
+    expect(axial.length).toBeGreaterThan(0);
+    expect(oblique.length).toBeGreaterThan(0);
+    expect(oblique).not.toEqual(axial); // different spins selected (set, not just count)
   });
 
   it('Larmor selects the slice height (different Larmor → different slab)', () => {

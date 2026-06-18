@@ -2,9 +2,10 @@ import '@kitware/vtk.js/Rendering/Profiles/Geometry'; // registers the WebGL bac
 import vtkFullScreenRenderWindow from '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow';
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
+import vtkPolyData from '@kitware/vtk.js/Common/DataModel/PolyData';
+import vtkDataArray from '@kitware/vtk.js/Common/Core/DataArray';
 import vtkLineSource from '@kitware/vtk.js/Filters/Sources/LineSource';
 import vtkConeSource from '@kitware/vtk.js/Filters/Sources/ConeSource';
-import vtkSphereSource from '@kitware/vtk.js/Filters/Sources/SphereSource';
 import vtkPlaneSource from '@kitware/vtk.js/Filters/Sources/PlaneSource';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from './SpinView';
@@ -13,61 +14,75 @@ const REST: Vec3 = [0.30, 0.45, 0.85];
 const HOT: Vec3 = [1.0, 0.65, 0.15];
 const SHAFT = 0.7;
 const HEAD = 0.35;
-const HEAD_C = SHAFT + HEAD / 2;
+const HEAD_R = 0.13;
+const K = 6; // arrowhead ring segments
+const PPS = 3 + K; // points per spin: base, shaftEnd, apex, K ring
 
 /**
- * The VIEW: per spin = proton sphere at base + line shaft + cone arrowhead.
- * Shaft uses line endpoints; the arrowhead is ONE shared cone mesh re-placed each frame
- * via a fresh actor matrix (cheap — no geometry rebuild, no rotation accumulation).
+ * The VIEW — BATCHED: every spin (proton dot + line shaft + cone head) is merged into
+ * ONE vtkPolyData with per-point RGBA scalars. One actor, one buffer upload per frame,
+ * GPU coloring — scales to thousands of spins. (Was ~3 actors/spin.)
  */
 export class SpinScene implements SpinView {
   private readonly renderer: any;
   private readonly renderWindow: any;
-  private readonly protonSphere: any;
-  private readonly coneSource: any; // shared head geometry (+X), height HEAD
+  private readonly poly: any;
+  private readonly scalars: any;
   private positions: Vec3[] = [];
-  private lines: any[] = [];
-  private protons: any[] = [];
-  private shafts: any[] = [];
-  private heads: any[] = [];
-  private slicePlane: any; // RF slice plane (flashes on pulse)
+  private pts!: Float32Array;
+  private cols!: Uint8Array;
+  private slicePlane: any;
 
   constructor() {
     const fs = vtkFullScreenRenderWindow.newInstance({ background: [0.06, 0.07, 0.09] });
     this.renderer = fs.getRenderer();
     this.renderWindow = fs.getRenderWindow();
-    this.protonSphere = vtkSphereSource.newInstance({ radius: 0.13, thetaResolution: 8, phiResolution: 8 });
-    this.coneSource = vtkConeSource.newInstance({ height: HEAD, radius: 0.12, resolution: 12, direction: [1, 0, 0], center: [0, 0, 0] });
+    this.poly = vtkPolyData.newInstance();
+    this.scalars = vtkDataArray.newInstance({ name: 'colors', numberOfComponents: 4, values: new Uint8Array(0) });
   }
 
   renderSpins(positions: Vec3[], directions: Vec3[], colors?: Vec3[]): void {
     this.positions = positions;
-    for (let k = 0; k < positions.length; k++) {
-      const p = positions[k];
-      const d = directions[k];
+    const N = positions.length;
+    this.pts = new Float32Array(N * PPS * 3);
+    this.cols = new Uint8Array(N * PPS * 4);
 
-      const pa = vtkActor.newInstance();
-      pa.setMapper(this.mapperFor(this.protonSphere));
-      pa.setPosition(...p);
-      this.renderer.addActor(pa);
-
-      const line = vtkLineSource.newInstance({ point1: [...p], point2: this.along(p, d, SHAFT) });
-      const la = vtkActor.newInstance();
-      la.setMapper(this.mapperFor(line));
-      la.getProperty().setLineWidth(3);
-      this.renderer.addActor(la);
-
-      const ca = vtkActor.newInstance();
-      ca.setMapper(this.mapperFor(this.coneSource));
-      ca.setUserMatrix(arrowMatrix(this.along(p, d, HEAD_C), d));
-      this.renderer.addActor(ca);
-
-      this.protons.push(pa);
-      this.lines.push(line);
-      this.shafts.push(la);
-      this.heads.push(ca);
-      this.applyColor([pa, la, ca], colors?.[k] ?? this.transverseColor(d));
+    // static topology (indices fixed; only point coords + colors change per frame)
+    const verts = new Uint32Array(N * 2); // proton dot at base
+    const lines = new Uint32Array(N * 3); // shaft
+    const polys = new Uint32Array(N * K * 4); // head triangles
+    for (let s = 0; s < N; s++) {
+      const o = s * PPS;
+      verts[s * 2] = 1;
+      verts[s * 2 + 1] = o; // base
+      lines[s * 3] = 2;
+      lines[s * 3 + 1] = o; // base
+      lines[s * 3 + 2] = o + 1; // shaftEnd
+      for (let i = 0; i < K; i++) {
+        const t = s * K * 4 + i * 4;
+        polys[t] = 3;
+        polys[t + 1] = o + 2; // apex
+        polys[t + 2] = o + 3 + i; // ring i
+        polys[t + 3] = o + 3 + ((i + 1) % K); // ring i+1
+      }
     }
+    this.poly.getPoints().setData(this.pts, 3);
+    this.poly.getVerts().setData(verts);
+    this.poly.getLines().setData(lines);
+    this.poly.getPolys().setData(polys);
+    this.poly.getPointData().setScalars(this.scalars);
+
+    const mapper = vtkMapper.newInstance();
+    mapper.setInputData(this.poly);
+    mapper.setScalarVisibility(true);
+    if (mapper.setColorModeToDirectScalars) mapper.setColorModeToDirectScalars();
+    const actor = vtkActor.newInstance();
+    actor.setMapper(mapper);
+    actor.getProperty().setLineWidth(2);
+    actor.getProperty().setPointSize(7);
+    this.renderer.addActor(actor);
+
+    this.writeFrame(directions, colors);
     this.addB0Axis(positions);
 
     this.renderer.resetCamera();
@@ -79,33 +94,69 @@ export class SpinScene implements SpinView {
   }
 
   updateSpins(directions: Vec3[], colors?: Vec3[]): void {
-    const n = Math.min(this.lines.length, directions.length);
-    for (let k = 0; k < n; k++) {
-      const p = this.positions[k];
-      const d = directions[k];
-      this.lines[k].setPoint2(this.along(p, d, SHAFT));
-      this.heads[k].setUserMatrix(arrowMatrix(this.along(p, d, HEAD_C), d));
-      this.applyColor([this.protons[k], this.shafts[k], this.heads[k]], colors?.[k] ?? this.transverseColor(d));
-    }
+    this.writeFrame(directions, colors);
+    this.poly.getPoints().setData(this.pts, 3);
+    this.scalars.setData(this.cols, 4);
+    this.poly.modified();
     this.renderWindow.render();
   }
 
+  /** Fill the merged point + color buffers for the current directions/colors. */
+  private writeFrame(directions: Vec3[], colors?: Vec3[]): void {
+    const N = Math.min(this.positions.length, directions.length);
+    for (let s = 0; s < N; s++) {
+      const p = this.positions[s];
+      const d = directions[s];
+      const [u, v] = perpBasis(d);
+      const base = p;
+      const shaftEnd: Vec3 = [p[0] + d[0] * SHAFT, p[1] + d[1] * SHAFT, p[2] + d[2] * SHAFT];
+      const apex: Vec3 = [p[0] + d[0] * (SHAFT + HEAD), p[1] + d[1] * (SHAFT + HEAD), p[2] + d[2] * (SHAFT + HEAD)];
+      const o = s * PPS;
+      this.setPt(o, base);
+      this.setPt(o + 1, shaftEnd);
+      this.setPt(o + 2, apex);
+      for (let i = 0; i < K; i++) {
+        const a = (i / K) * Math.PI * 2;
+        const c = Math.cos(a) * HEAD_R;
+        const sn = Math.sin(a) * HEAD_R;
+        this.setPt(o + 3 + i, [
+          shaftEnd[0] + c * u[0] + sn * v[0],
+          shaftEnd[1] + c * u[1] + sn * v[1],
+          shaftEnd[2] + c * u[2] + sn * v[2],
+        ]);
+      }
+      const col = colors?.[s] ?? transverseColor(d);
+      const r = (col[0] * 255) | 0, g = (col[1] * 255) | 0, b = (col[2] * 255) | 0;
+      for (let i = 0; i < PPS; i++) {
+        const ci = (o + i) * 4;
+        this.cols[ci] = r;
+        this.cols[ci + 1] = g;
+        this.cols[ci + 2] = b;
+        this.cols[ci + 3] = 255;
+      }
+    }
+  }
+
+  private setPt(i: number, p: Vec3): void {
+    this.pts[i * 3] = p[0];
+    this.pts[i * 3 + 1] = p[1];
+    this.pts[i * 3 + 2] = p[2];
+  }
+
   setSlice(center: Vec3, uHalf: Vec3, vHalf: Vec3): void {
-    if (this.slicePlane) this.renderer.removeActor(this.slicePlane); // re-orient on tilt
+    if (this.slicePlane) this.renderer.removeActor(this.slicePlane);
     const corner = (su: number, sv: number): Vec3 => [
       center[0] + su * uHalf[0] + sv * vHalf[0],
       center[1] + su * uHalf[1] + sv * vHalf[1],
       center[2] + su * uHalf[2] + sv * vHalf[2],
     ];
-    const plane = vtkPlaneSource.newInstance({
-      origin: corner(-1, -1),
-      point1: corner(1, -1),
-      point2: corner(-1, 1),
-    });
+    const plane = vtkPlaneSource.newInstance({ origin: corner(-1, -1), point1: corner(1, -1), point2: corner(-1, 1) });
+    const m = vtkMapper.newInstance();
+    m.setInputConnection(plane.getOutputPort());
     const actor = vtkActor.newInstance();
-    actor.setMapper(this.mapperFor(plane));
+    actor.setMapper(m);
     const prop = actor.getProperty();
-    prop.setColor(0.4, 0.9, 1.0); // RF cyan
+    prop.setColor(0.4, 0.9, 1.0);
     prop.setOpacity(0);
     prop.setLighting(false);
     this.renderer.addActor(actor);
@@ -116,29 +167,6 @@ export class SpinScene implements SpinView {
     if (this.slicePlane) this.slicePlane.getProperty().setOpacity(opacity);
   }
 
-  private mapperFor(source: any): any {
-    const m = vtkMapper.newInstance();
-    m.setInputConnection(source.getOutputPort());
-    return m;
-  }
-
-  private along(p: Vec3, d: Vec3, t: number): Vec3 {
-    return [p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t];
-  }
-
-  private transverseColor(d: Vec3): Vec3 {
-    const t = Math.min(1, Math.hypot(d[0], d[1]));
-    return [
-      REST[0] + (HOT[0] - REST[0]) * t,
-      REST[1] + (HOT[1] - REST[1]) * t,
-      REST[2] + (HOT[2] - REST[2]) * t,
-    ];
-  }
-
-  private applyColor(actors: any[], c: Vec3): void {
-    for (const a of actors) a.getProperty().setColor(c[0], c[1], c[2]);
-  }
-
   private addB0Axis(positions: Vec3[]): void {
     let minX = Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const p of positions) {
@@ -147,38 +175,36 @@ export class SpinScene implements SpinView {
       if (p[2] > maxZ) maxZ = p[2];
     }
     const x = minX - 1.5;
+    const lm = vtkMapper.newInstance();
+    lm.setInputConnection(vtkLineSource.newInstance({ point1: [x, 0, minZ - 1], point2: [x, 0, maxZ + 0.6] }).getOutputPort());
     const la = vtkActor.newInstance();
-    la.setMapper(this.mapperFor(vtkLineSource.newInstance({ point1: [x, 0, minZ - 1], point2: [x, 0, maxZ + 0.6] })));
+    la.setMapper(lm);
     la.getProperty().setColor(0.5, 0.5, 0.55);
     la.getProperty().setLineWidth(2);
     this.renderer.addActor(la);
+    const cm = vtkMapper.newInstance();
+    cm.setInputConnection(vtkConeSource.newInstance({ height: 0.6, radius: 0.2, resolution: 16, center: [x, 0, maxZ + 0.9], direction: [0, 0, 1] }).getOutputPort());
     const ca = vtkActor.newInstance();
-    ca.setMapper(this.mapperFor(this.coneSource));
-    ca.setUserMatrix(arrowMatrix([x, 0, maxZ + 0.9], [0, 0, 1]));
+    ca.setMapper(cm);
     ca.getProperty().setColor(0.5, 0.5, 0.55);
     this.renderer.addActor(ca);
   }
 }
 
-/** Column-major mat4 placing the shared +X cone at `tip`, rotated so +X → unit(d). */
-function arrowMatrix(tip: Vec3, d: Vec3): Float32Array {
-  const len = Math.hypot(d[0], d[1], d[2]) || 1;
-  const b0 = d[0] / len, b1 = d[1] / len, b2 = d[2] / len;
-  let r: number[][];
-  if (1 + b0 < 1e-8) {
-    r = [[-1, 0, 0], [0, -1, 0], [0, 0, 1]]; // d ≈ -X
-  } else {
-    const f = 1 / (1 + b0);
-    r = [
-      [b0, -b1, -b2],
-      [b1, 1 - b1 * b1 * f, -b1 * b2 * f],
-      [b2, -b1 * b2 * f, 1 - b2 * b2 * f],
-    ];
-  }
-  return new Float32Array([
-    r[0][0], r[1][0], r[2][0], 0,
-    r[0][1], r[1][1], r[2][1], 0,
-    r[0][2], r[1][2], r[2][2], 0,
-    tip[0], tip[1], tip[2], 1,
-  ]);
+function transverseColor(d: Vec3): Vec3 {
+  const t = Math.min(1, Math.hypot(d[0], d[1]));
+  return [REST[0] + (HOT[0] - REST[0]) * t, REST[1] + (HOT[1] - REST[1]) * t, REST[2] + (HOT[2] - REST[2]) * t];
+}
+
+/** Two unit vectors perpendicular to unit `d` (and each other). */
+function perpBasis(d: Vec3): [Vec3, Vec3] {
+  const ax: Vec3 = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const u = norm([ax[1] * d[2] - ax[2] * d[1], ax[2] * d[0] - ax[0] * d[2], ax[0] * d[1] - ax[1] * d[0]]);
+  const v: Vec3 = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]];
+  return [u, v];
+}
+
+function norm(a: Vec3): Vec3 {
+  const m = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0] / m, a[1] / m, a[2] / m];
 }
