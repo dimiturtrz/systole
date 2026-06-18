@@ -13,17 +13,17 @@ export function chamberPolys(masks: Uint8Array[], zSpacing: number): (any | null
   for (let slot = 0; slot < SLOT_LABELS.length; slot++) {
     const label = SLOT_LABELS[slot];
     const bin = new Uint8Array(d * SIZE * SIZE);
-    let any = false;
+    let hasVoxels = false;
     for (let z = 0; z < d; z++) {
       const m = masks[z];
       for (let i = 0; i < m.length; i++) {
         if (m[i] === label) {
           bin[z * SIZE * SIZE + i] = 1;
-          any = true;
+          hasVoxels = true;
         }
       }
     }
-    if (!any) continue;
+    if (!hasVoxels) continue;
     const img: any = vtkImageData.newInstance();
     img.setDimensions(SIZE, SIZE, d);
     img.setSpacing([TARGET_MM, TARGET_MM, zSpacing]); // in-plane resampled to 1.5 mm; z as acquired

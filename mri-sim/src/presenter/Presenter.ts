@@ -3,6 +3,7 @@ import { Simulator } from '../model/Simulator';
 import { Acquisition } from '../model/Acquisition';
 import { directionFromAngles } from '../model/physics';
 import { stageAt, seqWindows, phaseEncodeOffset } from '../model/sequence';
+import { dot } from '../model/vec3';
 import { magnitudeGrid } from '../model/fft';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from '../view/SpinView';
@@ -240,6 +241,3 @@ export class Presenter {
   }
 }
 
-function dot(a: Vec3, b: Vec3): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}

@@ -146,11 +146,10 @@ export class HeartViewer {
     const importer = vtkGLTFImporter.newInstance();
     importer.setRenderer(this.renderer);
     try {
-      // loadData resolves on FETCH, but parse (which builds actors) runs after, in an
-      // un-awaited .then — so wait for onReady, else importActors races ahead of parse.
       // loadData resolves on FETCH; parse (builds actors) runs after in an un-awaited .then —
-      // wait for onReady. importActors() realizes the mapper geometry (getInputData is null
-      // until then); we copy the polydata out and remove the actor (keep only our 3).
+      // wait for onReady, else importActors races ahead of parse. importActors() realizes the
+      // mapper geometry (getInputData is null until then); we copy the polydata out and remove
+      // the actor (keep only our 3).
       await new Promise<void>((resolve, reject) => {
         importer.onReady(resolve);
         importer.setUrl(url, { binary: true }).catch(reject);

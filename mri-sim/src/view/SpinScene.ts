@@ -10,6 +10,7 @@ import vtkPlaneSource from '@kitware/vtk.js/Filters/Sources/PlaneSource';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from './SpinView';
 import { transverseColor, SLICE_PLANE, B0_AXIS } from './palette';
+import { cross, norm } from '../model/vec3';
 
 const SHAFT = 0.7;
 const HEAD = 0.35;
@@ -193,12 +194,6 @@ export class SpinScene implements SpinView {
 /** Two unit vectors perpendicular to unit `d` (and each other). */
 function perpBasis(d: Vec3): [Vec3, Vec3] {
   const ax: Vec3 = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
-  const u = norm([ax[1] * d[2] - ax[2] * d[1], ax[2] * d[0] - ax[0] * d[2], ax[0] * d[1] - ax[1] * d[0]]);
-  const v: Vec3 = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]];
-  return [u, v];
-}
-
-function norm(a: Vec3): Vec3 {
-  const m = Math.hypot(a[0], a[1], a[2]) || 1;
-  return [a[0] / m, a[1] / m, a[2] / m];
+  const u = norm(cross(ax, d));
+  return [u, cross(d, u)];
 }
