@@ -24,6 +24,24 @@ k-space filling line-by-line, and the live inverse-FFT → image.
 - Optional: React for the control panel (or plain TS).
 - Self-contained: own `package.json`, `node_modules/`, `dist/` (all gitignored) inside `mri-sim/`.
 
+## Architecture (engine ⟂ renderer — MVP)
+- **Model (pure TS, no rendering):** the simulation engine.
+  - `SpinSystem` — grid of magnetization vectors (Mx,My,Mz) + proton density (from the phantom).
+  - `Sequence` — timeline of events: RF pulse, slice/phase/freq gradients, readout windows.
+  - `Simulator` — steps the state (precession at local field = B₀ + gradients; RF tips; optional T1/T2).
+  - **Honest k-space:** a readout sample = **Σ over spins of density·e^{iφ}**, where φ is the
+    phase each spin accrued from the gradients = **the DFT computed as a sum over spins**.
+    Fill k-space this way → inverse FFT → image. (This is why #3 "physics" and #4 "honest"
+    are one mechanism — the spins carrying phase *is* the transform.)
+  - Pure + testable (unit-test: known phantom → spins → k-space → FFT → recovers phantom).
+- **View (vtk.js + 2D panels):** draws current model state — spin glyphs/arrows, bore, B₀;
+  2D k-space panel; 2D image panel; sequence-diagram timeline. No physics in the view.
+- **Presenter/Controller:** wires UI controls → sequence/sim params; runs the animation loop;
+  pushes model state → view each frame.
+
+Renderer choice: **vtk.js** (relevance + skills); swap-able behind the view interface if
+arrow-animation perf demands Three.js later.
+
 ## Scene elements
 - **Magnet / bore** — static geometry.
 - **B₀** — field direction arrow (along z).
