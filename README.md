@@ -30,34 +30,43 @@ Today only the MRI lane is underway; CT and echo are planned, not done.
 
 ## Layout
 ```
-src/
-  core/                 # shared, modality-agnostic
-    model.py            #   MONAI U-Net factory
-    train.py            #   training loop
-    measure.py          #   volumes + ejection fraction (spacing-aware)
-    evaluate.py         #   Dice / Hausdorff / failure ranking
-    viz.py              #   marching-cubes mesh
-  modalities/
-    mri/                # CT/, echo/ added when each is real (not before)
-      data.py           #   ACDC loader (NIfTI), spacing-aware
-      synth.py          #   synthetic cardiac-like fixture (runs before real data)
+cardioseg/                # pipeline stages, data -> preprocess -> train -> measure
+  data/
+    mri/                  #   CT/, echo/ added when each is real (not before)
+      data.py             #     ACDC loader (NIfTI, spacing-aware) + geometric LV/RV id
+      synth.py            #     synthetic cardiac-like fixture (runs before real data)
+  preprocessing/
+    preprocess.py         #   resample in-plane + z-score; param-keyed disk cache
+  training/
+    model.py              #   MONAI U-Net factory (2D/3D)
+    train.py              #   training loop
+  evaluation/
+    measure.py            #   chamber volumes + ejection fraction (spacing-aware)
+    evaluate.py           #   Dice / Hausdorff / failure ranking
+    losses.py             #   compound Dice + cross-entropy
+  analysis/
+    eda.py                #   ACDC reality-check + data/overlay viz
+    viz.py                #   marching-cubes surface mesh
 tests/
-  test_smoke.py         # end-to-end on the synthetic fixture (no real data needed)
+  unit/                   # pure-function units (geometry, metrics, preprocessing)
+  integration/            # end-to-end on the synthetic fixture (no real data needed)
 ```
 
 ## Quickstart
 ```bash
 pip install -r requirements.txt
 python -m pytest tests/ -q                 # smoke test on synthetic fixture
-python -m src.core.train --synthetic       # train a few steps on synthetic data
+python -m cardioseg.training.train --synthetic   # train a few steps on synthetic data
 ```
 Real data: register for ACDC (Creatis / humanheart-project). Data lives **outside
-the repo** (licensing + size) — keep it under a modality-organised root, e.g.
-`D:/data/volumetric/mri/acdc/`, and point the loader at it:
+the repo** (licensing + size) under a `raw/` ↔ `processed/` split, e.g.
+`D:/data/raw/mri/acdc/` (inputs) and `D:/data/processed/mri/acdc/` (preprocessing
+cache). Point the loader at the raw root:
 ```bash
-export CARDIAC_DATA_ROOT=/path/to/volumetric/mri/acdc
+export CARDIAC_DATA_ROOT=/path/to/raw/mri/acdc          # loader input
+export CARDIAC_PROCESSED_ROOT=/path/to/processed/mri/acdc   # preprocess cache (optional)
 ```
-(falls back to `./data/acdc`, which is gitignored).
+(falls back to `data/raw/mri/acdc`, which is gitignored).
 
 ## How it's built
 Agent-driven build, human-owned judgment — the workflow I use day to day. Coding

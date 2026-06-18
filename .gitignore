@@ -3,6 +3,7 @@ data/
 mri-sim/node_modules/
 mri-sim/dist/
 mri-sim/debug-shot.png
+scripts/_eda_out/
 __pycache__/
 *.pyc
 .pytest_cache/

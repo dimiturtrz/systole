@@ -16,7 +16,7 @@ def label_volume_ml(mask, label, spacing):
     return int(np.sum(mask == label)) * voxel_volume_ml(spacing)
 
 
-def ejection_fraction(ed_mask, es_mask, spacing, lv_label=1):
+def ejection_fraction(ed_mask, es_mask, spacing, lv_label=3):
     """EF = (EDV - ESV) / EDV in percent, from LV blood-pool volumes (mL).
 
     Returns (ef_percent, edv_ml, esv_ml).

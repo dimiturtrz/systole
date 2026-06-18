@@ -1,10 +1,11 @@
 """Synthetic cardiac-like volumes + masks — lets the whole pipeline run before real data.
 
-Label convention matches ACDC: 0 background, 1 LV blood pool, 2 myocardium, 3 RV.
+Label convention matches ACDC (verified on real masks, see data/mri/eda.py):
+0 background, 1 RV cavity, 2 LV myocardium, 3 LV cavity. NB LV cavity = 3, not 1.
 """
 import numpy as np
 
-LABELS = {"bg": 0, "lv": 1, "myo": 2, "rv": 3}
+LABELS = {"bg": 0, "rv": 1, "myo": 2, "lv": 3}
 
 
 def make_volume(shape=(16, 128, 128), spacing=(8.0, 1.5, 1.5), lv_radius=18,

@@ -4,9 +4,9 @@
 """
 import numpy as np
 
-from src.modalities.mri.synth import make_volume, ed_es_pair
-from src.core.measure import ejection_fraction
-from src.core.evaluate import dice, dice_all
+from cardioseg.data.mri.synth import make_volume, ed_es_pair
+from cardioseg.evaluation.measure import ejection_fraction
+from cardioseg.evaluation.evaluate import dice, dice_all
 
 
 def test_synth_shapes():
