@@ -1,6 +1,6 @@
 # mri-sim — interactive 3D MRI pipeline visualizer
 
-*Lives as an **isolated subfolder** inside the cardiac-imaging repo for now (own stack,
+*Lives as an **isolated subfolder** inside the systole repo for now (own stack,
 own build); **split into its own repo later** if it grows. Self-contained TypeScript app —
 keep it out of the Python `src/`.*
 
@@ -80,9 +80,9 @@ arrow-animation perf demands Three.js later.
 - Clinical/patient data (this is abstract/conceptual — **not** a DICOM viewer).
 - Real reconstruction pipelines, real scanner hardware fidelity.
 
-## Relation to cardiac-imaging
+## Relation to systole (the applied pipeline)
 Same portfolio lane (medical imaging), different concern: this is the **physics/education**
-piece; cardiac-imaging proper is the **applied ML** piece (seg→EF). Kept in a subfolder for
+piece; the systole pipeline proper is the **applied ML** piece (seg→EF). Kept in a subfolder for
 now; **split to its own repo** once it stands on its own. Cross-link in profile README.
 
 ## Don't reinvent blind

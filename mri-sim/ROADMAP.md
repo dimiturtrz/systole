@@ -28,6 +28,6 @@ Roughly ordered by value. The first three form one arc: make the signal *real*.
    phase-encode wind-up steepness to the ky line being filled.
 4. **Real ACDC slice as phantom (vtk reslice)** — `cardiac-seg-w2n`
    Replace the synthetic disk with a real short-axis ACDC slice. Where vtk.js
-   earns its keep (vtkImageData + reslice); ties the sim to the cardiac-imaging data.
+   earns its keep (vtkImageData + reslice); ties the sim to the systole pipeline's data.
 5. **Tissue contrast (T1/T2 weighting via TR/TE)** — `cardiac-seg-wpq`
    Per-region T1/T2 so TR/TE change image *contrast* (T1w / T2w / PD) — the clinical knob.
