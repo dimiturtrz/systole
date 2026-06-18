@@ -34,7 +34,6 @@ cardioseg/                # pipeline stages, data -> preprocess -> train -> meas
   data/
     mri/                  #   CT/, echo/ added when each is real (not before)
       data.py             #     ACDC loader (NIfTI, spacing-aware) + geometric LV/RV id
-      synth.py            #     synthetic cardiac-like fixture (runs before real data)
   preprocessing/
     preprocess.py         #   resample in-plane + z-score; param-keyed disk cache
   training/
@@ -51,14 +50,13 @@ cardioseg/                # pipeline stages, data -> preprocess -> train -> meas
     viz.py                #   marching-cubes surface mesh
 tests/
   unit/                   # pure-function units (geometry, metrics, preprocessing)
-  integration/            # end-to-end on the synthetic fixture (no real data needed)
+  integration/            # end-to-end on real ACDC (skips if data absent)
 ```
 
 ## Quickstart
 ```bash
-pip install -r requirements.txt
-python -m pytest tests/ -q                 # smoke test on synthetic fixture
-python -m cardioseg.training.train --synthetic   # train a few steps on synthetic data
+pip install -e .                           # or: pip install -r requirements.txt
+python -m pytest tests/ -q                 # unit + real-ACDC integration (integration skips w/o data)
 ```
 Real data: register for ACDC (Creatis / humanheart-project). Data lives **outside
 the repo** (licensing + size) under a `raw/` ↔ `processed/` split, e.g.
