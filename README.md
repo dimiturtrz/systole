@@ -1,7 +1,7 @@
 # systole — cardiac segmentation + function (MRI, CT, echo)
 
-**What this is.** systole is where I pick up a new domain in the open — one bounded problem, end
-to end: cardiac **segmentation → ejection fraction**.
+**What this is.** systole is where I pick up a new domain in the open — one bounded problem:
+cardiac **segmentation → ejection fraction**.
 
 Segmentation → **ejection fraction** across imaging modalities (**MRI now; CT, echo planned**),
 with the evaluation rigor that decides whether a measurement can be trusted. The connecting
@@ -11,18 +11,18 @@ thread is the geometry: per-voxel labels → a clinical number. Three pieces, ge
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
 phase/frequency encode → k-space → reconstructed image, on one clock. Built to *understand the
-acquisition* the segmentation model consumes. TypeScript + vtk.js, physically honest.
+acquisition* the segmentation model consumes. TypeScript + vtk.js; models the actual signal path, not a cartoon.
 
 ![mri-sim demo](mri-sim/docs/media/demo.gif)
 
 ## See the model work — [cardioview](cardioview/)
-Browser viewer (TS + vtk.js) of the model's output on real hearts: predicted chambers (LV
+Browser viewer (TS + vtk.js) of the model's output on held-out patients: predicted chambers (LV
 cavity / myocardium / RV) as a **beating 3D heart** with **EDV / ESV / LVEF vs ground truth**
-and a `held-out` honesty tag. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
+and a `held-out` tag. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
 
 ![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
 
-*Held-out patient — the result, shown. A correct beating heart is self-evident; the numbers below back it.*
+*Held-out patient — the result, shown; the numbers below back it.*
 
 ## The pipeline + results — [cardioseg](cardioseg/)
 The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. Held-out, seed 0
@@ -41,9 +41,9 @@ on a clean benchmark," **not** SOTA or clinical-grade; multi-vendor robustness i
 hard part). **Where it fails:** RV boundary is the weak spot (HD95 10 mm), HCM EF errors largest.
 Full method, training, error-distribution plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
-## Honest scope
-I come from audio / acoustic-signal ML (end-to-end modeling, evaluation, edge); cardiac imaging
-is a deliberate ramp. The approach: build the problem end-to-end, evaluate it, and visualize it,
+## Scope
+I come from audio / acoustic-signal ML (modeling, evaluation, edge); cardiac imaging
+is a deliberate ramp. The approach: build the problem, evaluate it, and visualize it,
 with an **LLM-driven learning track** ([`learning/`](learning/): theory write-ups +
 self-quizzes) running alongside — learning a field by shipping in it. Competence built in the
 gap on public data, not a claim of prior medical-imaging experience; the ramp is the point, not
@@ -52,7 +52,7 @@ a disclaimer. Today only the MRI lane is underway; CT and echo are planned, not 
 ## Install & test
 ```bash
 pip install -e .
-python -m pytest tests/ -q     # unit + real-ACDC integration (integration skips without data)
+python -m pytest tests/ -q     # unit + ACDC integration (integration skips without data)
 ```
 **Running** is per project (each differs) — see the folder READMEs: pipeline train/eval →
 [cardioseg/](cardioseg/); viewers → [cardioview/](cardioview/) and [mri-sim/](mri-sim/) (`npm run dev`).
