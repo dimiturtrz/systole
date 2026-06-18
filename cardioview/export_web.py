@@ -19,10 +19,10 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
-from cardioseg.training.dataset import fit_square, split_patients
+from cardioseg.training.dataset import split_patients
 from cardioseg.data.mri.data import acdc_cases
 from cardioseg.evaluation.measure import ejection_fraction
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -54,26 +54,6 @@ def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
 def heldout_set() -> set[str]:
     _, val = split_patients(list(acdc_cases()), 0.2, 0)
     return {c.name for c in val}
-
-
-def gt_masks(case: dict) -> dict:
-    out = {}
-    for tag in ("ED", "ES"):
-        k = tag.lower()
-        if f"{k}_gt" in case:
-            out[tag] = np.stack([fit_square(s, SIZE, 0) for s in case[f"{k}_gt"]]).astype(np.uint8)
-    return out
-
-
-def pred_masks(case: dict, model, device) -> dict:
-    from cardioseg.evaluation.validate import predict_volume
-
-    out = {}
-    for tag in ("ED", "ES"):
-        k = tag.lower()
-        if f"{k}_img" in case:
-            out[tag] = predict_volume(model, case[f"{k}_img"], SIZE, device)
-    return out
 
 
 def shared_crop(masks: dict, spacing, margin_mm: float = 12.0):
@@ -137,7 +117,7 @@ def run(patients, source, model, device):
     for p in patients:
         case = preprocess_case(patient_dir(p))
         spacing = tuple(float(s) for s in case["spacing"])
-        masks = pred_masks(case, model, device) if source == "pred" else gt_masks(case)
+        masks = build_masks(case, source, model, device)
         crop_masks, iso = shared_crop(masks, spacing)
         glb = {}
         for tag, m in crop_masks.items():
@@ -145,7 +125,7 @@ def run(patients, source, model, device):
             export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
         entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source=source,
-                     pred=volumes(masks, spacing), gt=volumes(gt_masks(case), spacing), glb=glb)
+                     pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
         upsert_manifest(entry)
         print(f"  {p:11} {str(case.get('group')):5} static  EF {entry['pred'].get('ef')}% "
               f"(GT {entry['gt'].get('ef')}%)")
@@ -173,7 +153,7 @@ def run_animate(patients, model, device, stride=1):
         es_k = nearest_index(frames_t, esi)
         ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
         case = preprocess_case(patient_dir(p))
-        gt = volumes(gt_masks(case), tuple(float(s) for s in case["spacing"]))
+        gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
         entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source="pred",
                      pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
                      frames=files, ed_idx=ed_k, es_idx=es_k,

@@ -20,19 +20,15 @@ from scipy.ndimage import zoom
 
 from cardioseg.data.mri.data import load_ed_es
 from common import patient_dir  # noqa: F401  (re-exported; used here and by render_overlay)
+from geometry import bbox_slices
 
 
 def crop_to_heart(vol_zyx, gt_zyx, spacing_zyx, margin_mm: float = 15.0):
     """Crop to the labeled-heart bounding box + a mm margin, so we show the heart not the chest."""
     if gt_zyx is None or not np.any(gt_zyx > 0):
         return vol_zyx, gt_zyx
-    sl = []
-    for ax, n in enumerate(vol_zyx.shape):
-        idx = np.any(gt_zyx > 0, axis=tuple(a for a in range(3) if a != ax)).nonzero()[0]
-        pad = int(round(margin_mm / spacing_zyx[ax]))
-        sl.append(slice(max(0, idx[0] - pad), min(n, idx[-1] + 1 + pad)))
-    crop = (sl[0], sl[1], sl[2])
-    return vol_zyx[crop], (gt_zyx[crop] if gt_zyx is not None else None)
+    crop = bbox_slices(gt_zyx > 0, spacing_zyx, margin_mm)
+    return vol_zyx[crop], gt_zyx[crop]
 
 
 def to_isotropic(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):

@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from cardioseg.config import data_root
+from cardioseg.training.dataset import fit_square
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
 CHAMBERS = {
@@ -38,3 +41,26 @@ def load_model(weights: str, device):
     model.load_state_dict(torch.load(weights, map_location=device))
     model.eval()
     return model
+
+
+def square_stack(vol_zyx, dtype=None):
+    """Center pad/crop each slice to the SIZE square grid the model expects."""
+    out = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
+    return out.astype(dtype) if dtype else out
+
+
+def masks(case: dict, source: str, model=None, device=None) -> dict:
+    """{ED, ES} chamber-label volumes on the square grid — ground truth or model prediction."""
+    from cardioseg.evaluation.validate import predict_volume
+
+    out = {}
+    for tag in ("ED", "ES"):
+        k = tag.lower()
+        if f"{k}_img" not in case:
+            continue
+        out[tag] = (
+            square_stack(case[f"{k}_gt"], np.uint8)
+            if source == "gt"
+            else predict_volume(model, case[f"{k}_img"], SIZE, device)
+        )
+    return out

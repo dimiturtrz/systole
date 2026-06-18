@@ -22,40 +22,15 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case
-from cardioseg.training.dataset import fit_square
 from cardioseg.evaluation.measure import ejection_fraction
 from render_volume import normalize, to_imagedata
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir
-
-
-def square_stack(vol_zyx: np.ndarray) -> np.ndarray:
-    return np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
-
-
-def masks_for(case: dict, source: str, model, device) -> dict:
-    """Return {ED: mask[D,256,256], ES: ...} as GT or predicted, on the square grid."""
-    from cardioseg.evaluation.validate import predict_volume
-
-    out = {}
-    for tag in ("ED", "ES"):
-        key = tag.lower()
-        if f"{key}_img" not in case:
-            continue
-        if source == "gt":
-            out[tag] = np.stack([fit_square(s, SIZE, 0) for s in case[f"{key}_gt"]]).astype(np.uint8)
-        else:
-            out[tag] = predict_volume(model, case[f"{key}_img"], SIZE, device)
-    return out
+from common import CHAMBERS, MODELS, load_model, patient_dir, square_stack, masks as build_masks
+from geometry import bbox_slices
 
 
 def crop_and_iso(img_zyx, mask_zyx, spacing_zyx, margin_mm=12.0):
     """Crop both to the heart bbox + margin, then resample both to isotropic voxels."""
-    sl = []
-    for ax, n in enumerate(img_zyx.shape):
-        idx = np.any(mask_zyx > 0, axis=tuple(a for a in range(3) if a != ax)).nonzero()[0]
-        pad = int(round(margin_mm / spacing_zyx[ax]))
-        sl.append(slice(max(0, idx[0] - pad), min(n, idx[-1] + 1 + pad)))
-    crop = (sl[0], sl[1], sl[2])
+    crop = bbox_slices(mask_zyx > 0, spacing_zyx, margin_mm)
     img, mask = img_zyx[crop], mask_zyx[crop]
     iso = float(min(spacing_zyx))
     factors = tuple(s / iso for s in spacing_zyx)
@@ -94,7 +69,7 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
         split_tag = "  held-out" if held else "  TRAIN-seen"
         if not held:
             print(f"WARNING: {patient} was in training — pred overstates the model. Use a held-out patient.")
-    masks = masks_for(case, source, model, device)
+    masks = build_masks(case, source, model, device)
     if phase not in masks:
         raise SystemExit(f"phase {phase} unavailable for {patient}")
 
@@ -103,8 +78,7 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     if "ED" in masks and "ES" in masks:
         ef, _, _ = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
         ef_g, _, _ = ejection_fraction(
-            *(np.stack([fit_square(s, SIZE, 0) for s in case[f"{t}_gt"]]) for t in ("ed", "es")),
-            spacing, lv_label=3)
+            *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
         ef_txt = f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 
     img = square_stack(case[f"{phase.lower()}_img"])
