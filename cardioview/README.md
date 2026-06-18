@@ -1,7 +1,11 @@
 # cardioview
 
 3D visualization of ACDC cardiac MRI and the segmentation model's results — a demo /
-inference view of the [`cardioseg`](../cardioseg) pipeline. Python + VTK (pyvista).
+inference view of the [`cardioseg`](../cardioseg) pipeline.
+
+**The interactive browser viewer lives in [`web/`](web/)** (TS + vtk.js) — rotatable colored
+chambers + EDV/ESV/EF readout, fed by glb meshes precomputed here in Python. The Python
+scripts below (pyvista) are the offline render/export + quick desktop checks.
 
 **Status: segmentation overlay.** Colored chamber surfaces (LV cavity / myocardium / RV,
 marching-cubes + Taubin smoothing) over a dim intensity raycast — **GT or the model's
