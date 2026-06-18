@@ -109,8 +109,8 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
       p.tick(0.2);
       return v.last().flatMap((m, i) => (Math.abs(m[2]) < 1e-6 ? [i] : []));
     };
-    const low = tippedIdx(0.3); // RF tuned to a low slice
-    const high = tippedIdx(1.7); // RF tuned to a high slice
+    const low = tippedIdx(63.83); // RF tuned to a low slice (MHz)
+    const high = tippedIdx(63.91); // RF tuned to a high slice
     expect(low.length).toBeGreaterThan(0);
     expect(high.length).toBeGreaterThan(0);
     expect(low).not.toEqual(high); // different slab selected

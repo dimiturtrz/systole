@@ -10,6 +10,8 @@ import type { SequenceView } from '../view/SequenceDiagram';
 
 const REST_TILT = 0.12; // matches SpinSystem/Simulator rest tilt
 const TIP_DUR = 0.15; // sim-seconds to ramp the RF tip (avoids a teleport snap)
+const LARMOR_MIN = 63.8; // MHz — slice-select frequency band (≈1.5 T: γ·B0 ≈ 63.87 MHz)
+const LARMOR_MAX = 63.95;
 
 /**
  * Wires model → views on ONE speed-scaled clock. Each TR: an RF pulse at the cycle
@@ -90,10 +92,10 @@ export class Presenter {
     this.te = Math.min(v, this.tr * 0.9);
   }
 
-  setLarmor(v: number): void {
-    this.sim.larmorHz = v; // precession rate
-    const t = ((v - 0.1) / 1.9) * 2 - 1; // slider range → −1…1
-    this.sliceCenter = t * (this.halfZ - 0.5); // RF freq also selects the slice height
+  /** RF/Larmor frequency (MHz) selects the slice height along the gradient. */
+  setLarmor(mhz: number): void {
+    const t = ((mhz - LARMOR_MIN) / (LARMOR_MAX - LARMOR_MIN)) * 2 - 1; // → −1…1
+    this.sliceCenter = t * (this.halfZ - 0.5);
     this.recomputeSlab();
     this.updateSlicePlane();
   }
@@ -183,8 +185,9 @@ export class Presenter {
   }
 
   private readout(): void {
-    if (!this.acq || this.acq.done) return; // fill once, then hold (no jarring blur-reset)
-    this.acq.acquireNext();
+    if (!this.acq) return;
+    if (this.acq.done) this.acq.reset(); // loop: one k-space line per TR, rebuild when full
+    else this.acq.acquireNext();
     this.drawPanels();
   }
 
