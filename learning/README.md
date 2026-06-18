@@ -1,6 +1,6 @@
 # learning/
 
-My study material + quiz logs for the cardiac-imaging ramp. One file per topic:
+My study material + quiz logs for the systole project — my ramp into cardiac imaging. One file per topic:
 the **theory writeup** (what I study / prepare for), then a dated **quiz log**
 (questions, my answers, honest assessment) appended when I ask to be quizzed.
 

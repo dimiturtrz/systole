@@ -1,4 +1,4 @@
-# ROADMAP — cardiac-imaging
+# ROADMAP — systole
 
 A deliberate ramp into cardiac imaging. The throughline is one bounded,
 honestly-evaluated capability — **segment the heart → measure cardiac function

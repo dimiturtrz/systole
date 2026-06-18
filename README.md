@@ -1,4 +1,4 @@
-# cardiac-imaging — segmentation + cardiac function across MRI, CT, echo
+# systole — cardiac segmentation + function across MRI, CT, echo
 
 Segmentation and **cardiac-function measurement (ejection fraction)** across imaging
 modalities — **MRI first, CT and echo to follow** — with the evaluation rigor that
