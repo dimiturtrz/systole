@@ -50,12 +50,20 @@ single-centre (ACDC) model drops ~17 Dice points tested across vendors (mean 0.8
 (calibration). Full per-direction table + surface metrics (HD95 / ASSD) + error-distribution
 plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
-## Install & test
+## Tests
 ```bash
 pip install -e .
 python -m pytest tests/ -q     # unit + ACDC integration (integration skips without data)
 ```
-**Running** is per project (each differs) — see the folder READMEs: pipeline train/eval →
+Two layers, wide base to thin top (full rationale in [tests/README.md](tests/README.md)):
+- **Unit — equivalence-class.** Partition each input space by behaviour; test one representative
+  per class plus its boundaries, not exhaustive cases (e.g. `fit_square`: larger-than-target →
+  crops, smaller → pads, equal → identity).
+- **Integration — module pairs.** If A and B share a pipeline, test the A→B chain on the same
+  inputs/outputs the units promise — A's output is a valid B input, the chain keeps each unit's
+  guarantee. Catches interface drift (shape/dtype/label/spacing) that per-unit tests miss.
+
+**Running** the projects is separate (each differs) — see the folder READMEs: pipeline train/eval →
 [cardioseg/](cardioseg/); viewers → [cardioview/](cardioview/) and [mri-sim/](mri-sim/) (`npm run dev`).
 
 ## How it's built
