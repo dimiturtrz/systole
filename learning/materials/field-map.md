@@ -18,16 +18,24 @@ What we studied in A1 = the **medical-physics / imaging-engineering** *view* of 
 taken only to the depth that explains the data. Our actual deliverable lives in
 **medical image computing**.
 
-## Our target competency (the bar) — two stacks
+## Our target competency (the bar) — three layers
+**F) Foundations / maths** (under everything): linear algebra (affine/spacing,
+convolution-as-linear-map) · calculus & optimization (gradients, backprop) ·
+probability & statistics (cross-entropy, Bland-Altman, CV variance). Working
+fluency, not proofs. → [foundations/curriculum.md](foundations/curriculum.md).
+
 **A) Imaging-physics-enough** (per modality): acquisition principle · contrast
 mechanism · why intensity is (un)calibrated · geometry/units/spacing · key artifacts ·
 dataset conventions. *Enough to understand the data and its failure modes — NOT to
-build a scanner or design pulse sequences.*
+build a scanner or design pulse sequences.* → [mri/curriculum.md](mri/curriculum.md).
 
-**B) Analysis stack** (the real work): data loading + normalization · segmentation
-(architecture, 2D vs 3D, leakage) · evaluation (Dice, Hausdorff, **failure analysis**,
-calibration) · clinical metric (**EF**) + agreement vs ground truth · the
-clinical-grade gap.
+**B) Analysis stack** (the real work, cross-modality): segmentation (DL: CNN→U-Net→
+nnU-Net) · geometry (voxel→volume, marching cubes, meshes, registration) · evaluation
+(Dice, Hausdorff, **failure analysis**, Bland-Altman) · clinical metric (**EF**) · the
+clinical-grade gap. → [common/curriculum.md](common/curriculum.md).
+
+The three map to the layered way real curricula stack it: maths → imaging physics →
+medical image computing. F and B are modality-agnostic; A is per-modality.
 
 ## Coverage checklist (tick as we go) — ✅ done · ⬜ pending
 **Per modality** (MRI ✅ theory · CT ⬜ · echo ⬜):
