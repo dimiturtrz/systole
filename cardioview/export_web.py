@@ -99,36 +99,38 @@ def upsert_manifest(entry: dict, model_name: str) -> None:
     path.write_text(json.dumps({"model": model_name, "hearts": hearts}, indent=2))
 
 
-def load_4d(patient: str):
+def load_4d(pdir, name: str):
     """Load the cine as [t, z, y, x] + spacing (z, y, x) mm."""
-    img = nib.load(str(patient_dir(patient) / f"{patient}_4d.nii.gz"))
+    img = nib.load(str(pdir / f"{name}_4d.nii.gz"))
     arr = np.transpose(np.asanyarray(img.dataobj), (3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
     xs, ys, zs = img.header.get_zooms()[:3]
     return arr, (zs, ys, xs)
 
 
-def frame_indices(patient: str):
+def frame_indices(pdir):
     """0-based ED, ES frame indices (Info.cfg parsing reused from cardioseg)."""
-    cfg = parse_info_cfg(patient_dir(patient))
+    cfg = parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
 def run(patients, source, model, device, model_name):
     held = heldout_set()
     for p in patients:
-        case = preprocess_case(patient_dir(p))
+        pdir = patient_dir(p)  # p may be an ID or a full path
+        name = pdir.name
+        case = preprocess_case(pdir)
         spacing = tuple(float(s) for s in case["spacing"])
         masks = build_masks(case, source, model, device)
         crop_masks, iso = shared_crop(masks, spacing)
         glb = {}
         for tag, m in crop_masks.items():
-            fn = f"{p}_{tag}_{source}.gltf"
+            fn = f"{name}_{tag}_{source}.gltf"
             export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
-        entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source=source,
+        entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source=source,
                      pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
         upsert_manifest(entry, model_name)
-        print(f"  {p:11} {str(case.get('group')):5} static  EF {entry['pred'].get('ef')}% "
+        print(f"  {name:11} {str(case.get('group')):5} static  EF {entry['pred'].get('ef')}% "
               f"(GT {entry['gt'].get('ef')}%)")
 
 
@@ -136,7 +138,9 @@ def run_animate(patients, model, device, model_name, stride=1):
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry."""
     held = heldout_set()
     for p in patients:
-        vol, spacing = load_4d(p)
+        pdir = patient_dir(p)  # p may be an ID or a full path
+        name = pdir.name
+        vol, spacing = load_4d(pdir, name)
         rspacing = (spacing[0], 1.5, 1.5)
         frames_t = list(range(0, vol.shape[0], stride))
         masks = {}
@@ -146,21 +150,21 @@ def run_animate(patients, model, device, model_name, stride=1):
         crop_masks, iso = shared_crop(masks, rspacing)
         files = []
         for k in range(len(frames_t)):
-            fn = f"{p}_f{k:02d}_pred.gltf"
+            fn = f"{name}_f{k:02d}_pred.gltf"
             export_glb(crop_masks[k], rspacing, OUT / fn)
             files.append(fn)
-        edi, esi = frame_indices(p)
+        edi, esi = frame_indices(pdir)
         ed_k = nearest_index(frames_t, edi)
         es_k = nearest_index(frames_t, esi)
         ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-        case = preprocess_case(patient_dir(p))
+        case = preprocess_case(pdir)
         gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
-        entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source="pred",
+        entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                      pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
                      frames=files, ed_idx=ed_k, es_idx=es_k,
                      glb={"ED": files[ed_k], "ES": files[es_k]})
         upsert_manifest(entry, model_name)
-        print(f"  {p:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
+        print(f"  {name:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
               f"EF {entry['pred']['ef']}% (GT {gt.get('ef')}%)")
 
 

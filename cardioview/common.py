@@ -31,13 +31,17 @@ def cardioview_default(key: str, fallback):
 
 
 def patient_dir(patient: str, root: str | None = None) -> Path:
-    """Locate a patient folder under training/ or testing/ (root from paths.yaml)."""
+    """Resolve a patient folder. Accepts a full path to the folder, or an ID resolved
+    under data.raw/{training,testing} — so paths.yaml hearts can mix IDs and absolute paths."""
+    p = Path(patient)
+    if p.is_dir():
+        return p
     base = Path(root or data_root("raw"))
     for split in ("training", "testing"):
-        p = base / split / patient
-        if p.is_dir():
-            return p
-    raise FileNotFoundError(f"{patient} not found under {base}/training or /testing")
+        d = base / split / patient
+        if d.is_dir():
+            return d
+    raise FileNotFoundError(f"{patient} not found (not a dir, nor under {base}/training|testing)")
 
 
 def load_model(weights: str, device):
