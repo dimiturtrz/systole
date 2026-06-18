@@ -107,4 +107,8 @@ curated benchmark). We have neither — single split, single centre, no uncertai
 honest claim is "competent on ACDC," explicitly *not* "clinical-grade."
 
 ### Quiz log
-*(empty — append on demand)*
+- [E1–E2 · 2026-06-18](quizzes/common/E1-E2_2026-06-18.md) — ~60% (rigor set). Concepts
+  strong; mechanics (Dice vs IoU, thin-vs-fat) was the gap, drilled to solid.
+- [E4–E5 · 2026-06-18](quizzes/common/E4-E5_2026-06-18.md) — ~80%. Uncertainty/calibration
+  solid; sharpen: MRI is unit-less (intensity *distribution* shifts), clinical gap has
+  multiple axes.
