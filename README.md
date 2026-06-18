@@ -16,30 +16,45 @@ acquisition* the segmentation model consumes. TypeScript + vtk.js; models the ac
 ![mri-sim demo](mri-sim/docs/media/demo.gif)
 
 ## See the model work — [cardioview](cardioview/)
-Browser viewer (TS + vtk.js) of the model's output on held-out patients: predicted chambers (LV
-cavity / myocardium / RV) as a **beating 3D heart** with **EDV / ESV / LVEF vs ground truth**
-and a `held-out` tag. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
+Browser viewer (TS + vtk.js) of the flagship model's output on ACDC patients it never trained on
+(it learned on M&M-2): predicted chambers (LV cavity / myocardium / RV) as a **beating 3D heart**
+with **EDV / ESV / LVEF vs ground truth**. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
 
 ![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
 
-*Held-out patient — the result, shown; the numbers below back it.*
+*A heart from a different dataset than the model trained on — the result, shown; the numbers below back it.*
 
 ## The pipeline + results — [cardioseg](cardioseg/)
-The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. Held-out, seed 0
-(2D U-Net, patient-level 80/20 split, 20 patients across all five pathology groups):
+The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. The flagship model
+is set up for **domain generalization**: trained on the multi-vendor **M&M-2** challenge set
+(360 subjects, 3 scanner vendors, 8 pathologies, 1.5T + 3T) and tested on **held-out ACDC**
+(single-centre, 100 patients it never saw). Seed 0, patient-level splits.
 
-| structure | Dice | HD95 (mm) | published ACDC |
+**M&M-2 → ACDC** (train multi-vendor, test held-out single-centre):
+
+| structure | Dice | published ACDC |
+|---|---|---|
+| LV cavity | **0.93** | ~0.93–0.96 |
+| LV myocardium | 0.84 | ~0.88–0.92 |
+| RV cavity | 0.84 | ~0.88–0.92 |
+| **mean** | **0.87** | |
+
+**EF vs ground truth: MAE 9.4%** (cross-dataset; volume calibration shifts across centres).
+
+**Why train on M&M-2 instead of ACDC?** Because diversity in training buys robustness — and the
+flip proves it. Train single-centre and test across vendors → it *collapses*; train multi-vendor
+and test single-centre → it *holds*:
+
+| train → test | mean Dice | RV | EF MAE |
 |---|---|---|---|
-| LV cavity | **0.93** | 2.1 | ~0.93–0.96 |
-| LV myocardium | 0.82 | 3.0 | ~0.88–0.92 |
-| RV cavity | 0.86 | 10.0 | ~0.88–0.92 |
-| **mean** | **0.87** | | |
+| ACDC → ACDC (in-domain) | 0.87 | 0.85 | 4.7% |
+| ACDC → M&M-2 (out-of-distribution) | **0.70** | 0.59 | 9.1% |
+| **M&M-2 → ACDC (generalization, flagship)** | **0.87** | 0.84 | 9.4% |
 
-**EF vs ground truth: MAE ~3%** (bias −1.5%, 95% LoA [−8, +5]; clinical equivalence ≈ ±5%). The
-published column is *context, not a trophy*: ACDC is single-centre and homogeneous → "competent
-on a clean benchmark," **not** SOTA or clinical-grade; multi-vendor robustness is untested (the
-hard part). **Where it fails:** RV boundary is the weak spot (HD95 10 mm), HCM EF errors largest.
-Full method, training, error-distribution plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
+The single-centre model drops ~17 Dice points off its home dataset (RV worst, 0.85 → 0.59); the
+multi-vendor model carries to a new centre with no segmentation drop. **Where it still fails:**
+RV is the weak structure in every setting; EF transfers worse than Dice (calibration). Surface
+metrics (HD95 / ASSD) + error-distribution plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
 ## Scope
 I come from audio / acoustic-signal ML (modeling, evaluation, edge); cardiac imaging

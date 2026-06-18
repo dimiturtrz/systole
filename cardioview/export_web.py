@@ -177,7 +177,7 @@ def main():
     # Default hearts come from paths.yaml (cardioview.hearts); fallback = one per condition.
     ap.add_argument("--patients", nargs="*", default=None)
     ap.add_argument("--source", default="pred", choices=["pred", "gt"])
-    ap.add_argument("--model", default="acdc_aug", choices=list(MODELS))
+    ap.add_argument("--model", default="mnm2", choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
     a = ap.parse_args()
     patients = a.patients or cardioview_default(

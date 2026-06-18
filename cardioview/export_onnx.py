@@ -21,7 +21,7 @@ OUT = Path("cardioview/web/public/models")
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default="acdc_aug", choices=list(MODELS))
+    ap.add_argument("--model", default="mnm2", choices=list(MODELS))
     ap.add_argument("--verify", default=None)
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()

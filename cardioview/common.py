@@ -21,7 +21,13 @@ CHAMBERS = {
     1: ("RV cavity", "#5b8def"),
 }
 SIZE = 256  # square grid the 2D model runs on
-MODELS = {"acdc": "runs/acdc/model.pth", "acdc_aug": "runs/acdc_aug/model.pth"}
+# mnm2 = flagship: trained on multi-vendor M&M-2, generalizes to ACDC (the domain-
+# generalization setting). acdc/acdc_aug = single-centre baselines.
+MODELS = {
+    "mnm2": "runs/mnm2_to_acdc/model.pth",
+    "acdc_aug": "runs/acdc_aug/model.pth",
+    "acdc": "runs/acdc/model.pth",
+}
 
 
 def cardioview_default(key: str, fallback):

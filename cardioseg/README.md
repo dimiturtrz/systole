@@ -1,8 +1,9 @@
 # cardioseg — the pipeline
 
-The science layer: ACDC cardiac MRI → segmentation → ejection fraction → honest evaluation.
-Python (PyTorch + MONAI). The browser demo ([cardioview](../cardioview/)) consumes what this
-produces.
+The science layer: cardiac MRI → segmentation → ejection fraction → evaluation, set up for
+**domain generalization** (train on multi-vendor **M&M-2**, test on held-out single-centre
+**ACDC**). Python (PyTorch + MONAI). The browser demo ([cardioview](../cardioview/)) consumes
+what this produces.
 
 ## Pipeline
 1. **Data** — modality loader + normalization (ACDC short-axis cine MRI; NIfTI, spacing-aware
@@ -31,42 +32,64 @@ cp paths.example.yaml paths.yaml      # then edit:
 Loaded by `cardioseg/config.py` (OmegaConf); env vars `CARDIAC_DATA_ROOT` /
 `CARDIAC_PROCESSED_ROOT` override (handy for CI).
 
+**M&M-2** (multi-vendor, 360 subjects; register at the M&Ms-2 challenge site) sits **beside**
+ACDC — e.g. `data/raw/mri/mnm2/` while ACDC is `…/mri/acdc/`. Auto-discovered as a sibling of the
+raw root, or point at it with `CARDIAC_MNM2_ROOT`. Its ground-truth labels are the *opposite* of
+ACDC (LV=1 vs LV=3); the loader remaps to the ACDC convention on load (verified geometrically),
+so one model spans both datasets.
+
 ## Train + evaluate
 ```bash
-python -m cardioseg.training.train --acdc --epochs 40   # -> runs/acdc/{model.pth,metrics.json}
-python -m cardioseg.evaluation.distribution --run runs/acdc   # KDE + Bland-Altman -> runs/acdc/plots/
-python -m cardioseg.training.export_onnx --run runs/acdc      # model.onnx (+INT8) for the web viewer
+# flagship: train multi-vendor M&M-2, hold ACDC out entirely as the test set
+python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 40   # -> runs/mnm2_to_acdc/
+# single-centre baseline + its OOD drop on M&M-2 (the reverse direction)
+python -m cardioseg.training.train --dataset acdc --test mnm2 --epochs 40   # -> runs/acdc_to_mnm2/
+python -m cardioseg.evaluation.distribution --run runs/mnm2_to_acdc   # KDE + Bland-Altman -> plots/
+python -m cardioseg.training.export_onnx --run runs/mnm2_to_acdc      # model.onnx (+INT8) for the web viewer
 ```
+Training auto-tunes for the GPU: DataLoader workers (`--workers`), mixed precision, cudnn.benchmark.
 
-## Results (held-out, seed 0)
-| structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
-|---|---|---|---|---|
-| LV cavity | **0.93** | 2.1 | 0.5 | ~0.93–0.96 |
-| LV myocardium | 0.82 | 3.0 | 0.8 | ~0.88–0.92 |
-| RV cavity | 0.86 | 10.0 | 1.6 | ~0.88–0.92 |
-| **mean** | **0.87** | | | |
+## Results (seed 0, patient-level splits)
+Flagship = **M&M-2 → ACDC** (train multi-vendor, test 100 held-out single-centre patients):
 
-- **EF vs GT:** MAE ~3%, bias −1.5%, 95% LoA [−8, +5] (clinical equivalence ≈ ±5%).
-- **Metrics rank classes differently** — by Dice RV > myo, but by boundary (HD95) RV is *worst*
-  (10 mm): Dice punishes the thin myo ring; RV's boundary is messy (basal slices + stray voxels).
-  That's why both an overlap *and* a boundary metric are reported.
-- Full HD is the fragile max (one stray voxel → ~200 mm); **HD95** is the robust report.
-- `runs/acdc/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** — the
-  distribution behind the single numbers.
+| structure | Dice | published ACDC |
+|---|---|---|
+| LV cavity | **0.93** | ~0.93–0.96 |
+| LV myocardium | 0.84 | ~0.88–0.92 |
+| RV cavity | 0.84 | ~0.88–0.92 |
+| **mean** | **0.87** | |
 
-Published column = context, not a trophy: ACDC is single-centre/homogeneous → "competent on a
-clean benchmark," not SOTA or clinical-grade. Cross-vendor generalization (e.g. M&Ms) is the
-untested hard part.
+**EF vs GT: MAE 9.4%** (cross-dataset). **Diversity buys robustness — the asymmetry proves it:**
+
+| train → test | mean Dice | RV | EF MAE |
+|---|---|---|---|
+| ACDC → ACDC (in-domain) | 0.87 | 0.85 | 4.7% |
+| ACDC → M&M-2 (out-of-distribution) | 0.70 | 0.59 | 9.1% |
+| M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
+
+- Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
+  multi-vendor training carries to a new centre with **no segmentation drop**.
+- **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
+  4.7% → cross-dataset ~9%); the chambers are right, the absolute mL drift.
+- **Surface metrics** (single-centre ACDC eval): by Dice RV > myo, but by boundary (HD95) RV is
+  *worst* (10 mm) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray
+  voxels). Full HD is the fragile max (one stray voxel → ~200 mm); **HD95** is the robust report.
+- `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman**.
+
+Published column = context, not a trophy: even multi-vendor, this is "competent on public
+benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
+full deployment distribution.
 
 ## Layout
 ```
 cardioseg/
   data/mri/data.py        # ACDC loader (NIfTI, spacing-aware) + geometric LV/RV id, Info.cfg
+  data/mri/mnm2.py        # M&M-2 loader (multi-vendor) + label remap to ACDC convention, vendor/disease meta
   preprocessing/preprocess.py   # resample in-plane + z-score; param-keyed disk cache
   training/
     model.py              # MONAI U-Net factory (2D/3D)
-    dataset.py            # ACDC 2D-slice dataset, patient-level split
-    train.py              # training loop (synthetic + real ACDC)
+    dataset.py            # 2D-slice dataset, patient-level split (dataset-agnostic loader)
+    train.py              # training loop (--dataset acdc|mnm2, --test for cross-dataset; workers+AMP)
     export_onnx.py        # trained U-Net -> ONNX (+INT8 quant), torch-parity gated
   evaluation/
     measure.py            # chamber volumes + ejection fraction (spacing-aware)
