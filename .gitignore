@@ -33,3 +33,6 @@ cardioview/web/debug-import.png
 # bd issue tracker (local only — contains internal task notes)
 .beads/
 cardioview/web/debug-*.png
+
+# private job-application material — never public
+applications/
