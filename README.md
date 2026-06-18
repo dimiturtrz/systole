@@ -26,6 +26,15 @@ honest; a separate TS app from the Python pipeline below.
 
 ![mri-sim demo](mri-sim/docs/media/demo.gif)
 
+## Seeing the model work — [cardioview](cardioview/)
+A browser viewer (TS + vtk.js) of the segmentation model's output on real hearts: the
+predicted chambers (LV cavity / myocardium / RV) as a **beating 3D heart** over the cardiac
+cycle, with **EDV / ESV / LVEF** read out against ground truth and a `held-out` honesty tag.
+Inference + meshes are precomputed in Python (the [`cardioseg`](#pipeline-per-modality)
+pipeline below); the web app just renders.
+
+![cardioview demo](cardioview/docs/media/demo.gif)
+
 ## Pipeline (per modality)
 1. **Data** — modality-specific loader + normalization (e.g. ACDC short-axis cine
    MRI; NIfTI volumes with per-voxel spacing in mm).
