@@ -4,14 +4,14 @@
 cardiac **segmentation → ejection fraction**.
 
 Segmentation → **ejection fraction** across imaging modalities (**MRI now; CT, echo planned**),
-with the evaluation rigor that decides whether a measurement can be trusted. The connecting
+with the evaluation that decides whether a measurement can be trusted. The connecting
 thread is the geometry: per-voxel labels → a clinical number. Three pieces, general → specific
 (each links into its folder for depth); full plan + milestones in **[ROADMAP.md](ROADMAP.md)**.
 
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
 phase/frequency encode → k-space → reconstructed image, on one clock. Built to *understand the
-acquisition* the segmentation model consumes. TypeScript + vtk.js; models the actual signal path, not a cartoon.
+acquisition* the segmentation model consumes. TypeScript + vtk.js; models the actual signal path.
 
 ![mri-sim demo](mri-sim/docs/media/demo.gif)
 
