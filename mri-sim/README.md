@@ -28,7 +28,7 @@ npm run build    # typecheck + production build (dist/)
 ```
 
 ## Milestones
-M0 scene ✓ · M1 precession + RF tip ✓ · M1.5 T1/T2 relaxation ✓ · M2 slice-select · M3 phase/freq encode ·
+M0 scene ✓ · M1 precession + RF tip ✓ · M1.5 T1/T2 relaxation ✓ · M2 slice-select ✓ (3D grid) · M3 phase/freq encode ·
 M4 k-space fills → live inverse-FFT image (honest, from the spins) · M5 controls + timeline.
 
 *Lives in the cardiac-imaging repo for now; will split to its own repo as it grows.*

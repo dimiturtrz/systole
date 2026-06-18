@@ -24,6 +24,26 @@ export class Simulator {
     for (let i = 0; i < M.length; i++) M[i] = rotateAboutX(M[i], a);
   }
 
+  /**
+   * Slice-selective RF: tip only spins whose z is within the selected slab
+   * (|z − zCenter| ≤ zHalfThickness). Models gradient + frequency-selective excitation —
+   * spins outside the slab are untouched (stay at equilibrium).
+   */
+  sliceSelectiveTip(
+    M: Vec3[],
+    positions: Vec3[],
+    flipDeg: number,
+    zCenter: number,
+    zHalfThickness: number,
+  ): void {
+    const a = (flipDeg * Math.PI) / 180;
+    for (let i = 0; i < M.length; i++) {
+      if (Math.abs(positions[i][2] - zCenter) <= zHalfThickness) {
+        M[i] = rotateAboutX(M[i], a);
+      }
+    }
+  }
+
   /** Advance time by `dt` s: precess about z, then relax (T2 transverse, T1 longitudinal). */
   step(M: Vec3[], dt: number): void {
     const theta = 2 * Math.PI * this.larmorHz * dt;

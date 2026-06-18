@@ -51,4 +51,13 @@ describe('Simulator', () => {
     close(M[0][1], 0);
     close(M[0][2], 1);
   });
+
+  it('sliceSelectiveTip tips only spins inside the z-slab', () => {
+    const M: Vec3[] = [[0, 0, 1], [0, 0, 1], [0, 0, 1]];
+    const pos: Vec3[] = [[0, 0, -1], [0, 0, 0], [0, 0, 1]];
+    new Simulator().sliceSelectiveTip(M, pos, 90, 0, 0.6);
+    close(Math.abs(M[1][2]), 0); // z=0 spin tipped → transverse
+    expect(M[0]).toEqual([0, 0, 1]); // z=-1 untouched
+    expect(M[2]).toEqual([0, 0, 1]); // z=+1 untouched
+  });
 });

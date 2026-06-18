@@ -27,8 +27,11 @@ const logs = [];
 page.on('console', (m) => logs.push(`${m.type()} ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`pageerror ${e.message}`));
 
-await page.goto(URL, { waitUntil: 'networkidle0', timeout: 30000 });
-await new Promise((r) => setTimeout(r, 1500));
+// 'domcontentloaded' not 'networkidle0': the Vite HMR websocket keeps the network
+// "active" forever, so networkidle never settles. Then give the WebGL scene time to draw.
+const WAIT = Number(process.env.WAIT || 2500);
+await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await new Promise((r) => setTimeout(r, WAIT));
 const buf = await page.screenshot({ path: OUT });
 await browser.close();
 
