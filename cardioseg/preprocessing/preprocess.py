@@ -16,21 +16,25 @@ from pathlib import Path
 import numpy as np
 
 from cardioseg.data.mri.data import load_ed_es
+from cardioseg.types import Image, Spacing, Volume
 
 PROCESSED_ROOT = os.environ.get("CARDIAC_PROCESSED_ROOT", "D:/data/processed/mri/acdc")
 
 
-def zscore(img, eps=1e-6):
+def zscore(img: Image, eps: float = 1e-6) -> Image:
     """Per-volume z-score on the whole array (uncalibrated intensity -> zero-mean)."""
     img = img.astype(np.float32)
     return (img - img.mean()) / (img.std() + eps)
 
 
-def resample_inplane(arr, spacing, target_inplane=1.5, is_mask=False):
-    """Resample H,W (not D) to target_inplane mm. Returns (arr2, new_spacing).
+def resample_inplane(
+    arr: Volume, spacing: Spacing, target_inplane: float = 1.5, is_mask: bool = False
+) -> tuple[Volume, Spacing]:
+    """Resample H,W (not D) of a [D, H, W] array to target_inplane mm.
 
-    spacing is (z,y,x) mm. Slices (z) are preserved — a 2D-model convention on
-    anisotropic cardiac data. Masks use order=0 to keep labels integer.
+    Returns (resampled [D, H', W'], new_spacing (z, target, target)). Slices (z)
+    are preserved — a 2D-model convention on anisotropic cardiac data. Masks use
+    order=0 to keep labels integer.
     """
     from scipy.ndimage import zoom
 
@@ -49,9 +53,12 @@ def _cache_path(patient_name, target_inplane):
     return Path(PROCESSED_ROOT) / tag / f"{patient_name}.npz"
 
 
-def preprocess_case(patient_dir, target_inplane=1.5, use_cache=True):
+def preprocess_case(
+    patient_dir: str | Path, target_inplane: float = 1.5, use_cache: bool = True
+) -> dict:
     """Load + resample + normalize a patient's ED/ES. Returns dict with keys
-    ed_img, ed_gt, es_img, es_gt, spacing, group. Caches to disk per params.
+    ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group.
+    Caches to disk per params.
     """
     patient_dir = Path(patient_dir)
     cache = _cache_path(patient_dir.name, target_inplane)

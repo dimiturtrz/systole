@@ -9,6 +9,7 @@ from pathlib import Path
 
 def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
                val_frac=0.2, seed=0, device=None, out_dir="runs/acdc"):
+    import numpy as np
     import torch
     from torch.utils.data import DataLoader
     from ..evaluation.losses import dice_ce_loss
@@ -17,6 +18,7 @@ def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
     from .dataset import build_splits
 
     torch.manual_seed(seed)
+    np.random.seed(seed)          # augmentation uses global np.random
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device={device} torch={torch.__version__} seed={seed}")
 

@@ -9,9 +9,14 @@ Label convention (VERIFIED on real masks via myo-enclosure test, see
 data/mri/eda.py): 0 background, 1 RV cavity, 2 LV myocardium, 3 LV cavity.
 NB: LV cavity is label 3, NOT 1 — the synthetic fixture historically had this
 flipped. Always disambiguate geometrically, never trust a remembered integer.
+
+Shapes: volumes are [D, H, W] (D slices, H x W in-plane); spacing is (z, y, x) mm.
 """
 import os
 from pathlib import Path
+from typing import TypedDict
+
+from cardioseg.types import Image, Mask, Spacing, Volume
 
 # Data lives outside the repo (licensing + size). Point CARDIAC_DATA_ROOT at your
 # local ACDC root (the dir holding training/), e.g. D:/data/raw/mri/acdc.
@@ -21,8 +26,22 @@ DATA_ROOT = os.environ.get("CARDIAC_DATA_ROOT", "data/raw/mri/acdc")
 LV_CAVITY, LV_MYO, RV_CAVITY = 3, 2, 1
 
 
-def load_nifti(path):
-    """Return (array [D,H,W], spacing (z,y,x) mm)."""
+class Frame(TypedDict):
+    """One cardiac-phase frame: image + its label mask, both [D, H, W]."""
+    img: Image
+    gt: Mask
+
+
+class PatientData(TypedDict, total=False):
+    """One patient's ED/ES frames + metadata (returned by load_ed_es)."""
+    group: str | None          # pathology: NOR/DCM/HCM/MINF/ARV
+    spacing: Spacing | None    # (z, y, x) mm
+    ED: Frame                  # end-diastole (fullest)
+    ES: Frame                  # end-systole (emptiest)
+
+
+def load_nifti(path: str | Path) -> tuple[Volume, Spacing]:
+    """Load a NIfTI volume. Returns (array [D, H, W], spacing (z, y, x) mm)."""
     import nibabel as nib
     import numpy as np
     img = nib.load(str(path))
@@ -32,7 +51,7 @@ def load_nifti(path):
     return arr, (zz, zy, zx)
 
 
-def _training_dir(root=None):
+def _training_dir(root: str | Path | None = None) -> Path:
     """Resolve the dir holding patient*/ — accepts the root or .../training."""
     base = Path(root or DATA_ROOT)
     for cand in (base, base / "training", base / "database" / "training"):
@@ -41,14 +60,14 @@ def _training_dir(root=None):
     return base
 
 
-def acdc_cases(root=None):
-    """Yield patient dirs (ACDC: patientXXX/). Defaults to CARDIAC_DATA_ROOT."""
+def acdc_cases(root: str | Path | None = None) -> list[Path]:
+    """List patient dirs (ACDC: patientXXX/). Defaults to CARDIAC_DATA_ROOT."""
     return sorted(p for p in _training_dir(root).glob("patient*") if p.is_dir())
 
 
-def parse_info_cfg(patient_dir):
+def parse_info_cfg(patient_dir: str | Path) -> dict[str, str]:
     """ACDC Info.cfg -> dict (ED, ES frame numbers; Group = pathology; etc.)."""
-    cfg = {}
+    cfg: dict[str, str] = {}
     p = Path(patient_dir) / "Info.cfg"
     if p.exists():
         for line in p.read_text().splitlines():
@@ -58,22 +77,21 @@ def parse_info_cfg(patient_dir):
     return cfg
 
 
-def frame_paths(patient_dir, frame_no):
+def frame_paths(patient_dir: str | Path, frame_no: int | str) -> tuple[Path, Path]:
     """(image, gt) paths for one frame. ACDC: patientXXX_frameNN(.nii.gz)/_gt."""
     patient_dir = Path(patient_dir)
     stem = f"{patient_dir.name}_frame{int(frame_no):02d}"
     return patient_dir / f"{stem}.nii.gz", patient_dir / f"{stem}_gt.nii.gz"
 
 
-def load_ed_es(patient_dir):
+def load_ed_es(patient_dir: str | Path) -> PatientData:
     """Load the ED and ES frames + masks for one patient.
 
-    Returns dict: {group, spacing, ED:{img,gt}, ES:{img,gt}} — img/gt are [D,H,W],
-    spacing is (z,y,x) mm. Frame indices come from Info.cfg.
+    img/gt are [D, H, W], spacing is (z, y, x) mm. Frame indices come from Info.cfg.
     """
     patient_dir = Path(patient_dir)
     cfg = parse_info_cfg(patient_dir)
-    out = {"group": cfg.get("Group"), "spacing": None}
+    out: PatientData = {"group": cfg.get("Group"), "spacing": None}
     for tag in ("ED", "ES"):
         fno = cfg.get(tag)
         if fno is None:
@@ -86,19 +104,22 @@ def load_ed_es(patient_dir):
     return out
 
 
-def identify_lv_cavity(mask, myo_label=LV_MYO):
+def identify_lv_cavity(
+    mask: Mask, myo_label: int = LV_MYO
+) -> tuple[int | None, dict[int, float]]:
     """Geometrically identify the LV-cavity label: the non-myo foreground label
     most enclosed by the myocardium ring. Trusts geometry, not a remembered int.
 
-    Returns (lv_label, scores) where score = fraction of a label's 1-voxel shell
-    that touches myocardium. LV (inside the ring) scores high; RV scores low.
+    mask: [D, H, W] or [H, W] label map. Returns (lv_label, scores) where score =
+    fraction of a label's 1-voxel shell that touches myocardium. LV (inside the
+    ring) scores high; RV scores low.
     """
     import numpy as np
     from scipy import ndimage
 
     labels = [int(l) for l in np.unique(mask) if l != 0 and l != myo_label]
     myo = mask == myo_label
-    scores = {}
+    scores: dict[int, float] = {}
     for lab in labels:
         cav = mask == lab
         shell = ndimage.binary_dilation(cav) & ~cav

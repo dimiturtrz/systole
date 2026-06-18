@@ -6,13 +6,21 @@ EF uses each patient's own spacing. Note EF is a volume *ratio*, so a constant
 spacing cancels; the per-patient spacing matters once absolute volumes (mL) are
 reported, and is the honest thing to carry through regardless.
 """
+from pathlib import Path
+
 import numpy as np
+
+from cardioseg.types import Volume
 
 CLASS_NAMES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
 
-def predict_volume(model, vol_img, size, device):
-    """Predict a label map [D,size,size] for one z-scored [D,H,W] volume."""
+def predict_volume(model, vol_img: Volume, size: int, device: str) -> Volume:
+    """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
+
+    Each slice [H, W] -> [1, 1, size, size] -> model -> argmax over the 4 class
+    channels -> [size, size] label map; stacked back to [D, size, size].
+    """
     import torch
     from ..training.dataset import fit_square
 
@@ -26,7 +34,9 @@ def predict_volume(model, vol_img, size, device):
     return np.stack(preds)
 
 
-def validate(model, val_dirs, size, device, target_inplane=1.5):
+def validate(
+    model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5
+) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
     dice_per_class: {1,2,3 -> Dice pooled over all val slices}.

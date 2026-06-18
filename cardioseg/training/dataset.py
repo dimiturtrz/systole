@@ -6,18 +6,28 @@ short-axis slice + its 4-class mask (0 bg, 1 RV, 2 LV-myo, 3 LV-cavity). Frames
 come from the preprocessed cache (in-plane resampled + z-scored). Slices are
 centre padded/cropped to a fixed square so they batch.
 
+Shapes through this file:
+    cache volume      [D, H, W]   ->  per slice  [H, W]
+    fit_square        [H, W]      ->  [size, size]
+    __getitem__ item  img [1, size, size] float32,  mask [size, size] int64
+    (a DataLoader then stacks B items -> img [B, 1, size, size], mask [B, size, size])
+
 Split is PATIENT-LEVEL: every slice of a patient lands in the same fold, else
 near-identical neighbouring slices leak across train/val and inflate Dice.
 """
+from pathlib import Path
+
 import numpy as np
+from torch import Tensor
 from torch.utils.data import Dataset
 
 from cardioseg.data.mri.data import acdc_cases
 from cardioseg.preprocessing.preprocess import preprocess_case
+from cardioseg.types import Slice2D
 
 
-def fit_square(arr, size, pad_value=0):
-    """Centre pad/crop a [H,W] array to (size,size)."""
+def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
+    """Centre pad/crop a [H, W] array to [size, size]."""
     h, w = arr.shape
     out = np.full((size, size), pad_value, dtype=arr.dtype)
     # source crop window (centred)
@@ -29,60 +39,97 @@ def fit_square(arr, size, pad_value=0):
     return out
 
 
-def split_patients(cases, val_frac=0.2, seed=0):
-    """Deterministic patient-level train/val split."""
+def split_patients(
+    cases: list[Path], val_frac: float = 0.2, seed: int = 0
+) -> tuple[list[Path], list[Path]]:
+    """Deterministic patient-level train/val split -> (train_dirs, val_dirs)."""
     cases = list(cases)
     idx = np.random.default_rng(seed).permutation(len(cases))
     n_val = max(1, int(round(len(cases) * val_frac)))
-    val = {cases[i].name for i in idx[:n_val]}
-    train = [c for c in cases if c.name not in val]
-    val = [c for c in cases if c.name in val]
+    val_names = {cases[i].name for i in idx[:n_val]}
+    train = [c for c in cases if c.name not in val_names]
+    val = [c for c in cases if c.name in val_names]
     return train, val
 
 
 class ACDCSliceDataset(Dataset):
     """All ED+ES short-axis slices from the given patients, as (img, mask).
 
-    img: float32 [1, size, size]; mask: int64 [size, size]. Preloaded into RAM
+    Item: img float32 [1, size, size], mask int64 [size, size]. Preloaded into RAM
     (ACDC is small: ~100 patients x 2 frames x ~10 slices x 256^2 ~ 0.5 GB).
     """
 
-    def __init__(self, patient_dirs, size=256, target_inplane=1.5,
-                 frames=("ED", "ES"), keep_empty=False):
+    def __init__(
+        self,
+        patient_dirs: list[Path],
+        size: int = 256,
+        target_inplane: float = 1.5,
+        frames: tuple[str, ...] = ("ED", "ES"),
+        keep_empty: bool = False,
+        augment: bool = False,
+    ):
         self.size = size
-        self.items = []          # list of (img[H,W] f32, mask[H,W] u8)
+        self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames
+        self.augment = augment
         for pd in patient_dirs:
             c = preprocess_case(pd, target_inplane=target_inplane)
             for tag in frames:
-                img = c.get(f"{tag.lower()}_img")
-                gt = c.get(f"{tag.lower()}_gt")
+                img = c.get(f"{tag.lower()}_img")        # [D, H, W]
+                gt = c.get(f"{tag.lower()}_gt")          # [D, H, W]
                 if img is None:
                     continue
                 for z in range(img.shape[0]):
-                    m = gt[z]
+                    m = gt[z]                             # [H, W]
                     if not keep_empty and m.max() == 0:
                         continue          # drop slices with no heart (apex/base air)
                     self.items.append((img[z].astype(np.float32),
                                        m.astype(np.uint8)))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, i):
+    def _aug(self, img: Slice2D, m: Slice2D) -> tuple[Slice2D, Slice2D]:
+        """Geometric (flip/rotate/scale) on img+mask together; intensity on img.
+
+        Both [size, size] in and out. Mask uses nearest-order so labels stay
+        integer; img is bilinear. Uses global np.random (seed it in the training
+        entrypoint for reproducibility).
+        """
+        from scipy.ndimage import rotate, zoom
+
+        if np.random.rand() < 0.5:                       # horizontal flip
+            img, m = img[:, ::-1], m[:, ::-1]
+        if np.random.rand() < 0.5:                       # vertical flip
+            img, m = img[::-1], m[::-1]
+        ang = np.random.uniform(-15, 15)                 # small rotation
+        img = rotate(img, ang, order=1, reshape=False, mode="constant", cval=0.0)
+        m = rotate(m, ang, order=0, reshape=False, mode="constant", cval=0)
+        s = np.random.uniform(0.9, 1.1)                  # isotropic scale -> refit
+        img = fit_square(zoom(img, s, order=1), self.size, 0.0)
+        m = fit_square(zoom(m, s, order=0), self.size, 0)
+        img = img * np.random.uniform(0.9, 1.1) + np.random.normal(0, 0.05, img.shape)
+        return np.ascontiguousarray(img, np.float32), np.ascontiguousarray(m, np.uint8)
+
+    def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
         import torch
         img, m = self.items[i]
-        img = fit_square(img, self.size, pad_value=0.0)
-        m = fit_square(m, self.size, pad_value=0)
+        img = fit_square(img, self.size, pad_value=0.0)          # [size, size]
+        m = fit_square(m, self.size, pad_value=0)                # [size, size]
+        if self.augment:
+            img, m = self._aug(img, m)
+        # img -> [1, size, size] (add channel); mask -> [size, size] int64
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def build_splits(size=256, val_frac=0.2, seed=0, n_patients=0):
-    """Convenience: (train_ds, val_ds, train_dirs, val_dirs)."""
+def build_splits(
+    size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0
+) -> tuple[ACDCSliceDataset, ACDCSliceDataset, list[Path], list[Path]]:
+    """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs)."""
     cases = acdc_cases()
     if n_patients:
         cases = cases[:n_patients]
     train_dirs, val_dirs = split_patients(cases, val_frac, seed)
-    return (ACDCSliceDataset(train_dirs, size=size),
-            ACDCSliceDataset(val_dirs, size=size),
+    return (ACDCSliceDataset(train_dirs, size=size, augment=True),
+            ACDCSliceDataset(val_dirs, size=size, augment=False),
             train_dirs, val_dirs)
