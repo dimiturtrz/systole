@@ -27,7 +27,11 @@ export class Presenter {
   private readonly sliceZ = 0;
   private readonly sliceHalf = 0.6;
   private readonly slab: boolean[];
+  private readonly halfX: number;
+  private readonly halfY: number;
   private tipLeft = 0; // remaining time in the current RF-tip ramp
+  private peIndex = 0; // phase-encode step counter (gradient changes each TR)
+  private peStep = 0; // current phase-encode value, −1…1
 
   private tr = 2.0; // repetition time (s)
   private te = 0.5; // echo/readout time after the pulse (s)
@@ -49,6 +53,8 @@ export class Presenter {
     this.phase = [...this.spins.phase];
     if (panels && phantom) this.acq = new Acquisition(phantom);
     this.slab = this.positions.map((p) => Math.abs(p[2] - this.sliceZ) <= this.sliceHalf);
+    this.halfX = Math.max(...this.positions.map((p) => Math.abs(p[0]))) + 0.8;
+    this.halfY = Math.max(...this.positions.map((p) => Math.abs(p[1]))) + 0.8;
   }
 
   private directions(): Vec3[] {
@@ -57,6 +63,7 @@ export class Presenter {
 
   start(): void {
     this.view.renderSpins(this.positions, this.directions());
+    this.view.setSlice(this.sliceZ, this.halfX, this.halfY);
     this.pulse();
     this.cycleTime = 0;
     this.readThisCycle = false;
@@ -92,6 +99,8 @@ export class Presenter {
     }
     this.sim.step(this.theta, this.phase, d); // precess + relax theta toward rest
     if (this.tipLeft > 0) this.applyTip(d); // smooth RF tip overrides slab theta during the ramp
+    const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / TIP_DUR) : 0;
+    this.view.flashSlice(flash); // RF pulse flashes the slice plane
     this.view.updateSpins(this.directions());
     this.drawSeq();
   }
@@ -107,6 +116,8 @@ export class Presenter {
 
   private pulse(): void {
     this.tipLeft = TIP_DUR; // start a smooth RF tip ramp (no instant teleport, no phase reset)
+    this.peIndex = (this.peIndex + 1) % 16; // phase-encode steps each TR (RF stays the same)
+    this.peStep = (this.peIndex / 15) * 2 - 1;
   }
 
   private readout(): void {
@@ -122,7 +133,7 @@ export class Presenter {
   }
 
   private drawSeq(): void {
-    this.seq?.draw({ tr: this.tr, te: this.te, cycleTime: this.cycleTime });
+    this.seq?.draw({ tr: this.tr, te: this.te, cycleTime: this.cycleTime, peStep: this.peStep });
   }
 
   run(): void {

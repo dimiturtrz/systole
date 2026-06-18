@@ -5,6 +5,7 @@ import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkLineSource from '@kitware/vtk.js/Filters/Sources/LineSource';
 import vtkConeSource from '@kitware/vtk.js/Filters/Sources/ConeSource';
 import vtkSphereSource from '@kitware/vtk.js/Filters/Sources/SphereSource';
+import vtkPlaneSource from '@kitware/vtk.js/Filters/Sources/PlaneSource';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from './SpinView';
 
@@ -29,6 +30,7 @@ export class SpinScene implements SpinView {
   private protons: any[] = [];
   private shafts: any[] = [];
   private heads: any[] = [];
+  private slicePlane: any; // RF slice plane (flashes on pulse)
 
   constructor() {
     const fs = vtkFullScreenRenderWindow.newInstance({ background: [0.06, 0.07, 0.09] });
@@ -86,6 +88,26 @@ export class SpinScene implements SpinView {
       this.color(d, this.protons[k], this.shafts[k], this.heads[k]);
     }
     this.renderWindow.render();
+  }
+
+  setSlice(z: number, halfX: number, halfY: number): void {
+    const plane = vtkPlaneSource.newInstance({
+      origin: [-halfX, -halfY, z],
+      point1: [halfX, -halfY, z],
+      point2: [-halfX, halfY, z],
+    });
+    const actor = vtkActor.newInstance();
+    actor.setMapper(this.mapperFor(plane));
+    const prop = actor.getProperty();
+    prop.setColor(0.4, 0.9, 1.0); // RF cyan
+    prop.setOpacity(0);
+    prop.setLighting(false);
+    this.renderer.addActor(actor);
+    this.slicePlane = actor;
+  }
+
+  flashSlice(opacity: number): void {
+    if (this.slicePlane) this.slicePlane.getProperty().setOpacity(opacity);
   }
 
   private mapperFor(source: any): any {

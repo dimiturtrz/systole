@@ -16,6 +16,8 @@ class FakeView implements SpinView {
   updateSpins(m: Vec3[]): void {
     this.updates.push(m.map((v) => [...v] as Vec3));
   }
+  setSlice(): void {}
+  flashSlice(): void {}
   last(): Vec3[] {
     return this.updates[this.updates.length - 1];
   }

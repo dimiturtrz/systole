@@ -5,6 +5,7 @@ export interface SeqState {
   tr: number;
   te: number;
   cycleTime: number;
+  peStep: number; // phase-encode value −1…1 (steps each TR; RF stays the same)
 }
 
 export interface SequenceView {
@@ -39,7 +40,7 @@ export function mountSequenceDiagram(): SequenceView {
   const tx = (t: number, tr: number): number => padL + (t / tr) * plot;
 
   return {
-    draw({ tr, te, cycleTime }: SeqState): void {
+    draw({ tr, te, cycleTime, peStep }: SeqState): void {
       ctx.clearRect(0, 0, W, H);
       ctx.font = '10px system-ui';
 
@@ -78,9 +79,10 @@ export function mountSequenceDiagram(): SequenceView {
       ctx.fillStyle = 'rgba(122,162,255,.5)';
       ctx.fillRect(x0 - 6, ySS - amp, 12, amp);
 
-      // Gpe: phase-encode blip just after RF
-      ctx.fillStyle = 'rgba(240,179,91,.6)';
-      ctx.fillRect(x0 + 10, yPE - amp * 0.8, 8, amp * 0.8);
+      // Gpe: phase-encode blip just after RF — height steps with peStep each TR
+      const peH = amp * 0.8 * peStep; // signed: up or down from the line
+      ctx.fillStyle = 'rgba(240,179,91,.7)';
+      ctx.fillRect(x0 + 10, yPE - Math.max(0, peH), 8, Math.abs(peH) || 1);
 
       // ADC: readout window centered at TE
       ctx.fillStyle = 'rgba(93,209,196,.35)';
