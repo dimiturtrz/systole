@@ -40,7 +40,7 @@ export class SpinScene implements SpinView {
     this.coneSource = vtkConeSource.newInstance({ height: HEAD, radius: 0.12, resolution: 12, direction: [1, 0, 0], center: [0, 0, 0] });
   }
 
-  renderSpins(positions: Vec3[], directions: Vec3[]): void {
+  renderSpins(positions: Vec3[], directions: Vec3[], colors?: Vec3[]): void {
     this.positions = positions;
     for (let k = 0; k < positions.length; k++) {
       const p = positions[k];
@@ -66,7 +66,7 @@ export class SpinScene implements SpinView {
       this.lines.push(line);
       this.shafts.push(la);
       this.heads.push(ca);
-      this.color(d, pa, la, ca);
+      this.applyColor([pa, la, ca], colors?.[k] ?? this.transverseColor(d));
     }
     this.addB0Axis(positions);
 
@@ -78,14 +78,14 @@ export class SpinScene implements SpinView {
     this.renderWindow.render();
   }
 
-  updateSpins(directions: Vec3[]): void {
+  updateSpins(directions: Vec3[], colors?: Vec3[]): void {
     const n = Math.min(this.lines.length, directions.length);
     for (let k = 0; k < n; k++) {
       const p = this.positions[k];
       const d = directions[k];
       this.lines[k].setPoint2(this.along(p, d, SHAFT));
       this.heads[k].setUserMatrix(arrowMatrix(this.along(p, d, HEAD_C), d));
-      this.color(d, this.protons[k], this.shafts[k], this.heads[k]);
+      this.applyColor([this.protons[k], this.shafts[k], this.heads[k]], colors?.[k] ?? this.transverseColor(d));
     }
     this.renderWindow.render();
   }
@@ -120,13 +120,16 @@ export class SpinScene implements SpinView {
     return [p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t];
   }
 
-  private color(d: Vec3, ...actors: any[]): void {
+  private transverseColor(d: Vec3): Vec3 {
     const t = Math.min(1, Math.hypot(d[0], d[1]));
-    const c: Vec3 = [
+    return [
       REST[0] + (HOT[0] - REST[0]) * t,
       REST[1] + (HOT[1] - REST[1]) * t,
       REST[2] + (HOT[2] - REST[2]) * t,
     ];
+  }
+
+  private applyColor(actors: any[], c: Vec3): void {
     for (const a of actors) a.getProperty().setColor(c[0], c[1], c[2]);
   }
 

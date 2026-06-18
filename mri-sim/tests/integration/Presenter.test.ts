@@ -10,11 +10,13 @@ const REST_Z = Math.cos(0.12); // Presenter's rest tilt → resting proton z-com
 class FakeView implements SpinView {
   renderCalls = 0;
   updates: Vec3[][] = [];
+  lastColors?: Vec3[];
   renderSpins(_p: Vec3[], _m: Vec3[]): void {
     this.renderCalls++;
   }
-  updateSpins(m: Vec3[]): void {
+  updateSpins(m: Vec3[], colors?: Vec3[]): void {
     this.updates.push(m.map((v) => [...v] as Vec3));
+    this.lastColors = colors;
   }
   setSlice(): void {}
   flashSlice(): void {}
@@ -70,6 +72,16 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     p2.tick(0.3);
     const a2 = v2.last()[i];
     expect(Math.hypot(a2[0] - b2[0], a2[1] - b2[1])).toBeGreaterThan(1e-2); // moved
+  });
+
+  it('colors spins by Larmor while a gradient is on, none when idle', () => {
+    const v = new FakeView();
+    const p = new Presenter(v);
+    p.start(); // cycleTime 0 → slice-select gradient on
+    expect(v.lastColors).toBeDefined();
+    expect(v.lastColors!.length).toBeGreaterThan(0);
+    p.tick(0.36); // land in the idle gap between phase-encode and readout (tr=2)
+    expect(v.lastColors).toBeUndefined();
   });
 });
 

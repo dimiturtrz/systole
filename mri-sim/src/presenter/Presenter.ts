@@ -29,6 +29,7 @@ export class Presenter {
   private readonly slab: boolean[];
   private readonly halfX: number;
   private readonly halfY: number;
+  private readonly halfZ: number;
   private tipLeft = 0; // remaining time in the current RF-tip ramp
   private peIndex = 0; // phase-encode step counter (gradient changes each TR)
   private peStep = 0; // current phase-encode value, −1…1
@@ -55,6 +56,7 @@ export class Presenter {
     this.slab = this.positions.map((p) => Math.abs(p[2] - this.sliceZ) <= this.sliceHalf);
     this.halfX = Math.max(...this.positions.map((p) => Math.abs(p[0]))) + 0.8;
     this.halfY = Math.max(...this.positions.map((p) => Math.abs(p[1]))) + 0.8;
+    this.halfZ = Math.max(...this.positions.map((p) => Math.abs(p[2]))) + 0.5;
   }
 
   private directions(): Vec3[] {
@@ -67,7 +69,7 @@ export class Presenter {
     this.pulse();
     this.cycleTime = 0;
     this.readThisCycle = false;
-    this.view.updateSpins(this.directions());
+    this.view.updateSpins(this.directions(), this.gradientColors());
     this.drawPanels();
     this.drawSeq();
   }
@@ -83,6 +85,31 @@ export class Presenter {
 
   setTE(v: number): void {
     this.te = Math.min(v, this.tr * 0.9);
+  }
+
+  setLarmor(v: number): void {
+    this.sim.larmorHz = v;
+  }
+
+  /** Which gradient axis is active now (0=x freq, 1=y phase, 2=z slice, -1=none). */
+  private gradientAxisNow(): number {
+    const { tr, te } = this;
+    const ct = this.cycleTime;
+    const rfW = Math.max(0.08 * tr, 0.12);
+    const peW = 0.06 * tr;
+    const roHalf = Math.max(0.05 * tr, 0.1);
+    if (ct < rfW) return 2; // Gz — slice select (during RF)
+    if (ct < rfW + 0.02 * tr + peW) return 1; // Gy — phase encode
+    if (Math.abs(ct - te) <= roHalf) return 0; // Gx — frequency encode (readout)
+    return -1;
+  }
+
+  /** When a gradient is on, color spins by local Larmor (position along that axis). */
+  private gradientColors(): Vec3[] | undefined {
+    const axis = this.gradientAxisNow();
+    if (axis < 0) return undefined; // no gradient → view colors by transverse mag
+    const half = axis === 0 ? this.halfX : axis === 1 ? this.halfY : this.halfZ;
+    return this.positions.map((p) => freqColor(p[axis] / half));
   }
 
   tick(dt: number): void {
@@ -101,7 +128,7 @@ export class Presenter {
     if (this.tipLeft > 0) this.applyTip(d); // smooth RF tip overrides slab theta during the ramp
     const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / TIP_DUR) : 0;
     this.view.flashSlice(flash); // RF pulse flashes the slice plane
-    this.view.updateSpins(this.directions());
+    this.view.updateSpins(this.directions(), this.gradientColors());
     this.drawSeq();
   }
 
@@ -145,4 +172,10 @@ export class Presenter {
     };
     requestAnimationFrame(loop);
   }
+}
+
+/** Diverging colormap for Larmor frequency: low (blue) ↔ high (red). */
+function freqColor(t: number): Vec3 {
+  const u = Math.max(-1, Math.min(1, t));
+  return [0.5 + 0.5 * u, 0.35, 0.5 - 0.5 * u];
 }

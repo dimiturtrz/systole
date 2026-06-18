@@ -21,6 +21,7 @@ presenter.setTE(0.5);
 
 mountControls([
   { label: 'Speed', min: 0.05, max: 2, step: 0.05, value: DEFAULT_SPEED, fmt: (v) => `${v.toFixed(2)}×`, onChange: (v) => presenter.setSpeed(v) },
+  { label: 'Larmor', min: 0.1, max: 2, step: 0.05, value: 0.5, fmt: (v) => `${v.toFixed(2)} Hz`, onChange: (v) => presenter.setLarmor(v) },
   { label: 'TR (s)', min: 0.5, max: 5, step: 0.1, value: 2.0, fmt: (v) => v.toFixed(1), onChange: (v) => presenter.setTR(v) },
   { label: 'TE (s)', min: 0.1, max: 4, step: 0.05, value: 0.5, fmt: (v) => v.toFixed(2), onChange: (v) => presenter.setTE(v) },
 ]);
