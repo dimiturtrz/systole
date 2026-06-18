@@ -3,9 +3,11 @@
 Interactive 3D MRI pipeline visualizer (spins → pulse sequence → k-space → image).
 Educational; see [SPEC.md](SPEC.md) for the full design.
 
-**Status: M1.5** — animated Bloch cycle: 90° RF tip → free precession + T1/T2
-relaxation (3D spiral back to +z), arrow length ∝ |M|, re-pulsed on a period. Engine
-is pure TS + unit-tested; renderer verified by an asserting visual smoke.
+**Status: M4** — end-to-end pipeline visualized: a 3D grid of protons precessing on
+cones (individual-spin view) with **slice-selective** excitation (the central z-slab
+glows + tips), a **speed slider**, and **k-space → image** panels that fill line-by-line
+(low→high frequency) so the reconstructed image sharpens. Engine is pure TS +
+unit-tested (24 tests); renderer verified by an asserting visual smoke.
 
 ## Stack
 TypeScript + [vtk.js](https://kitware.github.io/vtk-js/) + Vite. Architecture is
@@ -28,7 +30,7 @@ npm run build    # typecheck + production build (dist/)
 ```
 
 ## Milestones
-M0 scene ✓ · M1 precession + RF tip ✓ · M1.5 T1/T2 relaxation ✓ · M2 slice-select ✓ (3D grid) · M3 phase/freq encode ·
+M0 scene ✓ · M1 precession + RF tip ✓ · M1.5 T1/T2 relaxation ✓ · M2 slice-select ✓ (3D grid) · M3 FFT/k-space engine ✓ · M4 k-space→image (progressive) ✓ ·
 M4 k-space fills → live inverse-FFT image (honest, from the spins) · M5 controls + timeline.
 
 *Lives in the cardiac-imaging repo for now; will split to its own repo as it grows.*
