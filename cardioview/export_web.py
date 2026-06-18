@@ -15,7 +15,7 @@ import nibabel as nib
 import numpy as np
 import pyvista as pv
 import torch
-from scipy.ndimage import zoom, label as cc_label
+from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
@@ -23,20 +23,11 @@ from cardioseg.training.dataset import fit_square, split_patients
 from cardioseg.data.mri.data import acdc_cases
 from cardioseg.evaluation.measure import ejection_fraction
 from render_overlay import CHAMBERS, SIZE, MODELS, load_model, patient_dir
+from geometry import keep_largest, bbox_slices
 
 OUT = Path("cardioview/web/public/data")
 DECIMATE = 0.7  # fraction of triangles to drop — smaller files, faster web
 MESH_MM = 2.5   # surface resample step; coarser than voxels -> far fewer triangles, still smooth
-
-
-def keep_largest(binary: np.ndarray) -> np.ndarray:
-    """Drop stray islands (model false positives) — keep the biggest connected blob."""
-    lab, n = cc_label(binary)
-    if n <= 1:
-        return binary
-    sizes = np.bincount(lab.ravel())
-    sizes[0] = 0
-    return lab == sizes.argmax()
 
 
 def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
@@ -91,12 +82,7 @@ def shared_crop(masks: dict, spacing, margin_mm: float = 12.0):
     union = np.zeros_like(next(iter(masks.values())), dtype=bool)
     for m in masks.values():
         union |= m > 0
-    sl = []
-    for ax, n in enumerate(union.shape):
-        idx = np.any(union, axis=tuple(a for a in range(3) if a != ax)).nonzero()[0]
-        pad = int(round(margin_mm / spacing[ax]))
-        sl.append(slice(max(0, idx[0] - pad), min(n, idx[-1] + 1 + pad)))
-    crop = (sl[0], sl[1], sl[2])
+    crop = bbox_slices(union, spacing, margin_mm)
     return {t: m[crop] for t, m in masks.items()}, float(min(spacing))
 
 

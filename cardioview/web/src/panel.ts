@@ -3,6 +3,7 @@ import { glbUrl } from './manifest';
 import type { HeartViewer } from './viewer';
 import { efCategory, efError, fmtMl, fmtPct } from './metrics';
 import { showSpinner, hideSpinner } from './spinner';
+import { pickDefault } from './select';
 
 const CARD =
   'position:fixed;top:12px;left:12px;z-index:10;background:rgba(20,24,30,.86);color:#cdd6e0;' +
@@ -12,10 +13,7 @@ const FPS = 12;
 
 /** Control + readout panel; drives the viewer (static ED/ES toggle or beating cycle). */
 export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
-  // Open on a genuinely normal heart (NOR group) if present, else the highest-EF one.
-  let current =
-    entries.find((e) => e.group === 'NOR') ??
-    entries.reduce((a, b) => (b.pred.ef > a.pred.ef ? b : a), entries[0]);
+  let current = pickDefault(entries);
 
   const wrap = document.createElement('div');
   wrap.style.cssText = CARD;

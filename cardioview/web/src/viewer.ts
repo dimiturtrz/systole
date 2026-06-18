@@ -4,13 +4,7 @@ import vtkGLTFImporter from '@kitware/vtk.js/IO/Geometry/GLTFImporter';
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkCubeAxesActor from '@kitware/vtk.js/Rendering/Core/CubeAxesActor';
-
-// Three chamber slots, identified by the glb's baked color. glTF drops opacity → re-set it.
-const CHAMBERS = [
-  { name: 'LV cavity', color: [0.94, 0.33, 0.31], opacity: 1.0, test: (r: number, g: number, b: number) => r > 0.6 && g < 0.5 && b < 0.5 },
-  { name: 'myocardium', color: [1.0, 0.79, 0.36], opacity: 0.32, test: (r: number, g: number, b: number) => r > 0.6 && g > 0.55 && b < 0.55 },
-  { name: 'RV cavity', color: [0.36, 0.56, 0.93], opacity: 1.0, test: (r: number, _g: number, b: number) => b > 0.55 && b > r },
-];
+import { CHAMBERS, chamberSlot } from './chambers';
 
 /**
  * Renders chamber meshes from precomputed glb. The beating cycle keeps only THREE actors
@@ -152,7 +146,7 @@ export class HeartViewer {
     const polys: (any | null)[] = [null, null, null];
     for (const a of importer.getActors().values()) {
       const [r, g, b] = a.getProperty().getColor();
-      const slot = CHAMBERS.findIndex((c) => c.test(r, g, b));
+      const slot = chamberSlot(r, g, b);
       const mapper = a.getMapper();
       if (slot >= 0 && mapper) polys[slot] = mapper.getInputData();
       this.renderer.removeActor(a);
