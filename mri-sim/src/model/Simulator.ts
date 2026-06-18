@@ -16,12 +16,20 @@ export class Simulator {
 
   /** Advance time dt: every proton precesses; tilt relaxes toward rest. */
   step(theta: number[], phase: number[], dt: number): void {
+    this.precess(phase, dt);
+    this.relax(theta, dt);
+  }
+
+  /** Larmor precession only — advance every proton's phase by the Larmor rate over dt. */
+  precess(phase: number[], dt: number): void {
     const dphi = 2 * Math.PI * this.larmorHz * dt;
+    for (let i = 0; i < phase.length; i++) phase[i] += dphi;
+  }
+
+  /** T1 relaxation only — tilt decays back toward rest over dt. */
+  relax(theta: number[], dt: number): void {
     const e1 = Math.exp(-dt / this.t1);
-    for (let i = 0; i < theta.length; i++) {
-      phase[i] += dphi;
-      theta[i] = this.restTilt + (theta[i] - this.restTilt) * e1;
-    }
+    for (let i = 0; i < theta.length; i++) theta[i] = this.restTilt + (theta[i] - this.restTilt) * e1;
   }
 
   /**

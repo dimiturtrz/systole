@@ -103,6 +103,27 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     expect(oblique).not.toEqual(axial); // different spins selected (set, not just count)
   });
 
+  it('precession is uniform across the TR (the warp skips the wait, not the spinning)', () => {
+    const v = new FakeView();
+    const p = new Presenter(v);
+    p.start();
+    const i = v.last().findIndex((m) => Math.abs(m[2] - REST_Z) < 1e-9); // a resting (non-slab) spin
+    const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+    const az = (): number => Math.atan2(v.last()[i][1], v.last()[i][0]);
+
+    const e0 = az();
+    p.tick(0.001); // encode region (ct ≈ 0) — no warp
+    const dEncode = wrap(az() - e0);
+
+    p.tick(0.05); // jump past the readout into the idle tail
+    const t0 = az();
+    p.tick(0.001); // same dt, now in the warped tail
+    const dIdle = wrap(az() - t0);
+
+    expect(dEncode).toBeGreaterThan(0); // actually precessing
+    expect(dIdle).toBeCloseTo(dEncode, 6); // same rate — not sped up 20× by the warp
+  });
+
   it('the RF flip completes within the slice-select window (full knock-down, not a light tap)', () => {
     const v = new FakeView();
     const p = new Presenter(v);

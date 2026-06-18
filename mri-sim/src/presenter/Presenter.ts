@@ -164,13 +164,15 @@ export class Presenter {
   }
 
   tick(dt: number): void {
-    let d = dt * this.speed;
-    // Fast-forward the dead relaxation tail (after readout), but stop on TR so the warp
-    // can't overshoot into — and skip — the next RF flip.
+    const base = dt * this.speed; // speed-scaled clock (NOT warped)
+    // Fast-forward only the dead relaxation tail (after readout), stopping on TR so the
+    // warp can't overshoot into — and skip — the next RF flip. Precession uses `base`, not
+    // this, so spins keep precessing at a steady rate (the warp skips the wait, not the spin).
+    let seqD = base;
     if (this.cycleTime > seqWindows(this.tr, this.te).roEnd) {
-      d = Math.min(d * IDLE_WARP, this.tr - this.cycleTime);
+      seqD = Math.min(base * IDLE_WARP, this.tr - this.cycleTime);
     }
-    this.cycleTime += d;
+    this.cycleTime += seqD;
     if (this.cycleTime >= this.tr) {
       this.cycleTime -= this.tr;
       this.pulse(); // RF at the start of each TR
@@ -180,8 +182,9 @@ export class Presenter {
       this.readout(); // acquire one k-space line at TE
       this.readThisCycle = true;
     }
-    this.sim.step(this.theta, this.phase, d); // precess + relax theta toward rest
-    if (this.tipLeft > 0) this.applyTip(d); // smooth RF tip overrides slab theta during the ramp
+    this.sim.precess(this.phase, base); // Larmor — uniform across the TR (warp never speeds it)
+    this.sim.relax(this.theta, seqD); // T1 tilt-recovery tracks the (warped) sequence clock
+    if (this.tipLeft > 0) this.applyTip(seqD); // smooth RF tip overrides slab theta during the ramp
     const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / this.tipDur) : 0;
     this.view.flashSlice(flash); // RF pulse flashes the slice plane
     this.view.updateSpins(this.directions(), this.gradientColors());
