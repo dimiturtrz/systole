@@ -1,0 +1,10 @@
+# Template for paths.yaml (which is gitignored — it holds your machine's absolute paths).
+# Copy this file to paths.yaml and set the roots for your machine.
+#
+#   cp paths.example.yaml paths.yaml
+#
+# Data lives OUTSIDE the repo (licensing + size). Env vars CARDIAC_DATA_ROOT /
+# CARDIAC_PROCESSED_ROOT override these (handy for CI).
+data:
+  raw: /path/to/data/raw/mri/acdc          # ACDC inputs (the dir holding training/)
+  processed: /path/to/data/processed/mri/acdc   # preprocessing cache (npz)

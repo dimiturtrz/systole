@@ -12,15 +12,15 @@ flipped. Always disambiguate geometrically, never trust a remembered integer.
 
 Shapes: volumes are [D, H, W] (D slices, H x W in-plane); spacing is (z, y, x) mm.
 """
-import os
 from pathlib import Path
 from typing import TypedDict
 
+from cardioseg.config import data_root
 from cardioseg.types import Image, Mask, Spacing, Volume
 
-# Data lives outside the repo (licensing + size). Point CARDIAC_DATA_ROOT at your
-# local ACDC root (the dir holding training/), e.g. D:/data/raw/mri/acdc.
-DATA_ROOT = os.environ.get("CARDIAC_DATA_ROOT", "data/raw/mri/acdc")
+# Data lives outside the repo (licensing + size). Configured in paths.yaml
+# (data.raw), overridable via CARDIAC_DATA_ROOT. See cardioseg/config.py.
+DATA_ROOT = data_root("raw")
 
 # ACDC ground-truth integer labels (verified on real data).
 LV_CAVITY, LV_MYO, RV_CAVITY = 3, 2, 1

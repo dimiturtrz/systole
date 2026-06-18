@@ -11,6 +11,7 @@ dependencies = [
     "nibabel",
     "matplotlib",
     "tqdm",
+    "omegaconf",   # paths.yaml config loader (cardioseg/config.py)
     "monai>=1.5",
     "pyvista",  # cardioview: 3D volume/mesh rendering (VTK)
     # torch >=2.7 is required for NVIDIA Blackwell (sm_120, e.g. RTX 5090).

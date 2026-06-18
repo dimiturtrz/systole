@@ -67,14 +67,16 @@ pip install -e .                           # or: pip install -r requirements.txt
 python -m pytest tests/ -q                 # unit + real-ACDC integration (integration skips w/o data)
 ```
 Real data: register for ACDC (Creatis / humanheart-project). Data lives **outside
-the repo** (licensing + size) under a `raw/` ↔ `processed/` split, e.g.
-`D:/data/raw/mri/acdc/` (inputs) and `D:/data/processed/mri/acdc/` (preprocessing
-cache). Point the loader at the raw root:
+the repo** (licensing + size) under a `raw/` ↔ `processed/` split. Point at it via
+`paths.yaml` (copy the template — it's gitignored, machine-specific):
 ```bash
-export CARDIAC_DATA_ROOT=/path/to/raw/mri/acdc          # loader input
-export CARDIAC_PROCESSED_ROOT=/path/to/processed/mri/acdc   # preprocess cache (optional)
+cp paths.example.yaml paths.yaml      # then edit:
+#   data:
+#     raw: /path/to/data/raw/mri/acdc          # ACDC inputs (dir holding training/)
+#     processed: /path/to/data/processed/mri/acdc   # preprocess cache (npz)
 ```
-(falls back to `data/raw/mri/acdc`, which is gitignored).
+Loaded by `cardioseg/config.py` (OmegaConf). Env vars `CARDIAC_DATA_ROOT` /
+`CARDIAC_PROCESSED_ROOT` override it (handy for CI).
 
 ### Train on real ACDC
 ```bash

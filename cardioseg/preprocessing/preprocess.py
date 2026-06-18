@@ -10,15 +10,15 @@ Processed arrays are cached under CARDIAC_PROCESSED_ROOT (default
 D:/data/processed/mri/acdc), keyed by the preprocessing params, so re-runs with
 the same params are instant and different params never collide.
 """
-import os
 from pathlib import Path
 
 import numpy as np
 
+from cardioseg.config import data_root
 from cardioseg.data.mri.data import load_ed_es
 from cardioseg.types import Image, Spacing, Volume
 
-PROCESSED_ROOT = os.environ.get("CARDIAC_PROCESSED_ROOT", "D:/data/processed/mri/acdc")
+PROCESSED_ROOT = data_root("processed")     # paths.yaml data.processed (env override: CARDIAC_PROCESSED_ROOT)
 
 
 def zscore(img: Image, eps: float = 1e-6) -> Image:

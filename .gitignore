@@ -1,4 +1,5 @@
-data/
+/data/                 # top-level dataset dir only (NOT cardioseg/data/ source)
+paths.yaml             # machine-specific absolute paths (copy from paths.example.yaml)
 # mri-sim (TypeScript app) build artifacts
 mri-sim/node_modules/
 mri-sim/dist/

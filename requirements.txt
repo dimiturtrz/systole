@@ -7,4 +7,5 @@ scikit-image
 vtk
 matplotlib
 tqdm
+omegaconf
 pytest
