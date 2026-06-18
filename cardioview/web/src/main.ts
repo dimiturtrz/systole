@@ -1,14 +1,12 @@
 import { HeartViewer } from './viewer';
 import { loadManifest } from './manifest';
 import { mountPanel } from './panel';
-import { mountImport } from './importPanel';
 
 const viewer = new HeartViewer();
-mountImport(viewer); // upload-your-own-scan path (independent of the canned hearts)
-
+let entries: Awaited<ReturnType<typeof loadManifest>> = [];
 try {
-  const entries = await loadManifest();
-  if (entries.length > 0) mountPanel(entries, viewer);
+  entries = await loadManifest();
 } catch {
-  /* no manifest is fine — the import panel still works */
+  /* no manifest is fine — import still works */
 }
+mountPanel(entries, viewer);

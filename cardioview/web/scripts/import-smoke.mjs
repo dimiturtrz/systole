@@ -36,10 +36,9 @@ await input.uploadFile(SCAN);
 await new Promise((r) => setTimeout(r, WAIT)); // model download + wasm inference + mesh + render
 
 const buf = await page.screenshot({ type: 'png' });
-const status = await page.$eval('#cv-status', (e) => e.textContent).catch(() => '?');
-const vols = await page.$eval('#cv-vols', (e) => e.textContent).catch(() => '');
+const readout = await page.$eval('#cv-readout', (e) => e.textContent?.replace(/\s+/g, ' ').trim()).catch(() => '');
 await browser.close();
-console.log(`[import-smoke] status="${status}"  vols="${vols}"`);
+console.log(`[import-smoke] readout="${readout}"`);
 
 const png = PNG.sync.read(Buffer.from(buf));
 let chamber = 0;
