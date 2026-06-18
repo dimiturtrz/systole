@@ -1,20 +1,28 @@
 import { Presenter } from './presenter/Presenter';
 import { SpinScene } from './view/SpinScene';
-import { mountSpeedSlider } from './view/controls';
+import { mountControls } from './view/controls';
 import { diskPhantom } from './model/phantom';
 import { mountPanels } from './view/Panels';
+import { mountSequenceDiagram } from './view/SequenceDiagram';
 
 const N = 20;
 const phantom = diskPhantom(N);
 const panels = mountPanels(N);
+const seq = mountSequenceDiagram();
 
-// Presenter drives the spins AND the k-space acquisition off one speed-scaled clock,
-// so the slider controls both the precession and how fast k-space fills.
-const presenter = new Presenter(new SpinScene(), panels, phantom);
+// One presenter drives spins + k-space acquisition + sequence diagram on a shared clock.
+const presenter = new Presenter(new SpinScene(), panels, phantom, seq);
 presenter.start();
 
 const DEFAULT_SPEED = 0.3;
 presenter.setSpeed(DEFAULT_SPEED);
-mountSpeedSlider(DEFAULT_SPEED, (s) => presenter.setSpeed(s));
+presenter.setTR(2.0);
+presenter.setTE(0.5);
+
+mountControls([
+  { label: 'Speed', min: 0.05, max: 2, step: 0.05, value: DEFAULT_SPEED, fmt: (v) => `${v.toFixed(2)}×`, onChange: (v) => presenter.setSpeed(v) },
+  { label: 'TR (s)', min: 0.5, max: 5, step: 0.1, value: 2.0, fmt: (v) => v.toFixed(1), onChange: (v) => presenter.setTR(v) },
+  { label: 'TE (s)', min: 0.1, max: 4, step: 0.05, value: 0.5, fmt: (v) => v.toFixed(2), onChange: (v) => presenter.setTE(v) },
+]);
 
 presenter.run();
