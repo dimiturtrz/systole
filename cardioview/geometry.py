@@ -15,6 +15,11 @@ def keep_largest(binary: np.ndarray) -> np.ndarray:
     return lab == sizes.argmax()
 
 
+def nearest_index(values, target) -> int:
+    """Index of the value closest to `target` (e.g. map an ED/ES frame to a sampled frame)."""
+    return min(range(len(values)), key=lambda i: abs(values[i] - target))
+
+
 def bbox_slices(mask_bool: np.ndarray, spacing, margin_mm: float = 12.0) -> tuple[slice, ...]:
     """Tight bounding box of the True voxels + a mm margin per axis, clamped to the array."""
     sl = []

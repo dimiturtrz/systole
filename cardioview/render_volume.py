@@ -13,25 +13,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import numpy as np
 from scipy.ndimage import zoom
 
 from cardioseg.data.mri.data import load_ed_es
-
-DEFAULT_ROOT = os.environ.get("CARDIAC_DATA_ROOT", "D:/data/raw/mri/acdc")
-
-
-def patient_dir(patient: str, root: str = DEFAULT_ROOT) -> Path:
-    """Locate a patient folder under training/ or testing/."""
-    base = Path(root)
-    for split in ("training", "testing"):
-        p = base / split / patient
-        if p.is_dir():
-            return p
-    raise FileNotFoundError(f"{patient} not found under {base}/training or /testing")
+from common import patient_dir  # noqa: F401  (re-exported; used here and by render_overlay)
 
 
 def crop_to_heart(vol_zyx, gt_zyx, spacing_zyx, margin_mm: float = 15.0):

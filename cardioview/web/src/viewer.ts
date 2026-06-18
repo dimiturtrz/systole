@@ -5,6 +5,7 @@ import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkCubeAxesActor from '@kitware/vtk.js/Rendering/Core/CubeAxesActor';
 import { CHAMBERS, chamberSlot } from './chambers';
+import { wrapIndex } from './util';
 
 /**
  * Renders chamber meshes from precomputed glb. The beating cycle keeps only THREE actors
@@ -87,8 +88,7 @@ export class HeartViewer {
 
   showFrame(i: number): void {
     if (this.framePolys.length === 0) return;
-    const n = this.framePolys.length;
-    const frame = this.framePolys[((i % n) + n) % n];
+    const frame = this.framePolys[wrapIndex(i, this.framePolys.length)];
     for (let s = 0; s < this.actors.length; s++) {
       const pd = frame[s];
       if (pd) {

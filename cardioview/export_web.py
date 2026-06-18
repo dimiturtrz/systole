@@ -22,8 +22,8 @@ from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane
 from cardioseg.training.dataset import fit_square, split_patients
 from cardioseg.data.mri.data import acdc_cases
 from cardioseg.evaluation.measure import ejection_fraction
-from render_overlay import CHAMBERS, SIZE, MODELS, load_model, patient_dir
-from geometry import keep_largest, bbox_slices
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir
+from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
 DECIMATE = 0.7  # fraction of triangles to drop — smaller files, faster web
@@ -169,8 +169,8 @@ def run_animate(patients, model, device, stride=1):
             export_glb(crop_masks[k], rspacing, OUT / fn)
             files.append(fn)
         edi, esi = frame_indices(p)
-        ed_k = min(range(len(frames_t)), key=lambda k: abs(frames_t[k] - edi))
-        es_k = min(range(len(frames_t)), key=lambda k: abs(frames_t[k] - esi))
+        ed_k = nearest_index(frames_t, edi)
+        es_k = nearest_index(frames_t, esi)
         ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
         case = preprocess_case(patient_dir(p))
         gt = volumes(gt_masks(case), tuple(float(s) for s in case["spacing"]))

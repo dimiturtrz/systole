@@ -24,30 +24,12 @@ from skimage.measure import marching_cubes
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.training.dataset import fit_square
 from cardioseg.evaluation.measure import ejection_fraction
-from render_volume import normalize, to_imagedata, patient_dir
-
-# label convention (verified): 1=RV, 2=LV-myo, 3=LV-cavity
-CHAMBERS = {
-    3: ("LV cavity", "#ef5350"),
-    2: ("LV myocardium", "#ffca5b"),
-    1: ("RV cavity", "#5b8def"),
-}
-SIZE = 256
-MODELS = {"acdc": "runs/acdc/model.pth", "acdc_aug": "runs/acdc_aug/model.pth"}
+from render_volume import normalize, to_imagedata
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir
 
 
 def square_stack(vol_zyx: np.ndarray) -> np.ndarray:
     return np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
-
-
-def load_model(weights: str, device):
-    import torch
-    from cardioseg.training.model import build_unet
-
-    model = build_unet(spatial_dims=2, out_channels=4).to(device)
-    model.load_state_dict(torch.load(weights, map_location=device))
-    model.eval()
-    return model
 
 
 def masks_for(case: dict, source: str, model, device) -> dict:

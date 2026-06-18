@@ -1,7 +1,7 @@
 """Unit tests for cardioview's pure mask geometry (no torch/vtk needed)."""
 import numpy as np
 
-from cardioview.geometry import keep_largest, bbox_slices
+from cardioview.geometry import keep_largest, bbox_slices, nearest_index
 
 
 def test_keep_largest_drops_islands():
@@ -47,3 +47,11 @@ def test_bbox_slices_anisotropic_spacing():
 def test_bbox_slices_empty_mask_returns_full():
     a = np.zeros((4, 4, 4), bool)
     assert bbox_slices(a, spacing=(1, 1, 1)) == (slice(0, 4), slice(0, 4), slice(0, 4))
+
+
+def test_nearest_index_picks_closest():
+    frames = [0, 5, 10, 15, 20]
+    assert nearest_index(frames, 12) == 2  # 10 is closest
+    assert nearest_index(frames, 13) == 3  # 15 is closest
+    assert nearest_index(frames, 0) == 0
+    assert nearest_index(frames, 100) == 4  # clamps to last
