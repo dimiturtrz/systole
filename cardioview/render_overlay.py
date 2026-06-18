@@ -95,7 +95,7 @@ def chamber_mesh(mask_zyx, label, iso):
     return pv.PolyData(verts, faces_pv).smooth_taubin(n_iter=20, pass_band=0.05)
 
 
-def render(patient, phase, source, out, interactive, model_name, margin_mm):
+def render(patient, phase, source, out, interactive, model_name, margin_mm, html=None, gltf=None):
     import pyvista as pv
     import torch
 
@@ -130,10 +130,12 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm):
 
     pl = pv.Plotter(off_screen=not interactive, window_size=(1000, 1000))
     pl.set_background("#0e1116")
-    grid = to_imagedata(normalize(img_i) * 255.0, iso)
-    pl.add_volume(grid, scalars="intensity", cmap="bone",
-                  opacity=[0.0, 0.0, 0.02, 0.04, 0.08, 0.14, 0.25],  # dim backdrop
-                  shade=False, show_scalar_bar=False, blending="composite")
+    # Volume backdrop doesn't export to vtk.js/glTF cleanly — skip it for web export.
+    if not (html or gltf):
+        grid = to_imagedata(normalize(img_i) * 255.0, iso)
+        pl.add_volume(grid, scalars="intensity", cmap="bone",
+                      opacity=[0.0, 0.0, 0.02, 0.04, 0.08, 0.14, 0.25],  # dim backdrop
+                      shade=False, show_scalar_bar=False, blending="composite")
     for label, (name, color) in CHAMBERS.items():
         mesh = chamber_mesh(mask_i, label, iso[0])
         if mesh is not None:
@@ -145,6 +147,16 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm):
     pl.camera.elevation = 20
     pl.add_text(f"{patient}  {phase}  [{source}]{split_tag}{ef_txt}", font_size=11, color="#cdd6e0")
 
+    if gltf:
+        Path(gltf).parent.mkdir(parents=True, exist_ok=True)
+        pl.export_gltf(gltf)
+        print(f"saved {gltf}  (glb for the web viewer){ef_txt}")
+        return
+    if html:
+        Path(html).parent.mkdir(parents=True, exist_ok=True)
+        pl.export_html(html)
+        print(f"saved {html}  (rotatable web scene){ef_txt}")
+        return
     if interactive:
         pl.show()
         return
@@ -163,8 +175,11 @@ def main():
     ap.add_argument("--margin", type=float, default=12.0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--interactive", action="store_true")
+    ap.add_argument("--html", default=None, help="export a rotatable standalone web page (vtk.js)")
+    ap.add_argument("--gltf", default=None, help="export chamber meshes as .glb for the web viewer")
     args = ap.parse_args()
-    render(args.patient, args.phase, args.source, args.out, args.interactive, args.model, args.margin)
+    render(args.patient, args.phase, args.source, args.out, args.interactive,
+           args.model, args.margin, args.html, args.gltf)
 
 
 if __name__ == "__main__":

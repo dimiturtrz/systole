@@ -16,3 +16,10 @@ runs/
 .dolt/
 *.db
 .beads-credential-key
+
+# cardioview generated assets (regenerable)
+cardioview/out/*.html
+cardioview/out/*.glb
+cardioview/web/public/data/
+cardioview/web/node_modules/
+cardioview/web/dist/
