@@ -4,7 +4,7 @@ Interactive 3D MRI pipeline visualizer — **spins → pulse sequence → k-spac
 
 ![mri-sim demo](docs/media/demo.gif)
 
-*Full-res clip: [`docs/media/demo.mp4`](docs/media/demo.mp4). Educational; see [SPEC.md](SPEC.md) for the design.*
+*Full-res clip: [`docs/media/demo.mp4`](docs/media/demo.mp4). Educational; see [SPEC.md](SPEC.md) for the design and [ROADMAP.md](ROADMAP.md) for what's done / next.*
 
 **Status: pipeline complete, end-to-end.** A 3D grid of protons precesses on cones
 (individual-spin view); a **slice-selective** RF pulse tips the (tiltable, oblique)
