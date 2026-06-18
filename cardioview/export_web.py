@@ -14,15 +14,43 @@ from pathlib import Path
 import numpy as np
 import pyvista as pv
 import torch
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom, label as cc_label
+from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.training.dataset import fit_square, split_patients
 from cardioseg.data.mri.data import acdc_cases
 from cardioseg.evaluation.measure import ejection_fraction
-from render_overlay import CHAMBERS, SIZE, MODELS, load_model, chamber_mesh, patient_dir
+from render_overlay import CHAMBERS, SIZE, MODELS, load_model, patient_dir
 
 OUT = Path("cardioview/web/public/data")
+DECIMATE = 0.6  # fraction of triangles to drop — smaller glb, faster web
+
+
+def keep_largest(binary: np.ndarray) -> np.ndarray:
+    """Drop stray islands (model false positives) — keep the biggest connected blob."""
+    lab, n = cc_label(binary)
+    if n <= 1:
+        return binary
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0
+    return lab == sizes.argmax()
+
+
+def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
+    """Smooth chamber surface: largest-CC binary, linear-resampled to isotropic (no
+    z-staircase), marching cubes, Taubin-smoothed, decimated. In (x,y,z) world mm."""
+    binary = keep_largest(mask_anis == label)
+    if binary.sum() < 8:
+        return None
+    soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)
+    if soft.max() < 0.5:
+        return None
+    verts, faces, _, _ = marching_cubes(soft, level=0.5, spacing=(iso, iso, iso))
+    verts = verts[:, [2, 1, 0]]  # (z,y,x) -> (x,y,z)
+    fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
+    mesh = pv.PolyData(verts, fp).smooth_taubin(n_iter=24, pass_band=0.05)
+    return mesh.decimate(DECIMATE) if DECIMATE else mesh
 
 
 def heldout_set() -> set[str]:
@@ -50,8 +78,9 @@ def pred_masks(case: dict, model, device) -> dict:
     return out
 
 
-def shared_crop_iso(masks: dict, spacing, margin_mm: float = 12.0):
-    """Crop every phase to the union heart bbox + margin, resample to isotropic (nearest)."""
+def shared_crop(masks: dict, spacing, margin_mm: float = 12.0):
+    """Crop every phase to the union heart bbox + margin (kept anisotropic — the mesher
+    resamples per-chamber with linear interp for smooth surfaces). Returns crops + iso step."""
     union = np.zeros_like(next(iter(masks.values())), dtype=bool)
     for m in masks.values():
         union |= m > 0
@@ -61,15 +90,13 @@ def shared_crop_iso(masks: dict, spacing, margin_mm: float = 12.0):
         pad = int(round(margin_mm / spacing[ax]))
         sl.append(slice(max(0, idx[0] - pad), min(n, idx[-1] + 1 + pad)))
     crop = (sl[0], sl[1], sl[2])
-    iso = float(min(spacing))
-    factors = tuple(s / iso for s in spacing)
-    return {t: zoom(m[crop], factors, order=0) for t, m in masks.items()}, iso
+    return {t: m[crop] for t, m in masks.items()}, float(min(spacing))
 
 
-def export_glb(mask_i: np.ndarray, iso: float, path: Path) -> None:
+def export_glb(mask_anis: np.ndarray, spacing, iso: float, path: Path) -> None:
     pl = pv.Plotter(off_screen=True)
     for label, (_name, color) in CHAMBERS.items():
-        mesh = chamber_mesh(mask_i, label, iso)
+        mesh = chamber_surface(mask_anis, label, spacing, iso)
         if mesh is not None:
             pl.add_mesh(mesh, color=color, opacity=1.0 if label != 2 else 0.55, smooth_shading=True)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,11 +122,11 @@ def run(patients, source, model_name):
         spacing = tuple(float(s) for s in case["spacing"])
         masks = pred_masks(case, model, device) if source == "pred" else gt_masks(case)
         gtm = gt_masks(case)
-        crop_masks, iso = shared_crop_iso(masks, spacing)
+        crop_masks, iso = shared_crop(masks, spacing)
         glb = {}
         for tag, m in crop_masks.items():
             fn = f"{p}_{tag}_{source}.glb"
-            export_glb(m, iso, OUT / fn)
+            export_glb(m, spacing, iso, OUT / fn)
             glb[tag] = fn
         entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source=source,
                      pred=volumes(masks, spacing), gt=volumes(gtm, spacing), glb=glb)

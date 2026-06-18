@@ -19,7 +19,7 @@ export class HeartViewer {
     // Correct blending for the translucent myocardium over the chambers inside it.
     this.renderer.setUseDepthPeeling?.(true);
     this.renderer.setOcclusionRatio?.(0.1);
-    this.renderer.setMaximumNumberOfPeels?.(8);
+    this.renderer.setMaximumNumberOfPeels?.(4);
   }
 
   /** Load a glb, replacing whatever is shown. Keeps the camera once one is set. */
