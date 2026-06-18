@@ -35,22 +35,28 @@ def predict_volume(model, vol_img: Volume, size: int, device: str) -> Volume:
 
 
 def validate(
-    model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5
+    model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5,
+    loader=None, cache_ns: str = "",
 ) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
     dice_per_class: {1,2,3 -> Dice pooled over all val slices}.
     ef_rows: list of dicts {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}.
+
+    `loader`/`cache_ns` default to ACDC; pass mnm2.load_ed_es / "mnm2" to score an
+    M&M-2 set with the same model (labels already remapped to ACDC convention).
     """
     from ..preprocessing.preprocess import preprocess_case
+    from ..data.mri.data import load_ed_es
     from .measure import ejection_fraction
     from ..training.dataset import fit_square
 
+    loader = loader or load_ed_es
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}
     ef_rows = []
     for pd in val_dirs:
-        c = preprocess_case(pd, target_inplane=target_inplane)
+        c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns)
         spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
         vols = {}
         for tag in ("ED", "ES"):

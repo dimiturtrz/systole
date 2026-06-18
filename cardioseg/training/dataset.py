@@ -21,7 +21,7 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from cardioseg.data.mri.data import acdc_cases
+from cardioseg.data.mri.data import acdc_cases, load_ed_es
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.types import Slice2D
 
@@ -67,13 +67,15 @@ class ACDCSliceDataset(Dataset):
         frames: tuple[str, ...] = ("ED", "ES"),
         keep_empty: bool = False,
         augment: bool = False,
+        loader=load_ed_es,
+        cache_ns: str = "",
     ):
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames
         self.augment = augment
         for pd in patient_dirs:
-            c = preprocess_case(pd, target_inplane=target_inplane)
+            c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns)
             for tag in frames:
                 img = c.get(f"{tag.lower()}_img")        # [D, H, W]
                 gt = c.get(f"{tag.lower()}_gt")          # [D, H, W]
@@ -123,13 +125,17 @@ class ACDCSliceDataset(Dataset):
 
 
 def build_splits(
-    size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0
+    size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0,
+    cases: list[Path] | None = None, loader=load_ed_es, cache_ns: str = "",
 ) -> tuple[ACDCSliceDataset, ACDCSliceDataset, list[Path], list[Path]]:
-    """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs)."""
-    cases = acdc_cases()
+    """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs).
+
+    `cases`/`loader`/`cache_ns` default to ACDC; pass mnm2_cases()/mnm2.load_ed_es/"mnm2"
+    to build the same splits from M&M-2 (the loader is dataset-agnostic).
+    """
+    cases = list(acdc_cases() if cases is None else cases)
     if n_patients:
         cases = cases[:n_patients]
     train_dirs, val_dirs = split_patients(cases, val_frac, seed)
-    return (ACDCSliceDataset(train_dirs, size=size, augment=True),
-            ACDCSliceDataset(val_dirs, size=size, augment=False),
-            train_dirs, val_dirs)
+    ds = lambda dirs, aug: ACDCSliceDataset(dirs, size=size, augment=aug, loader=loader, cache_ns=cache_ns)
+    return ds(train_dirs, True), ds(val_dirs, False), train_dirs, val_dirs

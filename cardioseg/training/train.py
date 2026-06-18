@@ -1,14 +1,29 @@
-"""Train a 2D U-Net on ACDC end-to-end: preprocess cache -> train -> Dice + EF.
+"""Train a 2D U-Net on ACDC or M&M-2, with an optional cross-dataset test.
 
     python -m cardioseg.training.train --acdc --epochs 40
+    python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 40
+
+The `--test` set is held out entirely (never seen in train/val) and scored with the
+same model — the honest generalization number. Train on M&M-2 (multi-vendor) / test
+on ACDC (single-centre) is the strong direction; the reverse measures OOD drop.
 """
 import argparse
 import json
 from pathlib import Path
 
+# dataset -> (cases_fn, loader, cache_ns). Loaders are dataset-agnostic; M&M-2 labels
+# are remapped to the ACDC convention on load, so one model spans both.
+def _registry():
+    from ..data.mri.data import acdc_cases, load_ed_es
+    from ..data.mri.mnm2 import mnm2_cases, load_ed_es as mnm2_loader
+    return {
+        "acdc": (acdc_cases, load_ed_es, ""),
+        "mnm2": (mnm2_cases, mnm2_loader, "mnm2"),
+    }
 
-def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
-               val_frac=0.2, seed=0, device=None, out_dir="runs/acdc"):
+
+def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
+              val_frac=0.2, seed=0, device=None, out_dir=None, test=None):
     import numpy as np
     import torch
     from torch.utils.data import DataLoader
@@ -17,13 +32,18 @@ def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
     from .model import build_unet
     from .dataset import build_splits
 
+    reg = _registry()
+    cases_fn, loader, ns = reg[dataset]
+    out_dir = out_dir or f"runs/{dataset}"
+
     torch.manual_seed(seed)
     np.random.seed(seed)          # augmentation uses global np.random
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device={device} torch={torch.__version__} seed={seed}")
+    print(f"device={device} torch={torch.__version__} seed={seed} dataset={dataset}")
 
     train_ds, val_ds, train_dirs, val_dirs = build_splits(
-        size=size, val_frac=val_frac, seed=seed, n_patients=n_patients)
+        size=size, val_frac=val_frac, seed=seed, n_patients=n_patients,
+        cases=cases_fn(), loader=loader, cache_ns=ns)
     print(f"patients: {len(train_dirs)} train / {len(val_dirs)} val  | "
           f"slices: {len(train_ds)} train / {len(val_ds)} val")
 
@@ -44,32 +64,56 @@ def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
             tot += loss.item()
         print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}")
 
-    dice_per_class, ef_rows = validate(model, val_dirs, size, device)
-    metrics = summarize(dice_per_class, ef_rows)
+    print(f"\n===== VALIDATION ({dataset}) =====")
+    dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns)
+    results = {"val": summarize(dice_per_class, ef_rows)}
+
+    # held-out cross-dataset test (the generalization number)
+    if test and test != dataset:
+        tcases_fn, tloader, tns = reg[test]
+        test_dirs = tcases_fn()
+        if n_patients:
+            test_dirs = test_dirs[:n_patients]
+        print(f"\n===== CROSS-DATASET TEST: train={dataset} -> test={test} (n={len(test_dirs)}) =====")
+        tdice, tef = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns)
+        results[f"test_{test}"] = summarize(tdice, tef)
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pth")
-    meta = {"epochs": epochs, "batch": batch, "lr": lr, "size": size, "seed": seed,
-            "n_train": len(train_dirs), "n_val": len(val_dirs),
-            "val_patients": [p.name for p in val_dirs], **metrics}
+    meta = {"dataset": dataset, "test": test, "epochs": epochs, "batch": batch, "lr": lr,
+            "size": size, "seed": seed, "n_train": len(train_dirs), "n_val": len(val_dirs),
+            "val_patients": [p.name for p in val_dirs], "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     print(f"\nsaved model + metrics -> {out}/")
-    return model, metrics
+    return model, results
+
+
+# Back-compat wrapper (README + tooling call this).
+def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
+               val_frac=0.2, seed=0, device=None, out_dir="runs/acdc"):
+    return train_seg("acdc", epochs=epochs, batch=batch, lr=lr, size=size,
+                     n_patients=n_patients, val_frac=val_frac, seed=seed,
+                     device=device, out_dir=out_dir)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--acdc", action="store_true")
+    ap.add_argument("--acdc", action="store_true", help="shorthand for --dataset acdc")
+    ap.add_argument("--dataset", choices=["acdc", "mnm2"], default=None)
+    ap.add_argument("--test", choices=["acdc", "mnm2", "none"], default="none",
+                    help="held-out cross-dataset test set")
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--n-patients", type=int, default=0, help="0=all")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default="runs/acdc")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    if args.acdc:
-        train_acdc(epochs=args.epochs, batch=args.batch,
-                   n_patients=args.n_patients, seed=args.seed, out_dir=args.out)
+    ds = args.dataset or ("acdc" if args.acdc else None)
+    if not ds:
+        print("pass --dataset acdc|mnm2 (or --acdc)")
     else:
-        print("pass --acdc")
+        test = None if args.test == "none" else args.test
+        train_seg(ds, epochs=args.epochs, batch=args.batch, n_patients=args.n_patients,
+                  seed=args.seed, out_dir=args.out, test=test)

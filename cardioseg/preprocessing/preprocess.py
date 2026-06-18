@@ -48,25 +48,30 @@ def resample_inplane(
     return out, new_spacing
 
 
-def _cache_path(patient_name, target_inplane):
+def _cache_path(patient_name, target_inplane, cache_ns=""):
     tag = f"inplane{str(target_inplane).replace('.', 'p')}"
-    return Path(PROCESSED_ROOT) / tag / f"{patient_name}.npz"
+    base = Path(PROCESSED_ROOT) / cache_ns if cache_ns else Path(PROCESSED_ROOT)
+    return base / tag / f"{patient_name}.npz"
 
 
 def preprocess_case(
-    patient_dir: str | Path, target_inplane: float = 1.5, use_cache: bool = True
+    patient_dir: str | Path, target_inplane: float = 1.5, use_cache: bool = True,
+    loader=load_ed_es, cache_ns: str = "",
 ) -> dict:
     """Load + resample + normalize a patient's ED/ES. Returns dict with keys
     ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group.
     Caches to disk per params.
+
+    `loader` lets other datasets reuse this (e.g. mnm2.load_ed_es); `cache_ns`
+    namespaces the cache so different datasets never collide on subject name.
     """
     patient_dir = Path(patient_dir)
-    cache = _cache_path(patient_dir.name, target_inplane)
+    cache = _cache_path(patient_dir.name, target_inplane, cache_ns)
     if use_cache and cache.exists():
         z = np.load(cache, allow_pickle=True)
         return {k: z[k] for k in z.files} | {"group": str(z["group"])}
 
-    d = load_ed_es(patient_dir)
+    d = loader(patient_dir)
     sp = d["spacing"]
     out = {"group": d.get("group"), "patient": patient_dir.name}
     new_sp = sp
