@@ -9,9 +9,11 @@ const REST_Z = Math.cos(0.12); // Presenter's rest tilt → resting proton z-com
 
 class FakeView implements SpinView {
   renderCalls = 0;
+  positions: Vec3[] = [];
   updates: Vec3[][] = [];
   lastColors?: Vec3[];
-  renderSpins(_p: Vec3[], _m: Vec3[]): void {
+  renderSpins(p: Vec3[], _m: Vec3[]): void {
+    this.positions = p;
     this.renderCalls++;
   }
   updateSpins(m: Vec3[], colors?: Vec3[]): void {
@@ -98,6 +100,32 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     expect(axial.length).toBeGreaterThan(0);
     expect(oblique.length).toBeGreaterThan(0);
     expect(oblique).not.toEqual(axial); // different spins selected (set, not just count)
+  });
+
+  it('phase encode winds slab spins into a position-dependent ramp (not just a color pass)', () => {
+    const v = new FakeView();
+    const p = new Presenter(v);
+    p.start(); // pulse → a non-zero Gy amplitude (peStep) this TR
+    // Sample two instants inside the Gy window (peStart≈0.0045 s, peEnd≈0.0087 s).
+    p.tick(0.0058); // ~30% into the blip
+    const az1 = v.last().map((m) => Math.atan2(m[1], m[0]));
+    p.tick(0.0021); // ~80% into the blip
+    const az2 = v.last().map((m) => Math.atan2(m[1], m[0]));
+
+    const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+    const slab: number[] = [];
+    const rest: number[] = [];
+    v.positions.forEach((pos, i) => {
+      (Math.abs(pos[2]) <= 0.6 ? slab : rest).push(wrap(az2[i] - az1[i]));
+    });
+    const std = (xs: number[]): number => {
+      const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+      return Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+    };
+    // Precession is uniform (same dphi for all) → rest spins rotate together: ~zero spread.
+    expect(std(rest)).toBeLessThan(1e-6);
+    // Gy adds an azimuth ∝ position → slab spins fan out: clear spread.
+    expect(std(slab)).toBeGreaterThan(0.05);
   });
 
   it('Larmor selects the slice height (different Larmor → different slab)', () => {

@@ -2,7 +2,7 @@ import { SpinSystem } from '../model/SpinSystem';
 import { Simulator } from '../model/Simulator';
 import { Acquisition } from '../model/Acquisition';
 import { directionFromAngles } from '../model/physics';
-import { stageAt } from '../model/sequence';
+import { stageAt, seqWindows, phaseEncodeOffset } from '../model/sequence';
 import { magnitudeGrid } from '../model/fft';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from '../view/SpinView';
@@ -36,6 +36,7 @@ export class Presenter {
   private sliceDir: Vec3 = [0, 0, 1]; // slice-select gradient direction (tiltable)
   private freqDir: Vec3 = [-1, 0, 0]; // in-plane, perpendicular to sliceDir
   private phaseDir: Vec3 = [0, 1, 0]; // in-plane, perpendicular to both
+  private phaseHalf = 1; // max |pos·phaseDir| → normalizes the phase-encode wind-up
   private tipLeft = 0; // remaining time in the current RF-tip ramp
   private peIndex = 0; // phase-encode step counter (gradient changes each TR)
   private peStep = 0; // current phase-encode value, −1…1
@@ -62,11 +63,20 @@ export class Presenter {
     this.halfX = Math.max(...this.positions.map((p) => Math.abs(p[0]))) + 0.8;
     this.halfY = Math.max(...this.positions.map((p) => Math.abs(p[1]))) + 0.8;
     this.halfZ = Math.max(...this.positions.map((p) => Math.abs(p[2]))) + 0.5;
+    this.computePhaseHalf();
     this.recomputeSlab();
   }
 
   private directions(): Vec3[] {
-    return this.positions.map((_, i) => directionFromAngles(this.theta[i], this.phase[i]));
+    const w = seqWindows(this.tr, this.te);
+    const prog = (this.cycleTime - w.peStart) / (w.peEnd - w.peStart); // phase-encode ramp 0…1
+    return this.positions.map((p, i) => {
+      // Gy winds an extra azimuth onto in-slice spins ∝ their position along phaseDir.
+      const off = this.slab[i]
+        ? phaseEncodeOffset(this.peStep, dot(p, this.phaseDir) / this.phaseHalf, prog)
+        : 0;
+      return directionFromAngles(this.theta[i], this.phase[i] + off);
+    });
   }
 
   start(): void {
@@ -107,8 +117,13 @@ export class Presenter {
     this.sliceDir = [Math.sin(r), 0, Math.cos(r)];
     this.freqDir = [-Math.cos(r), 0, Math.sin(r)]; // ⟂ sliceDir, in x–z
     this.phaseDir = [0, 1, 0]; // ⟂ both
+    this.computePhaseHalf();
     this.recomputeSlab();
     this.updateSlicePlane();
+  }
+
+  private computePhaseHalf(): void {
+    this.phaseHalf = Math.max(...this.positions.map((p) => Math.abs(dot(p, this.phaseDir)))) || 1;
   }
 
   private recomputeSlab(): void {

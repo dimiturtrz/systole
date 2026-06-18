@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { seqWindows, stageAt } from '../../src/model/sequence';
+import { seqWindows, stageAt, phaseEncodeOffset } from '../../src/model/sequence';
 
 describe('pulse-sequence timing', () => {
   const tr = 0.5;
@@ -31,5 +31,31 @@ describe('pulse-sequence timing', () => {
     expect(seen.has('phase')).toBe(true);
     expect(seen.has('freq')).toBe(true);
     expect(w.roEnd).toBeLessThan(0.05); // encodes confined to the early TR, not the whole 2 s
+  });
+});
+
+describe('phase-encode wind-up', () => {
+  it('is zero before the blip ramps in (prog ≤ 0)', () => {
+    expect(phaseEncodeOffset(1, 0.8, 0)).toBe(0);
+    expect(phaseEncodeOffset(1, 0.8, -0.5)).toBe(0); // clamped
+  });
+
+  it('twists ∝ position along the phase axis (a ramp, not a uniform shift)', () => {
+    const near = phaseEncodeOffset(1, 0.25, 1);
+    const far = phaseEncodeOffset(1, 1.0, 1);
+    expect(Math.abs(far)).toBeGreaterThan(Math.abs(near)); // steeper for spins further out
+    expect(far / near).toBeCloseTo(4); // linear in position
+  });
+
+  it('steepens and reverses with the Gy amplitude (the ky loop)', () => {
+    const weak = phaseEncodeOffset(0.25, 1, 1);
+    const strong = phaseEncodeOffset(1, 1, 1);
+    expect(Math.abs(strong)).toBeGreaterThan(Math.abs(weak)); // bigger |peStep| → more wind-up
+    expect(phaseEncodeOffset(-1, 1, 1)).toBeCloseTo(-strong); // opposite sign winds the other way
+  });
+
+  it('ramps linearly with window progress', () => {
+    expect(phaseEncodeOffset(1, 1, 0.5)).toBeCloseTo(phaseEncodeOffset(1, 1, 1) / 2);
+    expect(phaseEncodeOffset(1, 1, 2)).toBeCloseTo(phaseEncodeOffset(1, 1, 1)); // clamped at 1
   });
 });

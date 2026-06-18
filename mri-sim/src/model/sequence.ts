@@ -28,6 +28,19 @@ export function seqWindows(_tr: number, te: number): SeqWindows {
   };
 }
 
+// Phase encoding winds an extra azimuth onto each in-slice spin proportional to its
+// position along the phase-encode axis. The Gy amplitude (`peStep`, −1…1) steps each TR,
+// so the wind-up steepens/reverses repeat-to-repeat — that's how ky is filled.
+const TWIST = 2 * Math.PI; // radians across the FOV at full gradient (|peStep| = 1)
+
+/**
+ * Extra phase (rad) from the Gy gradient for a spin at `alongFrac` (its position along
+ * the phase axis, −1…1), at gradient amplitude `peStep`, ramped by window progress `prog`.
+ */
+export function phaseEncodeOffset(peStep: number, alongFrac: number, prog: number): number {
+  return TWIST * peStep * alongFrac * Math.min(1, Math.max(0, prog));
+}
+
 /** Which encoding is active at `ct` seconds into the TR (idle = relaxation/wait). */
 export function stageAt(tr: number, te: number, ct: number): Stage {
   const w = seqWindows(tr, te);
