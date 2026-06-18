@@ -2,6 +2,7 @@ import type { HeartEntry } from './manifest';
 import { glbUrl } from './manifest';
 import type { HeartViewer } from './viewer';
 import { efCategory, efError, fmtMl, fmtPct } from './metrics';
+import { showSpinner, hideSpinner } from './spinner';
 
 const CARD =
   'position:fixed;top:12px;left:12px;z-index:10;background:rgba(20,24,30,.86);color:#cdd6e0;' +
@@ -101,10 +102,14 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
       onFrame(i);
     }
 
-    void viewer.loadSequence(frames.map(glbUrl)).then(() => {
-      setLabel(0);
-      start();
-    });
+    showSpinner();
+    void viewer
+      .loadSequence(frames.map(glbUrl))
+      .then(() => {
+        setLabel(0);
+        start();
+      })
+      .finally(hideSpinner);
   }
 
   function buildStatic(e: HeartEntry): void {
@@ -115,7 +120,10 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
       edBtn.style.opacity = ph === 'ED' ? '1' : '0.5';
       esBtn.style.opacity = ph === 'ES' ? '1' : '0.5';
       const file = e.glb[ph];
-      if (file) void viewer.load(glbUrl(file));
+      if (file) {
+        showSpinner();
+        void viewer.load(glbUrl(file)).finally(hideSpinner);
+      }
     };
     edBtn.addEventListener('click', () => setPhase('ED'));
     esBtn.addEventListener('click', () => setPhase('ES'));

@@ -48,6 +48,9 @@ def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
     soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)
     if soft.max() < 0.5:
         return None
+    # Pad a zero border so chambers touching the (truncated) stack edges get capped — else
+    # marching cubes leaves the base/apex open and the cavity looks hollow.
+    soft = np.pad(soft, 1, mode="constant")
     verts, faces, _, _ = marching_cubes(soft, level=0.5, spacing=(iso, iso, iso))
     verts = verts[:, [2, 1, 0]]  # (z,y,x) -> (x,y,z)
     fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
