@@ -77,3 +77,15 @@ export function argmaxChannels(logits: Float32Array, classes: number, hw: number
 export function resampledSize(n: number, spacingMm: number): number {
   return Math.round((n * spacingMm) / TARGET_MM);
 }
+
+/** Count voxels of a label across a mask stack. */
+export function countLabel(masks: Uint8Array[], label: number): number {
+  let n = 0;
+  for (const m of masks) for (let i = 0; i < m.length; i++) if (m[i] === label) n++;
+  return n;
+}
+
+/** Chamber volume in mL from a voxel count × voxel volume (mm³ → mL). */
+export function volumeMl(voxelCount: number, voxelMm3: number): number {
+  return (voxelCount * voxelMm3) / 1000;
+}

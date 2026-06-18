@@ -86,6 +86,18 @@ export class HeartViewer {
     return collected.length;
   }
 
+  /** Show a single segmented volume (per-chamber polydata) — e.g. an imported scan. */
+  showStatic(polys: (any | null)[]): void {
+    this.pause();
+    this.ensureActors();
+    this.framePolys = [polys];
+    this.showFrame(0);
+    this.renderer.resetCamera();
+    this.cameraSet = true;
+    this.updateAxes();
+    this.renderWindow.render();
+  }
+
   showFrame(i: number): void {
     if (this.framePolys.length === 0) return;
     const frame = this.framePolys[wrapIndex(i, this.framePolys.length)];

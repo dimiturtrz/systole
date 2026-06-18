@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { zscore, fitSquare, resizeBilinear, argmaxChannels, resampledSize } from '../../src/preprocess';
+import { zscore, fitSquare, resizeBilinear, argmaxChannels, resampledSize, countLabel, volumeMl } from '../../src/preprocess';
 
 describe('zscore', () => {
   it('produces zero mean and ~unit std', () => {
@@ -61,5 +61,19 @@ describe('resampledSize', () => {
   it('rounds n*spacing/1.5', () => {
     expect(resampledSize(216, 1.5625)).toBe(225); // 216*1.5625/1.5 = 225
     expect(resampledSize(100, 1.5)).toBe(100); // already at target
+  });
+});
+
+describe('countLabel + volumeMl', () => {
+  it('counts voxels of a label across slices', () => {
+    const masks = [new Uint8Array([0, 3, 3, 2]), new Uint8Array([3, 0, 1, 3])];
+    expect(countLabel(masks, 3)).toBe(4);
+    expect(countLabel(masks, 1)).toBe(1);
+    expect(countLabel(masks, 9)).toBe(0);
+  });
+
+  it('converts voxel count × voxel mm³ to mL', () => {
+    expect(volumeMl(1000, 1)).toBe(1); // 1000 mm³ = 1 mL
+    expect(volumeMl(2000, 3.375)).toBeCloseTo(6.75); // 2000 × 3.375 mm³ = 6750 mm³
   });
 });

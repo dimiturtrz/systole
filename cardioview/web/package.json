@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "node scripts/render-smoke.mjs"
+    "smoke": "node scripts/render-smoke.mjs",
+    "smoke:import": "node scripts/import-smoke.mjs"
   },
   "devDependencies": {
     "pngjs": "^7.0.0",

@@ -1,12 +1,14 @@
 import { HeartViewer } from './viewer';
 import { loadManifest } from './manifest';
 import { mountPanel } from './panel';
+import { mountImport } from './importPanel';
 
 const viewer = new HeartViewer();
-const entries = await loadManifest();
-if (entries.length === 0) {
-  document.body.insertAdjacentHTML('beforeend',
-    '<div style="color:#cdd6e0;padding:20px;">No hearts in manifest. Run cardioview/export_web.py.</div>');
-} else {
-  mountPanel(entries, viewer);
+mountImport(viewer); // upload-your-own-scan path (independent of the canned hearts)
+
+try {
+  const entries = await loadManifest();
+  if (entries.length > 0) mountPanel(entries, viewer);
+} catch {
+  /* no manifest is fine — the import panel still works */
 }

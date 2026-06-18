@@ -5,13 +5,14 @@ const CLASSES = 4; // bg, RV, LV-myo, LV-cav
 
 // Serve the wasm runtime from a CDN (avoids bundling the .wasm files through vite).
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';
+ort.env.wasm.numThreads = 1; // single-thread: no SharedArrayBuffer / COOP-COEP headers needed
 
 /** Runs the exported U-Net in the browser to segment an uploaded volume, matching the pipeline. */
 export class Segmenter {
   private session: ort.InferenceSession | null = null;
 
-  async load(url: string): Promise<void> {
-    this.session = await ort.InferenceSession.create(url, { executionProviders: ['wasm'] });
+  async load(src: string | Uint8Array): Promise<void> {
+    this.session = await ort.InferenceSession.create(src as any, { executionProviders: ['wasm'] });
   }
 
   /**
