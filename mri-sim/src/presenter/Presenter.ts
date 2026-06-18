@@ -182,7 +182,10 @@ export class Presenter {
       this.readout(); // acquire one k-space line at TE
       this.readThisCycle = true;
     }
-    this.sim.precess(this.phase, base); // Larmor — uniform across the TR (warp never speeds it)
+    // Larmor precession runs at a steady real-time rate — always visibly alive, independent of
+    // the speed slider (which paces the sequence) and the warp; only speed 0 freezes it. Real
+    // Larmor is ms-fast vs the sequence, so a constant lively spin is the honest picture.
+    this.sim.precess(this.phase, this.speed > 0 ? dt : 0);
     this.sim.relax(this.theta, seqD); // T1 tilt-recovery tracks the (warped) sequence clock
     if (this.tipLeft > 0) this.applyTip(seqD); // smooth RF tip overrides slab theta during the ramp
     const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / this.tipDur) : 0;
