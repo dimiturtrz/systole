@@ -206,7 +206,8 @@ def predict_volume_local(model, vol_img, device):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--mode", choices=["static", "animate"], default="static")
-    ap.add_argument("--patients", nargs="*", default=["patient006", "patient009", "patient010"])
+    # One per condition: NOR (normal) · DCM (dilated) · HCM (thick wall) · MINF (infarct).
+    ap.add_argument("--patients", nargs="*", default=["patient073", "patient010", "patient021", "patient053"])
     ap.add_argument("--source", default="pred", choices=["pred", "gt"])
     ap.add_argument("--model", default="acdc_aug", choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
