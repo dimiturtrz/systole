@@ -23,7 +23,7 @@ def _registry():
 
 
 def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
-              val_frac=0.2, seed=0, device=None, out_dir=None, test=None):
+              val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6):
     import numpy as np
     import torch
     from torch.utils.data import DataLoader
@@ -39,6 +39,7 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
     torch.manual_seed(seed)
     np.random.seed(seed)          # augmentation uses global np.random
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    torch.backends.cudnn.benchmark = True   # fixed 256^2 input -> autotune fastest convs
     print(f"device={device} torch={torch.__version__} seed={seed} dataset={dataset}")
 
     train_ds, val_ds, train_dirs, val_dirs = build_splits(
@@ -47,20 +48,27 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
     print(f"patients: {len(train_dirs)} train / {len(val_dirs)} val  | "
           f"slices: {len(train_ds)} train / {len(val_ds)} val")
 
-    dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True)
+    pin = device == "cuda"
+    dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True,
+                    num_workers=workers, pin_memory=pin,
+                    persistent_workers=workers > 0)   # parallel CPU aug -> stop starving the GPU
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     loss_fn = dice_ce_loss()
     opt = torch.optim.Adam(model.parameters(), lr)
+    scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
     for ep in range(epochs):
         model.train()
         tot = 0.0
         for x, y in dl:
-            x, y = x.to(device), y[:, None].to(device)        # y -> [B,1,H,W]
-            opt.zero_grad()
-            loss = loss_fn(model(x), y)
-            loss.backward()
-            opt.step()
+            x = x.to(device, non_blocking=pin)
+            y = y[:, None].to(device, non_blocking=pin)       # y -> [B,1,H,W]
+            opt.zero_grad(set_to_none=True)
+            with torch.autocast("cuda", enabled=pin):
+                loss = loss_fn(model(x), y)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
             tot += loss.item()
         print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}")
 
@@ -105,6 +113,7 @@ if __name__ == "__main__":
                     help="held-out cross-dataset test set")
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--batch", type=int, default=32)
+    ap.add_argument("--workers", type=int, default=6, help="DataLoader workers (0=main proc)")
     ap.add_argument("--n-patients", type=int, default=0, help="0=all")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
@@ -115,5 +124,5 @@ if __name__ == "__main__":
         print("pass --dataset acdc|mnm2 (or --acdc)")
     else:
         test = None if args.test == "none" else args.test
-        train_seg(ds, epochs=args.epochs, batch=args.batch, n_patients=args.n_patients,
-                  seed=args.seed, out_dir=args.out, test=test)
+        train_seg(ds, epochs=args.epochs, batch=args.batch, workers=args.workers,
+                  n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test)
