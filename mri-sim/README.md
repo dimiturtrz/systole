@@ -2,9 +2,9 @@
 
 Interactive 3D MRI pipeline visualizer — **spins → pulse sequence → k-space → image**, on one clock.
 
-<video src="https://raw.githubusercontent.com/dimiturtrz/cardiac-imaging/main/mri-sim/docs/media/demo.mp4" controls muted loop poster="docs/media/demo-poster.png" width="640"></video>
+![mri-sim demo](docs/media/demo.gif)
 
-*[▶ demo.mp4](docs/media/demo.mp4) — educational; see [SPEC.md](SPEC.md) for the design.*
+*Full-res clip: [`docs/media/demo.mp4`](docs/media/demo.mp4). Educational; see [SPEC.md](SPEC.md) for the design.*
 
 **Status: pipeline complete, end-to-end.** A 3D grid of protons precesses on cones
 (individual-spin view); a **slice-selective** RF pulse tips the (tiltable, oblique)

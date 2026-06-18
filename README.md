@@ -24,7 +24,7 @@ phase/frequency encode → k-space → reconstructed image, on one clock — bui
 *understand the acquisition* the segmentation model consumes. Educational and physically
 honest; a separate TS app from the Python pipeline below.
 
-<video src="https://raw.githubusercontent.com/dimiturtrz/cardiac-imaging/main/mri-sim/docs/media/demo.mp4" controls muted loop poster="mri-sim/docs/media/demo-poster.png" width="640"></video>
+![mri-sim demo](mri-sim/docs/media/demo.gif)
 
 ## Pipeline (per modality)
 1. **Data** — modality-specific loader + normalization (e.g. ACDC short-axis cine
