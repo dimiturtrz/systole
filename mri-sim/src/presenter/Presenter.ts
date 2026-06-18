@@ -24,12 +24,15 @@ export class Presenter {
   private readonly theta: number[];
   private readonly phase: number[];
   private readonly acq?: Acquisition;
-  private readonly sliceZ = 0;
   private readonly sliceHalf = 0.6;
-  private readonly slab: boolean[];
+  private sliceCenter = 0; // offset of the selected slab along sliceDir (set by Larmor)
+  private slab: boolean[] = [];
   private readonly halfX: number;
   private readonly halfY: number;
   private readonly halfZ: number;
+  private sliceDir: Vec3 = [0, 0, 1]; // slice-select gradient direction (tiltable)
+  private freqDir: Vec3 = [-1, 0, 0]; // in-plane, perpendicular to sliceDir
+  private phaseDir: Vec3 = [0, 1, 0]; // in-plane, perpendicular to both
   private tipLeft = 0; // remaining time in the current RF-tip ramp
   private peIndex = 0; // phase-encode step counter (gradient changes each TR)
   private peStep = 0; // current phase-encode value, −1…1
@@ -53,10 +56,10 @@ export class Presenter {
     this.theta = [...this.spins.theta];
     this.phase = [...this.spins.phase];
     if (panels && phantom) this.acq = new Acquisition(phantom);
-    this.slab = this.positions.map((p) => Math.abs(p[2] - this.sliceZ) <= this.sliceHalf);
     this.halfX = Math.max(...this.positions.map((p) => Math.abs(p[0]))) + 0.8;
     this.halfY = Math.max(...this.positions.map((p) => Math.abs(p[1]))) + 0.8;
     this.halfZ = Math.max(...this.positions.map((p) => Math.abs(p[2]))) + 0.5;
+    this.recomputeSlab();
   }
 
   private directions(): Vec3[] {
@@ -65,7 +68,7 @@ export class Presenter {
 
   start(): void {
     this.view.renderSpins(this.positions, this.directions());
-    this.view.setSlice(this.sliceZ, this.halfX, this.halfY);
+    this.updateSlicePlane();
     this.pulse();
     this.cycleTime = 0;
     this.readThisCycle = false;
@@ -88,28 +91,60 @@ export class Presenter {
   }
 
   setLarmor(v: number): void {
-    this.sim.larmorHz = v;
+    this.sim.larmorHz = v; // precession rate
+    const t = ((v - 0.1) / 1.9) * 2 - 1; // slider range → −1…1
+    this.sliceCenter = t * (this.halfZ - 0.5); // RF freq also selects the slice height
+    this.recomputeSlab();
+    this.updateSlicePlane();
   }
 
-  /** Which gradient axis is active now (0=x freq, 1=y phase, 2=z slice, -1=none). */
-  private gradientAxisNow(): number {
+  /** Tilt the slice-select gradient in the x–z plane by `deg` → oblique slices. */
+  setSliceAngle(deg: number): void {
+    const r = (deg * Math.PI) / 180;
+    this.sliceDir = [Math.sin(r), 0, Math.cos(r)];
+    this.freqDir = [-Math.cos(r), 0, Math.sin(r)]; // ⟂ sliceDir, in x–z
+    this.phaseDir = [0, 1, 0]; // ⟂ both
+    this.recomputeSlab();
+    this.updateSlicePlane();
+  }
+
+  private recomputeSlab(): void {
+    this.slab = this.positions.map(
+      (p) => Math.abs(dot(p, this.sliceDir) - this.sliceCenter) <= this.sliceHalf,
+    );
+  }
+
+  private updateSlicePlane(): void {
+    const S = Math.max(this.halfX, this.halfY);
+    const u: Vec3 = [this.freqDir[0] * S, this.freqDir[1] * S, this.freqDir[2] * S];
+    const v: Vec3 = [this.phaseDir[0] * S, this.phaseDir[1] * S, this.phaseDir[2] * S];
+    const c: Vec3 = [
+      this.sliceDir[0] * this.sliceCenter,
+      this.sliceDir[1] * this.sliceCenter,
+      this.sliceDir[2] * this.sliceCenter,
+    ];
+    this.view.setSlice(c, u, v);
+  }
+
+  /** Active gradient direction now (slice/phase/freq), or null when idle. */
+  private gradientDirNow(): Vec3 | null {
     const { tr, te } = this;
     const ct = this.cycleTime;
     const rfW = Math.max(0.08 * tr, 0.12);
     const peW = 0.06 * tr;
     const roHalf = Math.max(0.05 * tr, 0.1);
-    if (ct < rfW) return 2; // Gz — slice select (during RF)
-    if (ct < rfW + 0.02 * tr + peW) return 1; // Gy — phase encode
-    if (Math.abs(ct - te) <= roHalf) return 0; // Gx — frequency encode (readout)
-    return -1;
+    if (ct < rfW) return this.sliceDir; // slice select (during RF)
+    if (ct < rfW + 0.02 * tr + peW) return this.phaseDir; // phase encode
+    if (Math.abs(ct - te) <= roHalf) return this.freqDir; // frequency encode (readout)
+    return null;
   }
 
-  /** When a gradient is on, color spins by local Larmor (position along that axis). */
+  /** When a gradient is on, color spins by local Larmor (position along its direction). */
   private gradientColors(): Vec3[] | undefined {
-    const axis = this.gradientAxisNow();
-    if (axis < 0) return undefined; // no gradient → view colors by transverse mag
-    const half = axis === 0 ? this.halfX : axis === 1 ? this.halfY : this.halfZ;
-    return this.positions.map((p) => freqColor(p[axis] / half));
+    const dir = this.gradientDirNow();
+    if (!dir) return undefined; // no gradient → view colors by transverse mag
+    const half = Math.max(...this.positions.map((p) => Math.abs(dot(p, dir)))) || 1;
+    return this.positions.map((p) => freqColor(dot(p, dir) / half));
   }
 
   tick(dt: number): void {
@@ -172,6 +207,10 @@ export class Presenter {
     };
     requestAnimationFrame(loop);
   }
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 /** Diverging colormap for Larmor frequency: low (blue) ↔ high (red). */

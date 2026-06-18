@@ -90,11 +90,17 @@ export class SpinScene implements SpinView {
     this.renderWindow.render();
   }
 
-  setSlice(z: number, halfX: number, halfY: number): void {
+  setSlice(center: Vec3, uHalf: Vec3, vHalf: Vec3): void {
+    if (this.slicePlane) this.renderer.removeActor(this.slicePlane); // re-orient on tilt
+    const corner = (su: number, sv: number): Vec3 => [
+      center[0] + su * uHalf[0] + sv * vHalf[0],
+      center[1] + su * uHalf[1] + sv * vHalf[1],
+      center[2] + su * uHalf[2] + sv * vHalf[2],
+    ];
     const plane = vtkPlaneSource.newInstance({
-      origin: [-halfX, -halfY, z],
-      point1: [halfX, -halfY, z],
-      point2: [-halfX, halfY, z],
+      origin: corner(-1, -1),
+      point1: corner(1, -1),
+      point2: corner(-1, 1),
     });
     const actor = vtkActor.newInstance();
     actor.setMapper(this.mapperFor(plane));
@@ -155,7 +161,7 @@ export class SpinScene implements SpinView {
 }
 
 /** Column-major mat4 placing the shared +X cone at `tip`, rotated so +X → unit(d). */
-function arrowMatrix(tip: Vec3, d: Vec3): Float64Array {
+function arrowMatrix(tip: Vec3, d: Vec3): Float32Array {
   const len = Math.hypot(d[0], d[1], d[2]) || 1;
   const b0 = d[0] / len, b1 = d[1] / len, b2 = d[2] / len;
   let r: number[][];
@@ -169,7 +175,7 @@ function arrowMatrix(tip: Vec3, d: Vec3): Float64Array {
       [b2, -b1 * b2 * f, 1 - b2 * b2 * f],
     ];
   }
-  return new Float64Array([
+  return new Float32Array([
     r[0][0], r[1][0], r[2][0], 0,
     r[0][1], r[1][1], r[2][1], 0,
     r[0][2], r[1][2], r[2][2], 0,
