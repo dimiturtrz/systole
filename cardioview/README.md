@@ -46,7 +46,8 @@ let you drop in your own model and scans (segmented in-browser). See [web/README
 
 ## Python tools (offline)
 - `export_web.py` — segment ED/ES (or every 4D frame, `--mode animate`) → chamber `.glb` + EF manifest
-- `export_onnx.py` — trained U-Net → ONNX for the browser (100% parity gate vs PyTorch)
+- `export_onnx.py` — thin: runs `cardioseg.training.export_onnx` (the canonical ONNX export +
+  INT8 quant + parity gate, written next to `model.pth`) and copies the artifact to the web
 - `render_overlay.py` / `render_volume.py` — desktop pyvista quick-looks (screenshot or `--interactive`)
 
 **Honesty:** predictions are tagged `held-out` vs `TRAIN-seen` (deterministic split check), EF
