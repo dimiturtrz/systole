@@ -1,6 +1,7 @@
 import { Presenter } from './presenter/Presenter';
 import { SpinScene } from './view/SpinScene';
 import { mountControls } from './view/controls';
+import { mountLegend } from './view/Legend';
 import { diskPhantom } from './model/phantom';
 import { mountPanels } from './view/Panels';
 import { mountSequenceDiagram } from './view/SequenceDiagram';
@@ -31,5 +32,7 @@ mountControls([
   { label: 'TE', min: 0.003, max: 0.15, step: 0.001, value: 0.015, fmt: ms, onChange: (v) => presenter.setTE(v) },
   { label: 'Slice angle', min: 0, max: 70, step: 1, value: 30, fmt: (v) => `${v.toFixed(0)}°`, onChange: (v) => presenter.setSliceAngle(v) },
 ]);
+
+mountLegend();
 
 presenter.run();
