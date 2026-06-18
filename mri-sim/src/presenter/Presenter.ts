@@ -8,6 +8,9 @@ import type { SpinView } from '../view/SpinView';
 import type { Panels } from '../view/Panels';
 import type { SequenceView } from '../view/SequenceDiagram';
 
+const REST_TILT = 0.12; // matches SpinSystem/Simulator rest tilt
+const TIP_DUR = 0.15; // sim-seconds to ramp the RF tip (avoids a teleport snap)
+
 /**
  * Wires model → views on ONE speed-scaled clock. Each TR: an RF pulse at the cycle
  * start (tips the slab), then a readout at TE (acquires one k-space line). The speed
@@ -23,6 +26,8 @@ export class Presenter {
   private readonly acq?: Acquisition;
   private readonly sliceZ = 0;
   private readonly sliceHalf = 0.6;
+  private readonly slab: boolean[];
+  private tipLeft = 0; // remaining time in the current RF-tip ramp
 
   private tr = 2.0; // repetition time (s)
   private te = 0.5; // echo/readout time after the pulse (s)
@@ -43,6 +48,7 @@ export class Presenter {
     this.theta = [...this.spins.theta];
     this.phase = [...this.spins.phase];
     if (panels && phantom) this.acq = new Acquisition(phantom);
+    this.slab = this.positions.map((p) => Math.abs(p[2] - this.sliceZ) <= this.sliceHalf);
   }
 
   private directions(): Vec3[] {
@@ -84,19 +90,28 @@ export class Presenter {
       this.readout(); // acquire one k-space line at TE
       this.readThisCycle = true;
     }
-    this.sim.step(this.theta, this.phase, d);
+    this.sim.step(this.theta, this.phase, d); // precess + relax theta toward rest
+    if (this.tipLeft > 0) this.applyTip(d); // smooth RF tip overrides slab theta during the ramp
     this.view.updateSpins(this.directions());
     this.drawSeq();
   }
 
+  /** Ramp the slab's tilt rest→90° over TIP_DUR (eased) so the pulse flips smoothly. */
+  private applyTip(d: number): void {
+    this.tipLeft -= d;
+    const prog = Math.min(1, 1 - Math.max(0, this.tipLeft) / TIP_DUR);
+    const e = 1 - (1 - prog) * (1 - prog); // ease-out
+    const tilt = REST_TILT + (Math.PI / 2 - REST_TILT) * e;
+    for (let i = 0; i < this.theta.length; i++) if (this.slab[i]) this.theta[i] = tilt;
+  }
+
   private pulse(): void {
-    this.sim.exciteSlab(this.theta, this.phase, this.positions, this.sliceZ, this.sliceHalf);
+    this.tipLeft = TIP_DUR; // start a smooth RF tip ramp (no instant teleport, no phase reset)
   }
 
   private readout(): void {
-    if (!this.acq) return;
-    if (this.acq.done) this.acq.reset();
-    else this.acq.acquireNext();
+    if (!this.acq || this.acq.done) return; // fill once, then hold (no jarring blur-reset)
+    this.acq.acquireNext();
     this.drawPanels();
   }
 

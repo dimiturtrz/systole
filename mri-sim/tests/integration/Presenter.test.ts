@@ -22,10 +22,12 @@ class FakeView implements SpinView {
 }
 
 describe('Presenter (proton view: presenter + simulator + mock view)', () => {
-  it('start renders once; slab tipped to transverse, rest keeps a tiny tilt', () => {
+  it('the RF tip ramp brings ONLY the slab to transverse; rest keeps a tiny tilt', () => {
     const v = new FakeView();
-    new Presenter(v).start();
+    const p = new Presenter(v);
+    p.start();
     expect(v.renderCalls).toBe(1);
+    p.tick(0.2); // complete the smooth tip ramp (TIP_DUR = 0.15s)
     const M = v.last();
     const tipped = M.filter((m) => Math.abs(m[2]) < 1e-6); // transverse slab
     const resting = M.filter((m) => Math.abs(m[2] - REST_Z) < 1e-9); // near +z
