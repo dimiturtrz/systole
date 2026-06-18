@@ -1,12 +1,14 @@
 # systole — cardiac segmentation + function (MRI, CT, echo)
 
-**What this is.** systole is where I pick up a new domain in the open — one bounded problem:
-cardiac **segmentation → ejection fraction**.
+**What this is.** systole picks up a new domain in the open — one bounded problem: cardiac
+**segmentation → ejection fraction**, with the evaluation that decides whether a measurement can
+be trusted. The connecting thread is geometry: per-voxel labels → a clinical number. Built on
+public data, learning the field by shipping in it — an **LLM-driven learning track**
+([`learning/`](learning/): theory write-ups + self-quizzes) runs alongside the code. Across
+modalities eventually (**MRI now; CT, echo planned**); today only the MRI lane is underway.
 
-Segmentation → **ejection fraction** across imaging modalities (**MRI now; CT, echo planned**),
-with the evaluation that decides whether a measurement can be trusted. The connecting
-thread is the geometry: per-voxel labels → a clinical number. Three pieces, general → specific
-(each links into its folder for depth); full plan + milestones in **[ROADMAP.md](ROADMAP.md)**.
+Three pieces, general → specific (each links into its folder for depth); full plan + milestones
+in **[ROADMAP.md](ROADMAP.md)**.
 
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
@@ -41,28 +43,12 @@ is set up for **domain generalization**: trained on the multi-vendor **M&M-2** c
 
 **EF vs ground truth: MAE 9.4%** (cross-dataset; volume calibration shifts across centres).
 
-**Why train on M&M-2 instead of ACDC?** Because diversity in training buys robustness — and the
-flip proves it. Train single-centre and test across vendors → it *collapses*; train multi-vendor
-and test single-centre → it *holds*:
-
-| train → test | mean Dice | RV | EF MAE |
-|---|---|---|---|
-| ACDC → ACDC (in-domain) | 0.87 | 0.85 | 4.7% |
-| ACDC → M&M-2 (out-of-distribution) | **0.70** | 0.59 | 9.1% |
-| **M&M-2 → ACDC (generalization, flagship)** | **0.87** | 0.84 | 9.4% |
-
-The single-centre model drops ~17 Dice points off its home dataset (RV worst, 0.85 → 0.59); the
-multi-vendor model carries to a new centre with no segmentation drop. **Where it still fails:**
-RV is the weak structure in every setting; EF transfers worse than Dice (calibration). Surface
-metrics (HD95 / ASSD) + error-distribution plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
-
-## Scope
-I come from audio / acoustic-signal ML (modeling, evaluation, edge); cardiac imaging
-is a deliberate ramp. The approach: build the problem, evaluate it, and visualize it,
-with an **LLM-driven learning track** ([`learning/`](learning/): theory write-ups +
-self-quizzes) running alongside — learning a field by shipping in it. Competence built in the
-gap on public data, not a claim of prior medical-imaging experience; the ramp is the point, not
-a disclaimer. Today only the MRI lane is underway; CT and echo are planned, not done.
+**Why train on M&M-2, not ACDC?** Diversity in training buys robustness, and it's asymmetric: a
+single-centre (ACDC) model drops ~17 Dice points tested across vendors (mean 0.87 → 0.70, RV
+0.85 → 0.59), while the multi-vendor model carries to a new centre with no segmentation drop.
+**Where it still fails:** RV is the weak structure everywhere; EF transfers worse than Dice
+(calibration). Full per-direction table + surface metrics (HD95 / ASSD) + error-distribution
+plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
 ## Install & test
 ```bash
@@ -74,6 +60,6 @@ python -m pytest tests/ -q     # unit + ACDC integration (integration skips with
 
 ## How it's built
 Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; I own the
-modeling decisions, the measurement correctness, and the evaluation. What transfers from audio
-ML is data-structure reasoning and evaluation discipline; the clinical specifics I learn as I go
+modeling decisions, the measurement correctness, and the evaluation. Data-structure reasoning and
+evaluation discipline carry over from prior ML work; the clinical specifics I learn as I go
 ([learning/](learning/)).
