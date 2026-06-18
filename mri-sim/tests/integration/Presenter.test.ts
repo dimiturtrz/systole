@@ -26,15 +26,16 @@ describe('Presenter (presenter + simulator + mock view)', () => {
     for (const m of view.last()) expect(Math.abs(m[2])).toBeLessThan(1e-6);
   });
 
-  it('tick precesses spins over time (transverse phase changes, stays transverse)', () => {
+  it('tick precesses AND relaxes (phase moves, transverse decays, longitudinal recovers)', () => {
     const view = new FakeView();
     const p = new Presenter(view);
     p.start();
-    const before = view.last()[0];
+    const before = view.last()[0]; // just-tipped: transverse, Mz≈0
     p.tick(0.5);
     const after = view.last()[0];
     const moved = Math.hypot(after[0] - before[0], after[1] - before[1]);
-    expect(moved).toBeGreaterThan(1e-3); // it actually precessed
-    expect(Math.abs(after[2])).toBeLessThan(1e-6); // still transverse
+    expect(moved).toBeGreaterThan(1e-3); // precessed
+    expect(Math.hypot(after[0], after[1])).toBeLessThan(Math.hypot(before[0], before[1])); // T2 decay
+    expect(after[2]).toBeGreaterThan(before[2]); // T1 recovery toward +z
   });
 });

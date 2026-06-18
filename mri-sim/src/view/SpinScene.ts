@@ -4,7 +4,7 @@ import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkArrowSource from '@kitware/vtk.js/Filters/Sources/ArrowSource';
 import type { Vec3 } from '../model/types';
-import { directionToAxisAngleDeg } from '../model/physics';
+import { directionToAxisAngleDeg, magnitude } from '../model/physics';
 import type { SpinView } from './SpinView';
 
 /**
@@ -49,11 +49,14 @@ export class SpinScene implements SpinView {
     this.renderWindow.render();
   }
 
-  /** Re-orient existing arrows to new magnetization (per frame). */
+  /** Re-orient + re-scale existing arrows to new magnetization (per frame). */
   updateSpins(magnetization: Vec3[]): void {
+    const base = 0.9;
     const n = Math.min(this.actors.length, magnetization.length);
     for (let k = 0; k < n; k++) {
       const actor = this.actors[k];
+      const s = base * magnitude(magnetization[k]); // length ∝ |M| (shows T2 decay / T1 recovery)
+      actor.setScale(s, s, s);
       actor.setOrientation(0, 0, 0); // reset before applying absolute rotation
       this.orientAlong(actor, magnetization[k]);
     }

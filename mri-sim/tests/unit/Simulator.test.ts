@@ -33,4 +33,22 @@ describe('Simulator', () => {
     close(M[0][2], 0);
     close(magnitude(M[0]), 1, 1e-9);
   });
+
+  it('relaxation: T2 decays transverse, T1 recovers longitudinal (larmor 0 to isolate)', () => {
+    const sim = new Simulator(0, 2, 1); // no precession, T1=2, T2=1
+    const M: Vec3[] = [[0, 1, 0]]; // pure transverse
+    sim.step(M, 1);
+    close(M[0][0], 0);
+    close(M[0][1], Math.exp(-1)); // |Mxy| = exp(-dt/T2)
+    close(M[0][2], 1 - Math.exp(-0.5)); // Mz = m0·(1 - exp(-dt/T1))
+  });
+
+  it('equilibrium spin (0,0,1) is a fixed point of step', () => {
+    const sim = new Simulator(1, 2, 0.6);
+    const M: Vec3[] = [[0, 0, 1]];
+    sim.step(M, 0.5);
+    close(M[0][0], 0);
+    close(M[0][1], 0);
+    close(M[0][2], 1);
+  });
 });
