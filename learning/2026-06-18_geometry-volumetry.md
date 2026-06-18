@@ -1,6 +1,6 @@
 # Phase D hands-on · geometry / volumetry (Track B)
 
-Connecting `materials/common/geometry-and-volumetry.md` to the pipeline
+Connecting `materials/common/G_geometry-and-volumetry.md` to the pipeline
 (`cardioseg/evaluation/measure.py`, `cardioseg/analysis/viz.py`). Theory deepened
 in the common doc; this file = lessons + my understanding + quiz log (on demand).
 

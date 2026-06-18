@@ -10,9 +10,9 @@ it, before Phase D (hands-on). Research-grounded (see
   - `README.md`
   - `cardiac-anatomy-and-cycle.md` (B1)
   - `ejection-fraction.md` (B2)
-  - `geometry-and-volumetry.md` (B3 + geometry thread)
-  - `segmentation-theory.md` (C2 — U-Net/nnU-Net, 2D vs 3D, loss, patient-level splits)
-  - `evaluation-theory.md` (Dice/Jaccard, Hausdorff/HD95, ASSD, Bland-Altman EF agreement,
+  - `G_geometry-and-volumetry.md` (B3 + geometry thread)
+  - `M_segmentation-theory.md` (C2 — U-Net/nnU-Net, 2D vs 3D, loss, patient-level splits)
+  - `E_evaluation-theory.md` (Dice/Jaccard, Hausdorff/HD95, ASSD, Bland-Altman EF agreement,
     calibration, failure analysis, clinical-grade gap)
 - **`mri/06_cardiac-mri.md`** (A2) — bSSFP cine, ECG gating (prospective/retrospective),
   segmented k-space, short-axis stack, ED/ES, anisotropy → 2D.

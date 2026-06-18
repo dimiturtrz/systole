@@ -32,7 +32,7 @@ Conventions that bite:
 ## Surface meshing (marching cubes)
 Converts a voxel mask → a triangulated surface. **Not needed for EF** (Simpson's
 suffices), but used for: 3D visualization, surface-based metrics (Hausdorff distance —
-see [evaluation-theory.md](evaluation-theory.md)), and wall-thickness. (Our `viz.py`
+see [E_evaluation-theory.md](E_evaluation-theory.md)), and wall-thickness. (Our `viz.py`
 does marching-cubes → STL.)
 
 ## Wall thickness

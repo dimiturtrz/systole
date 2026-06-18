@@ -35,7 +35,7 @@ Community convention:
 
 ## Geometry
 - In-plane spacing ~**1.4–1.7 mm** (median ~1.5); slice **5–10 mm** (median ~10) →
-  strong **anisotropy** → 2D models (see [../common/segmentation-theory.md](../common/segmentation-theory.md)).
+  strong **anisotropy** → 2D models (see [../common/M_segmentation-theory.md](../common/M_segmentation-theory.md)).
 - **Read spacing from the NIfTI header**, per volume — don't assume.
 
 ## Loading notes (for Phase D)

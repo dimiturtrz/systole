@@ -18,7 +18,7 @@ The MRI-specific bridge from generic physics (01–05) to the heart. Core proble
 - **Resolution:** in-plane ~**1.25–1.7 mm**, slice **5–8 mm** (ACDC: mostly 5 mm,
   sometimes 8 mm; ~5 mm gaps) → **anisotropy ~1:5 to 1:7**.
 - **Consequence:** that anisotropy is *the* reason **2D models dominate** (see
-  [../common/segmentation-theory.md](../common/segmentation-theory.md)).
+  [../common/M_segmentation-theory.md](../common/M_segmentation-theory.md)).
 
 ## ECG gating — exploit the periodic beat
 You can't freeze the heart in one acquisition, so you **synchronize to the ECG** and

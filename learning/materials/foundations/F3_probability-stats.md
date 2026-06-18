@@ -35,7 +35,7 @@ DeepLearning.AI prob-stats course.
   read **bias** (systematic offset) + **limits of agreement** (bias ± 1.96·SD). A
   model can have small MAE but a big systematic bias; Bland-Altman shows it.
 - Our README currently compares MAE to a ±5% *limits-of-agreement* threshold — that's
-  the apples-to-oranges to fix (see [../common/evaluation-theory.md](../common/evaluation-theory.md)).
+  the apples-to-oranges to fix (see [../common/E_evaluation-theory.md](../common/E_evaluation-theory.md)).
 
 ## Variance & cross-validation
 - One 80/20 split = one **sample**; its Dice/EF has **variance**. Patient-level

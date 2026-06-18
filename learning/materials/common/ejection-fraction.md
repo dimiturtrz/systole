@@ -14,7 +14,7 @@ EF (%) = SV / EDV × 100 = (EDV − ESV) / EDV × 100
 - Computed from the **LV cavity** (label 3) volume at the **ED** and **ES** frames.
 
 The pipeline: segment LV cavity at ED and ES → count voxels → convert to mL (see
-[geometry-and-volumetry.md](geometry-and-volumetry.md)) → EF.
+[G_geometry-and-volumetry.md](G_geometry-and-volumetry.md)) → EF.
 
 ## Normal ranges & clinical thresholds (LV)
 | | LVEF |
@@ -34,7 +34,7 @@ Heart-failure categories (2022 AHA/ACC/HFSA):
 ## Why EF accuracy is subtle (the key point for ML)
 EF is a **ratio of two volumes**, both estimated from segmentations:
 - A small **systematic boundary offset** biases EDV and ESV → biases EF, even at high
-  Dice. (See [evaluation-theory.md](evaluation-theory.md): why Dice alone misleads.)
+  Dice. (See [E_evaluation-theory.md](E_evaluation-theory.md): why Dice alone misleads.)
 - Errors at **ES** matter disproportionately (small cavity → small absolute errors are
   large relative errors).
 - A few mL of volume error = several % EF error in **small hearts** (HCM, low-EDV HFrEF).

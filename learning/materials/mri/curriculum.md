@@ -33,12 +33,12 @@ in Phase D failure analysis.)*
 ## Phase B — The heart & the measurement ✅ (cross-modality → `../common/`)
 - **B1 · Cardiac anatomy & cycle** ✅ → [../common/cardiac-anatomy-and-cycle.md](../common/cardiac-anatomy-and-cycle.md)
 - **B2 · Ejection fraction** ✅ → [../common/ejection-fraction.md](../common/ejection-fraction.md)
-- **B3 · Geometry & volumetry** ✅ → [../common/geometry-and-volumetry.md](../common/geometry-and-volumetry.md)
+- **B3 · Geometry & volumetry** ✅ → [../common/G_geometry-and-volumetry.md](../common/G_geometry-and-volumetry.md)
 
 ## Phase C — The data & the task ✅
 - **C1 · The ACDC dataset** ✅ → [08_acdc-dataset.md](08_acdc-dataset.md)
-- **C2 · Segmentation theory** ✅ → [../common/segmentation-theory.md](../common/segmentation-theory.md)
-- **Evaluation theory** ✅ → [../common/evaluation-theory.md](../common/evaluation-theory.md)
+- **C2 · Segmentation theory** ✅ → [../common/M_segmentation-theory.md](../common/M_segmentation-theory.md)
+- **Evaluation theory** ✅ → [../common/E_evaluation-theory.md](../common/E_evaluation-theory.md)
 
 ## Phase D — Hands-on (code) ⬜  ← only thing left
 EDA → 2D U-Net baseline → EF vs GT → **failure analysis** (apply A3 artifacts) →

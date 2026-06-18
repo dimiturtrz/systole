@@ -14,7 +14,7 @@ hands-on logs in [../../](../../) (`<date>_<topic>.md`). Status: ✅ done · �
 
 ## Phase M — Modelling / DL segmentation (the model side)
 The learned function image → per-voxel class. Theory stub:
-[segmentation-theory.md](segmentation-theory.md). Hands-on log:
+[M_segmentation-theory.md](M_segmentation-theory.md). Hands-on log:
 [../../2026-06-18_ml-segmentation.md](../../2026-06-18_ml-segmentation.md).
 
 - **M1 · CNN fundamentals** 🔄 — convolution, pooling, stride/padding, receptive
@@ -32,7 +32,7 @@ The learned function image → per-voxel class. Theory stub:
 
 ## Phase G — Geometry / measurement (the number side)
 Per-voxel labels → clinical scalar + 3D model. Theory stub:
-[geometry-and-volumetry.md](geometry-and-volumetry.md). Hands-on log:
+[G_geometry-and-volumetry.md](G_geometry-and-volumetry.md). Hands-on log:
 [../../2026-06-18_geometry-volumetry.md](../../2026-06-18_geometry-volumetry.md).
 
 - **G1 · voxel → volume / Simpson's** ✅(theory) — spacing, anisotropy, mm³→mL,
@@ -45,7 +45,7 @@ Per-voxel labels → clinical scalar + 3D model. Theory stub:
 - **G6 · shape models / 3D anatomical modelling** ⬜ (awareness) — atlases, PCA on meshes.
 
 ## Phase E — Evaluation & validation rigor
-Theory stub: [evaluation-theory.md](evaluation-theory.md).
+Theory stub: [E_evaluation-theory.md](E_evaluation-theory.md).
 - **E1 · overlap + boundary metrics** ✅(theory) — Dice/Jaccard, Hausdorff/HD95/ASSD.
 - **E2 · metric pitfalls** ⬜ — Metrics Reloaded (one metric misleads).
 - **E3 · function agreement** ⬜ — Bland-Altman (bias + limits of agreement) for EF;

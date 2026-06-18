@@ -148,7 +148,7 @@ under `mri/`. Recommended structure:
 - **Phase G — Geometry / measurement** (deepen `materials/common/geometry-and-
   volumetry.md`): G1 voxel→volume/Simpson's · G2 marching cubes · G3 mesh processing
   & wall thickness · G4 distance/Hausdorff · G5 registration · G6 shape models (aware).
-- **Phase E — Evaluation** (deepen `materials/common/evaluation-theory.md`): metrics,
+- **Phase E — Evaluation** (deepen `materials/common/E_evaluation-theory.md`): metrics,
   pitfalls, Bland-Altman, domain shift.
 
 **In scope** (library-using practitioner): use U-Net/nnU-Net via MONAI; use marching

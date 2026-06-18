@@ -57,4 +57,4 @@ patients. **Mitigation:** larger FOV, saturation bands, oversampling.
 **How to use this:** don't memorize — in Phase D, when a case fails, match the failure
 to one of these (which slice? base/apex? a band? a ghost?) and **report the mechanism**.
 That diagnosis is the senior signal. *(Cross-scanner domain shift — the biggest
-real-world failure — is in [../common/evaluation-theory.md](../common/evaluation-theory.md).)*
+real-world failure — is in [../common/E_evaluation-theory.md](../common/E_evaluation-theory.md).)*

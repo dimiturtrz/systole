@@ -1,6 +1,6 @@
 # Phase D hands-on · ML / segmentation (Track A)
 
-Connecting `materials/common/segmentation-theory.md` to the pipeline we actually
+Connecting `materials/common/M_segmentation-theory.md` to the pipeline we actually
 built (`cardioseg/training`, `cardioseg/evaluation`). Theory deepened in the
 common doc; this file = the lessons + my understanding + quiz log (on demand).
 
