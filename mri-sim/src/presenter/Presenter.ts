@@ -17,7 +17,7 @@ export class Presenter {
   private readonly sim: Simulator;
   private readonly positions: Vec3[];
   private readonly M: Vec3[];
-  private readonly period = 4; // seconds between RF pulses
+  private readonly period = 2; // seconds between RF pulses (kept short so motion is near-continuous)
   private readonly sliceZ = 0; // selected slab center
   private readonly sliceHalf = 0.6; // half-thickness (picks the z≈0 layer)
   private speed = 1; // time-scale (slider); 1 = real-time, <1 = slow-mo

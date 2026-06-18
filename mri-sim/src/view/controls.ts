@@ -11,6 +11,7 @@ export function mountSpeedSlider(initial: number, onChange: (v: number) => void)
   label.style.cssText = 'display:block;margin-bottom:6px;';
 
   const input = document.createElement('input');
+  input.id = 'speed-slider';
   input.type = 'range';
   input.min = '0.05';
   input.max = '2';

@@ -45,4 +45,27 @@ describe('Presenter (presenter + simulator + mock view)', () => {
     expect(Math.hypot(after[0], after[1])).toBeLessThan(Math.hypot(before[0], before[1])); // T2 decay
     expect(after[2]).toBeGreaterThan(before[2]); // T1 recovery
   });
+
+  it('setSpeed scales evolution: 0 freezes, higher moves more', () => {
+    const tippedIdx = (v: FakeView) => v.last().findIndex((m) => Math.abs(m[2]) < 1e-6);
+
+    const v0 = new FakeView();
+    const p0 = new Presenter(v0);
+    p0.start();
+    p0.setSpeed(0);
+    const i = tippedIdx(v0);
+    const b0 = v0.last()[i];
+    p0.tick(0.3);
+    const a0 = v0.last()[i];
+    expect(Math.hypot(a0[0] - b0[0], a0[1] - b0[1])).toBeLessThan(1e-9); // frozen
+
+    const v2 = new FakeView();
+    const p2 = new Presenter(v2);
+    p2.start();
+    p2.setSpeed(2);
+    const b2 = v2.last()[i];
+    p2.tick(0.3);
+    const a2 = v2.last()[i];
+    expect(Math.hypot(a2[0] - b2[0], a2[1] - b2[1])).toBeGreaterThan(1e-2); // moved
+  });
 });
