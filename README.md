@@ -1,10 +1,7 @@
 # systole — cardiac segmentation + function across MRI, CT, echo
 
-**What this is.** systole is where I pick up a new domain in the open: take one bounded problem
-(cardiac **segmentation → ejection fraction**), build it end-to-end, evaluate it, and visualize
-it — with an **LLM-driven learning track** ([`learning/`](learning/): theory write-ups +
-self-quizzes) alongside the build. Learning a field by shipping in it. The ramp is the point,
-not a disclaimer.
+**What this is.** systole is where I pick up a new domain in the open — one bounded problem, end
+to end: cardiac **segmentation → ejection fraction**.
 
 ![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
 
@@ -24,11 +21,13 @@ single story rather than three disjoint demos. For the full plan — the 3×3 gr
 milestones — see **[ROADMAP.md](ROADMAP.md)**. The dated build log is the git
 history.
 
-**Honest scope.** I come from audio / acoustic-signal ML (end-to-end modeling,
-evaluation, edge). Cardiac imaging is a deliberate ramp; this repo is me building
-competence in the gap — the modeling, the geometry/measurement, and the domain
-understanding — on public data, not a claim of prior medical-imaging experience.
-Today only the MRI lane is underway; CT and echo are planned, not done.
+**Honest scope.** I come from audio / acoustic-signal ML (end-to-end modeling, evaluation,
+edge); cardiac imaging is a deliberate ramp. The approach: build the problem end-to-end,
+evaluate it, and visualize it, with an **LLM-driven learning track** ([`learning/`](learning/):
+theory write-ups + self-quizzes) running alongside the build — learning a field by shipping in
+it. Competence built in the gap on public data, not a claim of prior medical-imaging
+experience; the ramp is the point, not a disclaimer. Today only the MRI lane is underway; CT
+and echo are planned, not done.
 
 ## Visualizing the physics — [mri-sim](mri-sim/)
 An interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
