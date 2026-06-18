@@ -10,7 +10,6 @@ import type { Panels } from '../view/Panels';
 import type { SequenceView } from '../view/SequenceDiagram';
 
 const REST_TILT = 0.12; // matches SpinSystem/Simulator rest tilt
-const TIP_DUR = 0.15; // sim-seconds to ramp the RF tip (avoids a teleport snap)
 const LARMOR_MIN = 63.8; // MHz — slice-select frequency band (≈1.5 T: γ·B0 ≈ 63.87 MHz)
 const LARMOR_MAX = 63.95;
 const IDLE_WARP = 20; // fast-forward the dead relaxation tail (real TR is ~96% wait)
@@ -39,6 +38,7 @@ export class Presenter {
   private phaseDir: Vec3 = [0, 1, 0]; // in-plane, perpendicular to both
   private phaseHalf = 1; // max |pos·phaseDir| → normalizes the phase-encode wind-up
   private tipLeft = 0; // remaining time in the current RF-tip ramp
+  private tipDur = 0.005; // RF flip duration ≈ slice-select window (set each pulse)
   private peIndex = 0; // phase-encode step counter (gradient changes each TR)
   private peStep = 0; // current phase-encode value, −1…1
 
@@ -165,8 +165,11 @@ export class Presenter {
 
   tick(dt: number): void {
     let d = dt * this.speed;
-    // Fast-forward the dead relaxation tail (after readout) so we don't watch nothing.
-    if (this.cycleTime > seqWindows(this.tr, this.te).roEnd) d *= IDLE_WARP;
+    // Fast-forward the dead relaxation tail (after readout), but stop on TR so the warp
+    // can't overshoot into — and skip — the next RF flip.
+    if (this.cycleTime > seqWindows(this.tr, this.te).roEnd) {
+      d = Math.min(d * IDLE_WARP, this.tr - this.cycleTime);
+    }
     this.cycleTime += d;
     if (this.cycleTime >= this.tr) {
       this.cycleTime -= this.tr;
@@ -179,23 +182,25 @@ export class Presenter {
     }
     this.sim.step(this.theta, this.phase, d); // precess + relax theta toward rest
     if (this.tipLeft > 0) this.applyTip(d); // smooth RF tip overrides slab theta during the ramp
-    const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / TIP_DUR) : 0;
+    const flash = this.tipLeft > 0 ? 0.35 * (Math.max(0, this.tipLeft) / this.tipDur) : 0;
     this.view.flashSlice(flash); // RF pulse flashes the slice plane
     this.view.updateSpins(this.directions(), this.gradientColors());
     this.drawSeq();
   }
 
-  /** Ramp the slab's tilt rest→90° over TIP_DUR (eased) so the pulse flips smoothly. */
+  /** Ramp the slab's tilt rest→90° over the RF flip (eased) so the pulse flips smoothly. */
   private applyTip(d: number): void {
     this.tipLeft -= d;
-    const prog = Math.min(1, 1 - Math.max(0, this.tipLeft) / TIP_DUR);
+    const prog = Math.min(1, 1 - Math.max(0, this.tipLeft) / this.tipDur);
     const e = 1 - (1 - prog) * (1 - prog); // ease-out
     const tilt = REST_TILT + (Math.PI / 2 - REST_TILT) * e;
     for (let i = 0; i < this.theta.length; i++) if (this.slab[i]) this.theta[i] = tilt;
   }
 
   private pulse(): void {
-    this.tipLeft = TIP_DUR; // start a smooth RF tip ramp (no instant teleport, no phase reset)
+    // RF flip spans the slice-select window → fully transverse before phase encode begins.
+    this.tipDur = seqWindows(this.tr, this.te).sliceEnd;
+    this.tipLeft = this.tipDur; // smooth ramp (no teleport, no phase reset)
     this.peIndex = (this.peIndex + 1) % 16; // phase-encode steps each TR (RF stays the same)
     this.peStep = (this.peIndex / 15) * 2 - 1;
   }

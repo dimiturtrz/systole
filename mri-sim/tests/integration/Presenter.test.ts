@@ -103,6 +103,18 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     expect(oblique).not.toEqual(axial); // different spins selected (set, not just count)
   });
 
+  it('the RF flip completes within the slice-select window (full knock-down, not a light tap)', () => {
+    const v = new FakeView();
+    const p = new Presenter(v);
+    p.start();
+    p.tick(0.0015); // mid slice-select window (sliceEnd ≈ 0.0033 s) → flip partway
+    const mid = v.last().filter((m) => Math.abs(m[2]) < 1e-6).length;
+    expect(mid).toBe(0); // not yet flat — still ramping
+    p.tick(0.003); // past the slice-select window → fully transverse
+    const done = v.last().filter((m) => Math.abs(m[2]) < 1e-6).length;
+    expect(done).toBeGreaterThan(0); // slab knocked all the way to 90°
+  });
+
   it('phase encode winds slab spins into a position-dependent ramp (not just a color pass)', () => {
     const v = new FakeView();
     const p = new Presenter(v);
