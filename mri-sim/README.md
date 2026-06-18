@@ -1,13 +1,20 @@
 # mri-sim
 
-Interactive 3D MRI pipeline visualizer (spins → pulse sequence → k-space → image).
-Educational; see [SPEC.md](SPEC.md) for the full design.
+Interactive 3D MRI pipeline visualizer — **spins → pulse sequence → k-space → image**, on one clock.
 
-**Status: M4** — end-to-end pipeline visualized: a 3D grid of protons precessing on
-cones (individual-spin view) with **slice-selective** excitation (the central z-slab
-glows + tips), a **speed slider**, and **k-space → image** panels that fill line-by-line
-(low→high frequency) so the reconstructed image sharpens. Engine is pure TS +
-unit-tested (24 tests); renderer verified by an asserting visual smoke.
+![mri-sim demo](docs/media/demo.gif)
+
+*Full-res clip: [`docs/media/demo.mp4`](docs/media/demo.mp4). Educational; see [SPEC.md](SPEC.md) for the design.*
+
+**Status: pipeline complete, end-to-end.** A 3D grid of protons precesses on cones
+(individual-spin view); a **slice-selective** RF pulse tips the (tiltable, oblique)
+slab; **phase encode** winds the in-slice spins into a position-dependent ramp whose
+steepness steps each TR (the k-space line loop); **frequency encode / readout** fills
+**k-space line-by-line**, and the inverse-FFT **image** sharpens as it fills. A live
+**pulse-sequence diagram** tracks the playhead. Timing is realistic (TR/TE in ms); the
+dead relaxation tail is fast-forwarded so you watch the physics, not the wait. Controls:
+log-scaled speed, Larmor (→ slice height), TR, TE, slice angle. Engine is pure TS,
+unit-tested (41 tests); the vtk.js renderer is verified by an asserting visual smoke.
 
 ## Stack
 TypeScript + [vtk.js](https://kitware.github.io/vtk-js/) + Vite. Architecture is
@@ -15,8 +22,8 @@ TypeScript + [vtk.js](https://kitware.github.io/vtk-js/) + Vite. Architecture is
 
 ```
 src/
-  model/      # pure-TS simulation (SpinSystem, later Sequence/Simulator) — strictly typed
-  view/       # vtk.js rendering (SpinScene) — no physics
+  model/      # pure-TS simulation (SpinSystem, Simulator, Acquisition, sequence timing, FFT) — strictly typed
+  view/       # rendering: vtk.js 3D spins (SpinScene) + canvas2d panels/sequence — no physics
   presenter/  # wires model → view, runs the loop
   main.ts     # entry
 ```

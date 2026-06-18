@@ -18,6 +18,14 @@ competence in the gap — the modeling, the geometry/measurement, and the domain
 understanding — on public data, not a claim of prior medical-imaging experience.
 Today only the MRI lane is underway; CT and echo are planned, not done.
 
+## Visualizing the physics — [mri-sim](mri-sim/)
+An interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
+phase/frequency encode → k-space → reconstructed image, on one clock — built to
+*understand the acquisition* the segmentation model consumes. Educational and physically
+honest; a separate TS app from the Python pipeline below.
+
+![mri-sim demo](mri-sim/docs/media/demo.gif)
+
 ## Pipeline (per modality)
 1. **Data** — modality-specific loader + normalization (e.g. ACDC short-axis cine
    MRI; NIfTI volumes with per-voxel spacing in mm).
@@ -81,12 +89,17 @@ python -m cardioseg.training.train --acdc --epochs 40      # writes runs/acdc/{m
 groups. *(baseline, not tuned.)* Numbers below are written by
 `runs/acdc/metrics.json`.
 
-| Structure | Val Dice | published SOTA |
+| Structure | Val Dice | published ACDC range |
 |---|---|---|
 | LV cavity | **0.932** | ~0.93–0.96 |
 | LV myocardium | 0.822 | ~0.88–0.92 |
 | RV cavity | 0.859 | ~0.88–0.92 |
 | **mean** | **0.871** | |
+
+The right column is the *published range on ACDC* — context, not a trophy. ACDC is
+single-centre and homogeneous, so matching it means "competent on a clean
+benchmark," **not** state-of-the-art or clinical-grade. Real-world robustness
+(multi-vendor/scanner, domain shift) is untested here and is the hard part.
 
 **Ejection fraction vs ground truth: MAE 3.1%** (clinical equivalence ≈ ±5%).
 **Where it fails:** the largest EF errors sit in the thin-walled RV and
