@@ -20,7 +20,7 @@ from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from cardioseg.training.dataset import split_patients
-from cardioseg.data.mri.data import acdc_cases
+from cardioseg.data.mri.data import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks
 from geometry import keep_largest, bbox_slices, nearest_index
@@ -105,10 +105,8 @@ def load_4d(patient: str):
 
 
 def frame_indices(patient: str):
-    """0-based ED, ES frame indices from Info.cfg."""
-    cfg = dict(
-        l.split(":", 1) for l in (patient_dir(patient) / "Info.cfg").read_text().splitlines() if ":" in l
-    )
+    """0-based ED, ES frame indices (Info.cfg parsing reused from cardioseg)."""
+    cfg = parse_info_cfg(patient_dir(patient))
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
