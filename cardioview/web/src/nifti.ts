@@ -1,31 +1,39 @@
 import * as nifti from 'nifti-reader-js';
 
 export interface Volume {
-  data: Float32Array; // [d,h,w] row-major (z,y,x) — same layout NIfTI stores (x fastest)
+  data: Float32Array; // [t,d,h,w] row-major (x fastest, t slowest) — t=1 for a 3D scan
   d: number;
   h: number;
   w: number;
+  t: number; // cine frames (1 if 3D)
   spacingYX: [number, number]; // (y, x) mm
   zSpacing: number; // mm
 }
 
-/** Read a (possibly gzipped) .nii / .nii.gz File into a [z,y,x] float volume + spacing. */
+/** Read a (possibly gzipped) .nii / .nii.gz File into a [t,z,y,x] float volume + spacing. */
 export async function readNifti(file: File): Promise<Volume> {
   let buf: ArrayBuffer = await file.arrayBuffer();
   if (nifti.isCompressed(buf)) buf = nifti.decompress(buf) as ArrayBuffer;
   if (!nifti.isNIFTI(buf)) throw new Error('not a NIfTI file');
   const hdr = nifti.readHeader(buf);
   const raw = nifti.readImage(hdr, buf);
-  const [, nx, ny, nz] = hdr.dims; // dims[0]=ndim
+  const [ndim, nx, ny, nz, nt] = hdr.dims; // dims[0]=ndim
   const [, sx, sy, sz] = hdr.pixDims;
   return {
     data: toFloat32(raw, hdr.datatypeCode),
     d: nz,
     h: ny,
     w: nx,
+    t: ndim >= 4 ? nt : 1,
     spacingYX: [sy, sx],
     zSpacing: sz,
   };
+}
+
+/** One [z,y,x] frame of a cine (i in [0,t)). */
+export function frame(v: Volume, i: number): Float32Array {
+  const n = v.d * v.h * v.w;
+  return v.data.subarray(i * n, (i + 1) * n) as Float32Array;
 }
 
 function toFloat32(buf: ArrayBuffer, code: number): Float32Array {

@@ -88,9 +88,14 @@ export class HeartViewer {
 
   /** Show a single segmented volume (per-chamber polydata) — e.g. an imported scan. */
   showStatic(polys: (any | null)[]): void {
+    this.showSequence([polys]);
+  }
+
+  /** Show an in-memory frame sequence (e.g. a segmented imported cine) — then play() animates it. */
+  showSequence(framePolys: (any | null)[][]): void {
     this.pause();
     this.ensureActors();
-    this.framePolys = [polys];
+    this.framePolys = framePolys;
     this.showFrame(0);
     this.renderer.resetCamera();
     this.cameraSet = true;

@@ -5,7 +5,7 @@ import { efCategory, efError, fmtMl, fmtPct } from './metrics';
 import { showSpinner, hideSpinner } from './spinner';
 import { pickDefault } from './select';
 import { Segmenter } from './segment';
-import { readNifti } from './nifti';
+import { readNifti, frame } from './nifti';
 import { chamberPolys } from './mesh';
 import { countLabel, volumeMl, TARGET_MM } from './preprocess';
 
@@ -19,8 +19,11 @@ const IMPORT = '__import__';
 
 interface Imported {
   name: string;
-  polys: (any | null)[];
+  polys: (any | null)[]; // shown frame (ED for a cine, the volume for a single scan)
   readout: string;
+  frames?: (any | null)[][]; // segmented cine frames (if 4D) -> beating
+  edIdx?: number;
+  esIdx?: number;
 }
 
 /** Top panel: Model dropdown + Hearts dropdown (each = defaults + import), drives the viewer. */
@@ -104,60 +107,28 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   function showImported(im: Imported): void {
     controls.innerHTML = '';
     readout.innerHTML = im.readout;
-    viewer.showStatic(im.polys);
-  }
-
-  async function onScans(files: File[]): Promise<void> {
-    showSpinner();
-    try {
-      await ensureModel();
-      let last = '';
-      for (const f of files) {
-        status(`segmenting ${f.name}…`);
-        const v = await readNifti(f);
-        const t0 = performance.now();
-        const masks = await seg.segmentVolume(v.data, v.d, v.h, v.w, v.spacingYX);
-        const secs = (performance.now() - t0) / 1000;
-        const polys = chamberPolys(masks, v.zSpacing);
-        const vox = TARGET_MM * TARGET_MM * v.zSpacing;
-        const cav = volumeMl(countLabel(masks, 3), vox);
-        const myo = volumeMl(countLabel(masks, 2), vox);
-        const rv = volumeMl(countLabel(masks, 1), vox);
-        const name = uniqueName(f.name, imported);
-        const ro = importedReadout(name, cav, myo, rv) +
-          `<div style="color:#8aa0b6;">${v.d} slices · ${seg.provider} · ${secs.toFixed(1)} s</div>`;
-        imported.set(name, { name, polys, readout: ro });
-        upsertOption(heartSel, name, `${name} (imported)`, IMPORT);
-        last = name;
-      }
-      if (last) {
-        heartSel.value = last;
-        heartSel.dataset.last = last;
-        showImported(imported.get(last)!);
-      }
-      status(`imported ${files.length} scan${files.length > 1 ? 's' : ''}`);
-    } catch (e: any) {
-      status(`error: ${e?.message ?? e}`);
-    } finally {
-      hideSpinner();
+    if (im.frames && im.frames.length > 1) {
+      viewer.showSequence(im.frames);
+      animControls(im.frames.length, im.edIdx ?? 0, im.esIdx ?? 0);
+    } else {
+      viewer.showStatic(im.polys);
     }
   }
 
-  // ---- canned heart controls ----
-  function buildAnimated(e: HeartEntry): void {
-    const frames = e.frames!;
+  /** Play/pause + scrub + ED/ES jump for a sequence already loaded in the viewer; opens paused at ED. */
+  function animControls(n: number, edIdx: number, esIdx: number): void {
     const playBtn = button('▶ play');
     const label = el('span', 'color:#8aa0b6;font-size:12px;min-width:78px;text-align:right;') as HTMLSpanElement;
     const scrub = el('input', 'width:100%;') as HTMLInputElement;
     scrub.type = 'range';
     scrub.min = '0';
-    scrub.max = String(frames.length - 1);
+    scrub.max = String(n - 1);
     const jumps = row(button('ED · full'), button('ES · empty'));
     controls.append(row(playBtn, label), scrub, jumps);
 
     const setLabel = (i: number) => {
-      const tag = i === (e.ed_idx ?? -1) ? ' · ED' : i === (e.es_idx ?? -1) ? ' · ES' : '';
-      label.textContent = `frame ${i + 1}/${frames.length}${tag}`;
+      const tag = i === edIdx ? ' · ED' : i === esIdx ? ' · ES' : '';
+      label.textContent = `frame ${i + 1}/${n}${tag}`;
       scrub.value = String(i);
     };
     const stop = () => {
@@ -175,13 +146,75 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
     };
     playBtn.addEventListener('click', () => (viewer.isPlaying ? stop() : start()));
     scrub.addEventListener('input', () => jump(Number(scrub.value)));
-    jumps.children[0].addEventListener('click', () => jump(e.ed_idx ?? 0));
-    jumps.children[1].addEventListener('click', () => jump(e.es_idx ?? 0));
+    jumps.children[0].addEventListener('click', () => jump(edIdx));
+    jumps.children[1].addEventListener('click', () => jump(esIdx));
+    jump(edIdx); // open on ED, paused
+  }
 
+  async function onScans(files: File[]): Promise<void> {
+    showSpinner();
+    try {
+      await ensureModel();
+      let last = '';
+      for (const f of files) {
+        const v = await readNifti(f);
+        const name = uniqueName(f.name, imported);
+        if (v.t > 1) await segmentCine(name, f.name, v);
+        else await segmentSingle(name, v);
+        upsertOption(heartSel, name, `${name} (imported)`, IMPORT);
+        last = name;
+      }
+      if (last) {
+        heartSel.value = last;
+        heartSel.dataset.last = last;
+        showImported(imported.get(last)!);
+      }
+      status(`imported ${files.length} scan${files.length > 1 ? 's' : ''}`);
+    } catch (e: any) {
+      status(`error: ${e?.message ?? e}`);
+    } finally {
+      hideSpinner();
+    }
+  }
+
+  async function segmentSingle(name: string, v: Awaited<ReturnType<typeof readNifti>>): Promise<void> {
+    status(`segmenting ${name}…`);
+    const t0 = performance.now();
+    const masks = await seg.segmentVolume(frame(v, 0), v.d, v.h, v.w, v.spacingYX);
+    const secs = (performance.now() - t0) / 1000;
+    const vox = TARGET_MM * TARGET_MM * v.zSpacing;
+    const ro = importedReadout(name,
+      volumeMl(countLabel(masks, 3), vox), volumeMl(countLabel(masks, 2), vox), volumeMl(countLabel(masks, 1), vox)) +
+      `<div style="color:#8aa0b6;">${v.d} slices · ${seg.provider} · ${secs.toFixed(1)} s</div>`;
+    imported.set(name, { name, polys: chamberPolys(masks, v.zSpacing), readout: ro });
+  }
+
+  async function segmentCine(name: string, label: string, v: Awaited<ReturnType<typeof readNifti>>): Promise<void> {
+    const t0 = performance.now();
+    const vox = TARGET_MM * TARGET_MM * v.zSpacing;
+    const framePolys: (any | null)[][] = [];
+    const lv: number[] = [];
+    for (let i = 0; i < v.t; i++) {
+      status(`segmenting ${label} ${i + 1}/${v.t}…`);
+      const masks = await seg.segmentVolume(frame(v, i), v.d, v.h, v.w, v.spacingYX);
+      framePolys.push(chamberPolys(masks, v.zSpacing));
+      lv.push(volumeMl(countLabel(masks, 3), vox));
+    }
+    const edIdx = argExtreme(lv, true); // ED = max LV-cavity volume (full)
+    const esIdx = argExtreme(lv, false); // ES = min (empty)
+    const secs = (performance.now() - t0) / 1000;
+    imported.set(name, {
+      name, polys: framePolys[edIdx], frames: framePolys, edIdx, esIdx,
+      readout: cineReadout(lv[edIdx], lv[esIdx], lv, edIdx, esIdx, v.t, seg.provider, secs),
+    });
+  }
+
+  // ---- canned heart controls ----
+  function buildAnimated(e: HeartEntry): void {
     showSpinner();
     void viewer
-      .loadSequence(frames.map(glbUrl))
-      .then(() => jump(e.ed_idx ?? 0)) // open on ED, PAUSED
+      .loadSequence(e.frames!.map(glbUrl))
+      .then(() => animControls(e.frames!.length, e.ed_idx ?? 0, e.es_idx ?? 0))
       .finally(hideSpinner);
   }
 
@@ -223,6 +256,36 @@ function cannedReadout(e: HeartEntry): string {
     <div style="color:#8aa0b6;border-top:1px solid #2a323d;padding-top:5px;margin-top:3px;">
       GT EF ${fmtPct(e.gt.ef)} &nbsp;·&nbsp; |error| ${efError(p.ef, e.gt.ef).toFixed(1)} pts
       &nbsp;·&nbsp; ${e.held_out ? 'held-out' : '⚠ train-seen'}</div>`;
+}
+
+function argExtreme(a: number[], max: boolean): number {
+  return a.reduce((bi, v, i) => ((max ? v > a[bi] : v < a[bi]) ? i : bi), 0);
+}
+
+/** LV-cavity volume vs frame, ED (red) + ES (blue) marked. */
+function sparkline(vals: number[], ed: number, es: number): string {
+  const w = 224, h = 40, pad = 4;
+  const mn = Math.min(...vals), rng = Math.max(...vals) - mn || 1;
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / Math.max(1, vals.length - 1);
+  const y = (val: number) => h - pad - ((val - mn) / rng) * (h - 2 * pad);
+  const pts = vals.map((val, i) => `${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(' ');
+  const dot = (i: number, c: string) => `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="3" fill="${c}"/>`;
+  return `<svg width="${w}" height="${h}" style="display:block;margin:2px 0;">` +
+    `<polyline points="${pts}" fill="none" stroke="#7a9bff" stroke-width="1.5"/>${dot(ed, '#ef5350')}${dot(es, '#5b8def')}</svg>` +
+    `<div style="color:#8aa0b6;font-size:11px;">LV volume vs frame · ED ● / ES ●</div>`;
+}
+
+function cineReadout(edv: number, esv: number, lv: number[], ed: number, es: number, t: number, provider: string, secs: number): string {
+  const ef = edv > 0 ? ((edv - esv) / edv) * 100 : NaN;
+  return `
+    <div style="font-size:22px;color:#fff;">LVEF ${fmtPct(ef)}
+      <span style="font-size:12px;color:#8aa0b6;">${efCategory(ef)}</span></div>
+    <div><span style="color:#e8edf4;">EDV</span> <span style="color:#8aa0b6;">(full)</span> ${fmtMl(edv)}
+      &nbsp; <span style="color:#e8edf4;">ESV</span> <span style="color:#8aa0b6;">(empty)</span> ${fmtMl(esv)}</div>
+    ${sparkline(lv, ed, es)}
+    <div style="color:#8aa0b6;border-top:1px solid #2a323d;padding-top:5px;margin-top:3px;">
+      imported cine · ${t} frames · ${provider} · ${secs.toFixed(1)} s</div>
+    <div style="color:#8aa0b6;">regular gated cycle (ACDC) — not arrhythmia</div>`;
 }
 
 function importedReadout(name: string, cav: number, myo: number, rv: number): string {
