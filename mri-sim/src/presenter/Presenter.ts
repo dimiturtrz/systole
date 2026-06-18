@@ -8,6 +8,7 @@ import type { Vec3 } from '../model/types';
 import type { SpinView } from '../view/SpinView';
 import type { Panels } from '../view/Panels';
 import type { SequenceView } from '../view/SequenceDiagram';
+import { freqColor } from '../view/palette';
 
 const REST_TILT = 0.12; // matches SpinSystem/Simulator rest tilt
 const LARMOR_MIN = 63.8; // MHz — slice-select frequency band (≈1.5 T: γ·B0 ≈ 63.87 MHz)
@@ -241,10 +242,4 @@ export class Presenter {
 
 function dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-/** Diverging colormap for Larmor frequency: low (blue) ↔ high (red). */
-function freqColor(t: number): Vec3 {
-  const u = Math.max(-1, Math.min(1, t));
-  return [0.5 + 0.5 * u, 0.35, 0.5 - 0.5 * u];
 }

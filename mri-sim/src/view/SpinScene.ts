@@ -9,9 +9,8 @@ import vtkConeSource from '@kitware/vtk.js/Filters/Sources/ConeSource';
 import vtkPlaneSource from '@kitware/vtk.js/Filters/Sources/PlaneSource';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from './SpinView';
+import { transverseColor, SLICE_PLANE, B0_AXIS } from './palette';
 
-const REST: Vec3 = [0.30, 0.45, 0.85];
-const HOT: Vec3 = [1.0, 0.65, 0.15];
 const SHAFT = 0.7;
 const HEAD = 0.35;
 const HEAD_R = 0.13;
@@ -156,7 +155,7 @@ export class SpinScene implements SpinView {
     const actor = vtkActor.newInstance();
     actor.setMapper(m);
     const prop = actor.getProperty();
-    prop.setColor(0.4, 0.9, 1.0);
+    prop.setColor(...SLICE_PLANE);
     prop.setOpacity(0);
     prop.setLighting(false);
     this.renderer.addActor(actor);
@@ -179,21 +178,16 @@ export class SpinScene implements SpinView {
     lm.setInputConnection(vtkLineSource.newInstance({ point1: [x, 0, minZ - 1], point2: [x, 0, maxZ + 0.6] }).getOutputPort());
     const la = vtkActor.newInstance();
     la.setMapper(lm);
-    la.getProperty().setColor(0.5, 0.5, 0.55);
+    la.getProperty().setColor(...B0_AXIS);
     la.getProperty().setLineWidth(2);
     this.renderer.addActor(la);
     const cm = vtkMapper.newInstance();
     cm.setInputConnection(vtkConeSource.newInstance({ height: 0.6, radius: 0.2, resolution: 16, center: [x, 0, maxZ + 0.9], direction: [0, 0, 1] }).getOutputPort());
     const ca = vtkActor.newInstance();
     ca.setMapper(cm);
-    ca.getProperty().setColor(0.5, 0.5, 0.55);
+    ca.getProperty().setColor(...B0_AXIS);
     this.renderer.addActor(ca);
   }
-}
-
-function transverseColor(d: Vec3): Vec3 {
-  const t = Math.min(1, Math.hypot(d[0], d[1]));
-  return [REST[0] + (HOT[0] - REST[0]) * t, REST[1] + (HOT[1] - REST[1]) * t, REST[2] + (HOT[2] - REST[2]) * t];
 }
 
 /** Two unit vectors perpendicular to unit `d` (and each other). */

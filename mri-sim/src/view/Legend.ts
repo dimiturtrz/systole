@@ -1,5 +1,7 @@
-// Legend overlay (top-right). View-only — explains what the scene encodes. Colors mirror
-// SpinScene (transverse-mag ramp) and Presenter.freqColor (Larmor gradient) so they stay honest.
+// Legend overlay (top-right). View-only — explains what the scene encodes. Swatch colors are
+// DERIVED from the shared palette (same functions/constants SpinScene & Presenter draw with),
+// so the legend can never drift from what's actually on screen.
+import { REST, TIPPED, SLICE_PLANE, B0_AXIS, freqColor, toCss } from './palette';
 
 interface LegendRow {
   swatch: string; // CSS background for the chip
@@ -7,10 +9,10 @@ interface LegendRow {
 }
 
 const ROWS: LegendRow[] = [
-  { swatch: 'linear-gradient(90deg,#4d73d9,#ffa626)', text: 'spin tilt: <b>rest</b> → <b>tipped</b> (transverse signal)' },
-  { swatch: 'linear-gradient(90deg,#0059ff,#805980,#ff5900)', text: 'gradient on: <b>low</b> ↔ <b>high</b> Larmor (position along the active gradient)' },
-  { swatch: '#66e6ff', text: '<b>slice plane</b> = RF transmit slab — flashes as it excites' },
-  { swatch: '#80808c', text: '<b>B₀</b> main-field axis' },
+  { swatch: `linear-gradient(90deg,${toCss(REST)},${toCss(TIPPED)})`, text: 'spin tilt: <b>rest</b> → <b>tipped</b> (transverse signal)' },
+  { swatch: `linear-gradient(90deg,${toCss(freqColor(-1))},${toCss(freqColor(0))},${toCss(freqColor(1))})`, text: 'gradient on: <b>low</b> ↔ <b>high</b> Larmor (position along the active gradient)' },
+  { swatch: toCss(SLICE_PLANE), text: '<b>slice plane</b> = RF transmit slab — flashes as it excites' },
+  { swatch: toCss(B0_AXIS), text: '<b>B₀</b> main-field axis' },
 ];
 
 export function mountLegend(): void {
