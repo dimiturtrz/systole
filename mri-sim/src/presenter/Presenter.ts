@@ -20,6 +20,7 @@ export class Presenter {
   private readonly period = 4; // seconds between RF pulses
   private readonly sliceZ = 0; // selected slab center
   private readonly sliceHalf = 0.6; // half-thickness (picks the z≈0 layer)
+  private speed = 1; // time-scale (slider); 1 = real-time, <1 = slow-mo
   private elapsed = 0;
   private last = 0;
 
@@ -38,14 +39,20 @@ export class Presenter {
     this.view.updateSpins(this.M);
   }
 
-  /** Advance dt seconds: re-pulse on schedule, evolve, refresh the view. */
+  /** Set the time-scale (1 = real-time, <1 = slow-mo). */
+  setSpeed(s: number): void {
+    this.speed = s;
+  }
+
+  /** Advance dt seconds (× speed): re-pulse on schedule, evolve, refresh the view. */
   tick(dt: number): void {
-    this.elapsed += dt;
+    const d = dt * this.speed;
+    this.elapsed += d;
     if (this.elapsed >= this.period) {
       this.pulse();
       this.elapsed = 0;
     }
-    this.sim.step(this.M, dt);
+    this.sim.step(this.M, d);
     this.view.updateSpins(this.M);
   }
 
