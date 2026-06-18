@@ -13,17 +13,17 @@ Grounded in
 
 ---
 
-## F1 · Linear algebra → [linear-algebra.md](linear-algebra.md) ⬜
+## F1 · Linear algebra → [linear-algebra.md](F1_linear-algebra.md) ⬜
 Vectors, matrices, matrix multiply, eigen/SVD, **affine transforms**.
 Pipeline hooks: the NIfTI **affine** (voxel→mm), spacing/resampling, augmentation
 rotations, **convolution as a linear operator**.
 
-## F2 · Calculus & optimization → [calculus-optimization.md](calculus-optimization.md) ⬜
+## F2 · Calculus & optimization → [calculus-optimization.md](F2_calculus-optimization.md) ⬜
 Derivatives, gradients, chain rule (= **backprop**), gradient descent, convexity,
 learning rate. Pipeline hooks: `loss.backward()` + Adam updating U-Net weights; why
 the loss curve looks like it does; LR tuning.
 
-## F3 · Probability & statistics → [probability-stats.md](probability-stats.md) ⬜
+## F3 · Probability & statistics → [probability-stats.md](F3_probability-stats.md) ⬜
 Distributions, likelihood, **cross-entropy**, expectation/variance, estimation,
 agreement statistics. Pipeline hooks: the CE half of Dice+CE; softmax as a
 distribution; **Bland-Altman** for EF; cross-validation variance.
