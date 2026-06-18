@@ -8,3 +8,8 @@
 data:
   raw: /path/to/data/raw/mri/acdc          # ACDC inputs (the dir holding training/)
   processed: /path/to/data/processed/mri/acdc   # preprocessing cache (npz)
+
+# cardioview demo defaults: which held-out hearts to bake into the web viewer.
+# (cardioview/export_web.py uses these when --patients is not given.)
+cardioview:
+  hearts: [patient073, patient010, patient021, patient053]   # NOR · DCM · HCM · MINF

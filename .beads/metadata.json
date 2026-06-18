@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "cardiac_seg",
-  "project_id": "0c650c18-716b-427f-a749-21f7c0eda5b9"
-}

@@ -32,7 +32,8 @@ describe('metrics', () => {
 describe('manifest self-consistency', () => {
   const path = 'public/data/manifest.json';
   it.skipIf(!existsSync(path))('pred.ef ≈ efFrom(pred.edv, pred.esv) for every heart', () => {
-    const entries = JSON.parse(readFileSync(path, 'utf8'));
+    const data = JSON.parse(readFileSync(path, 'utf8'));
+    const entries = Array.isArray(data) ? data : data.hearts; // {model, hearts} or legacy array
     expect(entries.length).toBeGreaterThan(0);
     for (const e of entries) {
       expect(efFrom(e.pred.edv, e.pred.esv)).toBeCloseTo(e.pred.ef, 0); // within rounding

@@ -15,7 +15,6 @@ const CARD =
   'user-select:none;display:flex;flex-direction:column;gap:9px;min-width:248px;';
 const SELECT = 'background:#11151b;color:#cdd6e0;border:1px solid #2a323d;border-radius:6px;padding:5px;width:100%;';
 const FPS = 12;
-const DEFAULT_MODEL = 'models/acdc_aug.onnx';
 const IMPORT = '__import__';
 
 interface Imported {
@@ -25,8 +24,9 @@ interface Imported {
 }
 
 /** Top panel: Model dropdown + Hearts dropdown (each = defaults + import), drives the viewer. */
-export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
+export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName = 'acdc_aug'): void {
   const seg = new Segmenter();
+  const DEFAULT_MODEL = `models/${modelName}.onnx`;
   let modelSrc: string | Uint8Array = DEFAULT_MODEL;
   let modelKey = '';
   const imported = new Map<string, Imported>();
@@ -36,7 +36,7 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
   title.innerHTML = '<b>cardioview</b> — segmented hearts';
 
   const modelSel = el('select', SELECT) as HTMLSelectElement;
-  modelSel.append(opt('bundled', 'model: acdc_aug (bundled)'), opt(IMPORT, 'model: import .onnx…'));
+  modelSel.append(opt('bundled', `model: ${modelName} (bundled)`), opt(IMPORT, 'model: import .onnx…'));
   const heartSel = el('select', SELECT) as HTMLSelectElement;
   for (const e of entries) heartSel.append(opt(e.patient, `${e.patient}  (${e.group}${e.held_out ? ', held-out' : ''})`));
   heartSel.append(opt(IMPORT, 'import scan (.nii.gz)…'));

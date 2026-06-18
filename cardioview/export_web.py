@@ -22,7 +22,7 @@ from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane
 from cardioseg.training.dataset import split_patients
 from cardioseg.data.mri.data import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks, cardioview_default
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -85,15 +85,18 @@ def volumes(masks: dict, spacing) -> dict:
     return {}
 
 
-def upsert_manifest(entry: dict) -> None:
-    """Insert/replace one patient in manifest.json (lets static + animated coexist)."""
+def upsert_manifest(entry: dict, model_name: str) -> None:
+    """Insert/replace one patient in manifest.json. Manifest = {model, hearts}; the web
+    reads `model` to know which bundled .onnx to load (so it follows what was exported)."""
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / "manifest.json"
-    data = json.loads(path.read_text()) if path.exists() else []
-    data = [e for e in data if e["patient"] != entry["patient"]]
-    data.append(entry)
-    data.sort(key=lambda e: e["patient"])
-    path.write_text(json.dumps(data, indent=2))
+    data = json.loads(path.read_text()) if path.exists() else {}
+    if isinstance(data, list):  # back-compat with the old array form
+        data = {"hearts": data}
+    hearts = [e for e in data.get("hearts", []) if e["patient"] != entry["patient"]]
+    hearts.append(entry)
+    hearts.sort(key=lambda e: e["patient"])
+    path.write_text(json.dumps({"model": model_name, "hearts": hearts}, indent=2))
 
 
 def load_4d(patient: str):
@@ -110,7 +113,7 @@ def frame_indices(patient: str):
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
-def run(patients, source, model, device):
+def run(patients, source, model, device, model_name):
     held = heldout_set()
     for p in patients:
         case = preprocess_case(patient_dir(p))
@@ -124,12 +127,12 @@ def run(patients, source, model, device):
             glb[tag] = fn
         entry = dict(patient=p, group=case.get("group"), held_out=(p in held), source=source,
                      pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
-        upsert_manifest(entry)
+        upsert_manifest(entry, model_name)
         print(f"  {p:11} {str(case.get('group')):5} static  EF {entry['pred'].get('ef')}% "
               f"(GT {entry['gt'].get('ef')}%)")
 
 
-def run_animate(patients, model, device, stride=1):
+def run_animate(patients, model, device, model_name, stride=1):
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry."""
     held = heldout_set()
     for p in patients:
@@ -156,7 +159,7 @@ def run_animate(patients, model, device, stride=1):
                      pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
                      frames=files, ed_idx=ed_k, es_idx=es_k,
                      glb={"ED": files[ed_k], "ES": files[es_k]})
-        upsert_manifest(entry)
+        upsert_manifest(entry, model_name)
         print(f"  {p:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
               f"EF {entry['pred']['ef']}% (GT {gt.get('ef')}%)")
 
@@ -170,18 +173,21 @@ def predict_volume_local(model, vol_img, device):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--mode", choices=["static", "animate"], default="static")
-    # One per condition: NOR (normal) · DCM (dilated) · HCM (thick wall) · MINF (infarct).
-    ap.add_argument("--patients", nargs="*", default=["patient073", "patient010", "patient021", "patient053"])
+    # Default hearts come from paths.yaml (cardioview.hearts); fallback = one per condition.
+    ap.add_argument("--patients", nargs="*", default=None)
     ap.add_argument("--source", default="pred", choices=["pred", "gt"])
     ap.add_argument("--model", default="acdc_aug", choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
     a = ap.parse_args()
+    patients = a.patients or cardioview_default(
+        "hearts", ["patient073", "patient010", "patient021", "patient053"]
+    )
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = load_model(MODELS[a.model], device) if a.source == "pred" or a.mode == "animate" else None
     if a.mode == "animate":
-        run_animate(a.patients, model, device, a.stride)
+        run_animate(patients, model, device, a.model, a.stride)
     else:
-        run(a.patients, a.source, model, device)
+        run(patients, a.source, model, device, a.model)
     print(f"manifest: {OUT/'manifest.json'}")
 
 

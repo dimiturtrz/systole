@@ -1,46 +1,56 @@
 # cardioview
 
-3D visualization of ACDC cardiac MRI and the segmentation model's results — a demo /
-inference view of the [`cardioseg`](../cardioseg) pipeline.
+3D visualization of the [`cardioseg`](../cardioseg) model's results — an inference/demo view
+of the pipeline. **The product is the browser viewer in [`web/`](web/)** (TS + vtk.js):
+rotatable colored chambers (LV cavity / myocardium / RV), the **beating cardiac cycle**, and
+**EDV / ESV / LVEF** read out against ground truth. Plus **import your own**: upload a
+`.nii.gz` and it's segmented in-browser (ONNX) and rendered.
 
-**The interactive browser viewer lives in [`web/`](web/)** (TS + vtk.js) — rotatable colored
-chambers + EDV/ESV/EF readout, fed by glb meshes precomputed here in Python. The Python
-scripts below (pyvista) are the offline render/export + quick desktop checks.
+![cardioview demo](docs/media/demo.gif)
 
-**Status: segmentation overlay.** Colored chamber surfaces (LV cavity / myocardium / RV,
-marching-cubes + Taubin smoothing) over a dim intensity raycast — **GT or the model's
-prediction**, with ejection fraction (pred vs GT) in the title. Everything renders in the
-model's preprocessed grid (in-plane 1.5 mm, square 256), so volume / GT / pred align with
-no back-mapping.
+## Setup
 
-![segmentation overlay — held-out prediction](out/patient006_ED_pred.png)
+Nothing data-derived is committed (ACDC licensing) — the hearts and the model are built from
+the pipeline. Two ways in:
 
-*Held-out prediction (patient006, EF pred 21% vs GT 14% — a hard low-EF case). Stray
-specks are real false positives — honest model behavior, not cleaned up.*
-
-**Honesty:** `--source pred` checks the deterministic train/val split and labels the frame
-`held-out` or `TRAIN-seen` (+ warns), so a prediction is never silently shown on data the
-model trained on. The 20 held-out patients are the only fair ones to judge the model by.
-
-Earlier step — raw intensity raycast (no seg) via `render_volume.py`; cine-MRI intensity is
-murky by nature (crisp volume renders are usually CT or seg-based), which is why the overlay
-is the real view.
-
-## Run
+### A — canned demo hearts (full pipeline)
 ```bash
-# from the repo root, in the env that has cardioseg + pyvista
-PYTHONPATH=. python cardioview/render_overlay.py --patient patient006 --phase ED --source pred
-#   --source gt   ground-truth masks   ·   --phase ED|ES   ·   --model acdc|acdc_aug
-#   --interactive rotatable window     ·   --margin MM     crop margin
-# (use the pytorch_training_env python; conda run's inline wrapper is flaky here, call the
-#  env python.exe directly: C:/Users/User/miniconda3/envs/pytorch_training_env/python.exe)
+# 1. deps (from repo root) — installs cardioseg + cardioview Python deps
+pip install -e .
+
+# 2. data: register for ACDC, then point paths.yaml at it (data stays outside the repo)
+cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc  (dir holding training/)
+
+# 3. train the segmentation model (see cardioseg/README) -> runs/acdc/model.pth
+python -m cardioseg.training.train --acdc --epochs 40
+
+# 4. bake the web assets (use the model you trained: --model acdc or acdc_aug — the viewer
+#    follows it via the manifest). Hearts come from paths.yaml (cardioview.hearts).
+python cardioview/export_onnx.py --model acdc         # -> web/public/models/acdc.onnx
+python cardioview/export_web.py --mode animate --model acdc   # -> web/public/data/*.glb + manifest.json
+
+# 5. run the viewer
+cd cardioview/web && npm install && npm run dev        # http://localhost:5173
 ```
-Reads ACDC from `CARDIAC_DATA_ROOT` (default `D:/data/raw/mri/acdc`); data stays outside
-the repo (licensing).
 
-## Planned
-- EF pred-vs-GT validation table + a gallery over the 20 held-out patients (worst cases first)
-- ED/ES side-by-side (the EF squeeze)
-- Optional web export
+### B — just explore, no data/training
+```bash
+cd cardioview/web && npm install && npm run dev
+```
+No canned hearts or bundled model, but the panel's **import .onnx** + **import scan (.nii.gz)**
+let you drop in your own model and scans (segmented in-browser). See [web/README](web/README.md).
 
-Tracked in beads (`bd show cardiac-seg-0tg`).
+> Requirements per project: **mri-sim** is the simplest (just `npm install && npm run dev`,
+> no data/model); **cardioview** needs the model + ACDC for the canned hearts (above);
+> **cardioseg** is the pipeline (`pip install -e .` + ACDC).
+
+## Python tools (offline)
+- `export_web.py` — segment ED/ES (or every 4D frame, `--mode animate`) → chamber `.glb` + EF manifest
+- `export_onnx.py` — trained U-Net → ONNX for the browser (100% parity gate vs PyTorch)
+- `render_overlay.py` / `render_volume.py` — desktop pyvista quick-looks (screenshot or `--interactive`)
+
+**Honesty:** predictions are tagged `held-out` vs `TRAIN-seen` (deterministic split check), EF
+is shown vs ground truth, and model false-positive specks aren't cleaned up. Volumes come from
+full-res masks × real spacing — the render grid never touches the numbers.
+
+Tracked in beads (`bd show cardiac-seg-5nh`).

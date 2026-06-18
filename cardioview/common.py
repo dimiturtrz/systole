@@ -9,7 +9,9 @@ from pathlib import Path
 
 import numpy as np
 
-from cardioseg.config import data_root
+from omegaconf import OmegaConf
+
+from cardioseg.config import data_root, _cfg as _PATHS  # reuse the one loaded paths.yaml
 from cardioseg.training.dataset import fit_square
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
@@ -20,6 +22,12 @@ CHAMBERS = {
 }
 SIZE = 256  # square grid the 2D model runs on
 MODELS = {"acdc": "runs/acdc/model.pth", "acdc_aug": "runs/acdc_aug/model.pth"}
+
+
+def cardioview_default(key: str, fallback):
+    """A cardioview default from paths.yaml (`cardioview.<key>`), else the fallback."""
+    v = OmegaConf.select(_PATHS, f"cardioview.{key}")
+    return list(v) if v is not None else fallback
 
 
 def patient_dir(patient: str, root: str | None = None) -> Path:
