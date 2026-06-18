@@ -60,5 +60,39 @@ per-voxel class scores; training picks its weights so it reproduces expert masks
 it works because convolutions let each voxel's label depend on learned *spatial
 context*, not a fixed intensity rule.
 
+## Lesson M (deltas) — what medical segmentation adds to general CV
+
+For someone fluent in general deep learning, medical image segmentation is *mostly*
+the same — here's the **delta**, the handful of things that are genuinely different
+and that the interview/job cares about.
+
+1. **Tiny labelled data.** ~100 patients, not a million images — expert annotation is
+   slow + expensive. → U-Net's small-data design (skip connections, works on ~30
+   images), heavy **augmentation**, sometimes transfer/self-supervision. Big models
+   overfit instantly.
+2. **3D + anisotropy.** Volumetric, and voxels aren't cubes (ACDC ~6–7×). → the **2D vs
+   3D vs 2.5D** decision (2D wins on short-axis); you reason about it, you don't default.
+3. **Severe class imbalance.** Background ≫ foreground in a slice. → **compound Dice+CE**:
+   CE = MLE (smooth per-voxel gradient, see F3) but background-biased; **Dice** is
+   overlap-normalised → robust to imbalance. Together = stability + balance.
+4. **Patient-level splits — THE gotcha.** Slice-level splitting leaks near-identical
+   neighbour slices across train/val → +5–10 fake Dice. Always split by patient.
+5. **nnU-Net is the baseline-to-beat.** A *self-configuring* pipeline (reads the dataset
+   fingerprint → sets patch size, norm, aug, depth, loss, postproc automatically). It
+   matches/beats bespoke models on 23 challenges with **no architecture tuning**. The
+   honest lesson: **a fancier net rarely wins; the value-add is the measurement +
+   evaluation**, not the architecture.
+6. **The label itself is fuzzy.** Single-expert GT with inter-rater variability (~±3% EF)
+   → your "truth" has error bars (E2 floor). You can't meaningfully beat the labels.
+7. **Segmentation isn't the deliverable — the clinical number is.** The mask feeds EF /
+   thickness; so **boundary accuracy (mm) > raw overlap**, and the geometry/evaluation
+   is where trust is won (the whole G + E tracks).
+
+**Takeaway.** General CV gives you the U-Net and the training loop. Medical adds:
+small fuzzy-labelled 3D-anisotropic class-imbalanced data, patient-level splits, a
+self-configuring baseline (nnU-Net) that's hard to beat, and a pipeline whose real
+output is a *trusted clinical measurement*, not a segmentation. The differentiator is
+rigor downstream of the net, not the net.
+
 ### Quiz log
 *(empty — append on demand)*
