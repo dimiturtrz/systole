@@ -1,5 +1,6 @@
 import { SpinSystem } from '../model/SpinSystem';
 import { Simulator } from '../model/Simulator';
+import { directionFromAngles } from '../model/physics';
 import type { Vec3 } from '../model/types';
 import type { SpinView } from '../view/SpinView';
 
@@ -8,43 +9,45 @@ import type { SpinView } from '../view/SpinView';
  * a fake in tests). `tick(dt)` advances one step (no RAF) so it's unit/integration
  * testable; `run()` drives it with requestAnimationFrame.
  *
- * M2: a 3D grid of spins; a slice-SELECTIVE 90° pulse tips only the central z-slab,
- * which then precesses + relaxes (3D spiral). Spins outside the slab stay at +z.
- * Re-pulsed every `period` seconds so it loops.
+ * Individual-proton view: a 3D grid of protons all precessing on cones; a
+ * slice-selective pulse tips the central z-slab toward transverse. Re-pulsed each period.
  */
 export class Presenter {
   private readonly spins: SpinSystem;
   private readonly sim: Simulator;
   private readonly positions: Vec3[];
-  private readonly M: Vec3[];
-  private readonly period = 2; // seconds between RF pulses (kept short so motion is near-continuous)
-  private readonly sliceZ = 0; // selected slab center
-  private readonly sliceHalf = 0.6; // half-thickness (picks the z≈0 layer)
-  private speed = 1; // time-scale (slider); 1 = real-time, <1 = slow-mo
+  private readonly theta: number[];
+  private readonly phase: number[];
+  private readonly period = 2;
+  private readonly sliceZ = 0;
+  private readonly sliceHalf = 0.6;
+  private speed = 1;
   private elapsed = 0;
   private last = 0;
 
   constructor(private readonly view: SpinView) {
-    this.spins = new SpinSystem(6, 6, 1.2, 7, 1.0); // 6×6 in-plane × 7 z-layers
-    this.sim = new Simulator(1.0, 2.0, 0.6); // larmorHz, T1, T2 (visual values)
+    this.spins = new SpinSystem(6, 6, 1.2, 7, 1.0, 0.12); // 6×6 × 7 z-layers; tiny rest tilt → nearly static
+    this.sim = new Simulator(0.5, 0.12, 2.5);
     this.positions = this.spins.positions;
-    this.M = this.spins.magnetization.map((m) => [...m] as Vec3); // own mutable copy
+    this.theta = [...this.spins.theta];
+    this.phase = [...this.spins.phase];
   }
 
-  /** Initial render + first slice-selective 90° pulse. */
+  private directions(): Vec3[] {
+    return this.positions.map((_, i) => directionFromAngles(this.theta[i], this.phase[i]));
+  }
+
   start(): void {
-    this.view.renderSpins(this.positions, this.M);
+    this.view.renderSpins(this.positions, this.directions());
     this.pulse();
     this.elapsed = 0;
-    this.view.updateSpins(this.M);
+    this.view.updateSpins(this.directions());
   }
 
-  /** Set the time-scale (1 = real-time, <1 = slow-mo). */
   setSpeed(s: number): void {
     this.speed = s;
   }
 
-  /** Advance dt seconds (× speed): re-pulse on schedule, evolve, refresh the view. */
   tick(dt: number): void {
     const d = dt * this.speed;
     this.elapsed += d;
@@ -52,15 +55,14 @@ export class Presenter {
       this.pulse();
       this.elapsed = 0;
     }
-    this.sim.step(this.M, d);
-    this.view.updateSpins(this.M);
+    this.sim.step(this.theta, this.phase, d);
+    this.view.updateSpins(this.directions());
   }
 
   private pulse(): void {
-    this.sim.sliceSelectiveTip(this.M, this.positions, 90, this.sliceZ, this.sliceHalf);
+    this.sim.exciteSlab(this.theta, this.phase, this.positions, this.sliceZ, this.sliceHalf);
   }
 
-  /** Start the animation loop (browser only). */
   run(): void {
     const loop = (t: number): void => {
       const dt = this.last ? (t - this.last) / 1000 : 0;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rotateAboutX, rotateAboutZ, magnitude } from '../../src/model/physics';
+import { rotateAboutX, rotateAboutZ, magnitude, directionFromAngles } from '../../src/model/physics';
 import type { Vec3 } from '../../src/model/types';
 
 const close = (a: number, b: number, eps = 1e-9) => expect(Math.abs(a - b)).toBeLessThan(eps);
@@ -24,5 +24,17 @@ describe('physics rotations', () => {
     const m: Vec3 = [0.3, -0.6, 0.74];
     close(magnitude(rotateAboutX(m, 1.1)), magnitude(m));
     close(magnitude(rotateAboutZ(m, -2.3)), magnitude(m));
+  });
+
+  it('directionFromAngles: θ=0 → +z; θ=π/2,φ=0 → +x; always unit', () => {
+    const up = directionFromAngles(0, 1.2);
+    close(up[0], 0);
+    close(up[1], 0);
+    close(up[2], 1);
+    const trans = directionFromAngles(Math.PI / 2, 0);
+    close(trans[0], 1);
+    close(trans[1], 0);
+    close(trans[2], 0);
+    close(magnitude(directionFromAngles(0.7, 2.1)), 1);
   });
 });

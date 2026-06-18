@@ -1,57 +1,46 @@
 import type { Vec3 } from './types';
-import { rotateAboutX, rotateAboutZ } from './physics';
 
 /**
- * Evolves magnetization over time — the engine (pure, headless-testable).
- * Free precession (about z) + Bloch relaxation: transverse decays with T2,
- * longitudinal recovers toward m0 with T1.
- *
- * Relaxation defaults OFF (T1=T2=Infinity → exp(0)=1 → no change), so pure-precession
- * behaviour is the default; the app sets finite T1/T2 for the realistic 3D spiral.
+ * Evolves PROTONS over time — the engine (pure, headless-testable).
+ * Each proton precesses around B0 (phase advances at the Larmor rate) on a cone of
+ * tilt theta. An RF pulse tips the selected slab toward the transverse plane and aligns
+ * its phase (coherence); tilt then relaxes back toward `restTilt` (T1-like).
  * `larmorHz` is a *visual* precession rate, not a real Larmor frequency.
  */
 export class Simulator {
   constructor(
-    public larmorHz = 0.4,
-    public t1 = Infinity,
-    public t2 = Infinity,
-    public m0 = 1,
+    public larmorHz = 0.5,
+    public restTilt = 0.3,
+    public t1 = 2.5,
   ) {}
 
-  /** Apply an RF pulse: tip every spin by `flipDeg` about the x-axis. */
-  rfTip(M: Vec3[], flipDeg: number): void {
-    const a = (flipDeg * Math.PI) / 180;
-    for (let i = 0; i < M.length; i++) M[i] = rotateAboutX(M[i], a);
-  }
-
-  /**
-   * Slice-selective RF: tip only spins whose z is within the selected slab
-   * (|z − zCenter| ≤ zHalfThickness). Models gradient + frequency-selective excitation —
-   * spins outside the slab are untouched (stay at equilibrium).
-   */
-  sliceSelectiveTip(
-    M: Vec3[],
-    positions: Vec3[],
-    flipDeg: number,
-    zCenter: number,
-    zHalfThickness: number,
-  ): void {
-    const a = (flipDeg * Math.PI) / 180;
-    for (let i = 0; i < M.length; i++) {
-      if (Math.abs(positions[i][2] - zCenter) <= zHalfThickness) {
-        M[i] = rotateAboutX(M[i], a);
-      }
+  /** Advance time dt: every proton precesses; tilt relaxes toward rest. */
+  step(theta: number[], phase: number[], dt: number): void {
+    const dphi = 2 * Math.PI * this.larmorHz * dt;
+    const e1 = Math.exp(-dt / this.t1);
+    for (let i = 0; i < theta.length; i++) {
+      phase[i] += dphi;
+      theta[i] = this.restTilt + (theta[i] - this.restTilt) * e1;
     }
   }
 
-  /** Advance time by `dt` s: precess about z, then relax (T2 transverse, T1 longitudinal). */
-  step(M: Vec3[], dt: number): void {
-    const theta = 2 * Math.PI * this.larmorHz * dt;
-    const e1 = Math.exp(-dt / this.t1);
-    const e2 = Math.exp(-dt / this.t2);
-    for (let i = 0; i < M.length; i++) {
-      const m = rotateAboutZ(M[i], theta);
-      M[i] = [m[0] * e2, m[1] * e2, this.m0 + (m[2] - this.m0) * e1];
+  /**
+   * Slice-selective RF: tip protons inside the z-slab toward the transverse plane
+   * (theta → flipRad) and align their phase (coherent precession). Others untouched.
+   */
+  exciteSlab(
+    theta: number[],
+    phase: number[],
+    positions: Vec3[],
+    zCenter: number,
+    zHalfThickness: number,
+    flipRad: number = Math.PI / 2,
+  ): void {
+    for (let i = 0; i < theta.length; i++) {
+      if (Math.abs(positions[i][2] - zCenter) <= zHalfThickness) {
+        theta[i] = flipRad;
+        phase[i] = 0; // coherent: the slab precesses together → a real net signal
+      }
     }
   }
 }

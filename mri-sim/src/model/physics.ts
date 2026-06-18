@@ -18,6 +18,12 @@ export function magnitude(m: Vec3): number {
   return Math.hypot(m[0], m[1], m[2]);
 }
 
+/** Unit direction of a proton at tilt `theta` (from +z) and azimuth `phase`. */
+export function directionFromAngles(theta: number, phase: number): Vec3 {
+  const st = Math.sin(theta);
+  return [st * Math.cos(phase), st * Math.sin(phase), Math.cos(theta)];
+}
+
 const DEG = 180 / Math.PI;
 
 /**
