@@ -6,6 +6,13 @@
 RV) as a beating 3D heart with **EDV / ESV / LVEF vs ground truth**. Drop in your own
 `.nii.gz` and it segments in-browser. Interactive viewer: **[cardioview](cardioview/)**.*
 
+**What this is.** systole is where I build real competence in a new domain in the open: take
+one hard, bounded problem (cardiac **segmentation → ejection fraction**), build it end-to-end,
+evaluate it honestly, and visualize it so the result speaks for itself — with an
+**LLM-driven learning track** ([`learning/`](learning/): theory write-ups + self-quizzes)
+running alongside the build. Learning a field by *shipping* in it, reasoning on display. That
+ramp — picking up a domain fast and rigorously — is the point, not a disclaimer.
+
 Segmentation and **cardiac-function measurement (ejection fraction)** across imaging
 modalities — **MRI first, CT and echo to follow** — with the evaluation rigor that
 decides whether a measurement can be trusted. The connective tissue is the
