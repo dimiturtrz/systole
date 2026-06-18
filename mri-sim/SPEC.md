@@ -1,8 +1,7 @@
 # mri-sim — interactive 3D MRI pipeline visualizer
 
-*Lives as an **isolated subfolder** inside the systole repo for now (own stack,
-own build); **split into its own repo later** if it grows. Self-contained TypeScript app —
-keep it out of the Python `src/`.*
+*Lives as an **isolated subfolder** inside the systole repo (own stack, own build).
+Self-contained TypeScript app — keep it out of the Python `src/`.*
 
 ## One-liner
 An interactive 3D web visualization of how an MRI image is made: the magnet + protons,
@@ -82,8 +81,8 @@ arrow-animation perf demands Three.js later.
 
 ## Relation to systole (the applied pipeline)
 Same portfolio lane (medical imaging), different concern: this is the **physics/education**
-piece; the systole pipeline proper is the **applied ML** piece (seg→EF). Kept in a subfolder for
-now; **split to its own repo** once it stands on its own. Cross-link in profile README.
+piece; the systole pipeline proper is the **applied ML** piece (seg→EF). Kept as a
+self-contained subfolder in the systole repo.
 
 ## Don't reinvent blind
 Look at existing sims for inspiration/validation (Hargreaves' Bloch demos, the classic

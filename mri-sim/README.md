@@ -40,4 +40,4 @@ npm run build    # typecheck + production build (dist/)
 M0 scene ✓ · M1 precession + RF tip ✓ · M1.5 T1/T2 relaxation ✓ · M2 slice-select ✓ · M3 FFT/k-space engine ✓ · M4 k-space→image ✓ · M5 acquisition synced to clock ✓ · M6 pulse-sequence diagram + TR/TE ✓
 M4 k-space fills → live inverse-FFT image (honest, from the spins) · M5 controls + timeline.
 
-*Lives in the systole repo for now; will split to its own repo as it grows.*
+*An isolated subfolder in the systole repo (own stack: TypeScript + vtk.js).*
