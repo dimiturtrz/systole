@@ -19,6 +19,8 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@kitware/vtk.js": "^36.2.0"
+    "@kitware/vtk.js": "^36.2.0",
+    "nifti-reader-js": "^0.8.0",
+    "onnxruntime-web": "^1.26.0"
   }
 }
