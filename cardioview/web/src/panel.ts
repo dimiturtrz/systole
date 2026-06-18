@@ -12,7 +12,10 @@ const FPS = 12;
 
 /** Control + readout panel; drives the viewer (static ED/ES toggle or beating cycle). */
 export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
-  let current = entries[0];
+  // Open on a genuinely normal heart (NOR group) if present, else the highest-EF one.
+  let current =
+    entries.find((e) => e.group === 'NOR') ??
+    entries.reduce((a, b) => (b.pred.ef > a.pred.ef ? b : a), entries[0]);
 
   const wrap = document.createElement('div');
   wrap.style.cssText = CARD;
@@ -29,6 +32,7 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer): void {
     o.textContent = `${e.patient}  (${e.group}${e.held_out ? ', held-out' : ''})`;
     select.appendChild(o);
   }
+  select.value = current.patient;
 
   const controls = document.createElement('div'); // rebuilt per patient (anim vs static)
   controls.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
