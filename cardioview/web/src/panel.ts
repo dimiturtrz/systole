@@ -36,7 +36,7 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   title.innerHTML = '<b>cardioview</b> — segmented hearts';
 
   const modelSel = el('select', SELECT) as HTMLSelectElement;
-  modelSel.append(opt('bundled', `model: ${modelName} (bundled)`), opt(IMPORT, 'model: import .onnx…'));
+  modelSel.append(opt('bundled', `${modelName}.onnx`), opt(IMPORT, 'import .onnx…'));
   const heartSel = el('select', SELECT) as HTMLSelectElement;
   for (const e of entries) heartSel.append(opt(e.patient, `${e.patient}  (${e.group}${e.held_out ? ', held-out' : ''})`));
   heartSel.append(opt(IMPORT, 'import scan (.nii.gz)…'));
@@ -50,7 +50,7 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   const onnxInput = fileInput('.onnx', false, async (fs) => {
     modelSrc = new Uint8Array(await fs[0].arrayBuffer());
     modelKey = '';
-    upsertOption(modelSel, fs[0].name, `model: ${fs[0].name}`, 'bundled');
+    upsertOption(modelSel, fs[0].name, fs[0].name, 'bundled');
     status(`model set: ${fs[0].name}`);
   });
   const scanInput = fileInput('.nii,.nii.gz,.gz', true, (fs) => void onScans(fs));
