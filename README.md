@@ -49,13 +49,13 @@ self-quizzes) running alongside — learning a field by shipping in it. Competen
 gap on public data, not a claim of prior medical-imaging experience; the ramp is the point, not
 a disclaimer. Today only the MRI lane is underway; CT and echo are planned, not done.
 
-## Run
+## Install & test
 ```bash
 pip install -e .
 python -m pytest tests/ -q     # unit + real-ACDC integration (integration skips without data)
 ```
-Per-project setup — data, training, the viewer — is in each folder's README; start with
-**[cardioseg/](cardioseg/)** for the pipeline.
+**Running** is per project (each differs) — see the folder READMEs: pipeline train/eval →
+[cardioseg/](cardioseg/); viewers → [cardioview/](cardioview/) and [mri-sim/](mri-sim/) (`npm run dev`).
 
 ## How it's built
 Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; I own the
