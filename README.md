@@ -3,20 +3,30 @@
 **What this is.** systole is where I pick up a new domain in the open — one bounded problem, end
 to end: cardiac **segmentation → ejection fraction**.
 
-![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
-
-*The model's output on a **held-out** patient — predicted chambers (LV cavity / myocardium /
-RV) as a beating 3D heart with **EDV / ESV / LVEF vs ground truth**. Drop in your own
-`.nii.gz` and it segments in-browser. Interactive viewer: **[cardioview](cardioview/)**.*
-
 Segmentation → **ejection fraction** across imaging modalities (**MRI now; CT, echo planned**),
 with the evaluation rigor that decides whether a measurement can be trusted. The connecting
-thread is the geometry: how you go from per-voxel labels to a clinical number. Full plan +
-milestones in **[ROADMAP.md](ROADMAP.md)**.
+thread is the geometry: per-voxel labels → a clinical number. Three pieces, general → specific
+(each links into its folder for depth); full plan + milestones in **[ROADMAP.md](ROADMAP.md)**.
 
-## Results — MRI / ACDC (held-out)
-2D U-Net, patient-level 80/20 split, 20 held-out patients across all five pathology groups.
-Baseline, `--seed 0`. Numbers from `runs/acdc/metrics.json`.
+## Understand the acquisition — [mri-sim](mri-sim/)
+Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
+phase/frequency encode → k-space → reconstructed image, on one clock. Built to *understand the
+acquisition* the segmentation model consumes. TypeScript + vtk.js, physically honest.
+
+![mri-sim demo](mri-sim/docs/media/demo.gif)
+
+## See the model work — [cardioview](cardioview/)
+Browser viewer (TS + vtk.js) of the model's output on real hearts: predicted chambers (LV
+cavity / myocardium / RV) as a **beating 3D heart** with **EDV / ESV / LVEF vs ground truth**
+and a `held-out` honesty tag. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
+
+![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
+
+*Held-out patient — the result, shown. A correct beating heart is self-evident; the numbers below back it.*
+
+## The pipeline + results — [cardioseg](cardioseg/)
+The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. Held-out, seed 0
+(2D U-Net, patient-level 80/20 split, 20 patients across all five pathology groups):
 
 | structure | Dice | HD95 (mm) | published ACDC |
 |---|---|---|---|
@@ -25,30 +35,19 @@ Baseline, `--seed 0`. Numbers from `runs/acdc/metrics.json`.
 | RV cavity | 0.86 | 10.0 | ~0.88–0.92 |
 | **mean** | **0.87** | | |
 
-**EF vs ground truth: MAE ~3%** (bias −1.5%, 95% limits of agreement [−8, +5]; clinical
-equivalence ≈ ±5%). The published column is *context, not a trophy*: ACDC is single-centre and
-homogeneous, so matching it means "competent on a clean benchmark" — **not** SOTA or
-clinical-grade, and multi-vendor robustness is untested (the hard part). **Where it fails:** RV
-boundary is the weak spot (HD95 10 mm) and thick-walled HCM EF errors are largest — closing the
-myo/RV gap (augmentation) is the next lever. Error-distribution plots (boundary KDE + EF
-Bland–Altman) and the full method live in **[cardioseg/](cardioseg/)**.
-
-## The pieces
-- **[cardioseg/](cardioseg/)** — the pipeline (the science): data → preprocess → 2D U-Net →
-  measure (EF) → evaluate (Dice / HD95 / ASSD, failure ranking). Train + eval + results detail.
-- **[cardioview/](cardioview/)** — browser viewer: predicted chambers as a beating 3D heart +
-  EF vs GT; or drop in your own `.nii.gz` → segmented in-browser (ONNX). The result, shown.
-- **[mri-sim/](mri-sim/)** — interactive MRI-physics visualizer (spins → k-space → image) —
-  understanding the acquisition the model consumes.
-- **[learning/](learning/)** — LLM-driven theory write-ups + self-quizzes, alongside the build.
+**EF vs ground truth: MAE ~3%** (bias −1.5%, 95% LoA [−8, +5]; clinical equivalence ≈ ±5%). The
+published column is *context, not a trophy*: ACDC is single-centre and homogeneous → "competent
+on a clean benchmark," **not** SOTA or clinical-grade; multi-vendor robustness is untested (the
+hard part). **Where it fails:** RV boundary is the weak spot (HD95 10 mm), HCM EF errors largest.
+Full method, training, error-distribution plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
 ## Honest scope
 I come from audio / acoustic-signal ML (end-to-end modeling, evaluation, edge); cardiac imaging
 is a deliberate ramp. The approach: build the problem end-to-end, evaluate it, and visualize it,
-with the [`learning/`](learning/) track running alongside — learning a field by shipping in it.
-Competence built in the gap on public data, not a claim of prior medical-imaging experience;
-the ramp is the point, not a disclaimer. Today only the MRI lane is underway; CT and echo are
-planned, not done.
+with an **LLM-driven learning track** ([`learning/`](learning/): theory write-ups +
+self-quizzes) running alongside — learning a field by shipping in it. Competence built in the
+gap on public data, not a claim of prior medical-imaging experience; the ramp is the point, not
+a disclaimer. Today only the MRI lane is underway; CT and echo are planned, not done.
 
 ## Run
 ```bash
@@ -60,7 +59,6 @@ Per-project setup — data, training, the viewer — is in each folder's README;
 
 ## How it's built
 Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; I own the
-modeling decisions, the measurement correctness, and the evaluation (the EF/volume math is
-spacing-aware and unit-checked; the failure ranking is the point). What transfers from audio ML
-is data-structure reasoning and evaluation discipline; the clinical specifics I learn as I go
+modeling decisions, the measurement correctness, and the evaluation. What transfers from audio
+ML is data-structure reasoning and evaluation discipline; the clinical specifics I learn as I go
 ([learning/](learning/)).
