@@ -1,0 +1,33 @@
+[project]
+name = "cardioseg"
+version = "0.1.0"
+description = "Cardiac segmentation + function (ejection fraction) across MRI/CT/echo, honestly evaluated."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "nibabel",
+    "matplotlib",
+    "tqdm",
+    "monai>=1.5",
+    # torch >=2.7 is required for NVIDIA Blackwell (sm_120, e.g. RTX 5090).
+    # Install the CUDA build from the PyTorch index, NOT plain PyPI (which is CPU):
+    #   pip install torch --index-url https://download.pytorch.org/whl/cu128
+    # Verified working here: torch 2.10.0+cu130 on an RTX 5090.
+    "torch>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cardioseg*"]

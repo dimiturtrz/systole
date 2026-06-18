@@ -39,10 +39,12 @@ cardioseg/                # pipeline stages, data -> preprocess -> train -> meas
     preprocess.py         #   resample in-plane + z-score; param-keyed disk cache
   training/
     model.py              #   MONAI U-Net factory (2D/3D)
-    train.py              #   training loop
+    dataset.py            #   ACDC 2D-slice dataset, patient-level split
+    train.py              #   training loop (synthetic + real ACDC)
   evaluation/
     measure.py            #   chamber volumes + ejection fraction (spacing-aware)
     evaluate.py           #   Dice / Hausdorff / failure ranking
+    validate.py           #   per-class Dice + EF vs GT on held-out patients
     losses.py             #   compound Dice + cross-entropy
   analysis/
     eda.py                #   ACDC reality-check + data/overlay viz
@@ -67,6 +69,33 @@ export CARDIAC_DATA_ROOT=/path/to/raw/mri/acdc          # loader input
 export CARDIAC_PROCESSED_ROOT=/path/to/processed/mri/acdc   # preprocess cache (optional)
 ```
 (falls back to `data/raw/mri/acdc`, which is gitignored).
+
+### Train on real ACDC
+```bash
+# torch CUDA build (CPU wheel won't train); Blackwell/RTX 5090 needs torch>=2.7:
+pip install torch --index-url https://download.pytorch.org/whl/cu128
+python -m cardioseg.training.train --acdc --epochs 40      # writes runs/acdc/{model.pth,metrics.json}
+```
+
+## Results — first real baseline (MRI / ACDC)
+2D U-Net, 40 epochs, no augmentation, `--seed 0` (reproducible). 80/20
+**patient-level** split, 20 held-out patients across all five ACDC pathology
+groups. *(baseline, not tuned.)* Numbers below are written by
+`runs/acdc/metrics.json`.
+
+| Structure | Val Dice | published SOTA |
+|---|---|---|
+| LV cavity | **0.932** | ~0.93–0.96 |
+| LV myocardium | 0.822 | ~0.88–0.92 |
+| RV cavity | 0.859 | ~0.88–0.92 |
+| **mean** | **0.871** | |
+
+**Ejection fraction vs ground truth: MAE 3.1%** (clinical equivalence ≈ ±5%).
+**Where it fails:** the largest EF errors sit in the thin-walled RV and
+thick-walled HCM cases (worst ≈11%), where the LV-myo / RV boundary is hardest —
+exactly as the artifact/evaluation notes predicted; the well-behaved DCM group
+tracks to a few percent. Closing the myo/RV Dice gap (augmentation, longer
+training) is the next lever.
 
 ## How it's built
 Agent-driven build, human-owned judgment — the workflow I use day to day. Coding
