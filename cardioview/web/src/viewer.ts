@@ -3,6 +3,7 @@ import vtkFullScreenRenderWindow from '@kitware/vtk.js/Rendering/Misc/FullScreen
 import vtkGLTFImporter from '@kitware/vtk.js/IO/Geometry/GLTFImporter';
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
+import vtkCubeAxesActor from '@kitware/vtk.js/Rendering/Core/CubeAxesActor';
 
 // Three chamber slots, identified by the glb's baked color. glTF drops opacity → re-set it.
 const CHAMBERS = [
@@ -26,12 +27,38 @@ export class HeartViewer {
   private cameraSet = false;
 
   constructor() {
-    const fs = vtkFullScreenRenderWindow.newInstance({ background: [0.055, 0.066, 0.086] });
+    const fs = vtkFullScreenRenderWindow.newInstance({ background: [1, 1, 1] });
     this.renderer = fs.getRenderer();
     this.renderWindow = fs.getRenderWindow();
     this.renderer.setUseDepthPeeling?.(true);
     this.renderer.setOcclusionRatio?.(0.1);
     this.renderer.setMaximumNumberOfPeels?.(4);
+    // Coordinate box with mm tick labels (meshes are in mm) — read scale / cm off it.
+    this.cubeAxes = vtkCubeAxesActor.newInstance();
+    this.cubeAxes.setCamera(this.renderer.getActiveCamera());
+    this.cubeAxes.getProperty().setColor(0.1, 0.12, 0.16); // dark on white
+    this.cubeAxes.setGridLines(false);
+    this.cubeAxes.setAxisLabels?.(['X (mm)', 'Y (mm)', 'Z (mm)']); // ticks are in mm
+    this.cubeAxes.setVisibility(false); // until bounds are known
+    this.renderer.addActor(this.cubeAxes);
+  }
+
+  private cubeAxes: any;
+
+  private updateAxes(): void {
+    const b = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+    for (const a of this.actors) {
+      if (!a.getVisibility()) continue;
+      const ab = a.getBounds();
+      for (let i = 0; i < 6; i += 2) {
+        b[i] = Math.min(b[i], ab[i]);
+        b[i + 1] = Math.max(b[i + 1], ab[i + 1]);
+      }
+    }
+    if (b[0] < b[1]) {
+      this.cubeAxes.setDataBounds(b);
+      this.cubeAxes.setVisibility(true);
+    }
   }
 
   /** Single static scene. */
@@ -59,6 +86,7 @@ export class HeartViewer {
       this.renderer.resetCamera();
       this.cameraSet = true;
     }
+    this.updateAxes();
     this.renderWindow.render();
     return collected.length;
   }
