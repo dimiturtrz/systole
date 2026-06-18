@@ -1,5 +1,6 @@
-// Pulse-sequence diagram (canvas): RF, slice-select, phase-encode, readout rows over
-// one TR, with TR/TE marked and a playhead at the current cycle time. View only.
+// Pulse-sequence diagram (canvas): walks the three spatial encodings each TR —
+// 1) slice select (Gz + RF), 2) phase encode (Gy), 3) frequency encode / readout (Gx + ADC).
+// The active stage is highlighted as the playhead sweeps. View only.
 
 export interface SeqState {
   tr: number;
@@ -12,14 +13,18 @@ export interface SequenceView {
   draw(s: SeqState): void;
 }
 
-const ROWS = ['RF', 'Gss', 'Gpe', 'ADC'];
+const ROWS = ['RF', 'Gz slice', 'Gy phase', 'Gx read', 'ADC'];
+const CYAN = '93,209,196';
+const BLUE = '122,162,255';
+const ORANGE = '240,179,91';
+const GREEN = '110,231,168';
 
 export function mountSequenceDiagram(): SequenceView {
-  const W = 360;
-  const H = 150;
+  const W = 384;
+  const H = 196;
   const wrap = document.createElement('div');
   wrap.style.cssText =
-    'position:fixed;right:12px;bottom:12px;z-index:10;background:rgba(20,24,30,.82);' +
+    'position:fixed;right:12px;bottom:12px;z-index:10;background:rgba(20,24,30,.85);' +
     'padding:8px 10px;border-radius:8px;border:1px solid #2a323d;font:11px system-ui,sans-serif;color:#9aa7b8;';
   const title = document.createElement('div');
   title.textContent = 'pulse sequence';
@@ -32,87 +37,107 @@ export function mountSequenceDiagram(): SequenceView {
   document.body.appendChild(wrap);
   const ctx = canvas.getContext('2d')!;
 
-  const padL = 34;
+  const padL = 48;
   const padR = 10;
-  const padT = 6;
+  const padT = 22; // caption row
+  const padB = 16; // TR/TE labels
   const plot = W - padL - padR;
-  const rowH = (H - padT - 14) / ROWS.length;
-  const tx = (t: number, tr: number): number => padL + (t / tr) * plot;
+  const rowH = (H - padT - padB) / ROWS.length;
 
   return {
     draw({ tr, te, cycleTime, peStep }: SeqState): void {
+      const tx = (t: number): number => padL + (Math.max(0, Math.min(t, tr)) / tr) * plot;
+      const yMid = (i: number): number => padT + i * rowH + rowH / 2;
+      const amp = rowH * 0.34;
+
+      // stage windows within the TR
+      const rfW = Math.max(0.08 * tr, 0.12);
+      const peStart = rfW + 0.02 * tr;
+      const peW = 0.06 * tr;
+      const roHalf = Math.max(0.05 * tr, 0.1);
+      const ct = cycleTime;
+      let stage: 'slice' | 'phase' | 'freq' | 'idle' = 'idle';
+      if (ct < rfW) stage = 'slice';
+      else if (ct < peStart + peW) stage = 'phase';
+      else if (ct >= te - roHalf && ct <= te + roHalf) stage = 'freq';
+      const a = (on: boolean): number => (on ? 1 : 0.3);
+
       ctx.clearRect(0, 0, W, H);
       ctx.font = '10px system-ui';
 
+      // caption
+      const caption =
+        stage === 'slice' ? '1 · slice select  (Gz + RF)' :
+        stage === 'phase' ? '2 · phase encode  (Gy)' :
+        stage === 'freq' ? '3 · frequency encode / readout  (Gx + ADC)' :
+        '· relaxation / wait';
+      ctx.fillStyle = stage === 'idle' ? '#7b8a9c' : '#e8edf4';
+      ctx.fillText(caption, padL, 13);
+
+      // row baselines + labels
       ROWS.forEach((name, i) => {
-        const yMid = padT + i * rowH + rowH / 2;
         ctx.fillStyle = '#7b8a9c';
-        ctx.fillText(name, 4, yMid + 3);
+        ctx.fillText(name, 4, yMid(i) + 3);
         ctx.strokeStyle = '#2a323d';
         ctx.beginPath();
-        ctx.moveTo(padL, yMid);
-        ctx.lineTo(W - padR, yMid);
+        ctx.moveTo(padL, yMid(i));
+        ctx.lineTo(W - padR, yMid(i));
         ctx.stroke();
       });
 
-      const x0 = tx(0, tr);
-      const xTE = tx(te, tr);
-      const yRF = padT + 0 * rowH + rowH / 2;
-      const ySS = padT + 1 * rowH + rowH / 2;
-      const yPE = padT + 2 * rowH + rowH / 2;
-      const yADC = padT + 3 * rowH + rowH / 2;
-      const amp = rowH * 0.35;
+      const x0 = tx(0);
+      const xTE = tx(te);
 
-      // RF: a pulse at t=0
-      ctx.strokeStyle = '#5dd1c4';
+      // RF spike (row 0)
+      ctx.strokeStyle = `rgba(${CYAN},${a(stage === 'slice')})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x0, yRF);
-      ctx.lineTo(x0, yRF - amp * 1.6);
+      ctx.moveTo(x0, yMid(0));
+      ctx.lineTo(x0, yMid(0) - amp * 1.6);
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x0, yRF - amp * 1.6, 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#5dd1c4';
-      ctx.fill();
 
-      // Gss: slice-select block during the RF
-      ctx.fillStyle = 'rgba(122,162,255,.5)';
-      ctx.fillRect(x0 - 6, ySS - amp, 12, amp);
+      // Gz slice-select block during RF (row 1)
+      ctx.fillStyle = `rgba(${BLUE},${a(stage === 'slice') * 0.7})`;
+      ctx.fillRect(x0 - 5, yMid(1) - amp, tx(rfW) - x0 + 5, amp);
 
-      // Gpe: phase-encode blip just after RF — height steps with peStep each TR
-      const peH = amp * 0.8 * peStep; // signed: up or down from the line
-      ctx.fillStyle = 'rgba(240,179,91,.7)';
-      ctx.fillRect(x0 + 10, yPE - Math.max(0, peH), 8, Math.abs(peH) || 1);
+      // Gy phase-encode blip, height steps with peStep (row 2)
+      const peH = amp * 0.9 * peStep;
+      ctx.fillStyle = `rgba(${ORANGE},${a(stage === 'phase') * 0.85})`;
+      const gx = tx(peStart);
+      ctx.fillRect(gx, yMid(2) - Math.max(0, peH), tx(peStart + peW) - gx, Math.abs(peH) || 1);
 
-      // ADC: readout window centered at TE
-      ctx.fillStyle = 'rgba(93,209,196,.35)';
-      ctx.fillRect(xTE - 18, yADC - amp, 36, amp);
-      ctx.strokeStyle = '#5dd1c4';
+      // Gx readout gradient during ADC (row 3)
+      ctx.fillStyle = `rgba(${GREEN},${a(stage === 'freq') * 0.7})`;
+      ctx.fillRect(tx(te - roHalf), yMid(3) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
+
+      // ADC window (row 4)
+      ctx.fillStyle = `rgba(${CYAN},${a(stage === 'freq') * 0.4})`;
+      ctx.fillRect(tx(te - roHalf), yMid(4) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
+      ctx.strokeStyle = `rgba(${CYAN},${a(stage === 'freq')})`;
       ctx.lineWidth = 1;
-      ctx.strokeRect(xTE - 18, yADC - amp, 36, amp);
+      ctx.strokeRect(tx(te - roHalf), yMid(4) - amp, tx(te + roHalf) - tx(te - roHalf), amp);
 
-      // TE marker (0 → TE)
-      ctx.strokeStyle = '#f0b35b';
+      // TE marker
+      ctx.strokeStyle = `rgba(${ORANGE},.8)`;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(xTE, padT);
-      ctx.lineTo(xTE, H - 14);
+      ctx.lineTo(xTE, H - padB);
       ctx.stroke();
       ctx.setLineDash([]);
 
       // playhead
-      const xp = tx(Math.min(cycleTime, tr), tr);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(xp, padT);
-      ctx.lineTo(xp, H - 14);
+      ctx.moveTo(tx(ct), padT);
+      ctx.lineTo(tx(ct), H - padB);
       ctx.stroke();
 
       // labels
       ctx.fillStyle = '#9aa7b8';
       ctx.fillText(`TR=${tr.toFixed(1)}s`, W - padR - 56, H - 3);
-      ctx.fillStyle = '#f0b35b';
+      ctx.fillStyle = `rgb(${ORANGE})`;
       ctx.fillText(`TE=${te.toFixed(2)}s`, padL, H - 3);
     },
   };
