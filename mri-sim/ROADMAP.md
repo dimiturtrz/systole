@@ -31,5 +31,3 @@ Roughly ordered by value. The first three form one arc: make the signal *real*.
    earns its keep (vtkImageData + reslice); ties the sim to the cardiac-imaging data.
 5. **Tissue contrast (T1/T2 weighting via TR/TE)** — `cardiac-seg-wpq`
    Per-region T1/T2 so TR/TE change image *contrast* (T1w / T2w / PD) — the clinical knob.
-6. **Split into its own repo** — `cardiac-seg-lul`
-   Standalone repo + README, deploy to GitHub Pages once it grows.
