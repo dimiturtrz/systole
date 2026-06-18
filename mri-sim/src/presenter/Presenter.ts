@@ -13,6 +13,7 @@ const REST_TILT = 0.12; // matches SpinSystem/Simulator rest tilt
 const TIP_DUR = 0.15; // sim-seconds to ramp the RF tip (avoids a teleport snap)
 const LARMOR_MIN = 63.8; // MHz — slice-select frequency band (≈1.5 T: γ·B0 ≈ 63.87 MHz)
 const LARMOR_MAX = 63.95;
+const IDLE_WARP = 20; // fast-forward the dead relaxation tail (real TR is ~96% wait)
 
 /**
  * Wires model → views on ONE speed-scaled clock. Each TR: an RF pulse at the cycle
@@ -163,7 +164,9 @@ export class Presenter {
   }
 
   tick(dt: number): void {
-    const d = dt * this.speed;
+    let d = dt * this.speed;
+    // Fast-forward the dead relaxation tail (after readout) so we don't watch nothing.
+    if (this.cycleTime > seqWindows(this.tr, this.te).roEnd) d *= IDLE_WARP;
     this.cycleTime += d;
     if (this.cycleTime >= this.tr) {
       this.cycleTime -= this.tr;

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Presenter } from '../../src/presenter/Presenter';
 import type { SpinView } from '../../src/view/SpinView';
 import type { Panels } from '../../src/view/Panels';
+import type { SequenceView, SeqState } from '../../src/view/SequenceDiagram';
 import { diskPhantom } from '../../src/model/phantom';
 import type { Vec3 } from '../../src/model/types';
 
@@ -126,6 +127,26 @@ describe('Presenter (proton view: presenter + simulator + mock view)', () => {
     expect(std(rest)).toBeLessThan(1e-6);
     // Gy adds an azimuth ∝ position → slab spins fan out: clear spread.
     expect(std(slab)).toBeGreaterThan(0.05);
+  });
+
+  it('fast-forwards the dead relaxation tail (idle advances faster than the encode window)', () => {
+    class FakeSeq implements SequenceView {
+      ct = 0;
+      draw(s: SeqState): void {
+        this.ct = s.cycleTime;
+      }
+    }
+    const seq = new FakeSeq();
+    const p = new Presenter(new FakeView(), undefined, undefined, seq);
+    p.start();
+    const e0 = seq.ct;
+    p.tick(0.002); // still in the encode window → real-time
+    const dEncode = seq.ct - e0;
+    p.tick(0.02); // step out past the readout into the idle tail
+    const i0 = seq.ct;
+    p.tick(0.002); // same dt, now in the tail → warped
+    const dIdle = seq.ct - i0;
+    expect(dIdle).toBeGreaterThan(dEncode * 5);
   });
 
   it('Larmor selects the slice height (different Larmor → different slab)', () => {

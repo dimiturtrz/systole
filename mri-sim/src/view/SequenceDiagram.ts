@@ -69,7 +69,7 @@ export function mountSequenceDiagram(): SequenceView {
         stage === 'slice' ? '1 · slice select  (Gz + RF)' :
         stage === 'phase' ? '2 · phase encode  (Gy)' :
         stage === 'freq' ? '3 · frequency encode / readout  (Gx + ADC)' :
-        `· relaxation / wait — next RF in ${waitMs.toFixed(0)} ms`;
+        `· relaxation / wait ⏩ — next RF in ${waitMs.toFixed(0)} ms`;
       ctx.fillStyle = stage === 'idle' ? '#7b8a9c' : '#e8edf4';
       ctx.fillText(caption, padL, 13);
 
