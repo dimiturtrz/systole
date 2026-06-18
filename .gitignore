@@ -1,4 +1,7 @@
 data/
+# mri-sim (TypeScript app) build artifacts
+mri-sim/node_modules/
+mri-sim/dist/
 __pycache__/
 *.pyc
 .pytest_cache/
