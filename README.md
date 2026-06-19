@@ -1,14 +1,16 @@
 # systole — cardiac segmentation + function (MRI, CT, echo)
 
-**What this is.** systole picks up a new domain in the open — one bounded problem: cardiac
-**segmentation → ejection fraction**, with the evaluation that decides whether a measurement can
-be trusted. The connecting thread is geometry: per-voxel labels → a clinical number. Built on
-public data, learning the field by shipping in it — an **LLM-driven learning track**
-([`learning/`](learning/): theory write-ups + self-quizzes) runs alongside the code. Across
-modalities eventually (**MRI now; CT, echo planned**); today only the MRI lane is underway.
+**What this is.** systole segments the heart from cardiac MRI and computes its **ejection
+fraction** — then asks the question most demos skip: *does that number survive a change of
+scanner?* The model trains on a multi-vendor dataset and is tested on a held-out single-centre one
+it never saw; segmentation generalizes (Dice **0.87**, matching the in-domain ceiling), while EF —
+a ratio of volumes — is the honest hard part. The thread tying it together is geometry: per-voxel
+labels → a clinical number.
 
-Three pieces, general → specific (each links into its folder for depth); full plan + milestones
-in **[ROADMAP.md](ROADMAP.md)**.
+It's also how **I'm** ramping into cardiac imaging: built on public data, with an LLM-driven
+learning track ([`learning/`](learning/): theory write-ups + self-quizzes) alongside the code.
+Across modalities (**MRI now; CT, echo planned**); three pieces, general → specific, each linking
+into its folder. Full plan → **[ROADMAP.md](ROADMAP.md)**.
 
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
