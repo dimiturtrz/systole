@@ -35,20 +35,20 @@ set up for **domain generalization**: trained on multi-vendor **M&M-2** (360 sub
 
 ### Ejection fraction — the clinical output
 EF is the number a clinician acts on, so it's the result that matters. Cross-dataset
-(M&M-2 → ACDC): **MAE 9.4%**, bias **−8.9%** (systematic underprediction), 95% LoA [−36, +18],
-plus one EF-collapse failure. The chambers are right; absolute volumes drift as calibration shifts
-across centres.
+(M&M-2 → ACDC, after largest-CC postprocessing): **MAE 8.2%**, bias **−7.2%** (systematic
+underprediction), 95% LoA [−34, +19], plus one EF-collapse failure. The chambers are right;
+absolute volumes drift as calibration shifts across centres.
 
 ![EF Bland–Altman — M&M-2 model on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
 
-**Not clinically usable yet** — MAE 9.4% and LoA ±27 are well past the ±5% clinical bar. The plot
-splits the error in two: a systematic **−8.9% bias** (the curve sits left of zero — correctable)
-and a **wide spread** with one hard failure (harder). EF is a *ratio* of two volumes, so it
-magnifies per-frame segmentation error — the masks are good (Dice 0.87), the derived number isn't.
+**Not clinically usable yet** — MAE 8.2% and LoA ±26 are still well past the ±5% clinical bar. The
+plot splits the error in two: a systematic **−7.2% bias** (the curve sits left of zero —
+correctable) and a **wide spread** with one hard failure (harder). EF is a *ratio* of two volumes,
+so it magnifies per-frame segmentation error — the masks are good (Dice 0.87), the derived number isn't.
 
 Paths from here, roughly in effort order:
-- **Postprocess masks** (largest-connected-component) — stray false-positive voxels inflate ESV and
-  push EF down, likely a chunk of the bias. Eval-only, no retrain.
+- ✅ **Largest-CC postprocessing** (applied) — dropping stray false-positive islands cut EF MAE
+  9.4 → 8.2%, bias −8.9 → −7.2%, and collapsed the boundary HD (RV 191 → 59 mm). Free, no retrain.
 - **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
   histogram standardization may tighten the spread. (Dice already transfers, so this is a smaller
   lever for EF than for segmentation — but it's the obvious gap.)

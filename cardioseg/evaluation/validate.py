@@ -36,7 +36,7 @@ def predict_volume(model, vol_img: Volume, size: int, device: str) -> Volume:
 
 def validate(
     model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5,
-    loader=None, cache_ns: str = "",
+    loader=None, cache_ns: str = "", postproc: bool = True,
 ) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
@@ -49,6 +49,7 @@ def validate(
     from ..preprocessing.preprocess import preprocess_case
     from ..data.mri.data import load_ed_es
     from .measure import ejection_fraction
+    from .postprocess import largest_cc_per_class
     from ..training.dataset import fit_square
 
     loader = loader or load_ed_es
@@ -63,6 +64,8 @@ def validate(
             if f"{tag.lower()}_img" not in c:
                 continue
             pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device)
+            if postproc:
+                pred = largest_cc_per_class(pred)
             gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag.lower()}_gt"]])
             vols[tag] = (pred, gt)
             for cl in CLASS_NAMES:

@@ -30,6 +30,7 @@ from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice
+from cardioseg.evaluation.postprocess import largest_cc_per_class
 
 CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef5350")}
 SIZE = 256
@@ -51,7 +52,7 @@ def collect(run: Path, device: str, cases, loader, cache_ns: str):
             k = tag.lower()
             if f"{k}_img" not in c:
                 continue
-            pred = predict_volume(model, c[f"{k}_img"], SIZE, device)
+            pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device))
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
             masks[tag] = (pred, gt)
             if tag == "ED":
