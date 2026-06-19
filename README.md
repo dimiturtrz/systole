@@ -69,6 +69,20 @@ Train it the other way — single-centre ACDC, tested across vendors — and it 
 (RV 0.85 → 0.59). Diversity in training is what holds up; RV is the weak structure throughout.
 Per-direction table, surface metrics (HD95 / ASSD), boundary KDE → **[cardioseg/](cardioseg/)**.
 
+### Baseline — nnU-Net (SOTA reference)
+nnU-Net as a *baseline*, not a dependency — quarantined in
+[baselines/nnunet/](baselines/nnunet/), scored by the **same** eval. M&M-2 → ACDC:
+
+| segmenter | mean Dice | RV | EF MAE |
+|---|---|---|---|
+| ours (deployable / ONNX) | 0.87 | 0.84 | 9.4% |
+| nnU-Net (50 ep, 1 fold) | **0.91** | **0.91** | **5.5%** |
+
+nnU-Net wins at its *floor* (full 1000-ep × 5-fold recipe goes higher) — biggest on
+**RV** and **EF (halved)**. We deploy the simpler ONNX-exportable model on purpose; the
+gap names the levers to close it (instance norm, finer spacing, heavier aug, TTA). The
+segmenter is a commodity — the value is the shared measurement + evaluation that scored both.
+
 ## Data
 Datasets live **outside the repo** (licensing + size) and **none is committed**.
 - **M&M-2** ([challenge](https://www.ub.edu/mnms-2/)) — multi-vendor training set: 360 subjects,
