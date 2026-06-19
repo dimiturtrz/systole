@@ -52,16 +52,17 @@ patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apple
 
 | segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net | 0.867 | 0.927 | 0.840 | 0.835 | 9.4% | deployable / ONNX |
+| our 2D U-Net (+ largest-CC) | 0.874 | 0.934 | 0.843 | 0.844 | 8.2% | deployable / ONNX |
 | **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
-| gain | +4.2 | +2.0 | +3.1 | **+7.3** | **−3.9** | |
+| gain | +3.5 | +1.3 | +2.8 | **+6.4** | **−2.7** | |
 
 **Read:** nnU-Net wins everything at only **50 epochs / 1 fold** (its floor — the full
 1000-epoch × 5-fold + TTA recipe goes higher). Biggest gains where it matters most:
-**RV +7.3** (the thin, domain-fragile structure the simple model collapses on) and
-**EF MAE nearly halved** (9.4 → 5.5% — better masks cut the systematic volume bias, so
-the *clinical number* improves, not just Dice). It hits **0.909 on ACDC trained on
-M&M-2** — near the in-domain ceiling (~0.91), cross-domain.
+**RV +6.4** (the thin, domain-fragile structure the simple model is weakest on) and
+**EF MAE 8.2 → 5.5%** (better masks cut the systematic volume bias, so the *clinical
+number* improves, not just Dice). It hits **0.909 on ACDC trained on M&M-2** — near the
+in-domain ceiling (~0.91), cross-domain. (Both rows are each model's deployable output
+scored by the same eval; ours includes our largest-CC postproc, nnU-Net its own.)
 
 *The gap is the honest price of a deployable, ONNX-exportable, fully-understood model —
 and it names the levers to close it on our clean U-Net while staying exportable:

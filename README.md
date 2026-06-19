@@ -75,13 +75,14 @@ nnU-Net as a *baseline*, not a dependency — quarantined in
 
 | segmenter | mean Dice | RV | EF MAE |
 |---|---|---|---|
-| ours (deployable / ONNX) | 0.87 | 0.84 | 9.4% |
+| ours (deployable / ONNX) | 0.87 | 0.84 | 8.2% |
 | nnU-Net (50 ep, 1 fold) | **0.91** | **0.91** | **5.5%** |
 
 nnU-Net wins at its *floor* (full 1000-ep × 5-fold recipe goes higher) — biggest on
-**RV** and **EF (halved)**. We deploy the simpler ONNX-exportable model on purpose; the
-gap names the levers to close it (instance norm, finer spacing, heavier aug, TTA). The
-segmenter is a commodity — the value is the shared measurement + evaluation that scored both.
+**RV** (+0.06) and **EF** (8.2 → 5.5%). We deploy the simpler ONNX-exportable model on
+purpose; the gap names the levers to close it (instance norm, finer spacing, heavier aug,
+TTA). The segmenter is a commodity — the value is the shared measurement + evaluation that
+scored both.
 
 ## Data
 Datasets live **outside the repo** (licensing + size) and **none is committed**.
