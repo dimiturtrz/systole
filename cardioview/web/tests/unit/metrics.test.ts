@@ -7,6 +7,8 @@ describe('metrics', () => {
     expect(efFrom(120, 60)).toBeCloseTo(50);
     expect(efFrom(100, 45)).toBeCloseTo(55);
     expect(efFrom(0, 0)).toBeNaN(); // guard divide-by-zero
+    expect(efFrom(100, 0)).toBeCloseTo(100); // empty systole -> full ejection
+    expect(efFrom(80, 80)).toBeCloseTo(0); // no contraction -> EF 0
   });
 
   it('efError is symmetric absolute difference', () => {
@@ -14,11 +16,14 @@ describe('metrics', () => {
     expect(efError(48, 55)).toBeCloseTo(7);
   });
 
-  it('efCategory bands match the LV convention', () => {
+  it('efCategory bands + exact boundary edges (>= is inclusive)', () => {
     expect(efCategory(60)).toBe('normal');
-    expect(efCategory(45)).toBe('mildly reduced');
-    expect(efCategory(35)).toBe('moderately reduced');
-    expect(efCategory(15)).toBe('severely reduced');
+    expect(efCategory(50)).toBe('normal'); // 50 is the inclusive edge
+    expect(efCategory(49.9)).toBe('mildly reduced');
+    expect(efCategory(40)).toBe('mildly reduced');
+    expect(efCategory(39.9)).toBe('moderately reduced');
+    expect(efCategory(30)).toBe('moderately reduced');
+    expect(efCategory(29.9)).toBe('severely reduced');
   });
 
   it('formatters render clinical units', () => {

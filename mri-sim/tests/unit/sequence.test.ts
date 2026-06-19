@@ -23,6 +23,14 @@ describe('pulse-sequence timing', () => {
     expect(stageAt(tr, te, tr * 0.99)).toBe('idle'); // long relaxation/wait
   });
 
+  it('stage transitions are half-open at the exact window edges', () => {
+    const w = seqWindows(tr, te);
+    expect(stageAt(tr, te, w.sliceEnd)).not.toBe('slice'); // slice is ct < sliceEnd; == is past it
+    expect(stageAt(tr, te, w.peStart)).toBe('phase'); // phase start is inclusive (>=)
+    expect(stageAt(tr, te, w.peEnd)).not.toBe('phase'); // phase end is exclusive (<)
+    expect(stageAt(tr, te, w.roEnd)).toBe('freq'); // readout end is inclusive (<=)
+  });
+
   it('ordering holds for a realistic TE ≪ TR (the regime that broke the old TR-keyed windows)', () => {
     const seen = new Set<string>();
     const w = seqWindows(2.0, 0.02);

@@ -27,6 +27,11 @@ describe('fitSquare', () => {
     const out = fitSquare(big, 4, 4, 2);
     expect(Array.from(out)).toEqual([5, 6, 9, 10]); // center 2x2 of the 4x4 grid
   });
+
+  it('is identity when the slice already equals size', () => {
+    const a = new Float32Array([1, 2, 3, 4]);
+    expect(Array.from(fitSquare(a, 2, 2, 2))).toEqual([1, 2, 3, 4]);
+  });
 });
 
 describe('resizeBilinear', () => {
@@ -55,12 +60,19 @@ describe('argmaxChannels', () => {
     ]);
     expect(Array.from(argmaxChannels(logits, 4, 2))).toEqual([2, 0]);
   });
+
+  it('breaks ties toward the lower class index (first max wins)', () => {
+    const logits = new Float32Array([0.5, 0.1, 0.5]); // 3 classes, 1 pixel; c0 and c2 tie at 0.5
+    expect(argmaxChannels(logits, 3, 1)[0]).toBe(0);
+  });
 });
 
 describe('resampledSize', () => {
-  it('rounds n*spacing/1.5', () => {
+  it('rounds n*spacing/1.5 (up/down/identity)', () => {
     expect(resampledSize(216, 1.5625)).toBe(225); // 216*1.5625/1.5 = 225
-    expect(resampledSize(100, 1.5)).toBe(100); // already at target
+    expect(resampledSize(100, 1.5)).toBe(100); // already at target (identity)
+    expect(resampledSize(100, 0.75)).toBe(50); // finer spacing -> fewer voxels (downsample)
+    expect(resampledSize(100, 3.0)).toBe(200); // coarser spacing -> upsample
   });
 });
 

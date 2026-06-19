@@ -61,6 +61,15 @@ def test_dice_perfect_and_disjoint():
     assert dice(a, b, 1) == 0.0
 
 
+def test_dice_empty_and_partial_classes():
+    z = np.zeros((4, 8, 8), dtype=np.uint8)
+    assert dice(z, z, 3) == 1.0                  # both absent -> vacuously perfect (the convention)
+    a = np.zeros((4, 8, 8), dtype=np.uint8); a[0, :4, :4] = 3   # 16 vox
+    assert dice(a, z, 3) == 0.0                  # one empty -> no overlap
+    b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, :4, :2] = 3   # 8 vox, subset of a
+    assert abs(dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)
+
+
 def test_hausdorff_zero_on_identical():
     m = _enclosed_lv()
     assert hausdorff(m, m, LV_CAVITY, spacing=(8.0, 1.5, 1.5)) == 0.0
