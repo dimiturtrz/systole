@@ -75,7 +75,10 @@ Flagship = **M&M-2 → ACDC** (train multi-vendor, test 100 held-out single-cent
 - **Surface metrics** (single-centre ACDC eval): by Dice RV > myo, but by boundary (HD95) RV is
   *worst* (10 mm) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray
   voxels). Full HD is the fragile max (one stray voxel → ~200 mm); **HD95** is the robust report.
-- `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman**.
+- `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
+
+![EF Bland–Altman — M&M-2 model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
+![Per-class boundary-distance KDE — M&M-2 model on held-out ACDC](docs/media/boundary_kde.png)
 
 Published column = context, not a trophy: even multi-vendor, this is "competent on public
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the

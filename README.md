@@ -43,6 +43,8 @@ is set up for **domain generalization**: trained on the multi-vendor **M&M-2** c
 
 **EF vs ground truth: MAE 9.4%** (cross-dataset; volume calibration shifts across centres).
 
+![EF Bland–Altman — M&M-2 model on held-out ACDC, with the difference distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
+
 **Why train on M&M-2, not ACDC?** Diversity in training buys robustness, and it's asymmetric: a
 single-centre (ACDC) model drops ~17 Dice points tested across vendors (mean 0.87 → 0.70, RV
 0.85 → 0.59), while the multi-vendor model carries to a new centre with no segmentation drop.
