@@ -40,19 +40,18 @@ across centres.
 ![EF Bland–Altman — M&M-2 model on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
 
 ### Segmentation
-Per-structure overlap, M&M-2 → ACDC:
+Per-structure Dice, M&M-2 → ACDC:
 
-| structure | Dice | published ACDC |
-|---|---|---|
-| LV cavity | **0.93** | ~0.93–0.96 |
-| LV myocardium | 0.84 | ~0.88–0.92 |
-| RV cavity | 0.84 | ~0.88–0.92 |
-| **mean** | **0.87** | |
+| structure | Dice |
+|---|---|
+| LV cavity | **0.93** |
+| LV myocardium | 0.84 |
+| RV cavity | 0.84 |
+| **mean** | **0.87** |
 
-**Why train on M&M-2, not ACDC?** Diversity buys robustness, asymmetrically: a single-centre
-(ACDC) model drops ~17 Dice points tested across vendors (mean 0.87 → 0.70, RV 0.85 → 0.59), while
-the multi-vendor model carries to a new centre with no drop. RV is the weak structure everywhere.
-Full per-direction table + surface metrics (HD95 / ASSD) + boundary KDE → **[cardioseg/](cardioseg/)**.
+Train it the other way — single-centre ACDC, tested across vendors — and it drops to **0.70**
+(RV 0.85 → 0.59). Diversity in training is what holds up; RV is the weak structure throughout.
+Per-direction table, surface metrics (HD95 / ASSD), boundary KDE → **[cardioseg/](cardioseg/)**.
 
 ## Data
 Datasets live **outside the repo** (licensing + size) and **none is committed**.
