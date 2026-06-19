@@ -46,13 +46,24 @@ nnU-Net on ACDC is a solved benchmark — top-of-leaderboard, **mean Dice ~0.91*
 *confirms* a known ceiling and gives the "I can operate it + score it through my own
 pipeline" credential — it is **not** a discovery.
 
-## Results (fill after running)
-Scored by `cardioseg.evaluation` (apples-to-apples with our own model):
+## Results — M&M-2 → ACDC (the project's generalization setup)
+Both trained on multi-vendor M&M-2, tested on the held-out single-centre ACDC (100
+patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apples.
 
 | segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (ACDC→ACDC) | 0.87 | 0.93 | 0.82 | 0.86 | ~3% | deployable / ONNX |
-| **nnU-Net (ACDC, 5-fold)** | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | baseline / not deployed |
+| our 2D U-Net | 0.867 | 0.927 | 0.840 | 0.835 | 9.4% | deployable / ONNX |
+| **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
+| gain | +4.2 | +2.0 | +3.1 | **+7.3** | **−3.9** | |
 
-*The gap (if any) is the price of a deployable, ONNX-exportable, fully-understood
-model — an honest, deliberate trade, not a shortfall.*
+**Read:** nnU-Net wins everything at only **50 epochs / 1 fold** (its floor — the full
+1000-epoch × 5-fold + TTA recipe goes higher). Biggest gains where it matters most:
+**RV +7.3** (the thin, domain-fragile structure the simple model collapses on) and
+**EF MAE nearly halved** (9.4 → 5.5% — better masks cut the systematic volume bias, so
+the *clinical number* improves, not just Dice). It hits **0.909 on ACDC trained on
+M&M-2** — near the in-domain ceiling (~0.91), cross-domain.
+
+*The gap is the honest price of a deployable, ONNX-exportable, fully-understood model —
+and it names the levers to close it on our clean U-Net while staying exportable:
+**instance norm, finer target spacing (1.23 mm), heavier augmentation, TTA, longer
+training.** The baseline is a roadmap, not just a credential.*
