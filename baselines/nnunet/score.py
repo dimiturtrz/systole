@@ -59,17 +59,21 @@ def score(pred_dir: str, gt_dir: str) -> dict:
     mean_dice = float(np.nanmean(dmean))
     print(f"  mean Dice {mean_dice:.3f}")
 
-    errs = []
+    diffs = []                                  # signed pred - GT (EF %), for bias + LoA
     for pid, ph in frames.items():
         if "ED" in ph and "ES" in ph:
             sp = ph["ED"][2]
             ef_p, *_ = ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
             ef_g, *_ = ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
-            errs.append(abs(ef_g - ef_p))
-    ef_mae = float(np.mean(errs)) if errs else float("nan")
-    if errs:
-        print(f"  EF MAE {ef_mae:.1f}%  (n={len(errs)} patients)")
-    return {"mean_dice": mean_dice, "ef_mae": ef_mae}
+            diffs.append(ef_p - ef_g)
+    out = {"mean_dice": mean_dice, "ef_mae": float("nan")}
+    if diffs:
+        d = np.array(diffs)
+        mae, bias, sd = float(np.mean(np.abs(d))), float(d.mean()), float(d.std(ddof=1))
+        lo, hi = bias - 1.96 * sd, bias + 1.96 * sd
+        out.update(ef_mae=mae, ef_bias=bias, ef_loa=[lo, hi])
+        print(f"  EF MAE {mae:.1f}%  bias {bias:+.1f}%  95% LoA [{lo:+.1f}, {hi:+.1f}]  (n={len(d)})")
+    return out
 
 
 def main():

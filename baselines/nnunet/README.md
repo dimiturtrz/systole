@@ -56,6 +56,11 @@ patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apple
 | **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
 | gain | +3.5 | +1.3 | +2.8 | **+6.4** | **−2.7** | |
 
+**EF agreement (Bland–Altman):** ours bias −7.2%, 95% LoA [−34, +19]; nnU-Net bias **−4.1%**,
+LoA **[−17.8, +9.7]** — roughly **half the spread** and less bias. Both still *underpredict*
+(negative bias), so part of the cross-domain EF shift is intrinsic (calibration), not just model
+quality — but nnU-Net's tighter masks cut the random error a lot.
+
 **Read:** nnU-Net wins everything at only **50 epochs / 1 fold** (its floor — the full
 1000-epoch × 5-fold + TTA recipe goes higher). Biggest gains where it matters most:
 **RV +6.4** (the thin, domain-fragile structure the simple model is weakest on) and
