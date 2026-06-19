@@ -1,4 +1,4 @@
-# systole — cardiac segmentation + function (MRI, CT, echo)
+# Systole — cardiac segmentation + function (MRI, CT, echo)
 
 **What this is.** systole segments the heart from cardiac MRI and computes its **ejection
 fraction** — then asks the question most demos skip: *does that number survive a change of
@@ -83,6 +83,22 @@ nnU-Net wins at its *floor* (full 1000-ep × 5-fold recipe goes higher) — bigg
 purpose; the gap names the levers to close it (instance norm, finer spacing, heavier aug,
 TTA). The segmenter is a commodity — the value is the shared measurement + evaluation that
 scored both.
+
+## Honest limits — the clinical-grade gap
+Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
+- **EF precision.** 95% LoA are ±20–26% — far past the ±5% clinical bar. And part of the
+  underprediction is *intrinsic*: even nnU-Net (SOTA) keeps a **−4% bias** cross-domain, so a better
+  segmenter tightens the spread but doesn't erase the lean — it's calibration, not just model quality.
+- **Robustness is partial.** Multi-vendor generalization is *tested* (3 vendors, M&M-2 → ACDC), not
+  *solved* — still 3 vendors / mostly 1.5T, not a deployment distribution; a 4-vendor / 6-centre set
+  (M&Ms-1) sits unused.
+- **Validation is thin.** One 80/20 split — no cross-validation, confidence intervals, or
+  test–retest; no per-case uncertainty / out-of-distribution flag.
+- **Not a device.** Public research data only; no DICOM/PII handling, no prospective or regulatory
+  validation.
+
+The route out of each gap is concrete — EF paths above + **[ROADMAP.md](ROADMAP.md)** Gate 2
+(largest-CC ✅, then harmonization, calibration, augmentation, eval rigor).
 
 ## Data
 Datasets live **outside the repo** (licensing + size) and **none is committed**.
