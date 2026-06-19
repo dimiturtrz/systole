@@ -9,6 +9,7 @@ on ACDC (single-centre) is the strong direction; the reverse measures OOD drop.
 """
 import argparse
 import json
+import time
 from pathlib import Path
 
 # dataset -> (cases_fn, loader, cache_ns). Loaders are dataset-agnostic; M&M-2 labels
@@ -60,6 +61,7 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
     for ep in range(epochs):
+        t0 = time.perf_counter()
         model.train()
         tot = 0.0
         for x, y in dl:
@@ -75,7 +77,7 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
-        print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}")
+        print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}  ({time.perf_counter()-t0:.1f}s)")
 
     print(f"\n===== VALIDATION ({dataset}) =====")
     dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns)

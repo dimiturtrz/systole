@@ -52,19 +52,19 @@ patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apple
 
 | segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ largest-CC + TTA) | 0.885 | 0.939 | 0.855 | 0.862 | 7.9% | deployable / ONNX |
+| our 2D U-Net (+ heavy aug + largest-CC + TTA) | 0.893 | 0.942 | 0.856 | 0.881 | 6.7% | deployable / ONNX |
 | **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
-| gain | +2.4 | +0.8 | +1.6 | **+4.6** | **−2.4** | |
+| gain | +1.6 | +0.5 | +1.5 | **+2.7** | **−1.2** | |
 
-**EF agreement (Bland–Altman):** ours bias −7.3%, 95% LoA [−34, +19]; nnU-Net bias **−4.1%**,
+**EF agreement (Bland–Altman):** ours bias −6.0%, 95% LoA [−25, +13]; nnU-Net bias **−4.1%**,
 LoA **[−17.8, +9.7]** — roughly **half the spread** and less bias. Both still *underpredict*
 (negative bias), so part of the cross-domain EF shift is intrinsic (calibration), not just model
 quality — but nnU-Net's tighter masks cut the random error a lot.
 
 **Read:** nnU-Net wins everything at only **50 epochs / 1 fold** (its floor — the full
 1000-epoch × 5-fold + TTA recipe goes higher). Biggest gains where it matters most:
-**RV +4.6** (the thin, domain-fragile structure the simple model is weakest on) and
-**EF MAE 7.9 → 5.5%** (better masks cut the systematic volume bias, so the *clinical
+**RV +2.7** (the thin, domain-fragile structure the simple model is weakest on) and
+**EF MAE 6.7 → 5.5%** (better masks cut the systematic volume bias, so the *clinical
 number* improves, not just Dice). It hits **0.909 on ACDC trained on M&M-2** — near the
 in-domain ceiling (~0.91), cross-domain. (Both rows are each model's deployable output
 scored by the same eval; ours includes largest-CC + TTA, nnU-Net its own.)
