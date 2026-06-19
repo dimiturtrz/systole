@@ -94,5 +94,41 @@ self-configuring baseline (nnU-Net) that's hard to beat, and a pipeline whose re
 output is a *trusted clinical measurement*, not a segmentation. The differentiator is
 rigor downstream of the net, not the net.
 
+## Lesson M (baseline) — nnU-Net measured, and the recipe as a roadmap
+
+Ran nnU-Net as a quarantined baseline (`baselines/nnunet/`) to put a real number on
+"how much are we leaving on the table?" Same setup as the flagship (train multi-vendor
+M&M-2, test held-out ACDC), scored by **our** eval — apples-to-apples.
+
+**Result (nnU-Net 50 epochs / 1 fold — its *floor*):**
+```
+                mean Dice   RV     EF MAE
+ours (+largest-CC)  0.874   0.844   8.2%      (deployable / ONNX)
+nnU-Net             0.909   0.908   5.5%      (baseline, not deployed)
+gain                +3.5    +6.4    -2.7
+```
+
+**What it proves (the recipe, not the architecture):**
+- nnU-Net wins at 50ep/1fold — *below* its full ceiling (1000ep × 5-fold + TTA). So the
+  gap is the **recipe** (instance norm, target spacing 1.23mm, heavier aug, longer
+  effective training), not a cleverer net. Confirms the nnU-Net thesis empirically.
+- **RV +6.4** — the thin, Dice-fragile, domain-fragile structure (G-quiz Q2 × E5) is
+  exactly where the recipe helps most. Robustness is a *pipeline* property.
+- **EF 8.2 → 5.5%** — better masks cut the systematic volume bias, so the *clinical
+  number* improved, not just Dice. The Dice/EF decouple isn't absolute: cleaning the
+  segmentation recovered EF here.
+- **0.909 on ACDC, trained on M&M-2** — near the in-domain ceiling (~0.91), cross-domain.
+
+**The roadmap it hands us** (close the gap on the deployable clean U-Net, stay ONNX-able):
+1. **TTA** (mirror-average at inference) — ~1–2%, trivial, deployable. First.
+2. **Instance norm** (not batch) — tiny-batch medical default.
+3. **Finer target spacing** (~1.23mm) + **heavier aug** (elastic, gamma).
+4. **Longer training + LR schedule**; **5-fold ensemble** (also gives uncertainty, E4).
+
+**Meta.** The baseline isn't just a credential ("I can run nnU-Net + score it through my
+own pipeline") — it's a **measured roadmap**. SOTA is a commodity; the value is the
+shared measurement + evaluation that scored both, and the deliberate choice to deploy the
+simpler exportable model knowing exactly what that costs.
+
 ### Quiz log
 *(empty — append on demand)*
