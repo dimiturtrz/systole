@@ -147,3 +147,7 @@ Agent-driven build, human-owned judgment — coding agents scaffold the plumbing
 modeling decisions, the measurement correctness, and the evaluation. Data-structure reasoning and
 evaluation discipline carry over from prior ML work; the clinical specifics I learn as I go
 ([learning/](learning/)).
+
+## License
+Code is **MIT** ([LICENSE](LICENSE)). The datasets (ACDC, M&M-2) are **not** included and carry
+their own licenses — register with each provider; see [Data](#data).
