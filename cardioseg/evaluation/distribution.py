@@ -1,10 +1,14 @@
 """Error-distribution plots for the model — the "look at the distribution, not one number"
-view (G4). On the held-out val set:
+view (G4). On a chosen evaluation set:
   - KDE of per-class boundary distances (where Dice/HD summarize, this shows the shape)
-  - EF Bland-Altman (bias + limits of agreement) — systematic vs random EF error
+  - EF Bland-Altman: scatter + bias + 95% limits of agreement, with a marginal KDE of the
+    differences (the distribution outline) down the right margin
 Also prints pooled HD95 / ASSD / Dice / EF-MAE. Writes PNGs to <run>/plots/.
 
-    python -m cardioseg.evaluation.distribution --run runs/acdc
+    # flagship: the M&M-2 model evaluated on the held-out ACDC set
+    python -m cardioseg.evaluation.distribution --run runs/mnm2_to_acdc --eval acdc
+    # in-domain ACDC, on its seed-0 val split
+    python -m cardioseg.evaluation.distribution --run runs/acdc --eval acdc --holdout
 """
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ from scipy.stats import gaussian_kde
 
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square, split_patients
-from cardioseg.data.mri.data import acdc_cases
+from cardioseg.training.train import _registry
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction
@@ -31,21 +35,22 @@ CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef535
 SIZE = 256
 
 
-def collect(run: Path, device: str):
+def collect(run: Path, device: str, cases, loader, cache_ns: str):
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
     model.eval()
-    val = split_patients(list(acdc_cases()), 0.2, 0)[1]
 
     dists = {c: [] for c in CLASSES}  # pooled boundary distances per class (mm)
     dice_acc = {c: [] for c in CLASSES}
     ef_gt, ef_pred = [], []
-    for pd in val:
-        c = preprocess_case(pd)
+    for pd in cases:
+        c = preprocess_case(pd, loader=loader, cache_ns=cache_ns)
         sp = tuple(float(s) for s in c["spacing"])
         masks = {}
         for tag in ("ED", "ES"):
             k = tag.lower()
+            if f"{k}_img" not in c:
+                continue
             pred = predict_volume(model, c[f"{k}_img"], SIZE, device)
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
             masks[tag] = (pred, gt)
@@ -53,14 +58,15 @@ def collect(run: Path, device: str):
                 for cl in CLASSES:
                     dists[cl].append(surface_distances(pred, gt, cl, sp))
                     dice_acc[cl].append(dice(pred, gt, cl))
-        ef_g, _, _ = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)
-        ef_p, _, _ = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)
-        ef_gt.append(ef_g)
-        ef_pred.append(ef_p)
+        if "ED" in masks and "ES" in masks:
+            ef_g, _, _ = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)
+            ef_p, _, _ = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)
+            ef_gt.append(ef_g)
+            ef_pred.append(ef_p)
     return dists, dice_acc, np.array(ef_gt), np.array(ef_pred)
 
 
-def plot_kde(dists, out: Path):
+def plot_kde(dists, out: Path, label: str):
     fig, ax = plt.subplots(figsize=(7, 4))
     xs = np.linspace(0, 12, 300)
     for cl, (name, color) in CLASSES.items():
@@ -72,29 +78,60 @@ def plot_kde(dists, out: Path):
                 label=f"{name}  ASSD {m['assd']:.1f} · HD95 {m['hd95']:.1f} mm")
     ax.set_xlabel("boundary distance (mm)")
     ax.set_ylabel("density")
-    ax.set_title("Per-class boundary-distance distribution (held-out)")
+    ax.set_title(f"Per-class boundary-distance distribution{label}")
     ax.legend(fontsize=9)
     fig.tight_layout()
     fig.savefig(out, dpi=110)
     plt.close(fig)
 
 
-def plot_bland_altman(ef_gt, ef_pred, out: Path):
+def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
     mean = (ef_gt + ef_pred) / 2
     diff = ef_pred - ef_gt
     bias, sd = float(np.mean(diff)), float(np.std(diff, ddof=1))
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.scatter(mean, diff, c="#7a9bff", s=28)
-    for y, ls, lbl in [(bias, "-", f"bias {bias:+.1f}"),
-                       (bias + 1.96 * sd, "--", f"+1.96σ {bias + 1.96 * sd:+.1f}"),
-                       (bias - 1.96 * sd, "--", f"−1.96σ {bias - 1.96 * sd:+.1f}")]:
-        ax.axhline(y, color="#888", ls=ls)
-        ax.text(ax.get_xlim()[1], y, " " + lbl, va="center", fontsize=8, color="#555")
-    ax.axhline(0, color="#ccc", lw=0.8)
+    lo, hi = bias - 1.96 * sd, bias + 1.96 * sd
+
+    fig = plt.figure(figsize=(8, 4))
+    gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0.04)
+    ax = fig.add_subplot(gs[0])
+    axk = fig.add_subplot(gs[1], sharey=ax)  # marginal KDE of the differences
+
+    ax.axhspan(lo, hi, color="#7a9bff", alpha=0.08)  # 95% LoA band
+    ax.scatter(mean, diff, c="#7a9bff", s=28, edgecolor="#3b5bbf", linewidth=0.4, zorder=3)
+    ax.axhline(0, color="#ccc", lw=0.8, zorder=0)
+    lines = [(bias, "-", f"bias {bias:+.1f}"),
+             (hi, "--", f"+1.96σ {hi:+.1f}"),
+             (lo, "--", f"−1.96σ {lo:+.1f}")]
+    x0 = ax.get_xlim()[0]
+    for y, ls, lbl in lines:
+        ax.axhline(y, color="#555", ls=ls, lw=1, zorder=2)
+        ax.text(x0, y, " " + lbl, va="bottom", ha="left", fontsize=8, color="#444")
     ax.set_xlabel("mean EF (GT, pred)  %")
     ax.set_ylabel("pred − GT  (EF %)")
-    ax.set_title("EF Bland–Altman (held-out)")
-    fig.tight_layout()
+    ax.set_title(f"EF Bland–Altman{label}")
+
+    # focus on the bulk so the distribution shape reads; mark hard failures off-scale
+    y_lo = min(lo, float(np.percentile(diff, 2))) - 6
+    y_hi = max(hi, float(np.percentile(diff, 98))) + 6
+    ax.set_ylim(y_lo, y_hi)
+    n_off = int((diff < y_lo).sum() + (diff > y_hi).sum())
+    if n_off:
+        ax.text(0.02, 0.02, f"{n_off} off-scale (EF prediction collapsed)",
+                transform=ax.transAxes, fontsize=8, color="#a33")
+
+    # right-margin distribution outline of the differences, bias/LoA carried across
+    ys = np.linspace(y_lo, y_hi, 200)
+    if diff.size >= 2 and np.std(diff) > 0:
+        k = gaussian_kde(diff)(ys)
+        axk.fill_betweenx(ys, 0, k, color="#7a9bff", alpha=0.35)
+        axk.plot(k, ys, color="#3b5bbf", lw=1.5)
+    for y, ls, _ in lines:
+        axk.axhline(y, color="#555", ls=ls, lw=1)
+    axk.set_xticks([])
+    axk.tick_params(labelleft=False)
+    axk.set_xlabel("density", fontsize=8)
+
+    fig.subplots_adjust(left=0.09, right=0.975, top=0.91, bottom=0.13)  # tight_layout breaks shared marginal
     fig.savefig(out, dpi=110)
     plt.close(fig)
     return bias, sd
@@ -102,24 +139,37 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/acdc")
+    ap.add_argument("--run", default="runs/mnm2_to_acdc", help="run dir with model.pth")
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2"], help="set to evaluate on")
+    ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
+    ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     run = Path(a.run)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dists, dice_acc, ef_gt, ef_pred = collect(run, device)
+
+    cases_fn, loader, ns = _registry()[a.eval]
+    cases = list(cases_fn())
+    if a.holdout:
+        cases = split_patients(cases, 0.2, a.seed)[1]
+    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(cases)})"
+    dists, dice_acc, ef_gt, ef_pred = collect(run, device, cases, loader, ns)
 
     out = run / "plots"
     out.mkdir(parents=True, exist_ok=True)
-    plot_kde(dists, out / "boundary_kde.png")
-    bias, sd = plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png")
+    plot_kde(dists, out / "boundary_kde.png", label)
+    bias, sd = plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
 
-    print("=== per-class surface metrics (pooled, held-out) ===")
+    print(f"=== per-class surface metrics (pooled){label} ===")
     for cl, (name, _) in CLASSES.items():
         pooled = np.concatenate([d for d in dists[cl] if d.size])
         m = surface_metrics(pooled)
         print(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-    print(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{bias - 1.96 * sd:+.1f}, {bias + 1.96 * sd:+.1f}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
+    print(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
     print(f"plots -> {out}")
+
+
+def lo_hi(bias, sd):
+    return f"{bias - 1.96 * sd:+.1f}, {bias + 1.96 * sd:+.1f}"
 
 
 if __name__ == "__main__":
