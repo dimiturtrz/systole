@@ -13,6 +13,10 @@ const CARD =
   'position:fixed;top:12px;left:12px;z-index:10;background:rgba(20,24,30,.86);color:#cdd6e0;' +
   'font:13px system-ui,sans-serif;padding:12px 14px;border-radius:10px;border:1px solid #2a323d;' +
   'user-select:none;display:flex;flex-direction:column;gap:9px;min-width:248px;';
+const CARD_BR =                                  // measurements panel, opposite the legend
+  'position:fixed;bottom:12px;right:12px;z-index:10;background:rgba(20,24,30,.86);color:#cdd6e0;' +
+  'font:13px system-ui,sans-serif;padding:12px 14px;border-radius:10px;border:1px solid #2a323d;' +
+  'user-select:none;display:flex;flex-direction:column;gap:6px;min-width:200px;';
 const SELECT = 'background:#11151b;color:#cdd6e0;border:1px solid #2a323d;border-radius:6px;padding:5px;width:100%;';
 const FPS = 12;
 const IMPORT = '__import__';
@@ -58,8 +62,17 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   });
   const scanInput = fileInput('.nii,.nii.gz,.gz', true, (fs) => void onScans(fs));
 
-  wrap.append(title, modelSel, heartSel, controls, readout, statusEl, onnxInput, scanInput);
+  wrap.append(title, modelSel, heartSel, controls, statusEl, onnxInput, scanInput);
   document.body.appendChild(wrap);
+
+  // measurements live bottom-right (read-only) so the controls top-left stay small and the
+  // heart in the middle is unobstructed.
+  const statsWrap = el('div', CARD_BR);
+  const statsTitle = el('div', 'color:#9aa7b8;font-size:11px;');
+  statsTitle.textContent = 'measurements';
+  statsWrap.append(statsTitle, readout);
+  document.body.appendChild(statsWrap);
+
   mountLegend();
 
   // ---- model selection ----
