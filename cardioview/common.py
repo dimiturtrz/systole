@@ -68,8 +68,13 @@ def square_stack(vol_zyx, dtype=None):
 
 
 def masks(case: dict, source: str, model=None, device=None) -> dict:
-    """{ED, ES} chamber-label volumes on the square grid — ground truth or model prediction."""
+    """{ED, ES} chamber-label volumes on the square grid — ground truth or model prediction.
+
+    Predictions get largest-CC post-processing (matches the cardioseg pipeline), so the
+    displayed EF/volumes line up with the reported numbers.
+    """
     from cardioseg.evaluation.validate import predict_volume
+    from cardioseg.evaluation.postprocess import largest_cc_per_class
 
     out = {}
     for tag in ("ED", "ES"):
@@ -79,6 +84,6 @@ def masks(case: dict, source: str, model=None, device=None) -> dict:
         out[tag] = (
             square_stack(case[f"{k}_gt"], np.uint8)
             if source == "gt"
-            else predict_volume(model, case[f"{k}_img"], SIZE, device)
+            else largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device))
         )
     return out

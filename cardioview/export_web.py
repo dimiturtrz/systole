@@ -23,6 +23,7 @@ from cardioseg.training.dataset import split_patients
 from cardioseg.data.mri.data import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
+from cardioseg.evaluation.postprocess import largest_cc_per_class
 from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks, cardioview_default
 from geometry import keep_largest, bbox_slices, nearest_index
 
@@ -147,7 +148,7 @@ def run_animate(patients, model, device, model_name, stride=1):
         masks = {}
         for k, t in enumerate(frames_t):
             img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, 1.5)[0])
-            masks[k] = predict_volume(model, img, SIZE, device)
+            masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device))
         crop_masks, iso = shared_crop(masks, rspacing)
         files = []
         for k in range(len(frames_t)):
