@@ -28,13 +28,15 @@ Datasets on disk (`D:/data/volumetric/mri/`, out of repo): **ACDC** + **M&M-2** 
 
 ## EF paths — from a weak number to a usable one
 The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort order:
-1. ⬜ **Postprocess masks** (largest-CC) — kill false-positive specks that inflate ESV and
-   push EF down; likely a chunk of the −8.9% bias. Eval-only. (`bd cardiac-seg-w4l`)
-2. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only;
+1. ✅ **Postprocess masks** (largest-CC) — dropped false-positive specks: EF MAE 9.4 → 8.2%,
+   bias −8.9 → −7.2%, HD RV 191 → 59 mm. Eval-only.
+2. ✅ **Test-time augmentation** — in-plane flip averaging: mean Dice 0.87 → 0.88 (RV +1.8 pts),
+   EF MAE 8.2 → 7.9%. Inference-time, no retrain.
+3. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only;
    vendor-aware histogram standardization may tighten the spread. (`bd cardiac-seg-qfz`)
-3. ⬜ **Bias calibration** — held-out linear EF correction, reported as such.
-4. ⬜ **Stronger segmentation** — nnU-Net baseline, 3D context, vendor-targeted augmentation.
-5. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
+4. ⬜ **Bias calibration** — held-out linear EF correction, reported as such.
+5. ⬜ **Stronger segmentation** — nnU-Net baseline (done, see baselines/), 3D context, augmentation.
+6. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
 ## How this is driven — the circuit

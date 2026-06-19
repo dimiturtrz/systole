@@ -148,7 +148,7 @@ def run_animate(patients, model, device, model_name, stride=1):
         masks = {}
         for k, t in enumerate(frames_t):
             img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, 1.5)[0])
-            masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device))
+            masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device, tta=True))
         crop_masks, iso = shared_crop(masks, rspacing)
         files = []
         for k in range(len(frames_t)):

@@ -35,20 +35,22 @@ set up for **domain generalization**: trained on multi-vendor **M&M-2** (360 sub
 
 ### Ejection fraction — the clinical output
 EF is the number a clinician acts on, so it's the result that matters. Cross-dataset
-(M&M-2 → ACDC, after largest-CC postprocessing): **MAE 8.2%**, bias **−7.2%** (systematic
-underprediction), 95% LoA [−34, +19], plus one EF-collapse failure. The chambers are right;
-absolute volumes drift as calibration shifts across centres.
+(M&M-2 → ACDC, after largest-CC + test-time augmentation): **MAE 7.9%**, bias **−7.3%**
+(systematic underprediction), 95% LoA [−34, +19], plus one EF-collapse failure. The chambers are
+right; absolute volumes drift as calibration shifts across centres.
 
 ![EF Bland–Altman — M&M-2 model on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
 
-**Not clinically usable yet** — MAE 8.2% and LoA ±26 are still well past the ±5% clinical bar. The
-plot splits the error in two: a systematic **−7.2% bias** (the curve sits left of zero —
+**Not clinically usable yet** — MAE 7.9% and LoA ±27 are still well past the ±5% clinical bar. The
+plot splits the error in two: a systematic **−7.3% bias** (the curve sits left of zero —
 correctable) and a **wide spread** with one hard failure (harder). EF is a *ratio* of two volumes,
-so it magnifies per-frame segmentation error — the masks are good (Dice 0.87), the derived number isn't.
+so it magnifies per-frame segmentation error — the masks are good (Dice 0.88), the derived number isn't.
 
 Paths from here, roughly in effort order:
 - ✅ **Largest-CC postprocessing** (applied) — dropping stray false-positive islands cut EF MAE
   9.4 → 8.2%, bias −8.9 → −7.2%, and collapsed the boundary HD (RV 191 → 59 mm). Free, no retrain.
+- ✅ **Test-time augmentation** (applied) — averaging over in-plane flips lifted mean Dice
+  0.87 → 0.88 (RV +1.8 pts) and EF MAE 8.2 → 7.9%. Inference-time, no retrain.
 - **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
   histogram standardization may tighten the spread. (Dice already transfers, so this is a smaller
   lever for EF than for segmentation — but it's the obvious gap.)
@@ -60,10 +62,10 @@ Per-structure Dice, M&M-2 → ACDC:
 
 | structure | Dice |
 |---|---|
-| LV cavity | **0.93** |
-| LV myocardium | 0.84 |
-| RV cavity | 0.84 |
-| **mean** | **0.87** |
+| LV cavity | **0.94** |
+| LV myocardium | 0.86 |
+| RV cavity | 0.86 |
+| **mean** | **0.88** |
 
 Train it the other way — single-centre ACDC, tested across vendors — and it drops to **0.70**
 (RV 0.85 → 0.59). Diversity in training is what holds up; RV is the weak structure throughout.
@@ -75,14 +77,13 @@ nnU-Net as a *baseline*, not a dependency — quarantined in
 
 | segmenter | mean Dice | RV | EF MAE |
 |---|---|---|---|
-| ours (deployable / ONNX) | 0.87 | 0.84 | 8.2% |
+| ours (deployable / ONNX) | 0.88 | 0.86 | 7.9% |
 | nnU-Net (50 ep, 1 fold) | **0.91** | **0.91** | **5.5%** |
 
 nnU-Net wins at its *floor* (full 1000-ep × 5-fold recipe goes higher) — biggest on
-**RV** (+0.06) and **EF** (8.2 → 5.5%). We deploy the simpler ONNX-exportable model on
-purpose; the gap names the levers to close it (instance norm, finer spacing, heavier aug,
-TTA). The segmenter is a commodity — the value is the shared measurement + evaluation that
-scored both.
+**RV** (+0.05) and **EF** (7.9 → 5.5%). We deploy the simpler ONNX-exportable model on
+purpose; the gap names the remaining levers (instance norm, finer spacing, heavier aug). The
+segmenter is a commodity — the value is the shared measurement + evaluation that scored both.
 
 ## Honest limits — the clinical-grade gap
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:

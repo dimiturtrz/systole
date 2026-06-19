@@ -15,11 +15,13 @@ from cardioseg.types import Volume
 CLASS_NAMES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
 
-def predict_volume(model, vol_img: Volume, size: int, device: str) -> Volume:
+def predict_volume(model, vol_img: Volume, size: int, device: str, tta: bool = False) -> Volume:
     """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
 
     Each slice [H, W] -> [1, 1, size, size] -> model -> argmax over the 4 class
     channels -> [size, size] label map; stacked back to [D, size, size].
+
+    `tta` averages predictions over the 4 in-plane flips (test-time augmentation).
     """
     import torch
     from ..training.dataset import fit_square
@@ -30,13 +32,28 @@ def predict_volume(model, vol_img: Volume, size: int, device: str) -> Volume:
         for z in range(vol_img.shape[0]):
             x = fit_square(vol_img[z].astype(np.float32), size, 0.0)
             x = torch.from_numpy(x)[None, None].to(device)
-            preds.append(model(x).argmax(1)[0].cpu().numpy().astype(np.uint8))
+            logits = _tta_logits(model, x) if tta else model(x)
+            preds.append(logits.argmax(1)[0].cpu().numpy().astype(np.uint8))
     return np.stack(preds)
+
+
+def _tta_logits(model, x):
+    """Average softmax over the 4 in-plane flips (identity, H, W, HW), un-flipping each
+    output back before averaging. argmax of the sum == argmax of the mean."""
+    import torch
+
+    acc = None
+    for dims in ([], [2], [3], [2, 3]):
+        v = torch.flip(x, dims) if dims else x
+        out = torch.softmax(model(v), dim=1)
+        out = torch.flip(out, dims) if dims else out
+        acc = out if acc is None else acc + out
+    return acc
 
 
 def validate(
     model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5,
-    loader=None, cache_ns: str = "", postproc: bool = True,
+    loader=None, cache_ns: str = "", postproc: bool = True, tta: bool = True,
 ) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
@@ -63,7 +80,7 @@ def validate(
         for tag in ("ED", "ES"):
             if f"{tag.lower()}_img" not in c:
                 continue
-            pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device)
+            pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device, tta=tta)
             if postproc:
                 pred = largest_cc_per_class(pred)
             gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag.lower()}_gt"]])

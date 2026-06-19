@@ -52,7 +52,7 @@ def collect(run: Path, device: str, cases, loader, cache_ns: str):
             k = tag.lower()
             if f"{k}_img" not in c:
                 continue
-            pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device))
+            pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device, tta=True))
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
             masks[tag] = (pred, gt)
             if tag == "ED":
