@@ -86,52 +86,50 @@ def plot_kde(dists, out: Path, label: str):
 
 
 def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
+    """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
+    upright on top; bias + 95% LoA as vertical lines (and in the title)."""
     mean = (ef_gt + ef_pred) / 2
     diff = ef_pred - ef_gt
     bias, sd = float(np.mean(diff)), float(np.std(diff, ddof=1))
     lo, hi = bias - 1.96 * sd, bias + 1.96 * sd
 
-    fig = plt.figure(figsize=(8, 4))
-    gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0.04)
-    ax = fig.add_subplot(gs[0])
-    axk = fig.add_subplot(gs[1], sharey=ax)  # marginal KDE of the differences
-
-    ax.axhspan(lo, hi, color="#7a9bff", alpha=0.08)  # 95% LoA band
-    ax.scatter(mean, diff, c="#7a9bff", s=28, edgecolor="#3b5bbf", linewidth=0.4, zorder=3)
-    ax.axhline(0, color="#ccc", lw=0.8, zorder=0)
-    lines = [(bias, "-", f"bias {bias:+.1f}"),
-             (hi, "--", f"+1.96σ {hi:+.1f}"),
-             (lo, "--", f"−1.96σ {lo:+.1f}")]
-    x0 = ax.get_xlim()[0]
-    for y, ls, lbl in lines:
-        ax.axhline(y, color="#555", ls=ls, lw=1, zorder=2)
-        ax.text(x0, y, " " + lbl, va="bottom", ha="left", fontsize=8, color="#444")
-    ax.set_xlabel("mean EF (GT, pred)  %")
-    ax.set_ylabel("pred − GT  (EF %)")
-    ax.set_title(f"EF Bland–Altman{label}")
+    fig = plt.figure(figsize=(7, 5))
+    gs = fig.add_gridspec(2, 1, height_ratios=(1, 3), hspace=0.05)
+    axk = fig.add_subplot(gs[0])                 # upright distribution of the differences
+    ax = fig.add_subplot(gs[1], sharex=axk)      # scatter vs mean EF
 
     # focus on the bulk so the distribution shape reads; mark hard failures off-scale
-    y_lo = min(lo, float(np.percentile(diff, 2))) - 6
-    y_hi = max(hi, float(np.percentile(diff, 98))) + 6
-    ax.set_ylim(y_lo, y_hi)
-    n_off = int((diff < y_lo).sum() + (diff > y_hi).sum())
+    x_lo = min(lo, float(np.percentile(diff, 2))) - 6
+    x_hi = max(hi, float(np.percentile(diff, 98))) + 6
+    ax.set_xlim(x_lo, x_hi)
+    lines = [(bias, "-"), (hi, "--"), (lo, "--")]
+
+    ax.axvspan(lo, hi, color="#7a9bff", alpha=0.08)            # 95% LoA band
+    ax.scatter(diff, mean, c="#7a9bff", s=28, edgecolor="#3b5bbf", linewidth=0.4, zorder=3)
+    ax.axvline(0, color="#ccc", lw=0.8, zorder=0)
+    for x, ls in lines:
+        ax.axvline(x, color="#555", ls=ls, lw=1, zorder=2)
+    ax.set_xlabel("pred − GT  (EF %)")
+    ax.set_ylabel("mean EF  %")
+    n_off = int((diff < x_lo).sum() + (diff > x_hi).sum())
     if n_off:
-        ax.text(0.02, 0.02, f"{n_off} off-scale (EF prediction collapsed)",
+        ax.text(0.02, 0.04, f"{n_off} off-scale (EF prediction collapsed)",
                 transform=ax.transAxes, fontsize=8, color="#a33")
 
-    # right-margin distribution outline of the differences, bias/LoA carried across
-    ys = np.linspace(y_lo, y_hi, 200)
+    # upright distribution outline on top
+    xs = np.linspace(x_lo, x_hi, 200)
     if diff.size >= 2 and np.std(diff) > 0:
-        k = gaussian_kde(diff)(ys)
-        axk.fill_betweenx(ys, 0, k, color="#7a9bff", alpha=0.35)
-        axk.plot(k, ys, color="#3b5bbf", lw=1.5)
-    for y, ls, _ in lines:
-        axk.axhline(y, color="#555", ls=ls, lw=1)
-    axk.set_xticks([])
-    axk.tick_params(labelleft=False)
-    axk.set_xlabel("density", fontsize=8)
+        k = gaussian_kde(diff)(xs)
+        axk.fill_between(xs, 0, k, color="#7a9bff", alpha=0.35)
+        axk.plot(xs, k, color="#3b5bbf", lw=1.5)
+    for x, ls in lines:
+        axk.axvline(x, color="#555", ls=ls, lw=1)
+    axk.set_yticks([])
+    axk.tick_params(labelbottom=False)
+    axk.set_title(f"EF Bland–Altman{label}\nbias: {bias:+.1f}%   ·   95% LoA: [{lo:+.1f}, {hi:+.1f}]",
+                  fontsize=11)
 
-    fig.subplots_adjust(left=0.09, right=0.975, top=0.91, bottom=0.13)  # tight_layout breaks shared marginal
+    fig.subplots_adjust(left=0.1, right=0.97, top=0.86, bottom=0.11)  # tight_layout breaks shared marginal
     fig.savefig(out, dpi=110)
     plt.close(fig)
     return bias, sd

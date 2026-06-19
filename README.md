@@ -27,12 +27,20 @@ with **EDV / ESV / LVEF vs ground truth**. Or drop in your own `.nii.gz` → seg
 *A heart from a different dataset than the model trained on — the result, shown; the numbers below back it.*
 
 ## The pipeline + results — [cardioseg](cardioseg/)
-The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. The flagship model
-is set up for **domain generalization**: trained on the multi-vendor **M&M-2** challenge set
-(360 subjects, 3 scanner vendors, 8 pathologies, 1.5T + 3T) and tested on **held-out ACDC**
-(single-centre, 100 patients it never saw). Seed 0, patient-level splits.
+The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. The flagship model is
+set up for **domain generalization**: trained on multi-vendor **M&M-2** (360 subjects, 3 vendors,
+8 pathologies, 1.5T + 3T), tested on **held-out ACDC** (single-centre, 100 patients it never saw).
 
-**M&M-2 → ACDC** (train multi-vendor, test held-out single-centre):
+### Ejection fraction — the clinical output
+EF is the number a clinician acts on, so it's the result that matters. Cross-dataset
+(M&M-2 → ACDC): **MAE 9.4%**, bias **−8.9%** (systematic underprediction), 95% LoA [−36, +18],
+plus one EF-collapse failure. The chambers are right; absolute volumes drift as calibration shifts
+across centres.
+
+![EF Bland–Altman — M&M-2 model on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
+
+### Segmentation
+Per-structure overlap, M&M-2 → ACDC:
 
 | structure | Dice | published ACDC |
 |---|---|---|
@@ -41,16 +49,10 @@ is set up for **domain generalization**: trained on the multi-vendor **M&M-2** c
 | RV cavity | 0.84 | ~0.88–0.92 |
 | **mean** | **0.87** | |
 
-**EF vs ground truth: MAE 9.4%** (cross-dataset; volume calibration shifts across centres).
-
-![EF Bland–Altman — M&M-2 model on held-out ACDC, with the difference distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
-
-**Why train on M&M-2, not ACDC?** Diversity in training buys robustness, and it's asymmetric: a
-single-centre (ACDC) model drops ~17 Dice points tested across vendors (mean 0.87 → 0.70, RV
-0.85 → 0.59), while the multi-vendor model carries to a new centre with no segmentation drop.
-**Where it still fails:** RV is the weak structure everywhere; EF transfers worse than Dice
-(calibration). Full per-direction table + surface metrics (HD95 / ASSD) + error-distribution
-plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
+**Why train on M&M-2, not ACDC?** Diversity buys robustness, asymmetrically: a single-centre
+(ACDC) model drops ~17 Dice points tested across vendors (mean 0.87 → 0.70, RV 0.85 → 0.59), while
+the multi-vendor model carries to a new centre with no drop. RV is the weak structure everywhere.
+Full per-direction table + surface metrics (HD95 / ASSD) + boundary KDE → **[cardioseg/](cardioseg/)**.
 
 ## Data
 Datasets live **outside the repo** (licensing + size) and **none is committed**.
