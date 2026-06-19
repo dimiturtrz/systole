@@ -31,6 +31,7 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
     from ..evaluation.validate import validate, summarize
     from .model import build_unet
     from .dataset import build_splits
+    from .augment import augment_batch
 
     reg = _registry()
     cases_fn, loader, ns = reg[dataset]
@@ -49,9 +50,10 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
           f"slices: {len(train_ds)} train / {len(val_ds)} val")
 
     pin = device == "cuda"
+    augment = train_ds.augment   # augmentation is GPU-batched in this loop, not in the workers
     dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True,
                     num_workers=workers, pin_memory=pin,
-                    persistent_workers=workers > 0)   # parallel CPU aug -> stop starving the GPU
+                    persistent_workers=workers > 0)   # cheap per-item path now -> GPU stays fed
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     loss_fn = dice_ce_loss()
     opt = torch.optim.Adam(model.parameters(), lr)
@@ -62,7 +64,10 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
         tot = 0.0
         for x, y in dl:
             x = x.to(device, non_blocking=pin)
-            y = y[:, None].to(device, non_blocking=pin)       # y -> [B,1,H,W]
+            y = y.to(device, non_blocking=pin)                # [B,H,W]
+            if augment:
+                x, y = augment_batch(x, y)                     # GPU-batched flip/rotate/scale + intensity
+            y = y[:, None]                                     # -> [B,1,H,W]
             opt.zero_grad(set_to_none=True)
             with torch.autocast("cuda", enabled=pin):
                 loss = loss_fn(model(x), y)

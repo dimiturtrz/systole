@@ -91,35 +91,13 @@ class ACDCSliceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.items)
 
-    def _aug(self, img: Slice2D, m: Slice2D) -> tuple[Slice2D, Slice2D]:
-        """Geometric (flip/rotate/scale) on img+mask together; intensity on img.
-
-        Both [size, size] in and out. Mask uses nearest-order so labels stay
-        integer; img is bilinear. Uses global np.random (seed it in the training
-        entrypoint for reproducibility).
-        """
-        from scipy.ndimage import rotate, zoom
-
-        if np.random.rand() < 0.5:                       # horizontal flip
-            img, m = img[:, ::-1], m[:, ::-1]
-        if np.random.rand() < 0.5:                       # vertical flip
-            img, m = img[::-1], m[::-1]
-        ang = np.random.uniform(-15, 15)                 # small rotation
-        img = rotate(img, ang, order=1, reshape=False, mode="constant", cval=0.0)
-        m = rotate(m, ang, order=0, reshape=False, mode="constant", cval=0)
-        s = np.random.uniform(0.9, 1.1)                  # isotropic scale -> refit
-        img = fit_square(zoom(img, s, order=1), self.size, 0.0)
-        m = fit_square(zoom(m, s, order=0), self.size, 0)
-        img = img * np.random.uniform(0.9, 1.1) + np.random.normal(0, 0.05, img.shape)
-        return np.ascontiguousarray(img, np.float32), np.ascontiguousarray(m, np.uint8)
-
     def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
         import torch
         img, m = self.items[i]
         img = fit_square(img, self.size, pad_value=0.0)          # [size, size]
         m = fit_square(m, self.size, pad_value=0)                # [size, size]
-        if self.augment:
-            img, m = self._aug(img, m)
+        # Augmentation is applied GPU-batched in the training loop (see training.augment), not
+        # here — the per-item path stays cheap so DataLoader workers don't bottleneck the GPU.
         # img -> [1, size, size] (add channel); mask -> [size, size] int64
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
