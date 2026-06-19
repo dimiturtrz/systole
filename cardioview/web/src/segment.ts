@@ -1,5 +1,6 @@
 import * as ort from 'onnxruntime-web';
 import { SIZE, zscore, fitSquare, resizeBilinear, argmaxChannels, resampledSize } from './preprocess';
+import { largestCcPerClass } from './postprocess';
 
 const CLASSES = 4; // bg, RV, LV-myo, LV-cav
 
@@ -44,7 +45,7 @@ export class Segmenter {
       const sq = fitSquare(z.subarray(s * nh * nw, (s + 1) * nh * nw) as Float32Array, nh, nw);
       masks.push(await this.runSlice(sq));
     }
-    return masks;
+    return largestCcPerClass(masks, SIZE, SIZE);   // match the pipeline's postprocessing
   }
 
   private async runSlice(input: Float32Array): Promise<Uint8Array> {
