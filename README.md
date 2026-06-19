@@ -50,6 +50,32 @@ single-centre (ACDC) model drops ~17 Dice points tested across vendors (mean 0.8
 (calibration). Full per-direction table + surface metrics (HD95 / ASSD) + error-distribution
 plots (boundary KDE + EF Bland–Altman) → **[cardioseg/](cardioseg/)**.
 
+## Data
+Datasets live **outside the repo** (licensing + size) and **none is committed**.
+- **M&M-2** ([challenge](https://www.ub.edu/mnms-2/)) — multi-vendor training set: 360 subjects,
+  3 vendors, 8 pathologies, 1.5T + 3T.
+- **ACDC** ([challenge](https://www.creatis.insa-lyon.fr/Challenge/acdc/)) — single-centre
+  held-out test set: 100 patients, 5 pathologies.
+
+Both are register-gated; label conventions differ (M&M-2 LV=1 vs ACDC LV=3) and are remapped on load.
+
+**Config — one global file.** Every project (cardioseg pipeline + cardioview viewer) reads paths
+from a single gitignored `paths.yaml` at the repo root. Copy the template and edit:
+```bash
+cp paths.example.yaml paths.yaml
+```
+```yaml
+data:
+  raw: D:/data/.../mri/acdc        # ACDC root (the dir holding training/)
+  processed: D:/data/.../mri/acdc  # preprocess cache (npz; auto-created)
+cardioview:
+  hearts:                          # canned demo hearts — full paths or bare IDs
+    - .../acdc/training/patient073
+```
+M&M-2 is auto-discovered as a sibling of the ACDC root (or set `CARDIAC_MNM2_ROOT`). Env vars
+`CARDIAC_DATA_ROOT` / `CARDIAC_PROCESSED_ROOT` override the file (handy for CI). Loaded by
+`cardioseg/config.py` (OmegaConf).
+
 ## Tests
 ```bash
 pip install -e .

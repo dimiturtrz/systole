@@ -14,7 +14,7 @@ steepness steps each TR (the k-space line loop); **frequency encode / readout** 
 **pulse-sequence diagram** tracks the playhead. Timing is realistic (TR/TE in ms); the
 dead relaxation tail is fast-forwarded so you watch the physics, not the wait. Controls:
 log-scaled speed, Larmor (→ slice height), TR, TE, slice angle. Engine is pure TS,
-unit-tested (41 tests); the vtk.js renderer is verified by an asserting visual smoke.
+unit-tested (42 tests); the vtk.js renderer is verified by an asserting visual smoke.
 
 ## Stack
 TypeScript + [vtk.js](https://kitware.github.io/vtk-js/) + Vite. Architecture is

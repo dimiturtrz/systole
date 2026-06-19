@@ -20,7 +20,8 @@ pip install -e .                  # from repo root (installs cardioseg)
 # torch CUDA build (CPU wheel won't train); Blackwell/RTX 5090 needs torch>=2.7:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 ```
-Real data: register for **ACDC** (Creatis / humanheart-project). Data lives **outside the repo**
+Real data: register for **ACDC** ([Creatis](https://www.creatis.insa-lyon.fr/Challenge/acdc/)).
+Data lives **outside the repo**
 (licensing + size) under a `raw/` ↔ `processed/` split. Point at it via `paths.yaml` (copy the
 template — gitignored, machine-specific):
 ```bash
@@ -32,7 +33,7 @@ cp paths.example.yaml paths.yaml      # then edit:
 Loaded by `cardioseg/config.py` (OmegaConf); env vars `CARDIAC_DATA_ROOT` /
 `CARDIAC_PROCESSED_ROOT` override (handy for CI).
 
-**M&M-2** (multi-vendor, 360 subjects; register at the M&Ms-2 challenge site) sits **beside**
+**M&M-2** (multi-vendor, 360 subjects; register at the [M&Ms-2 challenge](https://www.ub.edu/mnms-2/)) sits **beside**
 ACDC — e.g. `data/raw/mri/mnm2/` while ACDC is `…/mri/acdc/`. Auto-discovered as a sibling of the
 raw root, or point at it with `CARDIAC_MNM2_ROOT`. Its ground-truth labels are the *opposite* of
 ACDC (LV=1 vs LV=3); the loader remaps to the ACDC convention on load (verified geometrically),

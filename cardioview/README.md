@@ -18,16 +18,18 @@ the pipeline. Two ways in:
 # 1. deps (from repo root) — installs cardioseg + cardioview Python deps
 pip install -e .
 
-# 2. data: register for ACDC, then point paths.yaml at it (data stays outside the repo)
-cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc  (dir holding training/)
+# 2. data: register for M&M-2 (training, https://www.ub.edu/mnms-2/) + ACDC (the canned hearts,
+#    https://www.creatis.insa-lyon.fr/Challenge/acdc/); point paths.yaml at them
+cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc; M&M-2 sits beside it
 
-# 3. train the segmentation model (see cardioseg/README) -> runs/acdc/model.pth
-python -m cardioseg.training.train --acdc --epochs 40
+# 3. train the flagship model (see cardioseg/README) -> runs/mnm2_to_acdc/model.pth
+#    multi-vendor M&M-2 train, ACDC held out — the domain-generalization model
+python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 40
 
-# 4. bake the web assets (use the model you trained: --model acdc or acdc_aug — the viewer
-#    follows it via the manifest). Hearts come from paths.yaml (cardioview.hearts).
-python cardioview/export_onnx.py --model acdc         # -> web/public/models/acdc.onnx
-python cardioview/export_web.py --mode animate --model acdc   # -> web/public/data/*.glb + manifest.json
+# 4. bake the web assets (the viewer follows the model via the manifest). Hearts come from
+#    paths.yaml (cardioview.hearts) — ACDC patients the flagship never trained on.
+python cardioview/export_onnx.py --model mnm2         # -> web/public/models/mnm2.onnx
+python cardioview/export_web.py --mode animate --model mnm2   # -> web/public/data/*.glb + manifest.json
 
 # 5. run the viewer
 cd cardioview/web && npm install && npm run dev        # http://localhost:5173
@@ -41,8 +43,8 @@ No canned hearts or bundled model, but the panel's **import .onnx** + **import s
 let you drop in your own model and scans (segmented in-browser). See [web/README](web/README.md).
 
 > Requirements per project: **mri-sim** is the simplest (just `npm install && npm run dev`,
-> no data/model); **cardioview** needs the model + ACDC for the canned hearts (above);
-> **cardioseg** is the pipeline (`pip install -e .` + ACDC).
+> no data/model); **cardioview** needs a trained model + ACDC patients for the canned hearts
+> (above); **cardioseg** is the pipeline (`pip install -e .` + M&M-2/ACDC).
 
 ## Python tools (offline)
 - `export_web.py` — segment ED/ES (or every 4D frame, `--mode animate`) → chamber `.glb` + EF manifest
