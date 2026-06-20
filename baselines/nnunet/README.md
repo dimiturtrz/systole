@@ -24,7 +24,9 @@ ceiling number, not for shipping.
 nnU-Net is installed in a **separate env** (not a cardioseg dependency):
 ```bash
 pip install nnunetv2          # its own env
-export nnUNet_raw=D:/data/nnUNet_raw nnUNet_preprocessed=D:/data/nnUNet_pre nnUNet_results=D:/data/nnUNet_res
+# namespaced under the cardiac-MRI data domain (not dumped at D:/data root)
+NN=D:/data/volumetric/mri/nnunet
+export nnUNet_raw=$NN/raw nnUNet_preprocessed=$NN/preprocessed nnUNet_results=$NN/results
 
 # 1. our data -> nnU-Net format (uses cardioseg loaders; ED/ES -> one case each)
 python -m baselines.nnunet.convert --dataset acdc --out $nnUNet_raw --id 27
@@ -37,8 +39,9 @@ nnUNetv2_predict -i <held_out_images> -o <pred_dir> -d 27 -c 2d
 # 3. score nnU-Net's masks with OUR eval layer (the bridge back)
 python -m baselines.nnunet.score --pred <pred_dir> --gt $nnUNet_raw/Dataset027_ACDC/labelsTr
 ```
-Data + `nnUNet_raw/preprocessed/results` all live **outside the repo** (under `D:/data`),
-same as the rest — nothing heavy gets committed.
+Data + `raw/preprocessed/results/pred` all live **outside the repo**, namespaced under
+`D:/data/volumetric/mri/nnunet/` (the cardiac-MRI domain) — nothing heavy gets committed,
+and nnU-Net's dirs don't pollute the `D:/data` root.
 
 ## Published ceiling (context, before we even run it)
 nnU-Net on ACDC is a solved benchmark — top-of-leaderboard, **mean Dice ~0.91**
