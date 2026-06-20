@@ -62,16 +62,19 @@ Paths from here, roughly in effort order:
 ### Segmentation — ours vs SOTA
 Per-structure, M&M-2 → ACDC, our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
-| | LV-cav | myo | RV | **mean Dice** | EF MAE |
-|---|---|---|---|---|---|
-| **ours** (ONNX-deployable) | 0.94 | 0.86 | 0.89 | **0.90** | 6.3% |
-| nnU-Net (SOTA baseline) | 0.95 | 0.87 | 0.91 | 0.91 | 5.5% |
+| | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |
+|---|---|---|---|---|---|---|---|
+| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.94 | 0.86 | 0.89 | **0.90** | 6.3% |
+| nnU-Net (SOTA baseline) | 92 M | 19 G | 0.95 | 0.87 | 0.91 | 0.91 | 5.5% |
+
+<sub>params + FLOPs measured (fvcore, single forward; nnU-Net at its 256×320 patch — inference adds tiling + TTA on top).</sub>
 
 **How we train:** a 2D U-Net on multi-vendor M&M-2 — heavy GPU augmentation + early stopping +
 largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. **The alternative,** nnU-Net
 (self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
 scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
-clean-export). It leads by ~1 Dice pt / 0.8 EF pt — the price of a simple, fully-owned, exportable model.
+clean-export). It leads by ~1 Dice pt / 0.8 EF pt — at **~57× the parameters and ~23× the FLOPs**.
+That gap is the price of a tiny, fully-owned, in-browser-exportable model.
 
 **Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
 and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +

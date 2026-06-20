@@ -59,6 +59,10 @@ patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apple
 | **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
 | gain | +1.3 | +0.6 | +1.6 | **+1.6** | **−0.8** | |
 
+**Efficiency:** ours **1.6 M params / ~0.8 GFLOPs** vs nnU-Net **92 M / ~19 GFLOPs** (single forward,
+fvcore; nnU-Net at its 256×320 patch, inference adds tiling + TTA) — **~57× fewer params, ~23× fewer
+FLOPs** for ~1 Dice point. That's the deployable trade made quantitative.
+
 **EF agreement (Bland–Altman):** ours bias −5.6%, 95% LoA [−21, +9]; nnU-Net bias **−4.1%**,
 LoA **[−17.8, +9.7]** — now nearly matched (our spread tightened as the masks improved; nnU-Net
 keeps a slight edge + a touch less bias). Both still *underpredict* (negative bias), so part of
