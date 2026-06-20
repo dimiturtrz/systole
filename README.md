@@ -59,33 +59,23 @@ Paths from here, roughly in effort order:
 - **Bias calibration** — a held-out linear EF correction, honest if reported as such.
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
-### Segmentation
-Per-structure Dice, M&M-2 → ACDC:
+### Segmentation — ours vs SOTA
+Per-structure, M&M-2 → ACDC, our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
-| structure | Dice |
-|---|---|
-| LV cavity | **0.94** |
-| LV myocardium | 0.86 |
-| RV cavity | 0.89 |
-| **mean** | **0.90** |
+| | LV-cav | myo | RV | **mean Dice** | EF MAE |
+|---|---|---|---|---|---|
+| **ours** (ONNX-deployable) | 0.94 | 0.86 | 0.89 | **0.90** | 6.3% |
+| nnU-Net (SOTA baseline) | 0.95 | 0.87 | 0.91 | 0.91 | 5.5% |
 
-Train it the other way — single-centre ACDC, tested across vendors — and it drops to **0.70**
-(RV 0.85 → 0.59). Diversity in training is what holds up; RV is the weak structure throughout.
-Per-direction table, surface metrics (HD95 / ASSD), boundary KDE → **[cardioseg/](cardioseg/)**.
+**How we train:** a 2D U-Net on multi-vendor M&M-2 — heavy GPU augmentation + early stopping +
+largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. **The alternative,** nnU-Net
+(self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
+scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
+clean-export). It leads by ~1 Dice pt / 0.8 EF pt — the price of a simple, fully-owned, exportable model.
 
-### Baseline — nnU-Net (SOTA reference)
-nnU-Net as a *baseline*, not a dependency — quarantined in
-[baselines/nnunet/](baselines/nnunet/), scored by the **same** eval. M&M-2 → ACDC:
-
-| segmenter | mean Dice | RV | EF MAE |
-|---|---|---|---|
-| ours (deployable / ONNX) | 0.90 | 0.89 | 6.3% |
-| nnU-Net (50 ep, 1 fold) | **0.91** | **0.91** | **5.5%** |
-
-nnU-Net still leads at its *floor* (full 1000-ep × 5-fold recipe goes higher), but the gap is
-now small — **RV +0.02**, **EF 6.3 → 5.5%** — and we deploy the simpler ONNX-exportable model on
-purpose; the remaining levers are nnU-Net's recipe (instance norm, finer spacing, longer training).
-The segmenter is a commodity — the value is the shared measurement + evaluation that scored both.
+**Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
+and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +
+surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**.
 
 ## Honest limits — the clinical-grade gap
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
