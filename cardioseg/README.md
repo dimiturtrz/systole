@@ -42,7 +42,7 @@ so one model spans both datasets.
 ## Train + evaluate
 ```bash
 # flagship: train multi-vendor M&M-2, hold ACDC out entirely as the test set
-python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 80   # -> runs/mnm2_to_acdc/ (heavy aug needs the epochs)
+python -m cardioseg.training.train --dataset mnm2 --test acdc   # -> runs/mnm2_to_acdc/ (128-ep ceiling, early-stops ~95)
 # single-centre baseline + its OOD drop on M&M-2 (the reverse direction)
 python -m cardioseg.training.train --dataset acdc --test mnm2 --epochs 40   # -> runs/acdc_to_mnm2/
 python -m cardioseg.evaluation.distribution --run runs/mnm2_to_acdc   # KDE + Bland-Altman -> plots/
@@ -52,16 +52,16 @@ Training auto-tunes for the GPU: DataLoader workers (`--workers`), mixed precisi
 
 ## Results (seed 0, patient-level splits)
 Flagship = **M&M-2 → ACDC** (train multi-vendor, test 100 held-out single-centre patients),
-with heavy augmentation (80 ep) + largest-CC postprocessing + test-time augmentation:
+with heavy augmentation + early stopping + largest-CC postprocessing + test-time augmentation:
 
 | structure | Dice | published ACDC |
 |---|---|---|
 | LV cavity | **0.94** | ~0.93–0.96 |
 | LV myocardium | 0.86 | ~0.88–0.92 |
-| RV cavity | 0.88 | ~0.88–0.92 |
-| **mean** | **0.89** | |
+| RV cavity | 0.89 | ~0.88–0.92 |
+| **mean** | **0.90** | |
 
-**EF vs GT: MAE 6.7%** (cross-dataset, bias −6.0%, 95% LoA [−25, +13]). **Diversity buys
+**EF vs GT: MAE 6.3%** (cross-dataset, bias −5.6%, 95% LoA [−21, +9]). **Diversity buys
 robustness — the asymmetry proves it:**
 
 | train → test | mean Dice | RV | EF MAE |
@@ -71,14 +71,14 @@ robustness — the asymmetry proves it:**
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); heavy
-aug + largest-CC + TTA lift the flagship to 0.89 Dice / 6.7% EF (top table).*
+aug + largest-CC + TTA lift the flagship to 0.90 Dice / 6.3% EF (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre with **no segmentation drop**.
 - **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
   4.7% → cross-dataset ~9%); the chambers are right, the absolute mL drift.
 - **Surface metrics** (flagship eval): by Dice RV > myo, but by boundary (HD95) RV is
-  *worst* (~5.4 mm) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray
+  *worst* (~4.2 mm) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray
   voxels). Full HD is the fragile max (one stray voxel → ~200 mm); **HD95** is the robust report.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
 

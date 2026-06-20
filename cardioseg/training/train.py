@@ -23,8 +23,27 @@ def _registry():
     }
 
 
-def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
-              val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6):
+def _val_dice(model, val_dl, device) -> float:
+    """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal."""
+    import torch
+    import numpy as np
+
+    inter = {c: 0.0 for c in (1, 2, 3)}
+    denom = {c: 0.0 for c in (1, 2, 3)}
+    model.eval()
+    with torch.no_grad():
+        for x, y in val_dl:
+            x, y = x.to(device), y.to(device)
+            pred = model(x).argmax(1)
+            for c in (1, 2, 3):
+                p, g = pred == c, y == c
+                inter[c] += 2.0 * (p & g).sum().item()
+                denom[c] += (p.sum() + g.sum()).item()
+    return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in (1, 2, 3)]))
+
+
+def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
+              val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6, patience=20):
     import numpy as np
     import torch
     from torch.utils.data import DataLoader
@@ -55,11 +74,15 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
     dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True,
                     num_workers=workers, pin_memory=pin,
                     persistent_workers=workers > 0)   # cheap per-item path now -> GPU stays fed
+    val_dl = DataLoader(val_ds, batch_size=batch, num_workers=workers, pin_memory=pin)
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     loss_fn = dice_ce_loss()
     opt = torch.optim.Adam(model.parameters(), lr)
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
+    # `epochs` is a ceiling — early stopping keeps the best-val checkpoint and bails when val
+    # plateaus, so the heavy-aug "needs more epochs" question is answered per-run, not hardcoded.
+    best_dice, best_state, bad = -1.0, None, 0
     for ep in range(epochs):
         t0 = time.perf_counter()
         model.train()
@@ -77,7 +100,20 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
-        print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}  ({time.perf_counter()-t0:.1f}s)")
+        vd = _val_dice(model, val_dl, device)                  # fast batched slice-Dice (no TTA)
+        improved = vd > best_dice + 1e-4
+        if improved:
+            best_dice, bad = vd, 0
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+        else:
+            bad += 1
+        print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}  val_dice {vd:.4f}"
+              f"{' *' if improved else ''}  ({time.perf_counter()-t0:.1f}s)")
+        if bad >= patience:
+            print(f"early stop @ epoch {ep} (no val gain for {patience}); best val_dice {best_dice:.4f}")
+            break
+    if best_state is not None:
+        model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
     print(f"\n===== VALIDATION ({dataset}) =====")
     dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns)
@@ -105,7 +141,7 @@ def train_seg(dataset="acdc", epochs=40, batch=32, lr=1e-3, size=256, n_patients
 
 
 # Back-compat wrapper (README + tooling call this).
-def train_acdc(epochs=40, batch=32, lr=1e-3, size=256, n_patients=0,
+def train_acdc(epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
                val_frac=0.2, seed=0, device=None, out_dir="runs/acdc"):
     return train_seg("acdc", epochs=epochs, batch=batch, lr=lr, size=size,
                      n_patients=n_patients, val_frac=val_frac, seed=seed,
@@ -118,7 +154,8 @@ if __name__ == "__main__":
     ap.add_argument("--dataset", choices=["acdc", "mnm2"], default=None)
     ap.add_argument("--test", choices=["acdc", "mnm2", "none"], default="none",
                     help="held-out cross-dataset test set")
-    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--epochs", type=int, default=128, help="ceiling; early stopping ends sooner")
+    ap.add_argument("--patience", type=int, default=20, help="early-stop patience (epochs w/o val gain)")
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--workers", type=int, default=6, help="DataLoader workers (0=main proc)")
     ap.add_argument("--n-patients", type=int, default=0, help="0=all")
@@ -132,4 +169,5 @@ if __name__ == "__main__":
     else:
         test = None if args.test == "none" else args.test
         train_seg(ds, epochs=args.epochs, batch=args.batch, workers=args.workers,
-                  n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test)
+                  n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test,
+                  patience=args.patience)
