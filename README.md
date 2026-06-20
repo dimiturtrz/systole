@@ -129,6 +129,23 @@ M&M-2 is auto-discovered as a sibling of the ACDC root (or set `CARDIAC_MNM2_ROO
 `CARDIAC_DATA_ROOT` / `CARDIAC_PROCESSED_ROOT` override the file (handy for CI). Loaded by
 `cardioseg/config.py` (OmegaConf).
 
+## Data normalization
+MRI intensity is uncalibrated (no Hounsfield-like anchor), so inter-scanner variance is the core
+problem. We organize it by **5 source buckets × 2 axes**: *knowable* variance is removed at the
+right layer (parse it / correct it physically); *unknowable* variance is normalized statistically.
+
+| bucket | knowable → correct/parse | unknowable → normalize |
+|---|---|---|
+| **machine** | spacing, vendor, field, scanner, centre | recon scale → z-score / Nyúl |
+| **scan** | bias field → N4 | receive gain → z-score |
+| **patient** | age/sex/BSA, heart locate + orient | body shape → augmentation |
+| **temporal** | ED/ES frames | residual motion |
+| **annotation** | label convention, papillary rule | inter-observer → irreducible floor |
+
+Most knowable fields are *parsed from what the datasets ship* (Info.cfg / CSV / folders) — reproducible,
+deterministic. A few come from the dataset papers (cited, verified-flagged). Full schema, per-dataset
+coverage, and the build pipeline → **[cardioseg/normalization/](cardioseg/normalization/)**.
+
 ## Tests
 ```bash
 pip install -e .
