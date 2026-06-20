@@ -7,7 +7,7 @@ uncalibrated and varies frame to frame). Masks resample with nearest-neighbour
 so labels stay integer (no interpolation across 0/1/2/3).
 
 Processed arrays are cached under CARDIAC_PROCESSED_ROOT (default
-D:/data/processed/mri/acdc), keyed by the preprocessing params, so re-runs with
+D:/data/volumetric/mri/processed), keyed by the preprocessing params, so re-runs with
 the same params are instant and different params never collide.
 """
 from pathlib import Path

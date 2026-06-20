@@ -119,8 +119,8 @@ cp paths.example.yaml paths.yaml
 ```
 ```yaml
 data:
-  raw: D:/data/.../mri/acdc        # ACDC root (the dir holding training/)
-  processed: D:/data/.../mri/acdc  # preprocess cache (npz; auto-created)
+  raw: D:/data/.../volumetric/mri/acdc        # ACDC root (the dir holding training/)
+  processed: D:/data/.../volumetric/mri/processed  # preprocess cache (npz; auto-created)
 cardioview:
   hearts:                          # canned demo hearts — full paths or bare IDs
     - .../acdc/training/patient073

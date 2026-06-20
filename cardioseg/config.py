@@ -17,6 +17,9 @@ _PATHS_FILE = Path(os.environ.get("CARDIAC_PATHS", _REPO / "paths.yaml"))
 _cfg = OmegaConf.load(_PATHS_FILE) if _PATHS_FILE.exists() else OmegaConf.create({})
 
 _ENV = {"raw": "CARDIAC_DATA_ROOT", "processed": "CARDIAC_PROCESSED_ROOT"}
+# repo-relative fallbacks (gitignored). Per-domain convention: everything under
+# data/volumetric/mri/ — inputs in acdc/, preprocess cache in processed/.
+_FALLBACK = {"raw": "data/volumetric/mri/acdc", "processed": "data/volumetric/mri/processed"}
 
 
 def data_root(kind: str = "raw") -> str:
@@ -27,4 +30,4 @@ def data_root(kind: str = "raw") -> str:
     val = OmegaConf.select(_cfg, f"data.{kind}")
     if val:
         return str(val)
-    return f"data/{kind}/mri/acdc"      # gitignored fallback
+    return _FALLBACK[kind]

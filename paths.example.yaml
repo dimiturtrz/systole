@@ -6,8 +6,8 @@
 # Data lives OUTSIDE the repo (licensing + size). Env vars CARDIAC_DATA_ROOT /
 # CARDIAC_PROCESSED_ROOT override these (handy for CI).
 data:
-  raw: /path/to/data/raw/mri/acdc          # ACDC inputs (the dir holding training/)
-  processed: /path/to/data/processed/mri/acdc   # preprocessing cache (npz)
+  raw: /path/to/data/volumetric/mri/acdc          # ACDC inputs (the dir holding training/)
+  processed: /path/to/data/volumetric/mri/processed   # preprocess cache (npz; per-domain)
 
 # cardioview demo defaults: which hearts to bake into the web viewer.
 # (cardioview/export_web.py uses these when --patients is not given.)
@@ -15,5 +15,5 @@ data:
 # Mix freely; add/remove patients here (this file is gitignored).
 cardioview:
   hearts:
-    - /path/to/data/raw/mri/acdc/training/patient073   # full path, or...
+    - /path/to/data/volumetric/mri/acdc/training/patient073   # full path, or...
     - patient010                                       # ...a bare ID under data.raw

@@ -27,8 +27,8 @@ template — gitignored, machine-specific):
 ```bash
 cp paths.example.yaml paths.yaml      # then edit:
 #   data:
-#     raw: /path/to/data/raw/mri/acdc          # ACDC inputs (dir holding training/)
-#     processed: /path/to/data/processed/mri/acdc   # preprocess cache (npz)
+#     raw: /path/to/data/volumetric/mri/acdc          # ACDC inputs (dir holding training/)
+#     processed: /path/to/data/volumetric/mri/processed   # preprocess cache (npz)
 ```
 Loaded by `cardioseg/config.py` (OmegaConf); env vars `CARDIAC_DATA_ROOT` /
 `CARDIAC_PROCESSED_ROOT` override (handy for CI).
