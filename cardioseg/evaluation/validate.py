@@ -64,7 +64,7 @@ def validate(
     M&M-2 set with the same model (labels already remapped to ACDC convention).
     """
     from ..preprocessing.preprocess import preprocess_case
-    from ..data.mri.data import load_ed_es
+    from ..data.mri.acdc import load_ed_es
     from .measure import ejection_fraction
     from .postprocess import largest_cc_per_class
     from ..training.dataset import fit_square

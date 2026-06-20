@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from cardioseg.config import data_root
-from cardioseg.data.mri.data import load_ed_es
+from cardioseg.data.mri.acdc import load_ed_es
 from cardioseg.types import Image, Spacing, Volume
 
 PROCESSED_ROOT = data_root("processed")     # paths.yaml data.processed (env override: CARDIAC_PROCESSED_ROOT)
@@ -94,7 +94,7 @@ def preprocess_case(
 if __name__ == "__main__":
     import argparse
 
-    from cardioseg.data.mri.data import acdc_cases
+    from cardioseg.data.mri.acdc import acdc_cases
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--inplane", type=float, default=1.5)

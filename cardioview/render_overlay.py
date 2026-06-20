@@ -62,7 +62,7 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     model = None if source == "gt" else load_model(MODELS[model_name], device)
     split_tag = ""
     if source == "pred":  # honesty: was this patient in the model's training set?
-        from cardioseg.data.mri.data import acdc_cases
+        from cardioseg.data.mri.acdc import acdc_cases
         from cardioseg.training.dataset import split_patients
         _, val = split_patients(list(acdc_cases()), 0.2, 0)
         held = patient in {c.name for c in val}

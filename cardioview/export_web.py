@@ -20,7 +20,7 @@ from skimage.measure import marching_cubes
 
 from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from cardioseg.training.dataset import split_patients
-from cardioseg.data.mri.data import acdc_cases, parse_info_cfg
+from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class

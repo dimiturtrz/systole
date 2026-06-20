@@ -18,7 +18,7 @@ import torch
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square
 from cardioseg.preprocessing.preprocess import preprocess_case
-from cardioseg.data.mri.data import acdc_cases
+from cardioseg.data.mri.acdc import acdc_cases
 
 SIZE = 256
 PARITY_MIN = 99.0  # % argmax agreement required to ship

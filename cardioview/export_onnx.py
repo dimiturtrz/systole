@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from cardioseg.training.export_onnx import export as build_onnx
-from cardioseg.data.mri.data import acdc_cases
+from cardioseg.data.mri.acdc import acdc_cases
 from common import MODELS
 
 OUT = Path("cardioview/web/public/models")

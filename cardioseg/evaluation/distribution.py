@@ -25,7 +25,7 @@ from scipy.stats import gaussian_kde
 
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square, split_patients
-from cardioseg.training.train import _registry
+from cardioseg.data.mri.registry import get_adapter
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction
@@ -139,15 +139,16 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default="runs/mnm2_to_acdc", help="run dir with model.pth")
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2"], help="set to evaluate on")
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1"], help="set to evaluate on")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     run = Path(a.run)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    cases_fn, loader, ns = _registry()[a.eval]
-    cases = list(cases_fn())
+    adapter = get_adapter(a.eval)
+    loader, ns = adapter.load_ed_es, adapter.cache_ns
+    cases = list(adapter.cases())
     if a.holdout:
         cases = split_patients(cases, 0.2, a.seed)[1]
     label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(cases)})"

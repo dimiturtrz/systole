@@ -5,7 +5,7 @@ without the (gated, out-of-repo) dataset still passes.
 import numpy as np
 import pytest
 
-from cardioseg.data.mri.data import (
+from cardioseg.data.mri.acdc import (
     acdc_cases, load_ed_es, identify_lv_cavity, LV_CAVITY,
 )
 from cardioseg.evaluation.measure import ejection_fraction

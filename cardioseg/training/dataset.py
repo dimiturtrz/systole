@@ -21,7 +21,7 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from cardioseg.data.mri.data import acdc_cases, load_ed_es
+from cardioseg.data.mri.acdc import acdc_cases, load_ed_es
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.types import Slice2D
 

@@ -5,7 +5,7 @@ math, not a model. Real-data behaviour is covered by tests/integration.
 """
 import numpy as np
 
-from cardioseg.data.mri.data import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
+from cardioseg.data.mri.acdc import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
 from cardioseg.evaluation.measure import voxel_volume_ml, label_volume_ml, ejection_fraction
 from cardioseg.evaluation.evaluate import dice, hausdorff
 

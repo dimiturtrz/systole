@@ -14,13 +14,6 @@ from pathlib import Path
 
 # dataset -> (cases_fn, loader, cache_ns). Loaders are dataset-agnostic; M&M-2 labels
 # are remapped to the ACDC convention on load, so one model spans both.
-def _registry():
-    from ..data.mri.data import acdc_cases, load_ed_es
-    from ..data.mri.mnm2 import mnm2_cases, load_ed_es as mnm2_loader
-    return {
-        "acdc": (acdc_cases, load_ed_es, ""),
-        "mnm2": (mnm2_cases, mnm2_loader, "mnm2"),
-    }
 
 
 def _val_dice(model, val_dl, device) -> float:
@@ -52,9 +45,10 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
     from .model import build_unet
     from .dataset import build_splits
     from .augment import augment_batch
+    from ..data.mri.registry import get_adapter
 
-    reg = _registry()
-    cases_fn, loader, ns = reg[dataset]
+    adapter = get_adapter(dataset)
+    cases_fn, loader, ns = adapter.cases, adapter.load_ed_es, adapter.cache_ns
     out_dir = out_dir or f"runs/{dataset}"
 
     torch.manual_seed(seed)
@@ -121,8 +115,9 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
 
     # held-out cross-dataset test (the generalization number)
     if test and test != dataset:
-        tcases_fn, tloader, tns = reg[test]
-        test_dirs = tcases_fn()
+        tadapter = get_adapter(test)
+        tloader, tns = tadapter.load_ed_es, tadapter.cache_ns
+        test_dirs = tadapter.cases()
         if n_patients:
             test_dirs = test_dirs[:n_patients]
         print(f"\n===== CROSS-DATASET TEST: train={dataset} -> test={test} (n={len(test_dirs)}) =====")
@@ -151,8 +146,8 @@ def train_acdc(epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--acdc", action="store_true", help="shorthand for --dataset acdc")
-    ap.add_argument("--dataset", choices=["acdc", "mnm2"], default=None)
-    ap.add_argument("--test", choices=["acdc", "mnm2", "none"], default="none",
+    ap.add_argument("--dataset", choices=["acdc", "mnm2", "mnms1"], default=None)
+    ap.add_argument("--test", choices=["acdc", "mnm2", "mnms1", "none"], default="none",
                     help="held-out cross-dataset test set")
     ap.add_argument("--epochs", type=int, default=128, help="ceiling; early stopping ends sooner")
     ap.add_argument("--patience", type=int, default=20, help="early-stop patience (epochs w/o val gain)")

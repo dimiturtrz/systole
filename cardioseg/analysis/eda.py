@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cardioseg.data.mri.data import (
+from cardioseg.data.mri.acdc import (
     DATA_ROOT, acdc_cases, identify_lv_cavity, load_ed_es,
 )
 
