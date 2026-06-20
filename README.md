@@ -109,22 +109,15 @@ Datasets live **outside the repo** (licensing + size) and **none is committed**.
 
 Both are register-gated; label conventions differ (M&M-2 LV=1 vs ACDC LV=3) and are remapped on load.
 
-**Config — one global file.** Every project (cardioseg pipeline + cardioview viewer) reads paths
-from a single gitignored `paths.yaml` at the repo root. Copy the template and edit:
+**Config — one path, everything derived.** Copy the template, set a single `data` root:
 ```bash
-cp paths.example.yaml paths.yaml
+cp paths.example.yaml paths.yaml      # then: data: /abs/path/to/cardiac-data
 ```
-```yaml
-data:
-  raw: D:/data/.../volumetric/mri/acdc        # ACDC root (the dir holding training/)
-  processed: D:/data/.../volumetric/mri/processed  # preprocess cache (npz; auto-created)
-cardioview:
-  hearts:                          # canned demo hearts — full paths or bare IDs
-    - .../acdc/training/patient073
-```
-M&M-2 is auto-discovered as a sibling of the ACDC root (or set `CARDIAC_MNM2_ROOT`). Env vars
-`CARDIAC_DATA_ROOT` / `CARDIAC_PROCESSED_ROOT` override the file (handy for CI). Loaded by
-`cardioseg/config.py` (OmegaConf).
+Under that root you create **`raw/`** and drop the (register-gated) downloads in —
+`raw/acdc/`, `raw/mnm2/`, `raw/MnM/` (M&Ms-1). That's the only manual step. Everything else is
+automatic: **`<data>/processed/`** (the preprocess cache) is created on first run, datasets are
+discovered by name, and the per-dataset label conventions are remapped to canonical on load. Env
+`CARDIAC_DATA` overrides the file (CI). Loaded by `cardioseg/config.py`.
 
 ## Data normalization
 MRI intensity is uncalibrated (no Hounsfield-like anchor), so inter-scanner variance is the core

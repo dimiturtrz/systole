@@ -1,11 +1,12 @@
-"""Central path config. Reads paths.yaml (OmegaConf); env vars override.
+"""Central path config. ONE data root; raw/processed derived from it.
 
-paths.yaml (gitignored, machine-specific) holds the absolute data roots — copy
-paths.example.yaml -> paths.yaml and edit. This replaces the scattered
-CARDIAC_DATA_ROOT / CARDIAC_PROCESSED_ROOT env lookups with one place; the env
-vars still override (handy for tests / CI on another machine).
+paths.yaml (gitignored, machine-specific) holds a single absolute `data` root:
 
-Resolution order for a root: env var -> paths.yaml -> repo-relative fallback.
+    data: /abs/path/to/cardiac-data
+
+Convention under it: `<data>/raw/<dataset>/` holds your downloads (create raw/ and drop the
+datasets in); `<data>/processed/` is the preprocess cache (auto-created). Copy
+paths.example.yaml -> paths.yaml and set the one path. Env CARDIAC_DATA overrides the file.
 """
 import os
 from pathlib import Path
@@ -16,18 +17,14 @@ _REPO = Path(__file__).resolve().parents[1]
 _PATHS_FILE = Path(os.environ.get("CARDIAC_PATHS", _REPO / "paths.yaml"))
 _cfg = OmegaConf.load(_PATHS_FILE) if _PATHS_FILE.exists() else OmegaConf.create({})
 
-_ENV = {"raw": "CARDIAC_DATA_ROOT", "processed": "CARDIAC_PROCESSED_ROOT"}
-# repo-relative fallbacks (gitignored). Per-domain convention: everything under
-# data/volumetric/mri/ — inputs in acdc/, preprocess cache in processed/.
-_FALLBACK = {"raw": "data/volumetric/mri/acdc", "processed": "data/volumetric/mri/processed"}
+_FALLBACK_ROOT = "data"   # repo-relative (gitignored) if nothing configured
+
+
+def _root() -> str:
+    """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback."""
+    return os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT
 
 
 def data_root(kind: str = "raw") -> str:
-    """Absolute root for 'raw' (inputs) or 'processed' (cache) data."""
-    env = os.environ.get(_ENV[kind])
-    if env:
-        return env
-    val = OmegaConf.select(_cfg, f"data.{kind}")
-    if val:
-        return str(val)
-    return _FALLBACK[kind]
+    """Absolute root for 'raw' (inputs) or 'processed' (cache): `<data>/<kind>`."""
+    return str(Path(_root()) / kind)

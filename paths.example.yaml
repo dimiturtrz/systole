@@ -1,19 +1,10 @@
-# Template for paths.yaml (which is gitignored — it holds your machine's absolute paths).
-# Copy this file to paths.yaml and set the roots for your machine.
+# Template for paths.yaml (gitignored — your machine's absolute path).
+#   cp paths.example.yaml paths.yaml   # then set the one path below
 #
-#   cp paths.example.yaml paths.yaml
+# ONE data root. Everything else is derived:
+#   <data>/raw/<dataset>/   you create raw/ and drop the (register-gated) downloads in:
+#                             raw/acdc/, raw/mnm2/, raw/MnM/ (M&Ms-1), raw/task02_heart/
+#   <data>/processed/       preprocess cache — created automatically, never touch it
 #
-# Data lives OUTSIDE the repo (licensing + size). Env vars CARDIAC_DATA_ROOT /
-# CARDIAC_PROCESSED_ROOT override these (handy for CI).
-data:
-  raw: /path/to/data/volumetric/mri/acdc          # ACDC inputs (the dir holding training/)
-  processed: /path/to/data/volumetric/mri/processed   # preprocess cache (npz; per-domain)
-
-# cardioview demo defaults: which hearts to bake into the web viewer.
-# (cardioview/export_web.py uses these when --patients is not given.)
-# Each entry = a full path to a patient folder, OR a bare ID resolved under data.raw.
-# Mix freely; add/remove patients here (this file is gitignored).
-cardioview:
-  hearts:
-    - /path/to/data/volumetric/mri/acdc/training/patient073   # full path, or...
-    - patient010                                       # ...a bare ID under data.raw
+# Env CARDIAC_DATA overrides this file (handy for CI).
+data: /path/to/cardiac-data

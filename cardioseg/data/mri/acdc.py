@@ -14,8 +14,8 @@ from cardioseg.data.mri.base import (
     LV_CAVITY, LV_MYO, RV_CAVITY,
 )
 
-# Data lives outside the repo (paths.yaml data.raw; CARDIAC_DATA_ROOT overrides).
-DATA_ROOT = data_root("raw")
+# Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
+DATA_ROOT = str(Path(data_root("raw")) / "acdc")
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 

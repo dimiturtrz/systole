@@ -24,7 +24,7 @@ from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks, cardioview_default
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -181,9 +181,8 @@ def main():
     ap.add_argument("--model", default="mnm2", choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
     a = ap.parse_args()
-    patients = a.patients or cardioview_default(
-        "hearts", ["patient073", "patient010", "patient021", "patient053"]
-    )
+    # canned demo hearts (one per pathology); override with --patients (IDs or full paths).
+    patients = a.patients or ["patient073", "patient006", "patient021", "patient053"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = load_model(MODELS[a.model], device) if a.source == "pred" or a.mode == "animate" else None
     if a.mode == "animate":

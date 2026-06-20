@@ -20,24 +20,20 @@ pip install -e .                  # from repo root (installs cardioseg)
 # torch CUDA build (CPU wheel won't train); Blackwell/RTX 5090 needs torch>=2.7:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 ```
-Real data: register for **ACDC** ([Creatis](https://www.creatis.insa-lyon.fr/Challenge/acdc/)).
-Data lives **outside the repo**
-(licensing + size) under a `raw/` ↔ `processed/` split. Point at it via `paths.yaml` (copy the
-template — gitignored, machine-specific):
+Data lives **outside the repo** (licensing + size). Set **one** path in `paths.yaml` and lay the
+register-gated downloads under `<data>/raw/<dataset>/`:
 ```bash
-cp paths.example.yaml paths.yaml      # then edit:
-#   data:
-#     raw: /path/to/data/volumetric/mri/acdc          # ACDC inputs (dir holding training/)
-#     processed: /path/to/data/volumetric/mri/processed   # preprocess cache (npz)
+cp paths.example.yaml paths.yaml      # then: data: /abs/path/to/cardiac-data
+#   <data>/raw/acdc/      register: https://www.creatis.insa-lyon.fr/Challenge/acdc/
+#   <data>/raw/mnm2/      register: https://www.ub.edu/mnms-2/
+#   <data>/raw/MnM/       register: M&Ms-1  (optional, broadest multi-site set)
+#   <data>/processed/     preprocess cache — auto-created, leave it alone
 ```
-Loaded by `cardioseg/config.py` (OmegaConf); env vars `CARDIAC_DATA_ROOT` /
-`CARDIAC_PROCESSED_ROOT` override (handy for CI).
-
-**M&M-2** (multi-vendor, 360 subjects; register at the [M&Ms-2 challenge](https://www.ub.edu/mnms-2/)) sits **beside**
-ACDC — e.g. `data/raw/mri/mnm2/` while ACDC is `…/mri/acdc/`. Auto-discovered as a sibling of the
-raw root, or point at it with `CARDIAC_MNM2_ROOT`. Its ground-truth labels are the *opposite* of
-ACDC (LV=1 vs LV=3); the loader remaps to the ACDC convention on load (verified geometrically),
-so one model spans both datasets.
+That's the only manual step. Datasets are discovered by name under `raw/`; the preprocess cache is
+created on first run; per-dataset label conventions (M&M-2/M&Ms-1 have LV=1, ACDC LV=3) are
+remapped to canonical on load (verified geometrically), so one model spans them. Env `CARDIAC_DATA`
+overrides the file (CI). Loaded by `cardioseg/config.py`; adapters live in `cardioseg/data/mri/`
+behind a `DatasetAdapter` interface (add a dataset = one file + one registry line).
 
 ## Train + evaluate
 ```bash
@@ -92,8 +88,11 @@ full deployment distribution.
 ## Layout
 ```
 cardioseg/
-  data/mri/data.py        # ACDC loader (NIfTI, spacing-aware) + geometric LV/RV id, Info.cfg
-  data/mri/mnm2.py        # M&M-2 loader (multi-vendor) + label remap to ACDC convention, vendor/disease meta
+  data/mri/base.py        # DatasetAdapter interface + shared primitives (load_nifti, labels, LV/RV id)
+  data/mri/acdc.py        # ACDC adapter (canonical labels, Info.cfg meta)
+  data/mri/mnm2.py        # M&M-2 adapter (multi-vendor; label_map remaps to canonical)
+  data/mri/mnms1.py       # M&Ms-1 adapter (6-centre/4-vendor; 4D ED/ES + CSV)
+  data/mri/registry.py    # name -> adapter (add a dataset = one file + one line)
   preprocessing/preprocess.py   # resample in-plane + z-score; param-keyed disk cache
   training/
     model.py              # MONAI U-Net factory (2D/3D)
