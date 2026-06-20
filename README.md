@@ -76,6 +76,10 @@ scored through the same eval but **not deployed** (its sliding-window + TTA pipe
 clean-export). It leads by ~1 Dice pt / 0.8 EF pt — at **~57× the parameters and ~23× the FLOPs**.
 That gap is the price of a tiny, fully-owned, in-browser-exportable model.
 
+*Caveat — this nnU-Net is under-powered on purpose:* 50 epochs / 1 fold / 2D, not its full recipe
+(1000 ep × 5-fold ensemble + TTA + config search). So 0.91 is its **floor** — true nnU-Net would lead
+by more. The baseline proves *"I can run + score SOTA through my own eval,"* not *"I matched it."*
+
 **Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
 and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +
 surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**.

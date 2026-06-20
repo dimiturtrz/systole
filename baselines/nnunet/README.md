@@ -63,6 +63,17 @@ patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apple
 fvcore; nnU-Net at its 256×320 patch, inference adds tiling + TTA) — **~57× fewer params, ~23× fewer
 FLOPs** for ~1 Dice point. That's the deployable trade made quantitative.
 
+**Be frank — this is nnU-Net under-powered, not at full strength.** What we ran vs its real recipe:
+- **1 fold**, not the **5-fold ensemble** (the headline nnU-Net result averages 5 models).
+- **50 epochs**, not **1000**.
+- **2D only** — no `3d_fullres` / `3d_cascade` (it auto-picks the best config; we skipped that).
+- no postprocessing/config selection step; modest 360-subject train.
+
+So **0.91 is nnU-Net's floor here, and the ~1-Dice-pt gap understates the true SOTA gap** — full nnU-Net
+would lead by more. We report the floor honestly and didn't chase the ceiling: it's a lot more compute
+for a model we wouldn't deploy anyway (92 M, no clean ONNX). The baseline's job is *"I can operate +
+score SOTA through my own pipeline,"* **not** *"I matched it."*
+
 **EF agreement (Bland–Altman):** ours bias −5.6%, 95% LoA [−21, +9]; nnU-Net bias **−4.1%**,
 LoA **[−17.8, +9.7]** — now nearly matched (our spread tightened as the masks improved; nnU-Net
 keeps a slight edge + a touch less bias). Both still *underpredict* (negative bias), so part of
