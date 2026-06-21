@@ -46,46 +46,51 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
     from .augment import augment_batch
     from ..data import store, splits
     from ..preprocessing.preprocess import TARGET_INPLANE
+    from ..obs import setup, timed, progress
 
     inplane = inplane or TARGET_INPLANE
     out_dir = out_dir or f"runs/{'battery' if battery else dataset}"
+    log = setup(Path(out_dir) / "train.log")
 
     torch.manual_seed(seed)
     np.random.seed(seed)          # augmentation uses global np.random
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True   # fixed 256^2 input -> autotune fastest convs
-    print(f"device={device} torch={torch.__version__} seed={seed} "
-          f"{'battery (acdc+Canon held out)' if battery else f'dataset={dataset} test={test}'}")
+    log.info("device=%s torch=%s seed=%s %s", device, torch.__version__, seed,
+             "battery (acdc+Canon held out)" if battery else f"dataset={dataset} test={test}")
 
     # splits are queries over the consolidated data store (builds processed/<ds>/ if missing)
-    if battery:
-        meta = store.load(None, inplane=inplane, n4=n4, workers=workers)
-        train_df, val_df, test_df = splits.battery(meta, val_frac, seed)
-    else:
-        train_all = store.load([dataset], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
-        train_df, val_df = splits.patient_val(train_all, val_frac, seed)
-        if test == "canon":
-            test_df = store.load(["mnms1"], inplane=inplane, n4=n4, workers=workers).filter(
-                (pl.col("vendor") == "Canon") & pl.col("labelled"))
-        elif test and test != dataset:
-            test_df = store.load([test], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
+    with timed(log, "store.load + split"):
+        if battery:
+            meta = store.load(None, inplane=inplane, n4=n4, workers=workers)
+            train_df, val_df, test_df = splits.battery(meta, val_frac, seed)
         else:
-            test_df = None
+            train_all = store.load([dataset], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
+            train_df, val_df = splits.patient_val(train_all, val_frac, seed)
+            if test == "canon":
+                test_df = store.load(["mnms1"], inplane=inplane, n4=n4, workers=workers).filter(
+                    (pl.col("vendor") == "Canon") & pl.col("labelled"))
+            elif test and test != dataset:
+                test_df = store.load([test], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
+            else:
+                test_df = None
     if n_patients:                                     # debug cap
         train_df, val_df = train_df.head(n_patients), val_df.head(max(1, n_patients // 4))
         test_df = test_df.head(n_patients) if test_df is not None else None
 
-    train_ds, val_ds = datasets(splits.paths(train_df), splits.paths(val_df), size)
-    print(f"patients: {len(train_df)} train / {len(val_df)} val"
-          f"{f' / {len(test_df)} test' if test_df is not None else ''}  | "
-          f"slices: {len(train_ds)} train / {len(val_ds)} val")
+    with timed(log, f"build slice datasets ({len(train_df)}+{len(val_df)} subjects)"):
+        train_ds, val_ds = datasets(splits.paths(train_df), splits.paths(val_df), size)
+    log.info("patients: %d train / %d val%s | slices: %d train / %d val",
+             len(train_df), len(val_df),
+             f" / {len(test_df)} test" if test_df is not None else "", len(train_ds), len(val_ds))
 
+    # Dataset is fully in RAM + augmentation is GPU-batched, so DataLoader workers=0: on Windows
+    # num_workers>0 PICKLES the whole in-RAM dataset to every worker (huge stall, GPU starves). The
+    # `workers` arg parallelizes store CONSOLIDATION (ThreadPool), not this loop.
     pin = device == "cuda"
-    augment = train_ds.augment   # augmentation is GPU-batched in this loop, not in the workers
-    dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True,
-                    num_workers=workers, pin_memory=pin,
-                    persistent_workers=workers > 0)   # cheap per-item path now -> GPU stays fed
-    val_dl = DataLoader(val_ds, batch_size=batch, num_workers=workers, pin_memory=pin)
+    augment = train_ds.augment
+    dl = DataLoader(train_ds, batch_size=batch, shuffle=True, drop_last=True, num_workers=0, pin_memory=pin)
+    val_dl = DataLoader(val_ds, batch_size=batch, num_workers=0, pin_memory=pin)
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     loss_fn = dice_ce_loss()
     opt = torch.optim.Adam(model.parameters(), lr)
@@ -94,11 +99,12 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
     # `epochs` is a ceiling — early stopping keeps the best-val checkpoint and bails when val
     # plateaus, so the heavy-aug "needs more epochs" question is answered per-run, not hardcoded.
     best_dice, best_state, bad = -1.0, None, 0
+    nb = len(dl)
     for ep in range(epochs):
         t0 = time.perf_counter()
         model.train()
         tot = 0.0
-        for x, y in dl:
+        for x, y in progress(dl, f"epoch {ep}", total=nb):
             x = x.to(device, non_blocking=pin)
             y = y.to(device, non_blocking=pin)                # [B,H,W]
             if augment:
@@ -118,15 +124,16 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         else:
             bad += 1
-        print(f"epoch {ep:2d}  train_loss {tot/len(dl):.4f}  val_dice {vd:.4f}"
-              f"{' *' if improved else ''}  ({time.perf_counter()-t0:.1f}s)")
+        dt = time.perf_counter() - t0
+        log.info("epoch %2d  train_loss %.4f  val_dice %.4f%s  (%.1fs, %.1f batch/s)",
+                 ep, tot / nb, vd, " *" if improved else "", dt, nb / dt)
         if bad >= patience:
-            print(f"early stop @ epoch {ep} (no val gain for {patience}); best val_dice {best_dice:.4f}")
+            log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, patience, best_dice)
             break
     if best_state is not None:
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
-    print(f"\n===== VALIDATION =====")
+    log.info("===== VALIDATION =====")
     dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), size, device)
     results = {"val": summarize(dice_per_class, ef_rows, surf)}
 

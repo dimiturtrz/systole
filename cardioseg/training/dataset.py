@@ -67,11 +67,12 @@ class ACDCSliceDataset(Dataset):
         keep_empty: bool = False,
         augment: bool = False,
     ):
+        from cardioseg.obs import progress
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames
         self.augment = augment
-        for p in npz_paths:
+        for p in progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths)):
             c = load_arrays(p)
             for tag in frames:
                 img = c.get(f"{tag.lower()}_img")        # [D, H, W]

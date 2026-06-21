@@ -118,12 +118,14 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
+        from cardioseg.obs import progress
+        import logging
+        log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
-        print(f"consolidating {name}: {len(todo)} subjects -> {out} ({workers} threads, n4={n4})", flush=True)
+        log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            for i, _ in enumerate(ex.map(_one, todo), 1):
-                if i % 25 == 0 or i == len(todo):
-                    print(f"  {i}/{len(todo)}", flush=True)
+            for _ in progress(ex.map(_one, todo), f"consolidate {name}", total=len(todo)):
+                pass
 
     # (re)write meta.csv over ALL written subjects (cheap: meta() is sidecar parsing, no image load)
     rows = []
@@ -169,6 +171,8 @@ def load_arrays(path: str | Path) -> dict:
 
 if __name__ == "__main__":
     import argparse
+    from cardioseg.obs import setup
+    setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")
     ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
     ap.add_argument("--inplane", type=float, default=TARGET_INPLANE)
