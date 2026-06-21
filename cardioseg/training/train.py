@@ -41,7 +41,7 @@ def train_seg(cfg: TrainCfg):
     import polars as pl
     import torch
     from torch.utils.data import DataLoader
-    from ..evaluation.losses import dice_ce_loss
+    from ..evaluation.losses import build_loss
     from ..evaluation.validate import validate, summarize
     from .model import build_unet
     from .dataset import datasets
@@ -97,7 +97,7 @@ def train_seg(cfg: TrainCfg):
     dl = DataLoader(train_ds, batch_size=cfg.batch, shuffle=True, drop_last=True, num_workers=0, pin_memory=pin)
     val_dl = DataLoader(val_ds, batch_size=cfg.batch, num_workers=0, pin_memory=pin)
     model = build_unet(cfg.model).to(device)
-    loss_fn = dice_ce_loss()
+    loss_fn = build_loss(cfg.loss)
     opt = torch.optim.Adam(model.parameters(), cfg.lr)
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
@@ -107,6 +107,8 @@ def train_seg(cfg: TrainCfg):
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
         model.train()
+        if hasattr(loss_fn, "epoch"):
+            loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
         tot = 0.0
         for x, y in progress(dl, f"epoch {ep}", total=nb):
             x = x.to(device, non_blocking=pin)

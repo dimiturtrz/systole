@@ -41,6 +41,17 @@ class AugCfg:
 
 
 @dataclass
+class LossCfg:
+    """Segmentation loss. dice_ce = MONAI Dice+CE (region, the baseline). dice_ce_hd adds a
+    Hausdorff-DT boundary term (λ·HD), ramped in over `hd_warmup` epochs (HD losses diverge early) —
+    targets the ES boundary over-segmentation that region losses are blind to (the EF-bias lever)."""
+    kind: str = "dice_ce"               # dice_ce | dice_ce_hd
+    hd_weight: float = 0.01            # λ on Hausdorff-DT (its raw scale is ~50x Dice -> keep small)
+    hd_warmup: int = 15                # pure Dice+CE for these epochs (HD not even computed -> fast)
+    hd_ramp: int = 5                   # then ramp HD 0 -> hd_weight over this many epochs
+
+
+@dataclass
 class DataCfg:
     """What data + how it's split. battery=True pools `sources` and holds out ACDC+Canon (a split
     query); battery=False trains on `train_dataset` and tests on `test`."""
@@ -60,6 +71,7 @@ class TrainCfg:
     data: DataCfg = field(default_factory=DataCfg)
     model: ModelCfg = field(default_factory=ModelCfg)
     aug: AugCfg = field(default_factory=AugCfg)
+    loss: LossCfg = field(default_factory=LossCfg)
     epochs: int = 128                           # ceiling; early stopping ends sooner
     batch: int = 64
     lr: float = 1e-3
@@ -103,6 +115,7 @@ def to_json(cfg: TrainCfg, path: str | Path) -> None:
 
 def from_json(path: str | Path) -> TrainCfg:
     d = json.loads(Path(path).read_text())
+    nested = ("data", "model", "aug", "loss")
     return TrainCfg(data=DataCfg(**d["data"]), model=ModelCfg(**d["model"]),
-                    aug=AugCfg(**d["aug"]),
-                    **{k: v for k, v in d.items() if k not in ("data", "model", "aug")})
+                    aug=AugCfg(**d["aug"]), loss=LossCfg(**d.get("loss", {})),
+                    **{k: v for k, v in d.items() if k not in nested})
