@@ -96,6 +96,8 @@ Training reads the consolidated store (builds `processed/<ds>/` on first run), l
 per-epoch batch-rate to `runs/<run>/train.log`. In-RAM dataset + GPU-batched augment → `--workers`
 parallelizes store consolidation, not the loader (DataLoader runs workers=0; AMP + cudnn.benchmark).
 
+> Intended-use envelope, stratified metrics, failure modes + provenance → **[MODEL_CARD.md](MODEL_CARD.md)**.
+
 ## Results (seed 0, patient-level splits)
 Flagship = the **generalization battery**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
 ex-Canon, 451 subjects), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
