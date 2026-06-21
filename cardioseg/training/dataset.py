@@ -106,15 +106,21 @@ class ACDCSliceDataset(Dataset):
 def build_splits(
     size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0,
     cases: list[Path] | None = None, loader=load_ed_es, cache_ns: str = "", n4: bool = False,
+    workers: int | None = None,
 ) -> tuple[ACDCSliceDataset, ACDCSliceDataset, list[Path], list[Path]]:
     """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs).
 
     `cases`/`loader`/`cache_ns` default to ACDC; pass mnm2_cases()/mnm2.load_ed_es/"mnm2"
-    to build the same splits from M&M-2 (the loader is dataset-agnostic).
+    to build the same splits from M&M-2 (the loader is dataset-agnostic). Warms the preprocess
+    cache in PARALLEL first (preprocessing is CPU — resample/N4/z-score), so the serial dataset
+    build below just reads warm cache.
     """
+    from cardioseg.preprocessing.preprocess import preprocess_many
+
     cases = list(acdc_cases() if cases is None else cases)
     if n_patients:
         cases = cases[:n_patients]
+    preprocess_many(cases, loader=loader, cache_ns=cache_ns, n4=n4, workers=workers)
     train_dirs, val_dirs = split_patients(cases, val_frac, seed)
     ds = lambda dirs, aug: ACDCSliceDataset(dirs, size=size, augment=aug, loader=loader, cache_ns=cache_ns, n4=n4)
     return ds(train_dirs, True), ds(val_dirs, False), train_dirs, val_dirs

@@ -95,6 +95,31 @@ def preprocess_case(
     return out
 
 
+def preprocess_many(cases, target_inplane: float = 1.5, loader=load_ed_es, cache_ns: str = "",
+                    n4: bool = False, workers: int | None = None) -> None:
+    """Warm the preprocess cache for many cases IN PARALLEL. Uses a THREAD pool: the heavy steps
+    (N4 / scipy resample) are C-extensions that release the GIL, so threads parallelize them — and
+    it sidesteps Windows process-spawn pickling/`__main__` issues. Skips already-cached cases; big
+    first-run win (N4 is the slow part). After this the dataset just reads warm cache."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    todo = [Path(c) for c in cases
+            if not _cache_path(Path(c).name, target_inplane, cache_ns, n4).exists()]
+    if not todo:
+        return
+    workers = workers or max(1, (os.cpu_count() or 4) - 2)
+    print(f"preprocessing {len(todo)} cases on {workers} threads (n4={n4})…", flush=True)
+
+    def _one(case):
+        preprocess_case(case, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for i, _ in enumerate(ex.map(_one, todo), 1):
+            if i % 25 == 0 or i == len(todo):
+                print(f"  {i}/{len(todo)}", flush=True)
+
+
 if __name__ == "__main__":
     import argparse
 

@@ -63,13 +63,14 @@ def validate(
     `loader`/`cache_ns` default to ACDC; pass mnm2.load_ed_es / "mnm2" to score an
     M&M-2 set with the same model (labels already remapped to ACDC convention).
     """
-    from ..preprocessing.preprocess import preprocess_case
+    from ..preprocessing.preprocess import preprocess_case, preprocess_many
     from ..data.mri.acdc import load_ed_es
     from .measure import ejection_fraction
     from .postprocess import largest_cc_per_class
     from ..training.dataset import fit_square
 
     loader = loader or load_ed_es
+    preprocess_many(val_dirs, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)  # parallel cache warm
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}
     ef_rows = []
