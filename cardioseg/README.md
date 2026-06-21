@@ -36,10 +36,25 @@ overrides the file (CI). Loaded by `cardioseg/config.py`; adapters live in `card
 behind a `DatasetAdapter` interface (add a dataset = one file + one registry line).
 
 ## Data cloud
-The three datasets are unified by per-dataset **adapters** (`data/mri/{acdc,mnm2,mnms1}.py` behind a
-`DatasetAdapter` interface) into one schema, then inventoried into a single table
-(`python -m cardioseg.data.inventory` → `<data>/processed/inventory.csv`). We pull **all** labelled
-data and make our **own** splits — the challenge splits aren't inherited.
+Data = scans + metadata in one homogeneous **store**. Per-dataset **adapters**
+(`data/mri/{acdc,mnm2,mnms1}.py` behind a `DatasetAdapter` interface) read raw→canonical; `data/store.py`
+consolidates each into a self-contained processed set mirroring `raw/`:
+
+```
+processed/<dataset>/<paramkey>/        # paramkey = inplane1p5 | inplane1p5_n4
+    data/<subject>.npz                 # resampled + z-scored ed/es img+gt + spacing
+    meta.csv                           # common schema (read with polars)
+```
+
+`store.load(names)` ensures each is processed (builds if the folder is missing) then returns **one
+polars frame** over them — concatenating the per-dataset `meta.csv` *is* the data cloud (no separate
+inventory). **Splits are queries over it** (`data/splits.py`): roles aren't baked into datasets. We
+pull **all** data and make our **own** splits — challenge splits aren't inherited.
+
+```bash
+python -m cardioseg.data.store                 # consolidate all + print the cloud summary
+python -m cardioseg.training.train --battery   # train; hold out ACDC + Canon (one split rule)
+```
 
 | dataset | n | vendors | demographics | role |
 |---|---|---|---|---|
@@ -182,11 +197,13 @@ cardioseg/
   data/mri/mnm2.py        # M&M-2 adapter (multi-vendor; label_map remaps to canonical)
   data/mri/mnms1.py       # M&Ms-1 adapter (6-centre/4-vendor; 4D ED/ES + CSV)
   data/mri/registry.py    # name -> adapter (add a dataset = one file + one line)
-  preprocessing/preprocess.py   # resample in-plane + z-score; param-keyed disk cache
+  data/store.py           # consolidate adapters -> processed/<ds>/<paramkey>/{data,meta.csv}; load() = polars cloud
+  data/splits.py          # splits as polars queries (battery: hold out acdc + Canon)
+  preprocessing/preprocess.py   # the per-subject transform: resample in-plane + (N4) + z-score
   training/
     model.py              # MONAI U-Net factory (2D/3D)
-    dataset.py            # 2D-slice dataset, patient-level split (dataset-agnostic loader)
-    train.py              # training loop (--dataset acdc|mnm2, --test for cross-dataset; workers+AMP)
+    dataset.py            # 2D-slice dataset over consolidated npz paths
+    train.py              # training loop (--dataset/--test, or --battery; workers+AMP)
     export_onnx.py        # trained U-Net -> ONNX (+INT8 quant), torch-parity gated
   evaluation/
     measure.py            # chamber volumes + ejection fraction (spacing-aware)
