@@ -99,9 +99,12 @@ Competent on public benchmarks, **not** clinical-grade. The specific gaps, measu
 - **EF precision.** 95% LoA are ±15% — still past the ±5% clinical bar. And part of the
   underprediction is *intrinsic*: even nnU-Net (SOTA) keeps a **−4% bias** cross-domain, so a better
   segmenter tightens the spread but doesn't erase the lean — it's calibration, not just model quality.
-- **Robustness is partial.** Multi-vendor generalization is *tested* (3 vendors, M&M-2 → ACDC), not
-  *solved* — still 3 vendors / mostly 1.5T, not a deployment distribution; a 4-vendor / 6-centre set
-  (M&Ms-1) sits unused.
+- **The held-out test is single-vendor.** We *train* multi-vendor (M&M-2, 3 vendors) but *test* on
+  ACDC — one centre, **one scanner vendor (Siemens)**. So we test cross-*centre* generalization, but
+  the **machine axis is not directly tested on held-out data** (you can't see vendor-robustness with
+  one vendor in the test set). The fix is a multi-vendor held-out test — **M&Ms-1** (4 vendors incl.
+  Canon, 6 centres) is on disk and adapter-ready for exactly this; dataset roles (which set trains vs
+  tests) are still to be decided. Until then, vendor breakdowns are in-domain only (caveated).
 - **Validation is thin.** One 80/20 split — no cross-validation, confidence intervals, or
   test–retest; no per-case uncertainty / out-of-distribution flag.
 - **Not a device.** Public research data only; no DICOM/PII handling, no prospective or regulatory

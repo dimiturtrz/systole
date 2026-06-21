@@ -42,6 +42,15 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
+## Open structural decision — the machine axis + dataset roles
+The held-out test (ACDC) is **single-vendor**, so vendor/machine generalization isn't tested on
+held-out data — only the cross-*centre* drop is. To test the machine axis properly we need a
+**multi-vendor held-out test**. We have the data: **M&Ms-1** (375 subj, 4 vendors incl. Canon,
+6 centres) is bigger and broader than M&M-2 — so it's arguably the better *training* set, with the
+roles reshuffled. Undecided for now: M&Ms-1 vs M&M-2 as train; whether ACDC becomes test, or just
+the cardioview demo set (single-vendor but clean). Tracked: `bd cardiac-seg-bsz`. Deferred — settle
+once the EF levers land.
+
 ## How this is driven — the circuit
 Field understanding drives the roadmap. Each topic runs the loop:
 1. **Research** — teacher grounds it (internal + web) → `research/`.
