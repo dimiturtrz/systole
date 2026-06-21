@@ -52,32 +52,30 @@ def _tta_logits(model, x):
 
 
 def validate(
-    model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5,
-    loader=None, cache_ns: str = "", postproc: bool = True, tta: bool = True, n4: bool = False,
+    model, npz_paths: list, size: int, device: str,
+    postproc: bool = True, tta: bool = True,
 ) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
     dice_per_class: {1,2,3 -> Dice pooled over all val slices}.
     ef_rows: list of dicts {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}.
 
-    `loader`/`cache_ns` default to ACDC; pass mnm2.load_ed_es / "mnm2" to score an
-    M&M-2 set with the same model (labels already remapped to ACDC convention).
+    `npz_paths` are consolidated-subject npz files from the data store (data/store.py) — each holds
+    resampled+z-scored ed/es img+gt, spacing, group. Dataset-agnostic: labels are already canonical.
     """
-    from ..preprocessing.preprocess import preprocess_case, preprocess_many
-    from ..data.mri.acdc import load_ed_es
     from .measure import ejection_fraction
     from .postprocess import largest_cc_per_class
     from .evaluate import surface_distances, surface_metrics
     from ..training.dataset import fit_square
+    from ..data.store import load_arrays
 
-    loader = loader or load_ed_es
-    preprocess_many(val_dirs, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)  # parallel cache warm
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}
     surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
     ef_rows = []
-    for pd in val_dirs:
-        c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
+    for npz_path in npz_paths:
+        c = load_arrays(npz_path)
+        c = {k: (c[k].item() if k == "group" and hasattr(c[k], "item") else c[k]) for k in c}
         spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
         vols = {}
         for tag in ("ED", "ES"):
@@ -99,7 +97,7 @@ def validate(
         if "ED" in vols and "ES" in vols:
             ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing, lv_label=3)
             ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing, lv_label=3)
-            ef_rows.append(dict(patient=pd.name, group=c.get("group"),
+            ef_rows.append(dict(patient=Path(npz_path).stem, group=c.get("group"),
                                 ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
 
     dice_per_class = {cl: (inter[cl] / denom[cl] if denom[cl] else float("nan"))

@@ -21,8 +21,7 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from cardioseg.data.mri.acdc import acdc_cases, load_ed_es
-from cardioseg.preprocessing.preprocess import preprocess_case
+from cardioseg.data.store import load_arrays
 from cardioseg.types import Slice2D
 
 
@@ -53,30 +52,27 @@ def split_patients(
 
 
 class ACDCSliceDataset(Dataset):
-    """All ED+ES short-axis slices from the given patients, as (img, mask).
+    """All ED+ES short-axis slices from the given consolidated subjects, as (img, mask).
 
-    Item: img float32 [1, size, size], mask int64 [size, size]. Preloaded into RAM
-    (ACDC is small: ~100 patients x 2 frames x ~10 slices x 256^2 ~ 0.5 GB).
+    Takes a list of npz paths from the data store (data/store.py) — each holds one subject's
+    resampled + z-scored ed/es img+gt. Item: img float32 [1, size, size], mask int64 [size, size].
+    Preloaded into RAM (slices are small; ~hundreds of subjects x 2 frames x ~10 slices x 256^2).
     """
 
     def __init__(
         self,
-        patient_dirs: list[Path],
+        npz_paths: list[str | Path],
         size: int = 256,
-        target_inplane: float = 1.5,
         frames: tuple[str, ...] = ("ED", "ES"),
         keep_empty: bool = False,
         augment: bool = False,
-        loader=load_ed_es,
-        cache_ns: str = "",
-        n4: bool = False,
     ):
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames
         self.augment = augment
-        for pd in patient_dirs:
-            c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
+        for p in npz_paths:
+            c = load_arrays(p)
             for tag in frames:
                 img = c.get(f"{tag.lower()}_img")        # [D, H, W]
                 gt = c.get(f"{tag.lower()}_gt")          # [D, H, W]
@@ -103,24 +99,12 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def build_splits(
-    size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0,
-    cases: list[Path] | None = None, loader=load_ed_es, cache_ns: str = "", n4: bool = False,
-    workers: int | None = None,
-) -> tuple[ACDCSliceDataset, ACDCSliceDataset, list[Path], list[Path]]:
-    """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs).
+def datasets(train_paths: list[str], val_paths: list[str], size: int = 256
+             ) -> tuple[ACDCSliceDataset, ACDCSliceDataset]:
+    """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
 
-    `cases`/`loader`/`cache_ns` default to ACDC; pass mnm2_cases()/mnm2.load_ed_es/"mnm2"
-    to build the same splits from M&M-2 (the loader is dataset-agnostic). Warms the preprocess
-    cache in PARALLEL first (preprocessing is CPU — resample/N4/z-score), so the serial dataset
-    build below just reads warm cache.
+    The split itself is a query over the data store's meta frame (data/splits.py) — this just
+    turns the chosen subject paths into augmented/plain slice datasets.
     """
-    from cardioseg.preprocessing.preprocess import preprocess_many
-
-    cases = list(acdc_cases() if cases is None else cases)
-    if n_patients:
-        cases = cases[:n_patients]
-    preprocess_many(cases, loader=loader, cache_ns=cache_ns, n4=n4, workers=workers)
-    train_dirs, val_dirs = split_patients(cases, val_frac, seed)
-    ds = lambda dirs, aug: ACDCSliceDataset(dirs, size=size, augment=aug, loader=loader, cache_ns=cache_ns, n4=n4)
-    return ds(train_dirs, True), ds(val_dirs, False), train_dirs, val_dirs
+    return (ACDCSliceDataset(train_paths, size=size, augment=True),
+            ACDCSliceDataset(val_paths, size=size, augment=False))

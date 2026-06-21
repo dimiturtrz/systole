@@ -37,31 +37,50 @@ def _val_dice(model, val_dl, device) -> float:
 
 def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
               val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6, patience=20,
-              n4=False):
+              n4=False, battery=False, inplane=None):
     import numpy as np
+    import polars as pl
     import torch
     from torch.utils.data import DataLoader
     from ..evaluation.losses import dice_ce_loss
     from ..evaluation.validate import validate, summarize
     from .model import build_unet
-    from .dataset import build_splits
+    from .dataset import datasets
     from .augment import augment_batch
-    from ..data.mri.registry import get_adapter
+    from ..data import store, splits
+    from ..preprocessing.preprocess import TARGET_INPLANE
 
-    adapter = get_adapter(dataset)
-    cases_fn, loader, ns = adapter.cases, adapter.load_ed_es, adapter.cache_ns
-    out_dir = out_dir or f"runs/{dataset}"
+    inplane = inplane or TARGET_INPLANE
+    out_dir = out_dir or f"runs/{'battery' if battery else dataset}"
 
     torch.manual_seed(seed)
     np.random.seed(seed)          # augmentation uses global np.random
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True   # fixed 256^2 input -> autotune fastest convs
-    print(f"device={device} torch={torch.__version__} seed={seed} dataset={dataset}")
+    print(f"device={device} torch={torch.__version__} seed={seed} "
+          f"{'battery (acdc+Canon held out)' if battery else f'dataset={dataset} test={test}'}")
 
-    train_ds, val_ds, train_dirs, val_dirs = build_splits(
-        size=size, val_frac=val_frac, seed=seed, n_patients=n_patients,
-        cases=cases_fn(), loader=loader, cache_ns=ns, n4=n4)
-    print(f"patients: {len(train_dirs)} train / {len(val_dirs)} val  | "
+    # splits are queries over the consolidated data store (builds processed/<ds>/ if missing)
+    if battery:
+        meta = store.load(None, inplane=inplane, n4=n4, workers=workers)
+        train_df, val_df, test_df = splits.battery(meta, val_frac, seed)
+    else:
+        train_all = store.load([dataset], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
+        train_df, val_df = splits.patient_val(train_all, val_frac, seed)
+        if test == "canon":
+            test_df = store.load(["mnms1"], inplane=inplane, n4=n4, workers=workers).filter(
+                (pl.col("vendor") == "Canon") & pl.col("labelled"))
+        elif test and test != dataset:
+            test_df = store.load([test], inplane=inplane, n4=n4, workers=workers).filter(pl.col("labelled"))
+        else:
+            test_df = None
+    if n_patients:                                     # debug cap
+        train_df, val_df = train_df.head(n_patients), val_df.head(max(1, n_patients // 4))
+        test_df = test_df.head(n_patients) if test_df is not None else None
+
+    train_ds, val_ds = datasets(splits.paths(train_df), splits.paths(val_df), size)
+    print(f"patients: {len(train_df)} train / {len(val_df)} val"
+          f"{f' / {len(test_df)} test' if test_df is not None else ''}  | "
           f"slices: {len(train_ds)} train / {len(val_ds)} val")
 
     pin = device == "cuda"
@@ -110,27 +129,24 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
     if best_state is not None:
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
-    print(f"\n===== VALIDATION ({dataset}) =====")
-    dice_per_class, ef_rows, surf = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns, n4=n4)
+    print(f"\n===== VALIDATION =====")
+    dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), size, device)
     results = {"val": summarize(dice_per_class, ef_rows, surf)}
 
-    # held-out cross-dataset test (the generalization number)
-    if test and test != dataset:
-        tadapter = get_adapter(test)
-        tloader, tns = tadapter.load_ed_es, tadapter.cache_ns
-        test_dirs = tadapter.cases()
-        if n_patients:
-            test_dirs = test_dirs[:n_patients]
-        print(f"\n===== CROSS-DATASET TEST: train={dataset} -> test={test} (n={len(test_dirs)}) =====")
-        tdice, tef, tsurf = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns, n4=n4)
-        results[f"test_{test}"] = summarize(tdice, tef, tsurf)
+    # held-out test (the generalization number) — a query over the store, not a dataset role
+    if test_df is not None and len(test_df):
+        label = "battery (acdc+Canon)" if battery else f"train={dataset} -> test={test}"
+        print(f"\n===== HELD-OUT TEST: {label} (n={len(test_df)}) =====")
+        tdice, tef, tsurf = validate(model, splits.paths(test_df), size, device)
+        results["test_battery" if battery else f"test_{test}"] = summarize(tdice, tef, tsurf)
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pth")
-    meta = {"dataset": dataset, "test": test, "epochs": epochs, "batch": batch, "lr": lr,
-            "size": size, "seed": seed, "n_train": len(train_dirs), "n_val": len(val_dirs),
-            "val_patients": [p.name for p in val_dirs], "results": results}
+    meta = {"dataset": "battery" if battery else dataset, "test": test, "battery": battery,
+            "epochs": epochs, "batch": batch, "lr": lr, "size": size, "seed": seed, "inplane": inplane,
+            "n_train": len(train_df), "n_val": len(val_df),
+            "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     print(f"\nsaved model + metrics -> {out}/")
     return model, results
@@ -160,14 +176,21 @@ if __name__ == "__main__":
     ap.add_argument("--n-patients", type=int, default=0, help="0=all")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n4", action="store_true", help="N4 bias-field correction in preprocessing")
+    ap.add_argument("--battery", action="store_true",
+                    help="pool all datasets; hold out ACDC + Canon (the generalization battery)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    ds = args.dataset or ("acdc" if args.acdc else None)
-    if not ds:
-        print("pass --dataset acdc|mnm2 (or --acdc)")
-    else:
-        test = None if args.test == "none" else args.test
-        train_seg(ds, epochs=args.epochs, batch=args.batch, workers=args.workers,
-                  n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test,
+    if args.battery:
+        train_seg(battery=True, epochs=args.epochs, batch=args.batch, workers=args.workers,
+                  n_patients=args.n_patients, seed=args.seed, out_dir=args.out,
                   patience=args.patience, n4=args.n4)
+    else:
+        ds = args.dataset or ("acdc" if args.acdc else None)
+        if not ds:
+            print("pass --dataset acdc|mnm2 (or --acdc), or --battery")
+        else:
+            test = None if args.test == "none" else args.test
+            train_seg(ds, epochs=args.epochs, batch=args.batch, workers=args.workers,
+                      n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test,
+                      patience=args.patience, n4=args.n4)
