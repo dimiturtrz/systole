@@ -90,41 +90,17 @@ def _sa(case: Path) -> tuple[Path, Path]:
     return case / f"{code}_sa.nii.gz", case / f"{code}_sa_gt.nii.gz"
 
 
-_LABELLED_CACHE: dict[str, bool] = {}
-
-
-def _has_labels(case: Path) -> bool:
-    """True iff BOTH ED and ES GT frames are non-empty. M&Ms-1 ships withheld (zero-filled) GT for
-    much of Testing (and a few Validation/Training cases) — the gt *file* exists but is all-background,
-    so a file-existence check is not enough. Cached per case (loading the 4D GT is the cost)."""
-    key = str(case)
-    if key not in _LABELLED_CACHE:
-        d = load_ed_es(case)
-        import numpy as np
-        ok = all(tag in d and bool((d[tag]["gt"] > 0).any()) for tag in ("ED", "ES"))
-        _LABELLED_CACHE[key] = ok
-    return _LABELLED_CACHE[key]
-
-
-def mnms1_cases(root: str | Path | None = None, vendor: str | None = None,
-                labelled_only: bool = False) -> list[Path]:
-    """Subject dirs with a SA cine, across Labeled/Validation/Testing.
-
-    `vendor` (e.g. "Canon") filters to one vendor via the CSV — carves the unseen-vendor held-out
-    test out of M&Ms-1. `labelled_only` drops cases whose GT is withheld (zero-filled) — REQUIRED for
-    train/eval (320 cases on disk, only 213 have usable masks). Leave False for metadata inventory."""
+def mnms1_cases(root: str | Path | None = None) -> list[Path]:
+    """All subject dirs with a SA cine, across Labeled/Validation/Testing. The store flags which
+    have usable (non-empty) masks — M&Ms-1 ships withheld/zero-filled GT for much of Testing, so the
+    `labelled` column (computed from mask content) is what train/eval filter on; vendor (incl. the
+    Canon unseen-vendor slice) is a query over that meta, not a separate case list."""
     base = _root(root)
     out: list[Path] = []
     for split in _SPLITS:
         d = base / split
         if d.is_dir():
             out += [p for p in sorted(d.iterdir()) if p.is_dir() and _sa(p)[1].exists()]
-    if vendor is not None:
-        info = mnms1_info(root)
-        out = [p for p in out
-               if (info.get(p.name, {}).get("VendorName") or info.get(p.name, {}).get("Vendor")) == vendor]
-    if labelled_only:
-        out = [p for p in out if _has_labels(p)]
     return out
 
 
@@ -149,7 +125,6 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
 class Mnms1Adapter:
     """M&Ms-1: 6-centre / 4-vendor (incl. Canon); richest demographics (age/sex/BSA)."""
     name = "mnms1"
-    cache_ns = "mnms1"
     label_map = LABEL_MAP
 
     def cases(self) -> list[Path]:
@@ -169,16 +144,6 @@ class Mnms1Adapter:
             "scanner": None, "field_T": None,   # not in CSV (paper tables)
             "_source": {"all": "csv", "field_T": "paper(unfilled)"},
         }
-
-
-class CanonAdapter(Mnms1Adapter):
-    """Canon-only slice of M&Ms-1 — the clean unseen-vendor held-out test (overlap-free with
-    M&M-2, so usable WITHOUT dedup). Shares the mnms1 preprocess cache (these ARE mnms1 subjects)."""
-    name = "canon"
-    cache_ns = "mnms1"   # same subjects -> reuse mnms1's cache, no recompute
-
-    def cases(self) -> list[Path]:
-        return mnms1_cases(vendor="Canon", labelled_only=True)   # 9 labelled (Testing GT withheld)
 
 
 def _f(v):

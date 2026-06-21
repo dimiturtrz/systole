@@ -1,28 +1,22 @@
-"""Preprocess ACDC frames for segmentation, with a param-keyed disk cache.
+"""The per-subject preprocessing transform: load -> resample in-plane -> (N4) -> z-score.
 
-ACDC is highly anisotropic (in-plane ~1.4-1.6 mm, slice 10 mm -> 6-7x). The
-standard recipe for a 2D model: resample only the in-plane axes to a common
-spacing, leave slices alone, then z-score normalize per volume (intensity is
-uncalibrated and varies frame to frame). Masks resample with nearest-neighbour
-so labels stay integer (no interpolation across 0/1/2/3).
+ACDC is highly anisotropic (in-plane ~1.4-1.6 mm, slice 10 mm -> 6-7x). The standard recipe for a
+2D model: resample only the in-plane axes to a common spacing, leave slices alone, then z-score
+per volume (intensity is uncalibrated and varies frame to frame). Masks resample with
+nearest-neighbour so labels stay integer (no interpolation across 0/1/2/3).
 
-Processed arrays are cached under CARDIAC_PROCESSED_ROOT (default
-D:/data/volumetric/mri/processed), keyed by the preprocessing params, so re-runs with
-the same params are instant and different params never collide.
+Pure: returns arrays, no disk I/O. The consolidated store (data/store.py) calls this and owns the
+on-disk processed/<dataset>/<paramkey>/ layout + caching.
 """
 from pathlib import Path
 
 import numpy as np
 
-from cardioseg.config import data_root
 from cardioseg.data.mri.acdc import load_ed_es
 from cardioseg.types import Image, Spacing, Volume
 
-PROCESSED_ROOT = data_root("processed")     # paths.yaml data.processed (env override: CARDIAC_PROCESSED_ROOT)
-
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
-# model trains on. The single source of truth — callers mirror it as their default. Slices (z) are
-# left untouched (anisotropic 2D-model convention).
+# model trains on. The single source of truth. Slices (z) are left untouched (2D-model convention).
 TARGET_INPLANE = 1.5
 ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
 
@@ -54,30 +48,18 @@ def resample_inplane(
     return out, new_spacing
 
 
-def _cache_path(patient_name, target_inplane, cache_ns="", n4=False):
-    tag = f"inplane{str(target_inplane).replace('.', 'p')}" + ("_n4" if n4 else "")
-    base = Path(PROCESSED_ROOT) / cache_ns if cache_ns else Path(PROCESSED_ROOT)
-    return base / tag / f"{patient_name}.npz"
-
-
 def preprocess_case(
-    patient_dir: str | Path, target_inplane: float = TARGET_INPLANE, use_cache: bool = True,
-    loader=load_ed_es, cache_ns: str = "", n4: bool = False,
+    patient_dir: str | Path, target_inplane: float = TARGET_INPLANE,
+    loader=load_ed_es, n4: bool = False,
 ) -> dict:
-    """Load + resample + (N4) + normalize a patient's ED/ES. Returns dict with keys
-    ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group.
-    Caches to disk per params (the n4 flag namespaces the cache, so on/off never collide).
+    """Load + resample + (N4) + z-score one subject's ED/ES. PURE (no disk I/O).
 
-    `loader` lets other datasets reuse this (e.g. mnm2.load_ed_es); `cache_ns`
-    namespaces the cache so different datasets never collide on subject name. `n4` runs
-    N4 bias-field correction (resample -> N4 -> z-score) — physical, per-scan.
+    Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.
+    `loader` is the dataset adapter's load_ed_es (labels already canonical). `n4` runs N4 bias-field
+    correction (resample -> N4 -> z-score), physical + per-scan. The store (data/store.py) writes
+    the result to disk; this just computes it.
     """
     patient_dir = Path(patient_dir)
-    cache = _cache_path(patient_dir.name, target_inplane, cache_ns, n4)
-    if use_cache and cache.exists():
-        z = np.load(cache, allow_pickle=True)
-        return {k: z[k] for k in z.files} | {"group": str(z["group"])}
-
     d = loader(patient_dir)
     sp = d["spacing"]
     out = {"group": d.get("group"), "patient": patient_dir.name}
@@ -94,52 +76,4 @@ def preprocess_case(
         out[f"{tag.lower()}_gt"] = gt
         new_sp = isp
     out["spacing"] = np.asarray(new_sp, dtype=np.float32)
-
-    if use_cache:
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(cache, **out)
     return out
-
-
-def preprocess_many(cases, target_inplane: float = TARGET_INPLANE, loader=load_ed_es, cache_ns: str = "",
-                    n4: bool = False, workers: int | None = None) -> None:
-    """Warm the preprocess cache for many cases IN PARALLEL. Uses a THREAD pool: the heavy steps
-    (N4 / scipy resample) are C-extensions that release the GIL, so threads parallelize them — and
-    it sidesteps Windows process-spawn pickling/`__main__` issues. Skips already-cached cases; big
-    first-run win (N4 is the slow part). After this the dataset just reads warm cache."""
-    import os
-    from concurrent.futures import ThreadPoolExecutor
-
-    todo = [Path(c) for c in cases
-            if not _cache_path(Path(c).name, target_inplane, cache_ns, n4).exists()]
-    if not todo:
-        return
-    workers = workers or max(1, (os.cpu_count() or 4) - 2)
-    print(f"preprocessing {len(todo)} cases on {workers} threads (n4={n4})…", flush=True)
-
-    def _one(case):
-        preprocess_case(case, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
-
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        for i, _ in enumerate(ex.map(_one, todo), 1):
-            if i % 25 == 0 or i == len(todo):
-                print(f"  {i}/{len(todo)}", flush=True)
-
-
-if __name__ == "__main__":
-    import argparse
-
-    from cardioseg.data.mri.acdc import acdc_cases
-
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--inplane", type=float, default=1.5)
-    ap.add_argument("--n", type=int, default=0, help="0 = all patients")
-    args = ap.parse_args()
-
-    cases = acdc_cases()
-    cases = cases if args.n == 0 else cases[: args.n]
-    print(f"preprocessing {len(cases)} cases -> {PROCESSED_ROOT} (inplane={args.inplane}mm)")
-    for pd in cases:
-        r = preprocess_case(pd, target_inplane=args.inplane)
-        print(f"  {r['patient']:11} {r['group']:5} ed{tuple(r['ed_img'].shape)} "
-              f"spacing={tuple(round(float(s),2) for s in r['spacing'])}")

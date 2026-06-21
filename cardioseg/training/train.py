@@ -12,9 +12,6 @@ import json
 import time
 from pathlib import Path
 
-# dataset -> (cases_fn, loader, cache_ns). Loaders are dataset-agnostic; M&M-2 labels
-# are remapped to the ACDC convention on load, so one model spans both.
-
 
 def _val_dice(model, val_dl, device) -> float:
     """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal."""

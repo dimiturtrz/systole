@@ -78,8 +78,7 @@ class DatasetAdapter(Protocol):
     `meta()` is the normalization hook: acquisition/demographics parsed from the dataset's own
     shipped files (the AUTO tier), feeding stratified eval + the reference store.
     """
-    name: str
-    cache_ns: str               # namespaces the preprocess cache so datasets don't collide
+    name: str                   # also the processed/<name>/ folder in the store
     label_map: dict[int, int]   # raw int -> canonical (0 bg, 1 RV, 2 myo, 3 LV-cav)
 
     def cases(self) -> list[Path]: ...

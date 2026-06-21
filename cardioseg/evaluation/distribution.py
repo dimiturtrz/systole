@@ -21,13 +21,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import polars as pl
 import torch
 from scipy.stats import gaussian_kde
 
 from cardioseg.training.model import build_unet
-from cardioseg.training.dataset import fit_square, split_patients
-from cardioseg.data.mri.registry import get_adapter
-from cardioseg.preprocessing.preprocess import preprocess_case
+from cardioseg.training.dataset import fit_square
+from cardioseg.data import store, splits
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice
@@ -37,28 +37,26 @@ CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef535
 SIZE = 256
 
 
-def collect(run: Path, device: str, cases, loader, cache_ns: str, meta_fn=None):
-    """One record per case: dice + boundary distances per class, EF gt/pred, and the
-    stratification keys (vendor/pathology/field) from the adapter's meta() — for the
-    stratified views. Pure eval on the existing model (no retrain)."""
+def collect(run: Path, device: str, meta_rows):
+    """One record per subject: dice + boundary distances per class, EF gt/pred, and the
+    stratification keys (vendor/pathology/field) straight from the store's meta — for the
+    stratified views. Pure eval on the existing model (no retrain).
+
+    `meta_rows` = iterable of meta dicts (e.g. polars df.iter_rows(named=True)) carrying `path`
+    (the consolidated npz) + vendor/pathology/field_T columns.
+    """
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
     model.eval()
 
     rows = []
-    for pd in cases:
-        c = preprocess_case(pd, loader=loader, cache_ns=cache_ns)
+    for r in meta_rows:
+        c = store.load_arrays(r["path"])
         sp = tuple(float(s) for s in c["spacing"])
-        rec = {"patient": pd.name, "pathology": c.get("group")}
-        if meta_fn is not None:
-            try:
-                m = meta_fn(pd)
-                rec["vendor"] = m.get("vendor")
-                rec["pathology"] = m.get("group") or rec["pathology"]
-                f = m.get("field_T")
-                rec["field"] = f"{f}T" if isinstance(f, (int, float)) else None
-            except Exception:
-                pass
+        ft = r.get("field_T")
+        rec = {"patient": Path(r["path"]).stem,
+               "pathology": r.get("pathology"), "vendor": r.get("vendor"),
+               "field": f"{ft}T" if ft not in (None, "") else None}
         masks = {}
         for tag in ("ED", "ES"):
             k = tag.lower()
@@ -227,21 +225,26 @@ def plot_strata(rows, key, out: Path, label: str):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/mnm2_to_acdc", help="run dir with model.pth")
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1"], help="set to evaluate on")
+    ap.add_argument("--run", default="runs/battery", help="run dir with model.pth")
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "canon", "battery"],
+                    help="eval set as a store query (canon = mnms1 vendor==Canon; battery = acdc+Canon)")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     run = Path(a.run)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    adapter = get_adapter(a.eval)
-    loader, ns = adapter.load_ed_es, adapter.cache_ns
-    cases = list(adapter.cases())
-    if a.holdout:
-        cases = split_patients(cases, 0.2, a.seed)[1]
-    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(cases)})"
-    rows = collect(run, device, cases, loader, ns, meta_fn=adapter.meta)
+    # eval set = a query over the consolidated store (no adapter roles)
+    if a.eval == "battery":
+        _, _, df = splits.battery(store.load(None), seed=a.seed)
+    elif a.eval == "canon":
+        df = store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
+    else:
+        df = store.load([a.eval]).filter(pl.col("labelled"))
+        if a.holdout:
+            _, df = splits.patient_val(df, 0.2, a.seed)
+    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(df)})"
+    rows = collect(run, device, df.iter_rows(named=True))
     dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
 
     out = run / "plots"

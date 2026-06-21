@@ -6,10 +6,10 @@ the normalization parser) shares one source of truth.
 from cardioseg.data.mri.base import DatasetAdapter
 from cardioseg.data.mri.acdc import AcdcAdapter
 from cardioseg.data.mri.mnm2 import Mnm2Adapter
-from cardioseg.data.mri.mnms1 import Mnms1Adapter, CanonAdapter
+from cardioseg.data.mri.mnms1 import Mnms1Adapter
 
 _ADAPTERS: dict[str, DatasetAdapter] = {
-    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter(), CanonAdapter())
+    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter())
 }
 
 

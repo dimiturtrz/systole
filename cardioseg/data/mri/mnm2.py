@@ -84,7 +84,6 @@ def load_ed_es(patient_dir: str | Path, view: str = "SA") -> PatientData:
 class Mnm2Adapter:
     """M&M-2: multi-vendor training source; labels remapped to canonical via label_map."""
     name = "mnm2"
-    cache_ns = "mnm2"
     label_map = LABEL_MAP
 
     def cases(self) -> list[Path]:

@@ -76,7 +76,6 @@ def load_ed_es(patient_dir: str | Path) -> PatientData:
 class AcdcAdapter:
     """ACDC: single-centre Siemens (Dijon), the canonical-label held-out test set."""
     name = "acdc"
-    cache_ns = ""              # canonical -> default cache namespace
     label_map = LABEL_MAP
 
     def cases(self) -> list[Path]:

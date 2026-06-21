@@ -17,8 +17,7 @@ import torch
 
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square
-from cardioseg.preprocessing.preprocess import preprocess_case
-from cardioseg.data.mri.acdc import acdc_cases
+from cardioseg.data import store
 
 SIZE = 256
 PARITY_MIN = 99.0  # % argmax agreement required to ship
@@ -31,12 +30,12 @@ def load_model(run: Path):
     return model
 
 
-def parity(model, onnx_path: Path, patient_dir: Path) -> float:
-    """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one patient."""
+def parity(model, onnx_path: Path, npz_path) -> float:
+    """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
     import onnxruntime as ort
 
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-    case = preprocess_case(patient_dir)
+    case = store.load_arrays(npz_path)
     imgs = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in case["ed_img"]])
     agree = total = 0
     for s in imgs:
@@ -81,12 +80,12 @@ def export(run: Path, verify_dir: Path, quantize: bool = True) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/acdc_aug", help="run dir holding model.pth")
-    ap.add_argument("--verify", default=None, help="patient dir for the parity check (default: first ACDC case)")
+    ap.add_argument("--run", default="runs/battery", help="run dir holding model.pth")
+    ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()
-    verify_dir = Path(a.verify) if a.verify else acdc_cases()[0]
-    export(Path(a.run), verify_dir, a.quantize)
+    verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
+    export(Path(a.run), verify, a.quantize)
 
 
 if __name__ == "__main__":

@@ -113,8 +113,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
     todo = cases if rebuild else [c for c in cases if not (data_dir / f"{c.name}.npz").exists()]
 
     def _one(case: Path):
-        arrays = preprocess_case(case, target_inplane=inplane, use_cache=False,
-                                 loader=adapter.load_ed_es, n4=n4)
+        arrays = preprocess_case(case, target_inplane=inplane, loader=adapter.load_ed_es, n4=n4)
         npz = {k: v for k, v in arrays.items() if k != "patient"}
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
