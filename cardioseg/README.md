@@ -84,38 +84,45 @@ Dataset-role decisions track in `bd cardiac-seg-bsz`.
 
 ## Train + evaluate
 ```bash
-# flagship: train multi-vendor M&M-2, hold ACDC out entirely as the test set
-python -m cardioseg.training.train --dataset mnm2 --test acdc   # -> runs/mnm2_to_acdc/ (128-ep ceiling, early-stops ~95)
-# single-centre baseline + its OOD drop on M&M-2 (the reverse direction)
-python -m cardioseg.training.train --dataset acdc --test mnm2 --epochs 40   # -> runs/acdc_to_mnm2/
-python -m cardioseg.evaluation.distribution --run runs/mnm2_to_acdc   # KDE + Bland-Altman -> plots/
-python -m cardioseg.training.export_onnx --run runs/mnm2_to_acdc      # model.onnx (+INT8) for the web viewer
+# flagship: pooled-train, hold out ACDC (centre) + Canon (vendor) — one split rule
+python -m cardioseg.training.train --battery        # -> runs/battery/ (128-ep ceiling, early-stops ~106, ~6 min)
+# legacy single-source direction (e.g. the asymmetry A/B)
+python -m cardioseg.training.train --dataset acdc --test mnm2 --epochs 40   # -> runs/acdc/
+python -m cardioseg.evaluation.distribution --run runs/battery --eval acdc    # KDE + Bland-Altman -> plots/
+python -m cardioseg.evaluation.distribution --run runs/battery --eval canon   # the unseen-vendor axis
+python -m cardioseg.training.export_onnx --run runs/battery   # model.onnx (+INT8) for the web viewer
 ```
-Training auto-tunes for the GPU: DataLoader workers (`--workers`), mixed precision, cudnn.benchmark.
+Training reads the consolidated store (builds `processed/<ds>/` on first run), logs phase timings +
+per-epoch batch-rate to `runs/<run>/train.log`. In-RAM dataset + GPU-batched augment → `--workers`
+parallelizes store consolidation, not the loader (DataLoader runs workers=0; AMP + cudnn.benchmark).
 
 ## Results (seed 0, patient-level splits)
-Flagship = **M&M-2 → ACDC** (train multi-vendor, test **150** held-out single-centre patients — the
-full ACDC, both official splits), with heavy augmentation + early stopping + largest-CC
-postprocessing + test-time augmentation:
+Flagship = the **generalization battery**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
+ex-Canon, 451 subjects), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
+vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early stopping + largest-CC
++ TTA. On the **ACDC-150** axis:
 
 | structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
 |---|---|---|---|---|
-| LV cavity | **0.94** | 1.5 | 0.28 | ~0.93–0.96 |
-| LV myocardium | 0.86 | 2.1 | 0.49 | ~0.88–0.92 |
-| RV cavity | 0.88 | 5.0 | 0.80 | ~0.88–0.92 |
-| **mean** | **0.89** | | | |
+| LV cavity | **0.94** | 1.5 | 0.27 | ~0.93–0.96 |
+| LV myocardium | 0.86 | 2.1 | 0.46 | ~0.88–0.92 |
+| RV cavity | 0.91 | 3.0 | 0.49 | ~0.88–0.92 |
+| **mean** | **0.90** | | | |
 
-**EF vs GT: MAE 6.6%** (bias −5.8%, 95% LoA [−19, +7], n=150). **Two-axis generalization battery** —
-the M&M-2 model holds across both shifts (our own splits; the challenge splits aren't inherited):
+**EF vs GT: MAE 7.1%** (bias −6.6%, n=150). **Two-axis battery** (one model, our own splits — the
+challenge splits aren't inherited):
 
 | held-out axis | n | mean Dice | EF MAE |
 |---|---|---|---|
-| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.89 | 6.6% |
-| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.87 | 7.2% |
+| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.90 | 7.1% |
+| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.85 | 15.4% \* |
 
-Canon is the real domain-generalization test (a scanner vendor never in training) and the model barely
-drops — but **n=9**: the M&Ms-1 challenge withholds GT for most of its Testing split (320 cases on
-disk, 213 labelled; Canon 50 → 9 with masks). Thin, honest, the best unseen-vendor data available.
+\* Canon **n=9** — too thin to read EF on: the same axis gave EF MAE 7.2% under a M&M-2-only model,
+15.4% here (one collapsed case dominates 9), while Dice held ~0.85 both ways. The M&Ms-1 challenge
+withholds GT for most of its Testing split (320 on disk, 213 labelled; Canon 50 → 9 with masks), so
+Canon is the honest *Dice* signal for unseen-vendor robustness; its EF is noise. Pooling M&Ms-1 into
+training (451 vs 290 subjects) lifted the solid ACDC axis (mean 0.89 → 0.90, **RV 0.88 → 0.91, HD95
+5.0 → 3.0 mm** — the extra RV diversity paid off).
 
 **Diversity buys robustness — the asymmetry proves it:**
 
@@ -125,20 +132,20 @@ disk, 213 labelled; Canon 50 → 9 with masks). Thin, honest, the best unseen-ve
 | ACDC → M&M-2 (out-of-distribution) | 0.70 | 0.59 | 9.1% |
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
-*Asymmetry table is the base model (identical config across directions, for a fair A/B); heavy
-aug + largest-CC + TTA lift the flagship to 0.89 Dice / 6.6% EF (top table).*
+*Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
+battery + heavy aug + largest-CC + TTA lift the flagship to 0.90 Dice / 7.1% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
 - **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
   4.7% → cross-dataset ~6–9%); the chambers are right, the absolute mL drift.
-- **Surface metrics:** by Dice RV > myo, but by boundary RV is *worst* (HD95 5.0 mm vs myo 2.1, LV-cav
-  1.5) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray voxels). ASSD
+- **Surface metrics:** RV still has the loosest boundary (HD95 3.0 mm vs myo 2.1, LV-cav 1.5) — basal
+  slices + stray voxels — but the pooled-train RV diversity tightened it sharply (was 5.0 mm). ASSD
   stays sub-mm everywhere; full HD is the fragile max (one stray voxel → ~200 mm), **HD95** is robust.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
 
-![EF Bland–Altman — M&M-2 model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
-![Per-class boundary-distance KDE — M&M-2 model on held-out ACDC](docs/media/boundary_kde.png)
+![EF Bland–Altman — battery model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
+![Per-class boundary-distance KDE — battery model on held-out ACDC](docs/media/boundary_kde.png)
 
 ### Stratified — where it actually fails
 Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
@@ -150,11 +157,11 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| DCM | 18% | 0.90 | **2.2%** | −1.0% |
-| MINF | 31% | 0.90 | 5.1% | −4.1% |
-| RV | 55% | 0.89 | 7.8% | −7.1% |
-| NOR | 60% | 0.92 | 5.1% | −4.8% |
-| **HCM** | 68% | 0.91 | **11.2%** | −10.9% |
+| dilated (DCM) | 20% | 0.91 | **2.1%** | −0.5% |
+| ischemic (MINF) | 31% | 0.91 | 4.2% | −3.9% |
+| rv_congenital | 57% | 0.90 | 8.0% | −8.0% |
+| normal (NOR) | 62% | 0.92 | 7.4% | −7.1% |
+| **hypertrophic (HCM)** | 70% | 0.91 | **13.8%** | −13.3% |
 
 **Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
 localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across
@@ -170,20 +177,22 @@ right). See `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.
 
 ![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](docs/media/strata_pathology_acdc.png)
 
-**By vendor** (in-domain M&M-2 val) — murkier, read with care:
+**By vendor** (in-domain M&M-2 val, battery model) — read with care:
 
 | vendor | n | gtEF | mean Dice | EF MAE |
 |---|---|---|---|---|
-| Siemens | 43 | 48% | 0.898 | 8.2% |
-| Philips | 18 | 58% | 0.893 | 8.6% |
-| **GE** | 11 | 61% | **0.879** | 12.0% |
+| Siemens | 43 | 48% | 0.889 | 12.1% |
+| Philips | 20 | 59% | 0.910 | 11.7% |
+| **GE** | 9 | 55% | 0.903 | 11.0% |
 
-GE's **Dice is lowest** (0.879, range-independent → a real signal, though n=11). Its higher EF MAE
-is **partly confounded** by a higher-EF cohort (gtEF 61% vs Siemens 48%), so don't read it as pure
-vendor effect. Net: a weak-but-directional minority-vendor signal — the measured (caveated) case
-*for* `qfz`, not an assumption.
+The **GE minority-vendor deficit closed**: under the M&M-2-only model GE had the lowest Dice (0.879);
+pooling M&Ms-1 into training lifted it to **0.903**, now level with Philips and *above* Siemens —
+more vendor diversity in train, not harmonization, fixed the gap. That weakens the standalone case
+for intensity harmonization (`qfz`): the cheapest robustness lever is still more multi-vendor data.
+(EF MAE ~11–12% across vendors here is the in-domain pathology mix — the ESV small-cavity effect, not
+a vendor signal; the clean per-vendor read is Dice.)
 
-![Dice + EF MAE by vendor — GE (minority) lowest Dice](docs/media/strata_vendor_mnm2.png)
+![Dice + EF MAE by vendor — GE deficit closed under pooled training](docs/media/strata_vendor_mnm2.png)
 
 Published column = context, not a trophy: even multi-vendor, this is "competent on public
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
