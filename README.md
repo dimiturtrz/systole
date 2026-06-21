@@ -46,12 +46,15 @@ plot splits the error in two: a systematic **−5.6% bias** (the curve sits left
 correctable) and a **spread** (tightened by the work below). EF is a *ratio* of two volumes,
 so it magnifies per-frame segmentation error — the masks are good (Dice 0.90), the derived number isn't.
 
-**Where it fails — stratified.** Pooled numbers hide it: Dice is uniform across pathologies (~0.90),
-but **EF error concentrates on HCM** (MAE 11% vs 2% for DCM) — thick-myocardium hearts where the
-cavity is hardest. And the model is weakest on the **minority vendor** (GE, EF MAE 12% vs Siemens
-8%) — the multi-vendor-imbalance signal that motivates harmonization. Same eval, broken down:
+**Where it fails — stratified (read carefully).** Dice is uniform across pathologies (~0.90), so
+**the masks aren't worse anywhere** — the EF spread is a *ratio* effect, not a segmentation one.
+EF MAE largely tracks **EF magnitude** (DCM, low-EF dilated ventricles, MAE 2%; high-EF hearts
+harder) — a denominator artifact, not worse masks. **HCM is the genuine outlier**: same EF range as
+NOR (~60–68%) but **double the error** (11% vs 5%) — small thick-walled cavities amplify a fixed
+volume error. (The vendor breakdown is murkier — GE has the lowest Dice but its higher EF MAE is
+partly a higher-EF cohort + n=11; see [cardioseg/](cardioseg/).)
 
-![EF error by pathology — uniform Dice, HCM EF MAE spikes](cardioseg/docs/media/strata_pathology_acdc.png)
+![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](cardioseg/docs/media/strata_pathology_acdc.png)
 
 Paths from here, roughly in effort order:
 - ✅ **Largest-CC postprocessing** (applied) — dropping stray false-positive islands cut EF MAE

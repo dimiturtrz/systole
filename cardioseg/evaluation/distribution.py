@@ -175,18 +175,22 @@ def strata_table(rows, key) -> dict:
     if not g:
         return {}
     print(f"\n=== stratified by {key} ===")
-    print(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'EF MAE':>7} {'bias':>6}")
+    # GT-EF mean given alongside MAE: EF is a ratio, so absolute MAE isn't comparable across groups
+    # with different cavity sizes (small-cavity HCM amplifies a fixed volume error). Dice is the
+    # range-independent segmentation-quality metric; read MAE *with* the GT-EF context.
+    print(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'gtEF':>5} {'EF MAE':>7} {'bias':>6}")
     out = {}
     for grp, rs in g.items():
         d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
         diff = np.array([r["ef_pred"] - r["ef_gt"] for r in rs])
+        gt_ef = float(np.mean([r["ef_gt"] for r in rs]))
         mae, bias = float(np.mean(np.abs(diff))), float(np.mean(diff))
         mean_d = float(np.mean(list(d.values())))
         flag = "  (small n)" if len(rs) < SMALL_N else ""
         print(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
-              f"{mae:>6.1f}% {bias:>+5.1f}%{flag}")
+              f"{gt_ef:>4.0f}% {mae:>6.1f}% {bias:>+5.1f}%{flag}")
         out[grp] = {"n": len(rs), "dice": {CLASSES[c][0]: float(d[c]) for c in CLASSES},
-                    "dice_mean": mean_d, "ef_mae": mae, "ef_bias": bias}
+                    "dice_mean": mean_d, "gt_ef_mean": gt_ef, "ef_mae": mae, "ef_bias": bias}
     return out
 
 
@@ -204,18 +208,18 @@ def plot_strata(rows, key, out: Path, label: str):
 
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(max(5, 1.1 * len(groups)), 6))
     x = np.arange(len(groups))
-    for ax, vals, ylab, col in ((a1, mean_dice, "mean Dice", "#5b8def"),
-                                (a2, ef_mae, "EF MAE (%)", "#ef5350")):
+    for ax, vals, ylab, col, top in ((a1, mean_dice, "mean Dice", "#5b8def", 1.0),
+                                     (a2, ef_mae, "EF MAE (%)", "#ef5350", max(ef_mae))):
         bars = ax.bar(x, vals, color=col, edgecolor="#333", linewidth=0.5)
         for b, sm in zip(bars, small):
             if sm:
                 b.set_hatch("///"); b.set_alpha(0.55)
+        ax.set_ylim(0, top * 1.22)   # headroom so the value/n labels clear the frame + title
         for xi, v, n in zip(x, vals, ns):
             ax.text(xi, v, f"{v:.2f}\nn={n}", ha="center", va="bottom", fontsize=8)
         ax.set_ylabel(ylab)
         ax.set_xticks(x); ax.set_xticklabels(groups, rotation=20, ha="right", fontsize=9)
     a1.set_title(f"By {key}{label}   (hatched = n<{SMALL_N}, noisy)", fontsize=10)
-    a1.set_ylim(0, 1)
     fig.tight_layout()
     fig.savefig(out, dpi=110)
     plt.close(fig)

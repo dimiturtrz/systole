@@ -85,32 +85,40 @@ aug + largest-CC + TTA lift the flagship to 0.90 Dice / 6.3% EF (top table).*
 Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
 emits these + `stratified.json`):
 
-**By pathology** (held-out ACDC) — Dice is flat (~0.90 everywhere) but **EF error is disease-specific**:
+**By pathology** (held-out ACDC). Dice is flat (~0.90 everywhere) → **masks aren't worse anywhere**;
+the EF spread is a *ratio* effect. `gtEF` is given because EF MAE isn't comparable across groups
+with different cavity sizes — a fixed volume error moves EF more when the cavity is small:
 
-| pathology | mean Dice | EF MAE | EF bias |
-|---|---|---|---|
-| DCM | 0.90 | **2.2%** | −1.0% |
-| MINF | 0.90 | 5.1% | −4.1% |
-| NOR | 0.92 | 5.1% | −4.8% |
-| RV | 0.89 | 7.8% | −7.1% |
-| **HCM** | 0.91 | **11.2%** | −10.9% |
+| pathology | gtEF | mean Dice | EF MAE | EF bias |
+|---|---|---|---|---|
+| DCM | 18% | 0.90 | **2.2%** | −1.0% |
+| MINF | 31% | 0.90 | 5.1% | −4.1% |
+| RV | 55% | 0.89 | 7.8% | −7.1% |
+| NOR | 60% | 0.92 | 5.1% | −4.8% |
+| **HCM** | 68% | 0.91 | **11.2%** | −10.9% |
 
-HCM (thick myocardium → hardest cavity) is the EF failure — invisible in Dice, glaring in EF.
+Two readings: (1) MAE **largely tracks EF magnitude** — low-EF DCM is robust (big dilated cavity,
+forgiving denominator), high-EF hearts harder. A denominator artifact, *not* worse segmentation.
+(2) **HCM is the genuine outlier** — same EF range as NOR (~60–68%) yet *double* the error: small,
+thick-walled, papillary-dense cavities amplify a fixed volume error. So HCM is a real EF-sensitivity
+failure mode; the rest is mostly the ratio's range-dependence.
 
-![EF error by pathology — uniform Dice, HCM EF MAE spikes](docs/media/strata_pathology_acdc.png)
+![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](docs/media/strata_pathology_acdc.png)
 
-**By vendor** (in-domain M&M-2 val) — the model is weakest on the **minority** vendor:
+**By vendor** (in-domain M&M-2 val) — murkier, read with care:
 
-| vendor | n | mean Dice | EF MAE |
-|---|---|---|---|
-| Siemens | 43 | 0.898 | 8.2% |
-| Philips | 18 | 0.893 | 8.6% |
-| **GE** | 11 | **0.879** | **12.0%** |
+| vendor | n | gtEF | mean Dice | EF MAE |
+|---|---|---|---|---|
+| Siemens | 43 | 48% | 0.898 | 8.2% |
+| Philips | 18 | 58% | 0.893 | 8.6% |
+| **GE** | 11 | 61% | **0.879** | 12.0% |
 
-GE (fewest training subjects) trails — the imbalance signal that motivates harmonization. Small n
-(11), so directional not definitive; still, it's the measured case *for* `qfz`, not an assumption.
+GE's **Dice is lowest** (0.879, range-independent → a real signal, though n=11). Its higher EF MAE
+is **partly confounded** by a higher-EF cohort (gtEF 61% vs Siemens 48%), so don't read it as pure
+vendor effect. Net: a weak-but-directional minority-vendor signal — the measured (caveated) case
+*for* `qfz`, not an assumption.
 
-![Dice + EF MAE by vendor — GE (minority) trails](docs/media/strata_vendor_mnm2.png)
+![Dice + EF MAE by vendor — GE (minority) lowest Dice](docs/media/strata_vendor_mnm2.png)
 
 Published column = context, not a trophy: even multi-vendor, this is "competent on public
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
