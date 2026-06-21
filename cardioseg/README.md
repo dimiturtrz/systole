@@ -141,11 +141,17 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 | NOR | 60% | 0.92 | 5.1% | −4.8% |
 | **HCM** | 68% | 0.91 | **11.2%** | −10.9% |
 
-Two readings: (1) MAE **largely tracks EF magnitude** — low-EF DCM is robust (big dilated cavity,
-forgiving denominator), high-EF hearts harder. A denominator artifact, *not* worse segmentation.
-(2) **HCM is the genuine outlier** — same EF range as NOR (~60–68%) yet *double* the error: small,
-thick-walled, papillary-dense cavities amplify a fixed volume error. So HCM is a real EF-sensitivity
-failure mode; the rest is mostly the ratio's range-dependence.
+**Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
+localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across
+datasets, *not* an annotation bug); **ESV is over-predicted ~19%**, and that alone produces the whole
+−5.8% EF bias. The over-segmentation is a roughly **fixed absolute mL** at the cavity boundary
+(partial-volume + papillaries bulging into the small contracted ES cavity) — so its *fractional*
+impact scales inversely with cavity size: corr(ES cavity, ESV ratio) = **−0.50**. DCM (huge cavity)
+is **unbiased** (ESV ratio 0.99, EF bias −0.6); HCM (tiny cavity) is worst (ESV ratio 1.51, −10.9).
+That is the HCM "outlier" — not EF-range sensitivity, but a fixed ES boundary over-seg seen through a
+small denominator. **Consequence:** the fix is segmentation-side at ES (boundary-aware loss), *not* a
+constant EF subtraction (size-dependent → would over-correct DCM) and *not* `measure.py` (volumes are
+right). See `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.
 
 ![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](docs/media/strata_pathology_acdc.png)
 
