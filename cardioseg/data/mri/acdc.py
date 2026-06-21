@@ -19,18 +19,19 @@ DATA_ROOT = str(Path(data_root("raw")) / "acdc")
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 
-def _training_dir(root: str | Path | None = None) -> Path:
-    """Resolve the dir holding patient*/ — accepts the root or .../training."""
-    base = Path(root or DATA_ROOT)
-    for cand in (base, base / "training", base / "database" / "training"):
-        if any(cand.glob("patient*")):
-            return cand
-    return base
-
-
 def acdc_cases(root: str | Path | None = None) -> list[Path]:
-    """List patient dirs (ACDC: patientXXX/). Defaults to CARDIAC_DATA_ROOT."""
-    return sorted(p for p in _training_dir(root).glob("patient*") if p.is_dir())
+    """ALL labelled ACDC patients — both training/ (100) and testing/ (50, also has GT). We pull
+    everything and make our own train/val/test splits downstream (don't inherit the challenge split)."""
+    base = Path(root or DATA_ROOT)
+    out: list[Path] = []
+    for split in ("training", "testing"):
+        d = base / split
+        if d.is_dir():
+            out += [p for p in d.glob("patient*") if p.is_dir()]
+    if not out:                                    # tolerate a flat or database/training layout
+        for cand in (base, base / "database" / "training"):
+            out += [p for p in cand.glob("patient*") if p.is_dir()]
+    return sorted(out, key=lambda p: p.name)
 
 
 def parse_info_cfg(patient_dir: str | Path) -> dict[str, str]:
