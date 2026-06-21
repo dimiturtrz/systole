@@ -18,7 +18,26 @@ from cardioseg.data.mri.pathology import harmonize
 from cardioseg.data.mri.registry import dataset_names, get_adapter
 
 FIELDS = ["dataset", "id", "vendor", "pathology_raw", "pathology",
-          "field_T", "centre", "age", "sex", "height", "weight"]
+          "field_T", "centre", "age", "age_band", "sex", "height", "weight", "bsa"]
+
+
+def _bsa(height, weight):
+    """Body surface area (m^2, Mosteller) from height(cm)+weight(kg) — the clinical volume-indexing
+    variable + a fairness axis. None if either missing."""
+    try:
+        h, w = float(height), float(weight)
+        return round((h * w / 3600.0) ** 0.5, 2) if h > 0 and w > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _age_band(age):
+    """Coarse age band for fairness stratification. None -> None (unknown)."""
+    try:
+        a = float(age)
+    except (TypeError, ValueError):
+        return None
+    return "<45" if a < 45 else "45-60" if a < 60 else "60-75" if a < 75 else "75+"
 
 
 def build_rows() -> list[dict]:
@@ -37,8 +56,9 @@ def build_rows() -> list[dict]:
                 "vendor": _norm_vendor(m.get("vendor")),
                 "pathology_raw": raw, "pathology": harmonize(raw),
                 "field_T": f if not isinstance(f, list) else "/".join(map(str, f)),
-                "centre": m.get("centre"), "age": m.get("age"), "sex": m.get("sex"),
-                "height": m.get("height"), "weight": m.get("weight"),
+                "centre": m.get("centre"), "age": m.get("age"), "age_band": _age_band(m.get("age")),
+                "sex": m.get("sex"), "height": m.get("height"), "weight": m.get("weight"),
+                "bsa": _bsa(m.get("height"), m.get("weight")),
             })
     return rows
 
@@ -65,8 +85,11 @@ def summarize(rows: list[dict]) -> None:
         print(f"\n{ds}  (n={len(rs)})")
         print("  vendor:", dict(Counter(r["vendor"] for r in rs)))
         print("  pathology (harmonized):", dict(Counter(r["pathology"] for r in rs)))
+        print("  sex:", dict(Counter(r["sex"] for r in rs if r["sex"])),
+              "| age_band:", dict(Counter(r["age_band"] for r in rs if r["age_band"])),
+              f"| bsa: {cov['bsa']}/{len(rs)}")
         print("  coverage:", {f: f"{cov[f]}/{len(rs)}"
-                              for f in ("field_T", "centre", "age", "sex", "height", "weight")})
+                              for f in ("field_T", "centre", "age", "sex", "height", "weight", "bsa")})
     print("\n=== pooled harmonized pathology ===")
     print(" ", dict(Counter(r["pathology"] for r in rows)))
     print("=== pooled vendor ===")
