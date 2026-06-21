@@ -114,13 +114,12 @@ The route out of each gap is concrete — EF paths above + **[ROADMAP.md](ROADMA
 (largest-CC ✅, then harmonization, calibration, augmentation, eval rigor).
 
 ## Data
-Datasets live **outside the repo** (licensing + size) and **none is committed**.
-- **M&M-2** ([challenge](https://www.ub.edu/mnms-2/)) — multi-vendor training set: 360 subjects,
-  3 vendors, 8 pathologies, 1.5T + 3T.
-- **ACDC** ([challenge](https://www.creatis.insa-lyon.fr/Challenge/acdc/)) — single-centre
-  held-out test set: 100 patients, 5 pathologies.
-
-Both are register-gated; label conventions differ (M&M-2 LV=1 vs ACDC LV=3) and are remapped on load.
+Three register-gated public sets, **outside the repo** (licensing + size), unified by per-dataset
+adapters into one **data cloud** (830 subjects, 4 vendors, harmonized pathology + demographics):
+**M&M-2** ([link](https://www.ub.edu/mnms-2/), 360, 3 vendors), **ACDC**
+([link](https://www.creatis.insa-lyon.fr/Challenge/acdc/), 150, Siemens), **M&Ms-1** (345, 4 vendors
+incl. Canon). Each adapter remaps labels + parses metadata to a common schema; we pull *all* data and
+make our own splits. Full schema, coverage, and roles → **[cardioseg/](cardioseg/)**.
 
 **Config — one path, everything derived.** Copy the template, set a single `data` root:
 ```bash

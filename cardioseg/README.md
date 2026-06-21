@@ -35,6 +35,31 @@ remapped to canonical on load (verified geometrically), so one model spans them.
 overrides the file (CI). Loaded by `cardioseg/config.py`; adapters live in `cardioseg/data/mri/`
 behind a `DatasetAdapter` interface (add a dataset = one file + one registry line).
 
+## Data cloud
+The three datasets are unified by per-dataset **adapters** (`data/mri/{acdc,mnm2,mnms1}.py` behind a
+`DatasetAdapter` interface) into one schema, then inventoried into a single table
+(`python -m cardioseg.data.inventory` → `<data>/processed/inventory.csv`). We pull **all** labelled
+data and make our **own** splits — the challenge splits aren't inherited.
+
+| dataset | n | vendors | demographics | role |
+|---|---|---|---|---|
+| **ACDC** | 150 (train 100 + test 50, both labelled) | Siemens only | height/weight → BSA | clean cross-centre test |
+| **M&M-2** | 360 | Siemens 219 / Philips 88 / GE 53 | — | multi-vendor train |
+| **M&Ms-1** | 345 | Philips 125 / Siemens 95 / GE 75 / **Canon 50** | age / sex / h+w | broadest; built-in unseen-vendor split |
+
+**Unification** each adapter handles: label remap to canonical (0 bg / 1 RV / 2 myo / 3 LV-cav —
+M&M-2 & M&Ms-1 are LV=1, verified geometrically); ED/ES selection; `meta()` parsing of acquisition +
+demographics from the dataset's own sidecars (Info.cfg / CSV). `null` is a valid value (unknown).
+
+**Stratification axes** (the cloud's columns): **vendor** (4, everywhere), **harmonized pathology**
+(`data/mri/pathology.py` → normal / dilated / hypertrophic / ischemic / rv_congenital / other —
+the 3 vocabularies collapsed), and **demographics** for fairness (sex + age-band on M&Ms-1; **BSA**
+on 283 = ACDC + M&Ms-1, salvaged from height+weight). Pooled cloud: 830 subjects, balanced pathology.
+
+**Overlap caveat:** M&Ms-1 ⊃ ~195 of M&M-2 (shared NOR/HCM/LV per the M&M-2 docs; mapping
+unavailable) — so the two can't be each other's clean held-out test; ACDC is the only fully
+independent set. Dataset-role decisions track in `bd cardiac-seg-bsz`.
+
 ## Train + evaluate
 ```bash
 # flagship: train multi-vendor M&M-2, hold ACDC out entirely as the test set
