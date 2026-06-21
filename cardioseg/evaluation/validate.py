@@ -67,12 +67,14 @@ def validate(
     from ..data.mri.acdc import load_ed_es
     from .measure import ejection_fraction
     from .postprocess import largest_cc_per_class
+    from .evaluate import surface_distances, surface_metrics
     from ..training.dataset import fit_square
 
     loader = loader or load_ed_es
     preprocess_many(val_dirs, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)  # parallel cache warm
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}
+    surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
     ef_rows = []
     for pd in val_dirs:
         c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
@@ -90,6 +92,10 @@ def validate(
                 p, g = pred == cl, gt == cl
                 inter[cl] += 2.0 * np.logical_and(p, g).sum()
                 denom[cl] += p.sum() + g.sum()
+                sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
+                if sd.size:
+                    m = surface_metrics(sd)
+                    surf[cl]["hd95"].append(m["hd95"]); surf[cl]["assd"].append(m["assd"])
         if "ED" in vols and "ES" in vols:
             ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing, lv_label=3)
             ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing, lv_label=3)
@@ -98,16 +104,26 @@ def validate(
 
     dice_per_class = {cl: (inter[cl] / denom[cl] if denom[cl] else float("nan"))
                       for cl in CLASS_NAMES}
-    return dice_per_class, ef_rows
+    # median over volumes — robust report (HD95 already drops per-volume outliers; median across
+    # cases drops the odd failed volume too, matching the "worst case decides, but report robust" line)
+    surf_per_class = {cl: {"hd95": float(np.median(surf[cl]["hd95"])) if surf[cl]["hd95"] else float("nan"),
+                           "assd": float(np.median(surf[cl]["assd"])) if surf[cl]["assd"] else float("nan")}
+                      for cl in CLASS_NAMES}
+    return dice_per_class, ef_rows, surf_per_class
 
 
-def summarize(dice_per_class, ef_rows):
-    """Print the Dice table + EF table, return a JSON-able metrics dict."""
+def summarize(dice_per_class, ef_rows, surf_per_class=None):
+    """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
     print("\n=== VAL Dice (per class, pooled over slices) ===")
     for cl, name in CLASS_NAMES.items():
         print(f"  {name:7} (label {cl}): {dice_per_class[cl]:.3f}")
     mean_dice = float(np.nanmean([dice_per_class[c] for c in CLASS_NAMES]))
     print(f"  mean: {mean_dice:.3f}")
+
+    if surf_per_class:
+        print("\n=== VAL boundary (median over volumes, mm) ===")
+        for cl, name in CLASS_NAMES.items():
+            print(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
 
     print("\n=== VAL EF: GT vs predicted ===")
     errs = []
@@ -125,4 +141,6 @@ def summarize(dice_per_class, ef_rows):
         "dice_mean": mean_dice,
         "ef_mae": ef_mae,
         "ef_rows": ef_rows,
+        "boundary": ({CLASS_NAMES[c]: surf_per_class[c] for c in CLASS_NAMES}
+                     if surf_per_class else None),
     }

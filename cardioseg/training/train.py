@@ -111,8 +111,8 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
     print(f"\n===== VALIDATION ({dataset}) =====")
-    dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns, n4=n4)
-    results = {"val": summarize(dice_per_class, ef_rows)}
+    dice_per_class, ef_rows, surf = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns, n4=n4)
+    results = {"val": summarize(dice_per_class, ef_rows, surf)}
 
     # held-out cross-dataset test (the generalization number)
     if test and test != dataset:
@@ -122,8 +122,8 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
         if n_patients:
             test_dirs = test_dirs[:n_patients]
         print(f"\n===== CROSS-DATASET TEST: train={dataset} -> test={test} (n={len(test_dirs)}) =====")
-        tdice, tef = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns, n4=n4)
-        results[f"test_{test}"] = summarize(tdice, tef)
+        tdice, tef, tsurf = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns, n4=n4)
+        results[f"test_{test}"] = summarize(tdice, tef, tsurf)
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -145,11 +145,14 @@ def train_acdc(epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
 
 
 if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(line_buffering=True)   # so per-epoch lines flush live when redirected to a log
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--acdc", action="store_true", help="shorthand for --dataset acdc")
     ap.add_argument("--dataset", choices=["acdc", "mnm2", "mnms1"], default=None)
-    ap.add_argument("--test", choices=["acdc", "mnm2", "mnms1", "none"], default="none",
-                    help="held-out cross-dataset test set")
+    ap.add_argument("--test", choices=["acdc", "mnm2", "mnms1", "canon", "none"], default="none",
+                    help="held-out cross-dataset test set (canon = M&Ms-1 Canon-50, unseen-vendor)")
     ap.add_argument("--epochs", type=int, default=128, help="ceiling; early stopping ends sooner")
     ap.add_argument("--patience", type=int, default=20, help="early-stop patience (epochs w/o val gain)")
     ap.add_argument("--batch", type=int, default=32)

@@ -45,7 +45,7 @@ data and make our **own** splits — the challenge splits aren't inherited.
 |---|---|---|---|---|
 | **ACDC** | 150 (train 100 + test 50, both labelled) | Siemens only | height/weight → BSA | clean cross-centre test |
 | **M&M-2** | 360 | Siemens 219 / Philips 88 / GE 53 | — | multi-vendor train |
-| **M&Ms-1** | 345 | Philips 125 / Siemens 95 / GE 75 / **Canon 50** | age / sex / h+w | broadest; built-in unseen-vendor split |
+| **M&Ms-1** | 320 on disk / **213 labelled** | Philips 125 / Siemens 95 / GE 50 / **Canon 50** (9 labelled) | age / sex / h+w | broadest; **Canon = clean unseen-vendor test** (overlap-free) |
 
 **Unification** each adapter handles: label remap to canonical (0 bg / 1 RV / 2 myo / 3 LV-cav —
 M&M-2 & M&Ms-1 are LV=1, verified geometrically); ED/ES selection; `meta()` parsing of acquisition +
@@ -56,9 +56,16 @@ demographics from the dataset's own sidecars (Info.cfg / CSV). `null` is a valid
 the 3 vocabularies collapsed), and **demographics** for fairness (sex + age-band on M&Ms-1; **BSA**
 on 283 = ACDC + M&Ms-1, salvaged from height+weight). Pooled cloud: 830 subjects, balanced pathology.
 
+**Withheld-GT caveat:** M&Ms-1 ships 320 cases but only **213 have usable masks** — the challenge
+zero-fills the GT for much of Testing (the gt *file* exists but is all-background), so train/eval
+must filter on mask *content*, not file existence (`mnms1_cases(labelled_only=True)`). This is why
+**Canon = 50 on disk but n=9 labelled** — thin, but the only unseen-vendor data with public masks.
+
 **Overlap caveat:** M&Ms-1 ⊃ ~195 of M&M-2 (shared NOR/HCM/LV per the M&M-2 docs; mapping
 unavailable) — so the two can't be each other's clean held-out test; ACDC is the only fully
-independent set. Dataset-role decisions track in `bd cardiac-seg-bsz`.
+independent set. **Adopted split (2-axis battery):** train M&M-2 → test ACDC (centre shift) +
+Canon (unseen vendor); the overlapping M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
+Dataset-role decisions track in `bd cardiac-seg-bsz`.
 
 ## Train + evaluate
 ```bash
@@ -72,18 +79,30 @@ python -m cardioseg.training.export_onnx --run runs/mnm2_to_acdc      # model.on
 Training auto-tunes for the GPU: DataLoader workers (`--workers`), mixed precision, cudnn.benchmark.
 
 ## Results (seed 0, patient-level splits)
-Flagship = **M&M-2 → ACDC** (train multi-vendor, test 100 held-out single-centre patients),
-with heavy augmentation + early stopping + largest-CC postprocessing + test-time augmentation:
+Flagship = **M&M-2 → ACDC** (train multi-vendor, test **150** held-out single-centre patients — the
+full ACDC, both official splits), with heavy augmentation + early stopping + largest-CC
+postprocessing + test-time augmentation:
 
-| structure | Dice | published ACDC |
-|---|---|---|
-| LV cavity | **0.94** | ~0.93–0.96 |
-| LV myocardium | 0.86 | ~0.88–0.92 |
-| RV cavity | 0.89 | ~0.88–0.92 |
-| **mean** | **0.90** | |
+| structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
+|---|---|---|---|---|
+| LV cavity | **0.94** | 1.5 | 0.28 | ~0.93–0.96 |
+| LV myocardium | 0.86 | 2.1 | 0.49 | ~0.88–0.92 |
+| RV cavity | 0.88 | 5.0 | 0.80 | ~0.88–0.92 |
+| **mean** | **0.89** | | | |
 
-**EF vs GT: MAE 6.3%** (cross-dataset, bias −5.6%, 95% LoA [−21, +9]). **Diversity buys
-robustness — the asymmetry proves it:**
+**EF vs GT: MAE 6.6%** (bias −5.8%, 95% LoA [−19, +7], n=150). **Two-axis generalization battery** —
+the M&M-2 model holds across both shifts (our own splits; the challenge splits aren't inherited):
+
+| held-out axis | n | mean Dice | EF MAE |
+|---|---|---|---|
+| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.89 | 6.6% |
+| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.87 | 7.2% |
+
+Canon is the real domain-generalization test (a scanner vendor never in training) and the model barely
+drops — but **n=9**: the M&Ms-1 challenge withholds GT for most of its Testing split (320 cases on
+disk, 213 labelled; Canon 50 → 9 with masks). Thin, honest, the best unseen-vendor data available.
+
+**Diversity buys robustness — the asymmetry proves it:**
 
 | train → test | mean Dice | RV | EF MAE |
 |---|---|---|---|
@@ -92,15 +111,15 @@ robustness — the asymmetry proves it:**
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); heavy
-aug + largest-CC + TTA lift the flagship to 0.90 Dice / 6.3% EF (top table).*
+aug + largest-CC + TTA lift the flagship to 0.89 Dice / 6.6% EF (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
-  multi-vendor training carries to a new centre with **no segmentation drop**.
+  multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
 - **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
-  4.7% → cross-dataset ~9%); the chambers are right, the absolute mL drift.
-- **Surface metrics** (flagship eval): by Dice RV > myo, but by boundary (HD95) RV is
-  *worst* (~4.2 mm) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray
-  voxels). Full HD is the fragile max (one stray voxel → ~200 mm); **HD95** is the robust report.
+  4.7% → cross-dataset ~6–9%); the chambers are right, the absolute mL drift.
+- **Surface metrics:** by Dice RV > myo, but by boundary RV is *worst* (HD95 5.0 mm vs myo 2.1, LV-cav
+  1.5) — Dice punishes the thin myo ring, RV's boundary is messy (basal slices + stray voxels). ASSD
+  stays sub-mm everywhere; full HD is the fragile max (one stray voxel → ~200 mm), **HD95** is robust.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
 
 ![EF Bland–Altman — M&M-2 model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)

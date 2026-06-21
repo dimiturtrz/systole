@@ -18,12 +18,23 @@ import torch.nn.functional as F
 
 _GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
 
+# Augmentation hyperparameters. Geometric widths are conservative (cardiac short-axis has a
+# canonical orientation); intensity widths are deliberately broad to span the cross-vendor
+# contrast/resolution gap that drives the OOD drop. All probabilities are per-sample.
+ROT_DEG = 20.0                      # max +/- rotation (degrees)
+SCALE_RANGE = (0.85, 1.15)         # zoom factor range
+GAMMA_RANGE = (0.7, 1.5)           # intensity gamma range (contrast curve)
+GAMMA_PROB = 0.3                   # P(apply gamma) per sample
+BLUR_PROB = 0.2                    # P(apply 3x3 blur) per sample
+CONTRAST_RANGE = (0.8, 1.2)        # multiplicative contrast range
+NOISE_STD = 0.08                   # additive gaussian noise std (z-scored intensity units)
+
 
 def augment_batch(
     img: torch.Tensor,
     mask: torch.Tensor,
-    rot_deg: float = 20.0,
-    scale: tuple[float, float] = (0.85, 1.15),
+    rot_deg: float = ROT_DEG,
+    scale: tuple[float, float] = SCALE_RANGE,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
 
@@ -54,14 +65,16 @@ def augment_batch(
     # --- intensity (image only), per-sample, vectorized ---
     mn = img.amin((1, 2, 3), keepdim=True)
     rng = (img.amax((1, 2, 3), keepdim=True) - mn).clamp_min(1e-6)
-    gamma = torch.rand(b, 1, 1, 1, device=dev) * 0.8 + 0.7                      # 0.7-1.5
-    do_g = (torch.rand(b, 1, 1, 1, device=dev) < 0.3).to(dt)
+    g_lo, g_hi = GAMMA_RANGE
+    gamma = torch.rand(b, 1, 1, 1, device=dev) * (g_hi - g_lo) + g_lo
+    do_g = (torch.rand(b, 1, 1, 1, device=dev) < GAMMA_PROB).to(dt)
     img = do_g * (((img - mn) / rng) ** gamma * rng + mn) + (1 - do_g) * img    # gamma where selected
 
     k = _GAUSS3.to(dev, dt).view(1, 1, 3, 3)
-    do_b = (torch.rand(b, 1, 1, 1, device=dev) < 0.2).to(dt)
+    do_b = (torch.rand(b, 1, 1, 1, device=dev) < BLUR_PROB).to(dt)
     img = do_b * F.conv2d(img, k, padding=1) + (1 - do_b) * img                 # occasional blur
 
-    contrast = torch.rand(b, 1, 1, 1, device=dev) * 0.4 + 0.8                   # 0.8-1.2
-    img = img * contrast + torch.randn_like(img) * 0.08                         # contrast + noise
+    c_lo, c_hi = CONTRAST_RANGE
+    contrast = torch.rand(b, 1, 1, 1, device=dev) * (c_hi - c_lo) + c_lo
+    img = img * contrast + torch.randn_like(img) * NOISE_STD                    # contrast + noise
     return img, mask

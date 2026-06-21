@@ -20,15 +20,21 @@ from cardioseg.types import Image, Spacing, Volume
 
 PROCESSED_ROOT = data_root("processed")     # paths.yaml data.processed (env override: CARDIAC_PROCESSED_ROOT)
 
+# In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
+# model trains on. The single source of truth — callers mirror it as their default. Slices (z) are
+# left untouched (anisotropic 2D-model convention).
+TARGET_INPLANE = 1.5
+ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
 
-def zscore(img: Image, eps: float = 1e-6) -> Image:
+
+def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
     """Per-volume z-score on the whole array (uncalibrated intensity -> zero-mean)."""
     img = img.astype(np.float32)
     return (img - img.mean()) / (img.std() + eps)
 
 
 def resample_inplane(
-    arr: Volume, spacing: Spacing, target_inplane: float = 1.5, is_mask: bool = False
+    arr: Volume, spacing: Spacing, target_inplane: float = TARGET_INPLANE, is_mask: bool = False
 ) -> tuple[Volume, Spacing]:
     """Resample H,W (not D) of a [D, H, W] array to target_inplane mm.
 
@@ -55,7 +61,7 @@ def _cache_path(patient_name, target_inplane, cache_ns="", n4=False):
 
 
 def preprocess_case(
-    patient_dir: str | Path, target_inplane: float = 1.5, use_cache: bool = True,
+    patient_dir: str | Path, target_inplane: float = TARGET_INPLANE, use_cache: bool = True,
     loader=load_ed_es, cache_ns: str = "", n4: bool = False,
 ) -> dict:
     """Load + resample + (N4) + normalize a patient's ED/ES. Returns dict with keys
@@ -95,7 +101,7 @@ def preprocess_case(
     return out
 
 
-def preprocess_many(cases, target_inplane: float = 1.5, loader=load_ed_es, cache_ns: str = "",
+def preprocess_many(cases, target_inplane: float = TARGET_INPLANE, loader=load_ed_es, cache_ns: str = "",
                     n4: bool = False, workers: int | None = None) -> None:
     """Warm the preprocess cache for many cases IN PARALLEL. Uses a THREAD pool: the heavy steps
     (N4 / scipy resample) are C-extensions that release the GIL, so threads parallelize them — and
