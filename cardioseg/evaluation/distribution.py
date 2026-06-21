@@ -13,6 +13,7 @@ Also prints pooled HD95 / ASSD / Dice / EF-MAE. Writes PNGs to <run>/plots/.
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -36,17 +37,28 @@ CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef535
 SIZE = 256
 
 
-def collect(run: Path, device: str, cases, loader, cache_ns: str):
+def collect(run: Path, device: str, cases, loader, cache_ns: str, meta_fn=None):
+    """One record per case: dice + boundary distances per class, EF gt/pred, and the
+    stratification keys (vendor/pathology/field) from the adapter's meta() — for the
+    stratified views. Pure eval on the existing model (no retrain)."""
     model = build_unet(spatial_dims=2, out_channels=4).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
     model.eval()
 
-    dists = {c: [] for c in CLASSES}  # pooled boundary distances per class (mm)
-    dice_acc = {c: [] for c in CLASSES}
-    ef_gt, ef_pred = [], []
+    rows = []
     for pd in cases:
         c = preprocess_case(pd, loader=loader, cache_ns=cache_ns)
         sp = tuple(float(s) for s in c["spacing"])
+        rec = {"patient": pd.name, "pathology": c.get("group")}
+        if meta_fn is not None:
+            try:
+                m = meta_fn(pd)
+                rec["vendor"] = m.get("vendor")
+                rec["pathology"] = m.get("group") or rec["pathology"]
+                f = m.get("field_T")
+                rec["field"] = f"{f}T" if isinstance(f, (int, float)) else None
+            except Exception:
+                pass
         masks = {}
         for tag in ("ED", "ES"):
             k = tag.lower()
@@ -56,15 +68,23 @@ def collect(run: Path, device: str, cases, loader, cache_ns: str):
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
             masks[tag] = (pred, gt)
             if tag == "ED":
-                for cl in CLASSES:
-                    dists[cl].append(surface_distances(pred, gt, cl, sp))
-                    dice_acc[cl].append(dice(pred, gt, cl))
+                rec["sd"] = {cl: surface_distances(pred, gt, cl, sp) for cl in CLASSES}
+                rec["dice"] = {cl: dice(pred, gt, cl) for cl in CLASSES}
         if "ED" in masks and "ES" in masks:
-            ef_g, _, _ = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)
-            ef_p, _, _ = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)
-            ef_gt.append(ef_g)
-            ef_pred.append(ef_p)
-    return dists, dice_acc, np.array(ef_gt), np.array(ef_pred)
+            rec["ef_gt"] = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)[0]
+            rec["ef_pred"] = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)[0]
+        rows.append(rec)
+    return rows
+
+
+def _pooled(rows):
+    """Pooled dists/dice/ef arrays from per-case rows (for the total plots)."""
+    dists = {c: [r["sd"][c] for r in rows if "sd" in r] for c in CLASSES}
+    dice_acc = {c: [r["dice"][c] for r in rows if "dice" in r] for c in CLASSES}
+    ef = [(r["ef_gt"], r["ef_pred"]) for r in rows if "ef_gt" in r]
+    ef_gt = np.array([g for g, _ in ef])
+    ef_pred = np.array([p for _, p in ef])
+    return dists, dice_acc, ef_gt, ef_pred
 
 
 def plot_kde(dists, out: Path, label: str):
@@ -136,6 +156,71 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
     return bias, sd
 
 
+SMALL_N = 10   # groups below this are flagged — per-group stats are noisy
+
+
+def _groups(rows, key):
+    """{group_value -> rows with EF} for a stratify key, dropping rows missing the key/EF."""
+    g = defaultdict(list)
+    for r in rows:
+        v = r.get(key)
+        if v is not None and "ef_gt" in r:
+            g[str(v)].append(r)
+    return dict(sorted(g.items(), key=lambda kv: -len(kv[1])))   # largest group first
+
+
+def strata_table(rows, key) -> dict:
+    """Per-group mean Dice (per class + mean), EF MAE + bias, n. Printed + returned for JSON."""
+    g = _groups(rows, key)
+    if not g:
+        return {}
+    print(f"\n=== stratified by {key} ===")
+    print(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'EF MAE':>7} {'bias':>6}")
+    out = {}
+    for grp, rs in g.items():
+        d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
+        diff = np.array([r["ef_pred"] - r["ef_gt"] for r in rs])
+        mae, bias = float(np.mean(np.abs(diff))), float(np.mean(diff))
+        mean_d = float(np.mean(list(d.values())))
+        flag = "  (small n)" if len(rs) < SMALL_N else ""
+        print(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
+              f"{mae:>6.1f}% {bias:>+5.1f}%{flag}")
+        out[grp] = {"n": len(rs), "dice": {CLASSES[c][0]: float(d[c]) for c in CLASSES},
+                    "dice_mean": mean_d, "ef_mae": mae, "ef_bias": bias}
+    return out
+
+
+def plot_strata(rows, key, out: Path, label: str):
+    """Two panels: per-group mean Dice (bars) + per-group EF MAE (bars), n annotated,
+    small-n groups hatched. The 'where does it fail' figure."""
+    g = _groups(rows, key)
+    if len(g) < 2:
+        return
+    groups = list(g)
+    mean_dice = [np.mean([r["dice"][c] for r in g[gr] for c in CLASSES if "dice" in r]) for gr in groups]
+    ef_mae = [float(np.mean([abs(r["ef_pred"] - r["ef_gt"]) for r in g[gr]])) for gr in groups]
+    ns = [len(g[gr]) for gr in groups]
+    small = [n < SMALL_N for n in ns]
+
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(max(5, 1.1 * len(groups)), 6))
+    x = np.arange(len(groups))
+    for ax, vals, ylab, col in ((a1, mean_dice, "mean Dice", "#5b8def"),
+                                (a2, ef_mae, "EF MAE (%)", "#ef5350")):
+        bars = ax.bar(x, vals, color=col, edgecolor="#333", linewidth=0.5)
+        for b, sm in zip(bars, small):
+            if sm:
+                b.set_hatch("///"); b.set_alpha(0.55)
+        for xi, v, n in zip(x, vals, ns):
+            ax.text(xi, v, f"{v:.2f}\nn={n}", ha="center", va="bottom", fontsize=8)
+        ax.set_ylabel(ylab)
+        ax.set_xticks(x); ax.set_xticklabels(groups, rotation=20, ha="right", fontsize=9)
+    a1.set_title(f"By {key}{label}   (hatched = n<{SMALL_N}, noisy)", fontsize=10)
+    a1.set_ylim(0, 1)
+    fig.tight_layout()
+    fig.savefig(out, dpi=110)
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default="runs/mnm2_to_acdc", help="run dir with model.pth")
@@ -152,10 +237,12 @@ def main():
     if a.holdout:
         cases = split_patients(cases, 0.2, a.seed)[1]
     label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(cases)})"
-    dists, dice_acc, ef_gt, ef_pred = collect(run, device, cases, loader, ns)
+    rows = collect(run, device, cases, loader, ns, meta_fn=adapter.meta)
+    dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
 
     out = run / "plots"
     out.mkdir(parents=True, exist_ok=True)
+    # --- total (pooled) ---
     plot_kde(dists, out / "boundary_kde.png", label)
     bias, sd = plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
 
@@ -165,7 +252,16 @@ def main():
         m = surface_metrics(pooled)
         print(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
     print(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
-    print(f"plots -> {out}")
+
+    # --- stratified (only axes with >1 group present) ---
+    strata = {}
+    for key in ("vendor", "pathology", "field"):
+        if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
+            strata[key] = strata_table(rows, key)
+            plot_strata(rows, key, out / f"strata_{key}.png", label)
+    import json
+    (out / "stratified.json").write_text(json.dumps(strata, indent=2))
+    print(f"\nplots + stratified.json -> {out}")
 
 
 def lo_hi(bias, sd):

@@ -81,6 +81,37 @@ aug + largest-CC + TTA lift the flagship to 0.90 Dice / 6.3% EF (top table).*
 ![EF Bland–Altman — M&M-2 model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
 ![Per-class boundary-distance KDE — M&M-2 model on held-out ACDC](docs/media/boundary_kde.png)
 
+### Stratified — where it actually fails
+Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
+emits these + `stratified.json`):
+
+**By pathology** (held-out ACDC) — Dice is flat (~0.90 everywhere) but **EF error is disease-specific**:
+
+| pathology | mean Dice | EF MAE | EF bias |
+|---|---|---|---|
+| DCM | 0.90 | **2.2%** | −1.0% |
+| MINF | 0.90 | 5.1% | −4.1% |
+| NOR | 0.92 | 5.1% | −4.8% |
+| RV | 0.89 | 7.8% | −7.1% |
+| **HCM** | 0.91 | **11.2%** | −10.9% |
+
+HCM (thick myocardium → hardest cavity) is the EF failure — invisible in Dice, glaring in EF.
+
+![EF error by pathology — uniform Dice, HCM EF MAE spikes](docs/media/strata_pathology_acdc.png)
+
+**By vendor** (in-domain M&M-2 val) — the model is weakest on the **minority** vendor:
+
+| vendor | n | mean Dice | EF MAE |
+|---|---|---|---|
+| Siemens | 43 | 0.898 | 8.2% |
+| Philips | 18 | 0.893 | 8.6% |
+| **GE** | 11 | **0.879** | **12.0%** |
+
+GE (fewest training subjects) trails — the imbalance signal that motivates harmonization. Small n
+(11), so directional not definitive; still, it's the measured case *for* `qfz`, not an assumption.
+
+![Dice + EF MAE by vendor — GE (minority) trails](docs/media/strata_vendor_mnm2.png)
+
 Published column = context, not a trophy: even multi-vendor, this is "competent on public
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
 full deployment distribution.
