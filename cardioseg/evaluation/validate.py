@@ -53,7 +53,7 @@ def _tta_logits(model, x):
 
 def validate(
     model, val_dirs: list[Path], size: int, device: str, target_inplane: float = 1.5,
-    loader=None, cache_ns: str = "", postproc: bool = True, tta: bool = True,
+    loader=None, cache_ns: str = "", postproc: bool = True, tta: bool = True, n4: bool = False,
 ) -> tuple[dict[int, float], list[dict]]:
     """Return (dice_per_class, ef_rows).
 
@@ -74,7 +74,7 @@ def validate(
     denom = {c: 0.0 for c in CLASS_NAMES}
     ef_rows = []
     for pd in val_dirs:
-        c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns)
+        c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
         spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
         vols = {}
         for tag in ("ED", "ES"):

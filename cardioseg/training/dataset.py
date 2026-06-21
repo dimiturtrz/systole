@@ -69,13 +69,14 @@ class ACDCSliceDataset(Dataset):
         augment: bool = False,
         loader=load_ed_es,
         cache_ns: str = "",
+        n4: bool = False,
     ):
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames
         self.augment = augment
         for pd in patient_dirs:
-            c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns)
+            c = preprocess_case(pd, target_inplane=target_inplane, loader=loader, cache_ns=cache_ns, n4=n4)
             for tag in frames:
                 img = c.get(f"{tag.lower()}_img")        # [D, H, W]
                 gt = c.get(f"{tag.lower()}_gt")          # [D, H, W]
@@ -104,7 +105,7 @@ class ACDCSliceDataset(Dataset):
 
 def build_splits(
     size: int = 256, val_frac: float = 0.2, seed: int = 0, n_patients: int = 0,
-    cases: list[Path] | None = None, loader=load_ed_es, cache_ns: str = "",
+    cases: list[Path] | None = None, loader=load_ed_es, cache_ns: str = "", n4: bool = False,
 ) -> tuple[ACDCSliceDataset, ACDCSliceDataset, list[Path], list[Path]]:
     """Convenience: (train_ds [augmented], val_ds, train_dirs, val_dirs).
 
@@ -115,5 +116,5 @@ def build_splits(
     if n_patients:
         cases = cases[:n_patients]
     train_dirs, val_dirs = split_patients(cases, val_frac, seed)
-    ds = lambda dirs, aug: ACDCSliceDataset(dirs, size=size, augment=aug, loader=loader, cache_ns=cache_ns)
+    ds = lambda dirs, aug: ACDCSliceDataset(dirs, size=size, augment=aug, loader=loader, cache_ns=cache_ns, n4=n4)
     return ds(train_dirs, True), ds(val_dirs, False), train_dirs, val_dirs

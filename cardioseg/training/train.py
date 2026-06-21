@@ -36,7 +36,8 @@ def _val_dice(model, val_dl, device) -> float:
 
 
 def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patients=0,
-              val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6, patience=20):
+              val_frac=0.2, seed=0, device=None, out_dir=None, test=None, workers=6, patience=20,
+              n4=False):
     import numpy as np
     import torch
     from torch.utils.data import DataLoader
@@ -59,7 +60,7 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
 
     train_ds, val_ds, train_dirs, val_dirs = build_splits(
         size=size, val_frac=val_frac, seed=seed, n_patients=n_patients,
-        cases=cases_fn(), loader=loader, cache_ns=ns)
+        cases=cases_fn(), loader=loader, cache_ns=ns, n4=n4)
     print(f"patients: {len(train_dirs)} train / {len(val_dirs)} val  | "
           f"slices: {len(train_ds)} train / {len(val_ds)} val")
 
@@ -110,7 +111,7 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
     print(f"\n===== VALIDATION ({dataset}) =====")
-    dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns)
+    dice_per_class, ef_rows = validate(model, val_dirs, size, device, loader=loader, cache_ns=ns, n4=n4)
     results = {"val": summarize(dice_per_class, ef_rows)}
 
     # held-out cross-dataset test (the generalization number)
@@ -121,7 +122,7 @@ def train_seg(dataset="acdc", epochs=128, batch=32, lr=1e-3, size=256, n_patient
         if n_patients:
             test_dirs = test_dirs[:n_patients]
         print(f"\n===== CROSS-DATASET TEST: train={dataset} -> test={test} (n={len(test_dirs)}) =====")
-        tdice, tef = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns)
+        tdice, tef = validate(model, test_dirs, size, device, loader=tloader, cache_ns=tns, n4=n4)
         results[f"test_{test}"] = summarize(tdice, tef)
 
     out = Path(out_dir)
@@ -155,6 +156,7 @@ if __name__ == "__main__":
     ap.add_argument("--workers", type=int, default=6, help="DataLoader workers (0=main proc)")
     ap.add_argument("--n-patients", type=int, default=0, help="0=all")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--n4", action="store_true", help="N4 bias-field correction in preprocessing")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -165,4 +167,4 @@ if __name__ == "__main__":
         test = None if args.test == "none" else args.test
         train_seg(ds, epochs=args.epochs, batch=args.batch, workers=args.workers,
                   n_patients=args.n_patients, seed=args.seed, out_dir=args.out, test=test,
-                  patience=args.patience)
+                  patience=args.patience, n4=args.n4)
