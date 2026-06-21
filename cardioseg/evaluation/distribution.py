@@ -45,7 +45,7 @@ def collect(run: Path, device: str, meta_rows):
     `meta_rows` = iterable of meta dicts (e.g. polars df.iter_rows(named=True)) carrying `path`
     (the consolidated npz) + vendor/pathology/field_T columns.
     """
-    model = build_unet(spatial_dims=2, out_channels=4).to(device)
+    model = build_unet().to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
     model.eval()
 

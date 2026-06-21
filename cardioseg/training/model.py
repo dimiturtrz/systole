@@ -1,15 +1,17 @@
-"""MONAI U-Net factory (2D or 3D)."""
+"""MONAI U-Net factory (2D or 3D). Shape comes from an injected ModelCfg (cardioseg.hparams)."""
+
+from cardioseg.hparams import ModelCfg
 
 
-def build_unet(spatial_dims=3, in_channels=1, out_channels=4,
-               channels=(16, 32, 64, 128, 256), strides=(2, 2, 2, 2)):
-    """4-class U-Net (bg, LV, myo, RV). Set spatial_dims=2 for slice-wise."""
+def build_unet(cfg: ModelCfg | None = None):
+    """4-class U-Net (bg, RV, myo, LV-cav) from a ModelCfg. Default cfg = 2D slice-wise."""
     from monai.networks.nets import UNet
+    cfg = cfg or ModelCfg()
     return UNet(
-        spatial_dims=spatial_dims,
-        in_channels=in_channels,
-        out_channels=out_channels,
-        channels=channels,
-        strides=strides,
-        num_res_units=2,
+        spatial_dims=cfg.spatial_dims,
+        in_channels=cfg.in_channels,
+        out_channels=cfg.out_channels,
+        channels=tuple(cfg.channels),
+        strides=tuple(cfg.strides),
+        num_res_units=cfg.res_units,
     )

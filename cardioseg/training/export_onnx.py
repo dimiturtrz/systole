@@ -24,7 +24,7 @@ PARITY_MIN = 99.0  # % argmax agreement required to ship
 
 
 def load_model(run: Path):
-    model = build_unet(spatial_dims=2, out_channels=4)
+    model = build_unet()
     model.load_state_dict(torch.load(run / "model.pth", map_location="cpu"))
     model.eval()
     return model

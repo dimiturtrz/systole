@@ -47,7 +47,7 @@ def load_model(weights: str, device):
     import torch
     from cardioseg.training.model import build_unet
 
-    model = build_unet(spatial_dims=2, out_channels=4).to(device)
+    model = build_unet().to(device)
     model.load_state_dict(torch.load(weights, map_location=device))
     model.eval()
     return model

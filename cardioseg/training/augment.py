@@ -16,33 +16,25 @@ import math
 import torch
 import torch.nn.functional as F
 
-_GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
+from cardioseg.hparams import AugCfg
 
-# Augmentation hyperparameters. Geometric widths are conservative (cardiac short-axis has a
-# canonical orientation); intensity widths are deliberately broad to span the cross-vendor
-# contrast/resolution gap that drives the OOD drop. All probabilities are per-sample.
-ROT_DEG = 20.0                      # max +/- rotation (degrees)
-SCALE_RANGE = (0.85, 1.15)         # zoom factor range
-GAMMA_RANGE = (0.7, 1.5)           # intensity gamma range (contrast curve)
-GAMMA_PROB = 0.3                   # P(apply gamma) per sample
-BLUR_PROB = 0.2                    # P(apply 3x3 blur) per sample
-CONTRAST_RANGE = (0.8, 1.2)        # multiplicative contrast range
-NOISE_STD = 0.08                   # additive gaussian noise std (z-scored intensity units)
+_GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
 
 
 def augment_batch(
     img: torch.Tensor,
     mask: torch.Tensor,
-    rot_deg: float = ROT_DEG,
-    scale: tuple[float, float] = SCALE_RANGE,
+    cfg: AugCfg | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
 
     Per-sample flip * rotate * scale via a single affine grid_sample (bilinear image, nearest
     mask so labels stay integer; out-of-frame -> 0/background). Per-sample gamma, contrast,
-    gaussian noise, and an occasional 3x3 blur on the image only. Uses torch's global RNG —
-    seed it (torch.manual_seed) for reproducibility.
+    gaussian noise, and an occasional 3x3 blur on the image only. Hyperparams from the injected
+    AugCfg. Uses torch's global RNG — seed it (torch.manual_seed) for reproducibility.
     """
+    cfg = cfg or AugCfg()
+    rot_deg, scale = cfg.rot_deg, cfg.scale
     b, _, _, _ = img.shape
     dev, dt = img.device, img.dtype
 
@@ -65,16 +57,16 @@ def augment_batch(
     # --- intensity (image only), per-sample, vectorized ---
     mn = img.amin((1, 2, 3), keepdim=True)
     rng = (img.amax((1, 2, 3), keepdim=True) - mn).clamp_min(1e-6)
-    g_lo, g_hi = GAMMA_RANGE
+    g_lo, g_hi = cfg.gamma
     gamma = torch.rand(b, 1, 1, 1, device=dev) * (g_hi - g_lo) + g_lo
-    do_g = (torch.rand(b, 1, 1, 1, device=dev) < GAMMA_PROB).to(dt)
+    do_g = (torch.rand(b, 1, 1, 1, device=dev) < cfg.gamma_p).to(dt)
     img = do_g * (((img - mn) / rng) ** gamma * rng + mn) + (1 - do_g) * img    # gamma where selected
 
     k = _GAUSS3.to(dev, dt).view(1, 1, 3, 3)
-    do_b = (torch.rand(b, 1, 1, 1, device=dev) < BLUR_PROB).to(dt)
+    do_b = (torch.rand(b, 1, 1, 1, device=dev) < cfg.blur_p).to(dt)
     img = do_b * F.conv2d(img, k, padding=1) + (1 - do_b) * img                 # occasional blur
 
-    c_lo, c_hi = CONTRAST_RANGE
+    c_lo, c_hi = cfg.contrast
     contrast = torch.rand(b, 1, 1, 1, device=dev) * (c_hi - c_lo) + c_lo
-    img = img * contrast + torch.randn_like(img) * NOISE_STD                    # contrast + noise
+    img = img * contrast + torch.randn_like(img) * cfg.noise                    # contrast + noise
     return img, mask
