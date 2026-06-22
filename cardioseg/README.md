@@ -226,6 +226,24 @@ Published column = context, not a trophy: even multi-vendor, this is "competent 
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
 full deployment distribution.
 
+## Uncertainty & calibration
+Confidence comes free from the 4-flip TTA: per-voxel **predictive entropy** of the mean-over-flips
+softmax (`evaluation/uncertainty.py`). No dropout needed — MC-dropout was tried and rejected (it
+regressed EF ~2pp with no Dice gain, `bd cardiac-seg-bp4`).
+
+![Uncertainty map — entropy concentrates on the chamber boundaries](docs/media/uncertainty_map.png)
+
+- **Uncertainty sits on the boundary** — **~5× higher** on chamber edges than interiors (4.96×).
+  Interiors are confident; the boundary, where errors actually happen, is where the model hedges.
+  Sanity-confirmed.
+- **It tracks the real failure mode** — the most-uncertain cases are all **ES** (small contracted
+  cavity, the hard phase), including the worst HCM case (`patient034_ES`). Uncertainty ≈ a
+  difficulty / out-of-distribution flag for review.
+- **Calibration: ECE 0.093** (foreground voxels) — mildly miscalibrated, reported not hidden
+  (reliability diagram: `docs/media/reliability.png`).
+
+`python -m cardioseg.evaluation.uncertainty --run runs/gen --eval acdc`
+
 ## Layout
 ```
 cardioseg/
