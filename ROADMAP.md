@@ -13,8 +13,8 @@ report Dice + EF," the model is now set up for **domain generalization**: traine
 multi-vendor cloud (**M&M-2 + M&Ms-1**, 564 labelled subjects, 4 vendors) and held out along
 **two axes** — **ACDC** (centre/protocol shift, 150 it never saw) and **Canon** (unseen vendor).
 
-- **Segmentation generalizes** — pooled → held-out ACDC mean Dice **0.91**, equal to the in-domain
-  ACDC ceiling; unseen-vendor Canon **0.87**. The reverse (single-centre ACDC → multi-vendor)
+- **Segmentation generalizes** — pooled → held-out ACDC mean Dice **0.89** (ED+ES), near the in-domain
+  ACDC ceiling; unseen-vendor Canon **0.85**. The reverse (single-centre ACDC → multi-vendor)
   collapses to **0.70** (RV 0.85 → 0.59): diversity in training is what holds up. That asymmetry
   is the headline result.
 - **EF improved, not yet clinical** — held-out ACDC EF MAE **5.9%**, bias −5.2%, LoA ±13 — down
@@ -34,9 +34,9 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 2. ✅ **Test-time augmentation** — in-plane flip averaging at inference, no retrain.
 3. ✅ **Heavy augmentation + early stopping + multi-source pooling** (GPU-batched) — wider geometry +
    vendor-style intensity jitter; trained to a val-Dice plateau (~95 ep, best checkpoint kept); pooled
-   M&M-2 + M&Ms-1. RV Dice 0.84 → **0.92**, mean 0.87 → **0.91**, EF MAE 8.2 → **5.9%**, LoA ±27 → ±13.
-   Now **roughly level with the nnU-Net floor** (0.91 vs 0.912 Dice, 5.9 vs 5.6% EF) on a deployable
-   ONNX model at ~57× fewer params.
+   M&M-2 + M&Ms-1. RV Dice 0.84 → **0.88**, mean 0.87 → **0.89** (ED+ES), EF MAE 8.2 → **5.9%**, LoA ±27 → ±13.
+   **~2–3 Dice points under the nnU-Net floor** (0.89 vs 0.912); EF roughly level (5.9 vs 5.6%); on a
+   deployable ONNX model at ~57× fewer params.
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
    histogram standardization may tighten the spread. **Deprioritized by evidence:** the GE
    minority-vendor Dice deficit *closed under pooled training* (0.879 → 0.903) — vendor diversity, not
@@ -54,7 +54,7 @@ Earlier the held-out test was single-vendor ACDC — only the cross-*centre* dro
 the split holds out two axes** (criteria over the data cloud): ACDC (centre/protocol shift) **and
 Canon** (a scanner vendor never in training). **M&Ms-1** (320 on disk / 213 labelled, 4 vendors incl.
 Canon) is pooled into training, so the flagship trains on 4 vendors. The machine axis *is* tested —
-but Canon is **n=9 labelled** (M&Ms-1 withholds most Testing GT): enough for a Dice signal (~0.87),
+but Canon is **n=9 labelled** (M&Ms-1 withholds most Testing GT): enough for a Dice signal (~0.85),
 too thin for EF. **Still open:** leave-one-vendor-out (n up to ~190 for GE/Philips) for proper
 unseen-vendor stats. Tracked: `bd cardiac-seg-bsz`.
 

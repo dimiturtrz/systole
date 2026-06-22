@@ -115,25 +115,27 @@ vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early 
 
 | structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
 |---|---|---|---|---|
-| LV cavity | **0.95** | 1.5 | 0.29 | ~0.93–0.96 |
-| LV myocardium | 0.85 | 2.1 | 0.46 | ~0.88–0.92 |
-| RV cavity | 0.92 | 3.0 | 0.54 | ~0.88–0.92 |
-| **mean** | **0.91** | | | |
+| LV cavity | **0.92** | 2.1 | 0.53 | ~0.93–0.96 |
+| LV myocardium | 0.86 | 2.1 | 0.54 | ~0.88–0.92 |
+| RV cavity | 0.88 | 5.0 | 0.76 | ~0.88–0.92 |
+| **mean** | **0.89** | | | |
 
-**EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150). **Two-axis generalization** (one model, our own split — the
+Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
+including it is the honest read. **EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150).
+**Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
 | held-out axis | n | mean Dice | EF MAE |
 |---|---|---|---|
-| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.91 | 5.9% |
-| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.87 | 11.1% \* |
+| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.89 | 5.9% |
+| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.85 | 11.1% \* |
 
 \* Canon **n=9** — too thin to read EF on: the same axis gave EF MAE 7.2% under a M&M-2-only model,
-11.1% here (one collapsed case dominates 9), while Dice held ~0.87 both ways. The M&Ms-1 challenge
+11.1% here (one collapsed case dominates 9), while Dice held ~0.85 both ways. The M&Ms-1 challenge
 withholds GT for most of its Testing split (320 on disk, 213 labelled; Canon 50 → 9 with masks), so
 Canon is the honest *Dice* signal for unseen-vendor robustness; its EF is noise. Pooling M&Ms-1 into
-training (564 vs 360 subjects) lifted the solid ACDC axis (mean 0.89 → 0.91, **RV 0.88 → 0.92, HD95
-5.0 → 3.0 mm** — the extra RV diversity paid off).
+training (564 vs 360 subjects) lifted the ACDC axis (mean ~0.87 → 0.89 — the extra RV/vendor
+diversity paid off).
 
 **Diversity buys robustness — the asymmetry proves it:**
 
@@ -144,15 +146,15 @@ training (564 vs 360 subjects) lifted the solid ACDC axis (mean 0.89 → 0.91, *
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-pooled split + heavy aug + largest-CC + TTA lift the flagship to 0.91 Dice / 5.9% EF on ACDC-150 (top table).*
+split + heavy aug + largest-CC + TTA lift the flagship to 0.89 Dice / 5.9% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
 - **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
   4.7% → cross-dataset ~6–9%); the chambers are right, the absolute mL drift.
-- **Surface metrics:** RV still has the loosest boundary (HD95 3.0 mm vs myo 2.1, LV-cav 1.5) — basal
-  slices + stray voxels — but the pooled-train RV diversity tightened it sharply (was 5.0 mm). ASSD
-  stays sub-mm everywhere; full HD is the fragile max (one stray voxel → ~200 mm), **HD95** is robust.
+- **Surface metrics (ED+ES):** RV has the loosest boundary (HD95 5.0 mm vs myo 2.1, LV-cav 2.1) —
+  basal slices + the small ES cavity. ASSD stays sub-mm everywhere; full HD is the fragile max (one
+  stray voxel → ~200 mm), **HD95** is the robust read.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
 
 ![EF Bland–Altman — model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
@@ -162,17 +164,17 @@ pooled split + heavy aug + largest-CC + TTA lift the flagship to 0.91 Dice / 5.9
 Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
 emits these + `stratified.json`):
 
-**By pathology** (held-out ACDC). Dice is flat (~0.90 everywhere) → **masks aren't worse anywhere**;
-the EF spread is a *ratio* effect. `gtEF` is given because EF MAE isn't comparable across groups
+**By pathology** (held-out ACDC). Dice is fairly flat (~0.87–0.90) → **masks aren't much worse
+anywhere**; the EF spread is a *ratio* effect. `gtEF` is given because EF MAE isn't comparable across groups
 with different cavity sizes — a fixed volume error moves EF more when the cavity is small:
 
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.91 | **2.1%** | −0.2% |
-| ischemic (MINF) | 31% | 0.91 | 4.1% | −3.4% |
-| rv_congenital | 57% | 0.90 | 6.5% | −5.9% |
-| normal (NOR) | 62% | 0.91 | 5.1% | −4.8% |
-| **hypertrophic (HCM)** | 70% | 0.91 | **11.9%** | −11.5% |
+| dilated (DCM) | 20% | 0.90 | **2.1%** | −0.2% |
+| ischemic (MINF) | 31% | 0.88 | 4.1% | −3.4% |
+| rv_congenital | 57% | 0.88 | 6.5% | −5.9% |
+| normal (NOR) | 62% | 0.90 | 5.1% | −4.8% |
+| **hypertrophic (HCM)** | 70% | 0.87 | **11.9%** | −11.5% |
 
 **Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
 localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across
