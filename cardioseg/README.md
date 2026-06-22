@@ -239,6 +239,10 @@ regressed EF ~2pp with no Dice gain, `bd cardiac-seg-bp4`).
 - **It tracks the real failure mode** — the most-uncertain cases are all **ES** (small contracted
   cavity, the hard phase), including the worst HCM case (`patient034_ES`). Uncertainty ≈ a
   difficulty / out-of-distribution flag for review.
+- **It predicts errors, not just edges** — entropy ranks wrong voxels above correct at **ROC-AUC
+  0.87**; **AUPRC 0.51 vs a 0.14 base rate (3.5× lift)** on foreground. So high uncertainty genuinely
+  means likely-wrong — a usable review flag, not boundary decoration. (AUPRC is the honest read here —
+  errors are the rare class.)
 - **Calibration: ECE 0.093** (foreground voxels) — mildly miscalibrated, reported not hidden
   (reliability diagram: `docs/media/reliability.png`).
 

@@ -91,7 +91,7 @@ def main():
     else:
         df = store.load(["acdc"]).filter(pl.col("labelled"))
 
-    confs, corrects = [], []           # foreground-voxel calibration samples
+    confs, corrects, ents = [], [], []  # foreground-voxel calibration + error-detection samples
     bnd_u, int_u = [], []              # boundary vs interior uncertainty (sanity)
     cases = []                         # per-case uncertainty scores
     out = run / "plots"
@@ -105,7 +105,7 @@ def main():
             pred, ent, conf = tta_uncertainty(model, c[f"{tag}_img"], SIZE, device)
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
             fg = (pred > 0) | (gt > 0)
-            confs.append(conf[fg]); corrects.append((pred == gt)[fg])
+            confs.append(conf[fg]); corrects.append((pred == gt)[fg]); ents.append(ent[fg])
             cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}",
                           "uncertainty": float(ent[fg].mean()) if fg.any() else 0.0})
             for z in range(pred.shape[0]):                      # boundary vs interior
@@ -121,8 +121,19 @@ def main():
     e, bins = ece(conf, correct)
     cases.sort(key=lambda x: -x["uncertainty"])
     bratio = float(np.mean(bnd_u) / max(np.mean(int_u), 1e-6))
+
+    # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
+    # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
+    from sklearn.metrics import roc_auc_score, average_precision_score
+    ent_all = np.concatenate(ents); wrong = 1.0 - correct
+    base = float(wrong.mean())
+    rocauc = float(roc_auc_score(wrong, ent_all))
+    auprc = float(average_precision_score(wrong, ent_all))
+
     (out / "uncertainty.json").write_text(json.dumps(
         {"ece": round(e, 4), "boundary_vs_interior_ratio": round(bratio, 2),
+         "error_detection": {"auprc": round(auprc, 3), "base_rate": round(base, 3),
+                             "lift_over_base": round(auprc / max(base, 1e-6), 1), "rocauc": round(rocauc, 3)},
          "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
 
     # reliability diagram
@@ -136,7 +147,8 @@ def main():
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
-    print(f"ECE {e:.3f} | boundary/interior uncertainty {bratio:.2f}x | "
+    print(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
+          f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
           f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
     print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
