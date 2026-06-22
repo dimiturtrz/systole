@@ -77,10 +77,13 @@ roughly level (5.9 vs 5.6%), at ~57× fewer parameters — and it exports to run
 
 Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
+<!-- results:compare -->
 | | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |
 |---|---|---|---|---|---|---|---|
 | **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.92 | 0.86 | 0.88 | **0.89** | 5.9% |
 | nnU-Net (SOTA baseline) | 92 M | 19 G | 0.95 | 0.88 | 0.91 | **0.91** | 5.6% |
+<!-- /results:compare -->
+<sub>numbers auto-filled from `cardioseg/RESULTS.json` (`scripts/sync_numbers.py`) — do not hand-edit the table above.</sub>
 
 <sub>params + FLOPs measured (fvcore, single forward; nnU-Net at its 256×320 patch — inference adds tiling + TTA on top).</sub>
 

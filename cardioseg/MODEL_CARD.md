@@ -44,12 +44,15 @@ One model, held out along two independent shift axes (DataCfg criteria: `test_da
 
 **ACDC-150 (centre/protocol shift):**
 
+<!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
 | LV cavity | 0.92 | 2.1 | 0.53 |
 | LV myocardium | 0.86 | 2.1 | 0.54 |
 | RV cavity | 0.88 | 5.0 | 0.76 |
 | **mean** | **0.89** | | |
+<!-- /results:acdc -->
+<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`) — do not hand-edit.</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase, so this is the honest read
 (ED-only would be ~2 Dice points higher). EF vs GT: **MAE 5.9%**, bias −5.2%, 95% LoA [−18, +8] (n=150).

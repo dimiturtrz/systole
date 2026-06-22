@@ -121,12 +121,16 @@ ex-Canon, 564 labelled subjects — 451 train / 113 val), hold out **two axes** 
 vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early stopping + largest-CC
 + TTA. On the **ACDC-150** axis:
 
-| structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
-|---|---|---|---|---|
-| LV cavity | **0.92** | 2.1 | 0.53 | ~0.93–0.96 |
-| LV myocardium | 0.86 | 2.1 | 0.54 | ~0.88–0.92 |
-| RV cavity | 0.88 | 5.0 | 0.76 | ~0.88–0.92 |
-| **mean** | **0.89** | | | |
+<!-- results:acdc -->
+| structure | Dice | HD95 (mm) | ASSD (mm) |
+|---|---|---|---|
+| LV cavity | 0.92 | 2.1 | 0.53 |
+| LV myocardium | 0.86 | 2.1 | 0.54 |
+| RV cavity | 0.88 | 5.0 | 0.76 |
+| **mean** | **0.89** | | |
+<!-- /results:acdc -->
+<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`). Published in-distribution ACDC is
+~0.91–0.93 mean — context, not like-for-like (different test set; see the split caveat above).</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
 including it is the honest read. **EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150).
@@ -176,13 +180,16 @@ emits these + `stratified.json`):
 anywhere**; the EF spread is a *ratio* effect. `gtEF` is given because EF MAE isn't comparable across groups
 with different cavity sizes — a fixed volume error moves EF more when the cavity is small:
 
+<!-- results:strata -->
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.90 | **2.1%** | −0.2% |
-| ischemic (MINF) | 31% | 0.88 | 4.1% | −3.4% |
-| rv_congenital | 57% | 0.88 | 6.5% | −5.9% |
-| normal (NOR) | 62% | 0.90 | 5.1% | −4.8% |
-| **hypertrophic (HCM)** | 70% | 0.87 | **11.9%** | −11.5% |
+| dilated (DCM) | 20% | 0.90 | 2.1% | -0.2% |
+| ischemic (MINF) | 31% | 0.88 | 4.1% | -3.4% |
+| rv_congenital | 57% | 0.88 | 6.5% | -5.9% |
+| normal (NOR) | 62% | 0.90 | 5.1% | -4.8% |
+| **hypertrophic (HCM)** | 70% | 0.87 | 11.9% | -11.5% |
+<!-- /results:strata -->
+<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`).</sub>
 
 **Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
 localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across
