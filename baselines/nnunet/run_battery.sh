@@ -4,11 +4,10 @@
 # (convert first: python -m baselines.nnunet.convert --id 29)
 set -e
 
-export nnUNet_raw=D:/data/volumetric/mri/nnunet/raw
-export nnUNet_preprocessed=D:/data/volumetric/mri/nnunet/preprocessed
-export nnUNet_results=D:/data/volumetric/mri/nnunet/results
+# config-derived nnU-Net dirs under <data>/nnunet/ (never the data root) — see env.sh
+source "$(dirname "$0")/env.sh"
 DS="$nnUNet_raw/Dataset029_BATTERY"
-PRED=D:/data/volumetric/mri/nnunet/pred/Dataset029
+PRED="$NN/pred/Dataset029"
 
 echo "=== plan + preprocess ==="
 nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity

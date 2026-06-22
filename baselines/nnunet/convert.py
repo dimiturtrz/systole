@@ -10,8 +10,8 @@ Battery parity: imagesTr/labelsTr = the battery TRAIN+VAL pool (M&M-2 + M&Ms-1 e
 imagesTs/labelsTs = the held-out battery TEST (ACDC-150 + Canon-9). A ts_manifest.json records each
 test case's axis (acdc vs canon) so scoring can report the two generalization axes separately.
 
-    python -m baselines.nnunet.convert --out D:/data/volumetric/mri/nnunet/raw --id 29
-    # then (same env; nnUNet_raw/_preprocessed/_results env vars set by run_nnunet.sh):
+    python -m baselines.nnunet.convert --id 29     # --out defaults to <data>/nnunet/raw (config-derived)
+    # then (same env; nnUNet_raw/_preprocessed/_results set by `source baselines/nnunet/env.sh`):
     nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity
     nnUNetv2_train 29 2d 0 -tr nnUNetTrainer_50epochs
     nnUNetv2_predict -i .../imagesTs -o <pred> -d 29 -c 2d -f 0 -tr nnUNetTrainer_50epochs
@@ -91,12 +91,17 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
 
 
 def main():
+    from cardioseg.config import data_root
+
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default="D:/data/volumetric/mri/nnunet/raw")
+    # Default to the data-namespaced raw dir (<data>/nnunet/raw) derived from cardioseg's path
+    # config — never the D:/data root, and machine-independent (no hardcoded absolute path).
+    ap.add_argument("--out", default=None, help="nnU-Net raw root (default: <data>/nnunet/raw)")
     ap.add_argument("--id", type=int, default=29, help="nnU-Net dataset id")
     ap.add_argument("--n-patients", type=int, default=0, help="0 = all (debug cap)")
     a = ap.parse_args()
-    convert_battery(a.out, a.id, a.n_patients)
+    out = a.out or str(Path(data_root("nnunet")) / "raw")
+    convert_battery(out, a.id, a.n_patients)
 
 
 if __name__ == "__main__":
