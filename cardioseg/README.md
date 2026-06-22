@@ -5,6 +5,12 @@ The science layer: cardiac MRI → segmentation → ejection fraction → evalua
 **ACDC**). Python (PyTorch + MONAI). The browser demo ([cardioview](../cardioview/)) consumes
 what this produces.
 
+![Held-out ACDC — MRI / ground truth / prediction: clean DCM (EF 17→17%) vs worst HCM (77→48%)](docs/media/seg_overlay.png)
+
+*Our model on held-out ACDC (trained on other scanners). Top: a clean dilated heart. Bottom: the
+worst hypertrophic case — small thick-walled cavities are where the end-systolic over-segmentation
+bites. RV blue · LV-myo green · LV-cav red.*
+
 ## Pipeline
 1. **Data** — modality loader + normalization (ACDC short-axis cine MRI; NIfTI, spacing-aware
    in mm; geometric LV/RV disambiguation).
@@ -113,8 +119,6 @@ vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early 
 | LV myocardium | 0.85 | 2.1 | 0.46 | ~0.88–0.92 |
 | RV cavity | 0.92 | 3.0 | 0.54 | ~0.88–0.92 |
 | **mean** | **0.91** | | | |
-
-![Held-out ACDC — MRI / GT / prediction: clean DCM vs worst HCM](docs/media/seg_overlay.png)
 
 **EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150). **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):

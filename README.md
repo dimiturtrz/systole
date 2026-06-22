@@ -12,12 +12,6 @@ learning track ([`learning/`](learning/): theory write-ups + self-quizzes) along
 Across modalities (**MRI now; CT, echo planned**); three pieces, general → specific, each linking
 into its folder. Full plan → **[ROADMAP.md](ROADMAP.md)**.
 
-![Held-out ACDC segmentation — MRI / ground truth / prediction, for a clean case and the worst HCM failure](cardioseg/docs/media/seg_overlay.png)
-
-*Held-out ACDC (the model trained on other scanners): top row a clean dilated heart (EF 17%→17%);
-bottom row the worst hypertrophic case (EF 77%→48%) — small thick-walled cavities are where the
-end-systolic over-segmentation bites. RV blue · LV-myo green · LV-cav red.*
-
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
 phase/frequency encode → k-space → reconstructed image, on one clock. Built to *understand the
