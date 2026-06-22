@@ -141,6 +141,22 @@ def train_seg(cfg: TrainCfg):
             "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     log.info("saved model + config + metrics -> %s/", out)
+
+    # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a
+    # hiccup logs and moves on, never fails a finished training run.
+    try:
+        from ..modelcard import generate
+        generate(out)
+        log.info("wrote %s/MODEL_CARD.md", out)
+    except Exception as e:
+        log.warning("model card skipped: %s", e)
+    try:
+        from .export_onnx import export
+        export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
+    except ImportError:
+        log.info("ONNX export skipped (pip install .[export] for onnxruntime)")
+    except Exception as e:
+        log.warning("ONNX export skipped: %s", e)
     return model, results
 
 
