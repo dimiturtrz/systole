@@ -51,6 +51,13 @@ class LossCfg:
     tversky_alpha: float = 0.3          # FN weight
     tversky_beta: float = 0.7           # FP weight (> alpha = punish over-seg)
     tversky_lambda: float = 1.0         # weight of the Tversky term added to Dice+CE
+    # Hausdorff-ER (dice_ce_her): erosion-based Hausdorff surrogate, pure-torch GPU (no DT/cucim).
+    # Targets FAR boundary errors (stray voxels, loose RV boundary). warmup -> ramp like HD.
+    her_weight: float = 0.5
+    her_alpha: float = 2.0              # distance exponent ((k+1)^alpha per erosion level)
+    her_erosions: int = 10             # erosion iterations (depth of distance proxy)
+    her_warmup: int = 5
+    her_ramp: int = 5
     # Hausdorff-DT (dice_ce_hd): NOTE CPU-bound on Windows (needs cucim, Linux-only) -> slow/unstable.
     hd_weight: float = 0.01
     hd_warmup: int = 15
