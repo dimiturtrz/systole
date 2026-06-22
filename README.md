@@ -99,12 +99,10 @@ Competent on public benchmarks, **not** clinical-grade. The specific gaps, measu
 - **EF precision.** 95% LoA are ±15% — still past the ±5% clinical bar. And part of the
   underprediction is *intrinsic*: even nnU-Net (SOTA) keeps a **−4% bias** cross-domain, so a better
   segmenter tightens the spread but doesn't erase the lean — it's calibration, not just model quality.
-- **The held-out test is single-vendor.** We *train* multi-vendor (M&M-2, 3 vendors) but *test* on
-  ACDC — one centre, **one scanner vendor (Siemens)**. So we test cross-*centre* generalization, but
-  the **machine axis is not directly tested on held-out data** (you can't see vendor-robustness with
-  one vendor in the test set). The fix is a multi-vendor held-out test — **M&Ms-1** (4 vendors incl.
-  Canon, 6 centres) is on disk and adapter-ready for exactly this; dataset roles (which set trains vs
-  tests) are still to be decided. Until then, vendor breakdowns are in-domain only (caveated).
+- **The unseen-vendor test is thin.** We hold out two axes — ACDC (centre shift) **and Canon** (a
+  scanner vendor never in training). So the machine axis *is* tested now — but Canon has only **n=9
+  labelled** (M&Ms-1 withholds most Testing GT), enough for a Dice signal (~0.85) but too noisy for EF.
+  Leave-one-vendor-out (n up to ~190 for GE/Philips) would give proper unseen-vendor stats; not yet run.
 - **Validation is thin.** One 80/20 split — no cross-validation, confidence intervals, or
   test–retest; no per-case uncertainty / out-of-distribution flag.
 - **Not a device.** Public research data only; no DICOM/PII handling, no prospective or regulatory
@@ -132,6 +130,24 @@ Under that root you create **`raw/`** and drop the (register-gated) downloads in
 automatic: **`<data>/processed/`** (the preprocess cache) is created on first run, datasets are
 discovered by name, and the per-dataset label conventions are remapped to canonical on load. Env
 `CARDIAC_DATA` overrides the file (CI). Loaded by `cardioseg/config.py`.
+
+## Quickstart (order of operations)
+```bash
+# 1. install (torch CUDA build FIRST — plain PyPI is CPU-only):
+pip install torch --index-url https://download.pytorch.org/whl/cu128   # >=2.7 (Blackwell/RTX 5090)
+pip install -e .                       # core; extras as needed: .[n4,export,viz,nnunet,dev] or .[all]
+# 2. point at the data (one path) + drop register-gated downloads under <data>/raw/<dataset>/:
+cp paths.example.yaml paths.yaml       # set: data: /abs/path/to/cardiac-data
+# 3. consolidate raw -> the homogeneous store (processed/<ds>/<paramkey>/{data,meta.csv}); first run only:
+python -m cardioseg.data.store         # auto-runs on first train too; this just prints the cloud summary
+# 4. train (split = DataCfg criteria; default holds out ACDC + Canon). Full config -> runs/<run>/config.json:
+python -m cardioseg.training.train --out runs/gen
+# 5. evaluate / export:
+python -m cardioseg.evaluation.distribution --run runs/gen --eval acdc   # + --eval canon; plots + strata
+python -m cardioseg.training.export_onnx --run runs/gen                  # needs .[export]
+```
+A run is reproducible from its `config.json` (the split criteria + all hyperparams are serialized).
+nnU-Net baseline is separate: `pip install -e .[nnunet]`, then `baselines/nnunet/` (convert → `run_battery.sh`).
 
 ## Data normalization
 MRI intensity is uncalibrated (no Hounsfield-like anchor), so inter-scanner variance is the core

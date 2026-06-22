@@ -11,9 +11,9 @@ dependencies = [
     "nibabel",
     "matplotlib",
     "tqdm",
+    "polars",      # the data store + splits (cardioseg/data/{store,splits}.py) — REQUIRED for training
     "omegaconf",   # paths.yaml config loader (cardioseg/config.py)
     "monai>=1.5",
-    "pyvista",  # cardioview: 3D volume/mesh rendering (VTK)
     # torch >=2.7 is required for NVIDIA Blackwell (sm_120, e.g. RTX 5090).
     # Install the CUDA build from the PyTorch index, NOT plain PyPI (which is CPU):
     #   pip install torch --index-url https://download.pytorch.org/whl/cu128
@@ -23,6 +23,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True). NB HD-DT GPU loss needs cucim = Linux-only.
+export = ["onnxruntime"]     # ONNX export + parity check (cardioseg/training/export_onnx.py)
+viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
+nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
+all = ["SimpleITK", "onnxruntime", "pyvista", "nnunetv2>=2.5", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

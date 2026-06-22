@@ -1,11 +1,22 @@
-torch
-monai
-nibabel
+# Core runtime deps (mirror of pyproject [project].dependencies — pyproject is the source of truth).
+# Preferred install:  pip install -e .          (+ extras: .[n4,export,viz,nnunet,dev]  or  .[all])
+#
+# torch: install the CUDA build from the PyTorch index FIRST, not plain PyPI (which is CPU-only):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128   # >=2.7 for Blackwell/RTX 5090
+torch>=2.7
 numpy
 scipy
 scikit-image
-vtk
+nibabel
 matplotlib
 tqdm
+polars
 omegaconf
-pytest
+monai>=1.5
+
+# Optional (pyproject extras; listed for reference):
+#   n4:     SimpleITK      # N4 bias correction (HD-DT GPU loss would need cucim = Linux-only)
+#   export: onnxruntime    # ONNX export + parity
+#   viz:    pyvista        # cardioview 3D rendering
+#   nnunet: nnunetv2>=2.5  # external baseline (baselines/nnunet)
+#   dev:    pytest
