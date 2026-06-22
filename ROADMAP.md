@@ -9,32 +9,34 @@ Status tags: ✅ done · 🔄 doing · ⬜ planned.
 
 ## Where it stands (2026-06)
 **MRI lane is delivered, and went past the original Gate 1.** Beyond "train on ACDC,
-report Dice + EF," the model is now set up for **domain generalization**: trained on the
-multi-vendor **M&M-2** set (360 subjects, 3 vendors) and tested on **held-out ACDC**
-(single-centre, 100 patients it never saw).
+report Dice + EF," the model is now set up for **domain generalization**: trained on a pooled
+multi-vendor cloud (**M&M-2 + M&Ms-1**, 564 labelled subjects, 4 vendors) and held out along
+**two axes** — **ACDC** (centre/protocol shift, 150 it never saw) and **Canon** (unseen vendor).
 
-- **Segmentation generalizes** — M&M-2 → ACDC mean Dice **0.87**, equal to the in-domain
-  ACDC ceiling. The reverse (ACDC → multi-vendor) collapses to **0.70** (RV 0.85 → 0.59):
-  diversity in training is what holds up. That asymmetry is the headline result.
-- **EF does not (yet)** — cross-dataset EF MAE **9.4%**, bias −8.9%, LoA ±27 — *not*
-  clinically usable (clinical bar ≈ ±5%). EF is a ratio of two volumes, so it amplifies
-  per-frame mask error. Good masks, fragile derived number. See **EF paths** below.
+- **Segmentation generalizes** — pooled → held-out ACDC mean Dice **0.91**, equal to the in-domain
+  ACDC ceiling; unseen-vendor Canon **0.87**. The reverse (single-centre ACDC → multi-vendor)
+  collapses to **0.70** (RV 0.85 → 0.59): diversity in training is what holds up. That asymmetry
+  is the headline result.
+- **EF improved, not yet clinical** — held-out ACDC EF MAE **5.9%**, bias −5.2%, LoA ±13 — down
+  from the ±27 pre-postproc start, still past the ≈±5% clinical bar. EF is a ratio of two volumes,
+  so it amplifies per-frame mask error. Good masks, fragile derived number. See **EF paths** below.
 - **Shipped alongside:** [cardioview](cardioview/) browser viewer (beating 3D hearts +
   in-browser ONNX segmentation), [mri-sim](mri-sim/) acquisition visualizer, surface
   metrics (HD95/ASSD) + error-distribution plots (boundary KDE, EF Bland–Altman).
 
-Datasets on disk (`D:/data/volumetric/mri/`, out of repo): **ACDC** + **M&M-2** (in use),
-**M&Ms-1** and **task02_heart** (MSD left-atrium) available but not wired.
+Datasets on disk (out of repo, under `<data>/raw/`): **ACDC + M&M-2 + M&Ms-1** all wired into the
+data cloud; **task02_heart** (MSD left-atrium) available but not wired.
 
 ## EF paths — from a weak number to a usable one
 The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort order:
 1. ✅ **Postprocess masks** (largest-CC) — dropped false-positive specks: EF MAE 9.4 → 8.2%,
    bias −8.9 → −7.2%, HD RV 191 → 59 mm. Eval-only.
 2. ✅ **Test-time augmentation** — in-plane flip averaging at inference, no retrain.
-3. ✅ **Heavy augmentation + early stopping** (GPU-batched) — wider geometry + vendor-style
-   intensity jitter; trained to a val-Dice plateau (~95 ep, best checkpoint kept). RV Dice
-   0.84 → **0.89**, mean 0.87 → **0.90**, EF MAE 8.2 → **6.3%**, LoA ±27 → ±15. Now ~1 Dice pt /
-   0.8 EF pts behind nnU-Net SOTA, on a deployable ONNX model.
+3. ✅ **Heavy augmentation + early stopping + multi-source pooling** (GPU-batched) — wider geometry +
+   vendor-style intensity jitter; trained to a val-Dice plateau (~95 ep, best checkpoint kept); pooled
+   M&M-2 + M&Ms-1. RV Dice 0.84 → **0.92**, mean 0.87 → **0.91**, EF MAE 8.2 → **5.9%**, LoA ±27 → ±13.
+   Now **roughly level with the nnU-Net floor** (0.91 vs 0.912 Dice, 5.9 vs 5.6% EF) on a deployable
+   ONNX model at ~57× fewer params.
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only;
    vendor-aware histogram standardization may tighten the spread. (`bd cardiac-seg-qfz`)
 5. ⬜ **Bias calibration** — held-out linear EF correction, reported as such.
@@ -42,14 +44,14 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
-## Open structural decision — the machine axis + dataset roles
-The held-out test (ACDC) is **single-vendor**, so vendor/machine generalization isn't tested on
-held-out data — only the cross-*centre* drop is. To test the machine axis properly we need a
-**multi-vendor held-out test**. We have the data: **M&Ms-1** (375 subj, 4 vendors incl. Canon,
-6 centres) is bigger and broader than M&M-2 — so it's arguably the better *training* set, with the
-roles reshuffled. Undecided for now: M&Ms-1 vs M&M-2 as train; whether ACDC becomes test, or just
-the cardioview demo set (single-vendor but clean). Tracked: `bd cardiac-seg-bsz`. Deferred — settle
-once the EF levers land.
+## Resolved (thinly): the machine axis is now tested
+Earlier the held-out test was single-vendor ACDC — only the cross-*centre* drop was measured. **Now
+the split holds out two axes** (criteria over the data cloud): ACDC (centre/protocol shift) **and
+Canon** (a scanner vendor never in training). **M&Ms-1** (320 on disk / 213 labelled, 4 vendors incl.
+Canon) is pooled into training, so the flagship trains on 4 vendors. The machine axis *is* tested —
+but Canon is **n=9 labelled** (M&Ms-1 withholds most Testing GT): enough for a Dice signal (~0.87),
+too thin for EF. **Still open:** leave-one-vendor-out (n up to ~190 for GE/Philips) for proper
+unseen-vendor stats. Tracked: `bd cardiac-seg-bsz`.
 
 ## How this is driven — the circuit
 Field understanding drives the roadmap. Each topic runs the loop:
@@ -65,12 +67,12 @@ Three modalities × three steps, all converging on **cardiac function (EF)** —
 
 | Modality | Theory | Data viz | Problem solved |
 |---|---|---|---|
-| **MRI** (ACDC + M&M-2) | ✅ acquisition physics ([mri-sim](mri-sim/)), short-axis geometry | ✅ [cardioview](cardioview/) 3D viewer + held-out EF | ✅ seg LV/myo/RV → EF, **cross-dataset (DG)**; EF quality ⬜ |
+| **MRI** (ACDC + M&M-2 + M&Ms-1) | ✅ acquisition physics ([mri-sim](mri-sim/)), short-axis geometry | ✅ [cardioview](cardioview/) 3D viewer + held-out EF | ✅ seg LV/myo/RV → EF, **cross-dataset (DG)**; EF quality ⬜ |
 | **CT** (MM-WHS)  | ⬜ HU calibration, CTA | ⬜ EDA | ⬜ whole-heart / chamber seg (`bd cardiac-seg-fzm`) |
 | **echo** (CAMUS) | ⬜ ultrasound, 2D+t | ⬜ EDA | ⬜ LV seg → EF, Simpson's biplane (`bd cardiac-seg-q38`) |
 
 Scaffold (✅): spacing-aware EF/volume math, Dice/HD95/ASSD + failure ranking, MONAI U-Net,
-ONNX export (INT8, parity-gated), dataset-agnostic loader (ACDC + M&M-2, label remap),
+ONNX export (INT8, parity-gated), dataset-agnostic loader (ACDC + M&M-2 + M&Ms-1, label remap),
 cross-dataset train/test harness, `cardioseg/` + `cardioview/` + `mri-sim/` structure.
 
 ## The geometry thread (cross-cutting)
@@ -93,8 +95,8 @@ Computational geometry turns per-voxel labels into a clinical number, and recurs
 
 ## Cross-cutting threads
 - **Structure** — `cardioseg/` (pipeline) + `cardioview/` (viewer) + `mri-sim/` (acquisition).
-  A modality is added only when it's real — no empty speculative folders. Data mirrors
-  `D:/data/volumetric/{mri,ct,echo}/`, out of the repo (licensing + size).
+  A modality is added only when it's real — no empty speculative folders. Data lives out of the
+  repo under `<data>/raw/` (licensing + size).
 - **Clinical-grade gap** — the honest "hard 80%": multi-vendor robustness (now measured, not
   assumed), validation rigour, measurement precision, licensing / DICOM PII.
 

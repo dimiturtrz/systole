@@ -24,7 +24,7 @@ This card follows Mitchell et al. 2019; the failure-mode and limitation sections
   non-cine sequences, or other anatomy.
 
 ## Training data
-Pooled multi-source "data cloud" (`data/store.py`), **451 labelled subjects**:
+Pooled multi-source "data cloud" (`data/store.py`), **564 labelled subjects** (451 train / 113 val):
 - **M&M-2** (Siemens / Philips / GE, 1.5T+3T) + **M&Ms-1 excluding Canon** (Siemens / Philips / GE).
 - ACDC and the Canon vendor are **held out entirely** (never in train/val).
 - Splits are our own (a polars query, `data/splits.py`) — challenge splits are not inherited.
@@ -46,15 +46,15 @@ One model, held out along two independent shift axes (DataCfg criteria: `test_da
 
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.94 | 1.5 | 0.27 |
-| LV myocardium | 0.86 | 2.1 | 0.46 |
-| RV cavity | 0.91 | 3.0 | 0.49 |
-| **mean** | **0.90** | | |
+| LV cavity | 0.95 | 1.5 | 0.29 |
+| LV myocardium | 0.85 | 2.1 | 0.46 |
+| RV cavity | 0.92 | 3.0 | 0.54 |
+| **mean** | **0.91** | | |
 
-EF vs GT: **MAE 7.1%**, bias −6.6% (n=150).
+EF vs GT: **MAE 5.9%**, bias −5.2%, 95% LoA [−18, +8] (n=150).
 
-**Canon-9 (unseen vendor):** mean Dice **0.85**. EF MAE is **not reported as a stable number** — at
-n=9 it swings (7.2% under a M&M-2-only model, 15.4% here) while Dice holds ~0.85. Canon is the honest
+**Canon-9 (unseen vendor):** mean Dice **0.87**. EF MAE is **not reported as a stable number** — at
+n=9 it swings (7.2% under a M&M-2-only model, 11.1% here) while Dice holds ~0.87. Canon is the honest
 *Dice* signal for unseen-vendor robustness; its EF is noise (the M&Ms-1 challenge withholds GT for
 most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
 
@@ -64,21 +64,22 @@ a floor), scored by the same eval layer:
 
 | ACDC-150 | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
-| mean Dice | **0.912** | 0.901 |
-| EF MAE / bias | **5.6% / −4.2%** | 7.1% / −6.6% |
-| Canon-9 mean Dice | 0.876 | 0.853 |
+| mean Dice | 0.912 | 0.908 |
+| EF MAE / bias | 5.6% / −4.2% | 5.9% / −5.2% |
+| Canon-9 mean Dice | 0.876 | 0.869 |
 
-nnU-Net is ~**1 Dice point** ahead with **better EF** (smaller ES-over-seg bias) — *even at a floor
-setting*; the full ceiling (1000ep × 5-fold + TTA, `cardiac-seg-yp3`) would be higher. Honest position:
-this 2D U-Net is **competent, ~1 point under nnU-Net's floor** on the same data. (One inversion: our
-boundary is tighter — LV-cav HD95 1.5 vs 3.5mm — from largest-CC + TTA, which this nnU-Net run lacked.)
+On the ACDC axis the two are **roughly level** — Dice 0.908 vs 0.912, EF MAE 5.9% vs 5.6% — *even at
+nnU-Net's floor setting* (50ep/1fold; the full 1000ep × 5-fold + TTA ceiling, `cardiac-seg-yp3`, would
+pull ahead). nnU-Net keeps a slight edge on the unseen-vendor axis (Canon 0.876 vs 0.869). Honest
+position: this 2D U-Net **matches nnU-Net's floor on ACDC at ~57× fewer parameters**. (One inversion:
+our boundary is tighter — LV-cav HD95 1.5 vs 3.3 mm — from largest-CC + TTA, which this nnU-Net run lacked.)
 Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../baselines/nnunet/MODEL_CARD.md).
 
 ## Where it fails (stratified)
 - **HCM / small cavities — the main EF failure mode.** EF bias is **entirely end-systolic cavity
   over-segmentation** (~fixed absolute mL of boundary + papillary voxels), so its *fractional* impact
   scales inversely with cavity size: corr(ES cavity, ESV ratio) = −0.50. Dilated (huge cavity) is EF-
-  unbiased (≈ −0.5%); hypertrophic (tiny cavity) is worst (EF MAE ~13.8%). Dice stays flat (~0.90)
+  unbiased (≈ −0.2%); hypertrophic (tiny cavity) is worst (EF MAE ~11.9%). Dice stays flat (~0.91)
   across pathologies — masks aren't worse, the EF *ratio* is range-dependent. (See
   `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.)
 - **RV boundary** is the loosest (HD95 3.0 mm vs myo 2.1, LV-cav 1.5) — basal slices + stray voxels.
@@ -87,7 +88,7 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
 
 ## Limitations & caveats
 - Single modality (cine MRI short-axis), 2D slice model — no long-axis, no 3D context.
-- Systematic EF under-prediction (bias ≈ −6%) from ES over-segmentation; **not** corrected by a
+- Systematic EF under-prediction (bias ≈ −5%) from ES over-segmentation; **not** corrected by a
   constant offset (size-dependent → would over-correct dilated hearts) and **not** a measurement bug
   (volumes are computed correctly). The honest fix is segmentation-side at ES (`cardiac-seg-7oe`).
 - Unseen-vendor evidence is thin (Canon n=9); Dice is the only readable metric there.

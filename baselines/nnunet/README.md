@@ -28,16 +28,16 @@ pip install nnunetv2          # its own env
 NN=D:/data/volumetric/mri/nnunet
 export nnUNet_raw=$NN/raw nnUNet_preprocessed=$NN/preprocessed nnUNet_results=$NN/results
 
-# 1. our data -> nnU-Net format (uses cardioseg loaders; ED/ES -> one case each)
-python -m baselines.nnunet.convert --dataset acdc --out $nnUNet_raw --id 27
+# 1. our data -> nnU-Net format: builds Dataset029_BATTERY (train+val pool Tr, held-out acdc+canon Ts)
+python -m baselines.nnunet.convert --id 29
 
-# 2. nnU-Net does the rest (its recipe: fingerprint -> plan -> train 5 folds)
-nnUNetv2_plan_and_preprocess -d 27 --verify_dataset_integrity
-nnUNetv2_train 27 2d 0   # ... folds 0..4 for the ensemble
-nnUNetv2_predict -i <held_out_images> -o <pred_dir> -d 27 -c 2d
-
-# 3. score nnU-Net's masks with OUR eval layer (the bridge back)
-python -m baselines.nnunet.score --pred <pred_dir> --gt $nnUNet_raw/Dataset027_ACDC/labelsTr
+# 2.+3. preprocess -> train (50ep/fold0) -> predict held-out -> score via cardioseg eval:
+bash baselines/nnunet/run_battery.sh
+#   step-by-step equivalent:
+#   nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity
+#   nnUNetv2_train 29 2d 0                       # ... folds 0..4 for the full ensemble
+#   nnUNetv2_predict -i $nnUNet_raw/Dataset029_BATTERY/imagesTs -o <pred_dir> -d 29 -c 2d
+#   python -m baselines.nnunet.score --pred <pred_dir> --manifest <.../ts_manifest.json>
 ```
 Data + `raw/preprocessed/results/pred` all live **outside the repo**, namespaced under
 `D:/data/volumetric/mri/nnunet/` (the cardiac-MRI domain) — nothing heavy gets committed,
@@ -49,43 +49,42 @@ nnU-Net on ACDC is a solved benchmark — top-of-leaderboard, **mean Dice ~0.91*
 *confirms* a known ceiling and gives the "I can operate it + score it through my own
 pipeline" credential — it is **not** a discovery.
 
-## Results — M&M-2 → ACDC (the project's generalization setup)
-Both trained on multi-vendor M&M-2, tested on the held-out single-centre ACDC (100
-patients / 200 frames), **scored by `cardioseg.evaluation`** — apples-to-apples.
+## Results — generalization split (ACDC-150 held-out axis)
+Both trained on the **same pooled cloud** (M&M-2 + M&Ms-1 ex-Canon, 564 labelled), tested on the
+held-out **ACDC-150** axis, **scored by `cardioseg.evaluation`** — apples-to-apples.
 
 | segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.896 | 0.941 | 0.855 | 0.892 | 6.3% | deployable / ONNX |
-| **nnU-Net** (50 ep, 1 fold) | **0.909** | 0.947 | 0.871 | **0.908** | **5.5%** | baseline / not deployed |
-| gain | +1.3 | +0.6 | +1.6 | **+1.6** | **−0.8** | |
+| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.908 | 0.953 | 0.851 | 0.920 | 5.9% | deployable / ONNX |
+| **nnU-Net** (50 ep, 1 fold) | **0.912** | 0.948 | **0.876** | 0.911 | **5.6%** | baseline / not deployed |
+| Δ | +0.4 | −0.5 | +2.5 | −0.9 | −0.3 | |
 
 **Efficiency:** ours **1.6 M params / ~0.8 GFLOPs** vs nnU-Net **92 M / ~19 GFLOPs** (single forward,
 fvcore; nnU-Net at its 256×320 patch, inference adds tiling + TTA) — **~57× fewer params, ~23× fewer
-FLOPs** for ~1 Dice point. That's the deployable trade made quantitative.
+FLOPs** for near-parity on ACDC. That's the deployable trade made quantitative.
 
 **Be frank — this is nnU-Net under-powered, not at full strength.** What we ran vs its real recipe:
 - **1 fold**, not the **5-fold ensemble** (the headline nnU-Net result averages 5 models).
 - **50 epochs**, not **1000**.
 - **2D only** — no `3d_fullres` / `3d_cascade` (it auto-picks the best config; we skipped that).
-- no postprocessing/config selection step; modest 360-subject train.
+- no postprocessing/config selection step.
 
-So **0.91 is nnU-Net's floor here, and the ~1-Dice-pt gap understates the true SOTA gap** — full nnU-Net
-would lead by more. We report the floor honestly and didn't chase the ceiling: it's a lot more compute
-for a model we wouldn't deploy anyway (92 M, no clean ONNX). The baseline's job is *"I can operate +
-score SOTA through my own pipeline,"* **not** *"I matched it."*
+So **0.912 is nnU-Net's floor here**; the full 1000-epoch × 5-fold + TTA recipe would pull ahead. On
+this floor setting the two are **roughly level on ACDC** (Dice 0.908 vs 0.912, EF 5.9 vs 5.6%); nnU-Net
+keeps a slight edge on the unseen-vendor Canon axis (0.876 vs 0.869). We report the floor honestly and
+didn't chase the ceiling — it's a lot more compute for a model we wouldn't deploy anyway (92 M, no clean
+ONNX). The baseline's job is *"I can operate + score SOTA through my own pipeline, and match its floor,"*
+**not** *"I matched its ceiling."*
 
-**EF agreement (Bland–Altman):** ours bias −5.6%, 95% LoA [−21, +9]; nnU-Net bias **−4.1%**,
-LoA **[−17.8, +9.7]** — now nearly matched (our spread tightened as the masks improved; nnU-Net
-keeps a slight edge + a touch less bias). Both still *underpredict* (negative bias), so part of
+**EF agreement (Bland–Altman):** ours bias −5.2%, 95% LoA [−18, +8]; nnU-Net bias **−4.2%**,
+LoA **[−19.3, +10.8]** — closely matched. Both still *underpredict* (negative bias), so part of
 the cross-domain EF shift is intrinsic (calibration), not just model quality.
 
-**Read:** nnU-Net still leads at only **50 epochs / 1 fold** (its floor — the full 1000-epoch ×
-5-fold + TTA recipe goes higher), but the gap is small now:
-**RV +1.6** (the thin, domain-fragile structure the simple model is weakest on) and
-**EF MAE 6.3 → 5.5%** (better masks cut the systematic volume bias, so the *clinical
-number* improves, not just Dice). It hits **0.909 on ACDC trained on M&M-2** — near the
-in-domain ceiling (~0.91), cross-domain. (Both rows are each model's deployable output
-scored by the same eval; ours includes largest-CC + TTA, nnU-Net its own.)
+**Read:** nnU-Net edges ahead at only **50 epochs / 1 fold** (its floor — the full 1000-epoch ×
+5-fold + TTA recipe goes higher), but the gap is small: myo +2.5 is its main lead, while our
+largest-CC + TTA gives a tighter LV-cav boundary. The clinical number (EF) is near-identical
+(5.9 vs 5.6%). (Both rows are each model's deployable output scored by the same eval; ours includes
+largest-CC + TTA, nnU-Net its own.)
 
 *The gap is the honest price of a deployable, ONNX-exportable, fully-understood model —
 and it names the remaining levers to close it on our clean U-Net while staying exportable

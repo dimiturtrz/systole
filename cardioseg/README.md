@@ -103,30 +103,32 @@ parallelizes store consolidation, not the loader (DataLoader runs workers=0; AMP
 
 ## Results (seed 0, patient-level splits)
 Flagship = the **generalization split**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
-ex-Canon, 451 subjects), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
+ex-Canon, 564 labelled subjects — 451 train / 113 val), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
 vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early stopping + largest-CC
 + TTA. On the **ACDC-150** axis:
 
 | structure | Dice | HD95 (mm) | ASSD (mm) | published ACDC |
 |---|---|---|---|---|
-| LV cavity | **0.94** | 1.5 | 0.27 | ~0.93–0.96 |
-| LV myocardium | 0.86 | 2.1 | 0.46 | ~0.88–0.92 |
-| RV cavity | 0.91 | 3.0 | 0.49 | ~0.88–0.92 |
-| **mean** | **0.90** | | | |
+| LV cavity | **0.95** | 1.5 | 0.29 | ~0.93–0.96 |
+| LV myocardium | 0.85 | 2.1 | 0.46 | ~0.88–0.92 |
+| RV cavity | 0.92 | 3.0 | 0.54 | ~0.88–0.92 |
+| **mean** | **0.91** | | | |
 
-**EF vs GT: MAE 7.1%** (bias −6.6%, n=150). **Two-axis generalization** (one model, our own split — the
+![Held-out ACDC — MRI / GT / prediction: clean DCM vs worst HCM](docs/media/seg_overlay.png)
+
+**EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150). **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
 | held-out axis | n | mean Dice | EF MAE |
 |---|---|---|---|
-| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.90 | 7.1% |
-| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.85 | 15.4% \* |
+| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.91 | 5.9% |
+| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.87 | 11.1% \* |
 
 \* Canon **n=9** — too thin to read EF on: the same axis gave EF MAE 7.2% under a M&M-2-only model,
-15.4% here (one collapsed case dominates 9), while Dice held ~0.85 both ways. The M&Ms-1 challenge
+11.1% here (one collapsed case dominates 9), while Dice held ~0.87 both ways. The M&Ms-1 challenge
 withholds GT for most of its Testing split (320 on disk, 213 labelled; Canon 50 → 9 with masks), so
 Canon is the honest *Dice* signal for unseen-vendor robustness; its EF is noise. Pooling M&Ms-1 into
-training (451 vs 290 subjects) lifted the solid ACDC axis (mean 0.89 → 0.90, **RV 0.88 → 0.91, HD95
+training (564 vs 360 subjects) lifted the solid ACDC axis (mean 0.89 → 0.91, **RV 0.88 → 0.92, HD95
 5.0 → 3.0 mm** — the extra RV diversity paid off).
 
 **Diversity buys robustness — the asymmetry proves it:**
@@ -138,7 +140,7 @@ training (451 vs 290 subjects) lifted the solid ACDC axis (mean 0.89 → 0.90, *
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-pooled split + heavy aug + largest-CC + TTA lift the flagship to 0.90 Dice / 7.1% EF on ACDC-150 (top table).*
+pooled split + heavy aug + largest-CC + TTA lift the flagship to 0.91 Dice / 5.9% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
@@ -162,16 +164,16 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.91 | **2.1%** | −0.5% |
-| ischemic (MINF) | 31% | 0.91 | 4.2% | −3.9% |
-| rv_congenital | 57% | 0.90 | 8.0% | −8.0% |
-| normal (NOR) | 62% | 0.92 | 7.4% | −7.1% |
-| **hypertrophic (HCM)** | 70% | 0.91 | **13.8%** | −13.3% |
+| dilated (DCM) | 20% | 0.91 | **2.1%** | −0.2% |
+| ischemic (MINF) | 31% | 0.91 | 4.1% | −3.4% |
+| rv_congenital | 57% | 0.90 | 6.5% | −5.9% |
+| normal (NOR) | 62% | 0.91 | 5.1% | −4.8% |
+| **hypertrophic (HCM)** | 70% | 0.91 | **11.9%** | −11.5% |
 
 **Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
 localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across
 datasets, *not* an annotation bug); **ESV is over-predicted ~19%**, and that alone produces the whole
-−5.8% EF bias. The over-segmentation is a roughly **fixed absolute mL** at the cavity boundary
+EF bias (≈ −5% on ACDC-150). The over-segmentation is a roughly **fixed absolute mL** at the cavity boundary
 (partial-volume + papillaries bulging into the small contracted ES cavity) — so its *fractional*
 impact scales inversely with cavity size: corr(ES cavity, ESV ratio) = **−0.50**. DCM (huge cavity)
 is **unbiased** (ESV ratio 0.99, EF bias −0.6); HCM (tiny cavity) is worst (ESV ratio 1.51, −10.9).

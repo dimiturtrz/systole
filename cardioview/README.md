@@ -22,9 +22,10 @@ pip install -e .
 #    https://www.creatis.insa-lyon.fr/Challenge/acdc/); point paths.yaml at them
 cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc; M&M-2 sits beside it
 
-# 3. train the flagship model (see cardioseg/README) -> runs/mnm2_to_acdc/model.pth
-#    multi-vendor M&M-2 train, ACDC held out — the domain-generalization model
-python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 40
+# 3. train the demo model (see cardioseg/README) -> runs/mnm2_to_acdc/model.pth
+#    multi-vendor M&M-2 train, ACDC held out — split = DataCfg criteria (no --dataset/--test flags)
+python -m cardioseg.training.train --out runs/mnm2_to_acdc --epochs 40 \
+    --set data.sources=('mnm2','acdc') data.test_datasets=('acdc',) data.test_vendors=()
 
 # 4. bake the web assets (the viewer follows the model via the manifest). Hearts come from
 #    paths.yaml (cardioview.hearts) — ACDC patients the flagship never trained on.

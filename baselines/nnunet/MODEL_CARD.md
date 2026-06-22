@@ -48,12 +48,13 @@ EF vs GT: **MAE 5.6%**, bias −4.2%, 95% LoA [−19.3, +10.8] (n=150).
 
 | ACDC-150 | nnU-Net (50ep/fold0) | cardioseg |
 |---|---|---|
-| mean Dice | **0.912** | 0.901 |
-| EF MAE / bias | **5.6% / −4.2%** | 7.1% / −6.6% |
-| Canon-9 Dice | 0.876 | 0.853 |
+| mean Dice | 0.912 | 0.908 |
+| EF MAE / bias | 5.6% / −4.2% | 5.9% / −5.2% |
+| Canon-9 Dice | 0.876 | 0.869 |
 
-- nnU-Net leads by ~**1 Dice point** with **better EF** (smaller ES-over-seg bias) — even at this
-  floor setting.
+- On the ACDC axis the two are **roughly level** (Dice 0.912 vs 0.908, EF MAE 5.6% vs 5.9%) — even at
+  this floor setting; nnU-Net keeps a slight edge on unseen-vendor Canon (0.876 vs 0.869). cardioseg
+  matches the nnU-Net floor on ACDC at ~57× fewer parameters.
 - **One inversion:** cardioseg's boundary is *tighter* (LV-cav HD95 1.5 vs 3.3 mm) — from its
   largest-CC + TTA postprocessing, which **this nnU-Net run did not apply**. So the HD95 gap is a
   postproc artifact, not a modelling result; read Dice/EF as the fair head-to-head.
