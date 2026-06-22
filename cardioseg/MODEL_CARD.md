@@ -58,13 +58,20 @@ n=9 it swings (7.2% under a M&M-2-only model, 15.4% here) while Dice holds ~0.85
 *Dice* signal for unseen-vendor robustness; its EF is noise (the M&Ms-1 challenge withholds GT for
 most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
 
-### Benchmark context (nnU-Net)
-For reference, nnU-Net was run as an external benchmark — **but not on this split**: it was measured
-on the older `M&M-2 → ACDC-100` config (mnm2-only train, 100-patient test), at a **floor setting
-(50 epochs, 1 fold)**, scoring mean Dice 0.909 / EF MAE 5.5% (vs our 2D U-Net 0.896 / 6.3% on the
-*same* old config). It is **not directly comparable** to the generalization-split numbers above (different train
-pool, different + larger test set incl. unseen vendor). The full nnU-Net ceiling (1000ep × 5-fold +
-TTA) is not yet run (`cardiac-seg-yp3`). Read 0.909 as a floor-level reference point, not the SOTA bar.
+### Benchmark (nnU-Net, same split)
+nnU-Net trained on the **identical generalization split** (Dataset029_BATTERY, 50 epochs / 1 fold —
+a floor), scored by the same eval layer:
+
+| ACDC-150 | nnU-Net (50ep/fold0) | this model |
+|---|---|---|
+| mean Dice | **0.912** | 0.901 |
+| EF MAE / bias | **5.6% / −4.2%** | 7.1% / −6.6% |
+| Canon-9 mean Dice | 0.876 | 0.853 |
+
+nnU-Net is ~**1 Dice point** ahead with **better EF** (smaller ES-over-seg bias) — *even at a floor
+setting*; the full ceiling (1000ep × 5-fold + TTA, `cardiac-seg-yp3`) would be higher. Honest position:
+this 2D U-Net is **competent, ~1 point under nnU-Net's floor** on the same data. (One inversion: our
+boundary is tighter — LV-cav HD95 1.5 vs 3.5mm — from largest-CC + TTA, which this nnU-Net run lacked.)
 
 ## Where it fails (stratified)
 - **HCM / small cavities — the main EF failure mode.** EF bias is **entirely end-systolic cavity
