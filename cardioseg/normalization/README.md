@@ -77,6 +77,15 @@ restructuring · **ABSENT** → image-derived or unknowable fallback.
   numbers); deviations documented.
 
 ## Status / contents
-Spec stage — this README is the design. Code lands per the beads tasks: the sidecar **parser**
-(`AUTO` tier, reproducible), `fetch_sources` (the `WEB` pulls), and the **transforms** (N4 bias
-correction, Nyúl standardization). Referenced from the main [README](../../README.md#data-normalization).
+- **AUTO parser** ✅ — `data/mri/{acdc,mnm2,mnms1}.py` `meta()` parses the shipped sidecars
+  (Info.cfg / CSVs) → acquisition + demographics with per-field `_source`.
+- **Paper layer** ✅ — `sources.yaml`: the cited WEB/paper-tier constants (ACDC vendor/field, …),
+  each `{value, source, verified}`; unverified fields stay visibly unverified.
+- **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`
+  (`{value, source, by, verified}` per field; regenerable, out-of-repo) + `load_meta()` with
+  per-scan fallback. `python -m cardioseg.normalization.persist`.
+- **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of the
+  paywalled/register-gated sources to fetch manually.
+- **N4** ✅ — `n4.py` (bias correction). **Nyúl standardization** ⬜ — spec.
+
+Referenced from the main [README](../../README.md#data-normalization).

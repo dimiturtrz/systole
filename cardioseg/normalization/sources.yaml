@@ -1,0 +1,29 @@
+# Paper-cited acquisition constants — the WEB/paper tier of the normalization scheme: values NOT in
+# the datasets' shipped sidecars, taken from the challenge papers. Each: {value, source, verified}.
+# `verified: false` = present but not yet transcribed/checked (visibly unverified, never silently used).
+# The AUTO tier (vendor/disease/demographics parsed from Info.cfg / CSVs) lives in adapter.meta(),
+# not here. This file is the small hand-curated layer persist.py overlays onto the parsed meta.
+
+acdc:
+  vendor:
+    value: Siemens
+    source: "Bernard et al. 2018 (IEEE TMI) — single-centre, Siemens"
+    verified: true
+  field_T:
+    value: [1.5, 3.0]
+    source: "Bernard et al. 2018 — Siemens Aera (1.5T) + Trio (3T)"
+    verified: true
+  centre:
+    value: Dijon
+    source: "Bernard et al. 2018 — CHU Dijon (single centre)"
+    verified: true
+
+mnm2:
+  # All acquisition fields ship in dataset_information.csv (AUTO tier) — no paper layer required.
+  {}
+
+mnms1:
+  field_T:
+    value: null
+    source: "Campello et al. 2021 (IEEE TMI) — per-vendor scanner table; the released CSV omits field strength"
+    verified: false   # not yet transcribed from the paper tables -> stays null/unknown until done
