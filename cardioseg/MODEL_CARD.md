@@ -90,7 +90,11 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
 
 ## Limitations & caveats
 - Single modality (cine MRI short-axis), 2D slice model — no long-axis, no 3D context.
-- Systematic EF under-prediction (bias ≈ −5%) from ES over-segmentation; **not** corrected by a
+- Systematic EF under-prediction (bias ≈ −5%) from ES over-segmentation. **Structure (diagnostic):**
+  the bias is **proportional** (diff vs EF slope −0.18/EF%, r=−0.56, p<1e-13) and **pathology-structured**
+  (DCM ≈ 0% → HCM −11.5%), so a single global offset would over-correct DCM and under-correct HCM —
+  an honest correction would have to be per-subgroup, which needs target labels (domain adaptation, not
+  zero-shot). So it's reported, not patched. Also **not** corrected by a
   constant offset (size-dependent → would over-correct dilated hearts) and **not** a measurement bug
   (volumes are computed correctly). The honest fix is segmentation-side at ES (`cardiac-seg-7oe`).
 - Unseen-vendor evidence is thin (Canon n=9); Dice is the only readable metric there.
