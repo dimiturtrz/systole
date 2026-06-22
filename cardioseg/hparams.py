@@ -32,6 +32,9 @@ class ModelCfg(BaseModel):
     channels: tuple[int, ...] = (16, 32, 64, 128, 256)
     strides: tuple[int, ...] = (2, 2, 2, 2)
     res_units: int = Field(2, ge=0)
+    dropout: float = Field(0.0, ge=0, le=1)        # 0 by default: dropout 0.1/0.2 regressed EF ~2pp on this
+    #                                                already-regularized small net (heavy aug + early stop), no
+    #                                                Dice gain — boundary/volume precision is dropout-fragile. See bp4.
 
 
 class AugCfg(BaseModel):

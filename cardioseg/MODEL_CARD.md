@@ -47,18 +47,18 @@ One model, held out along two independent shift axes (DataCfg criteria: `test_da
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 2.1 | 0.53 |
-| LV myocardium | 0.86 | 2.1 | 0.54 |
-| RV cavity | 0.88 | 5.0 | 0.76 |
-| **mean** | **0.89** | | |
+| LV cavity | 0.92 | 2.1 | 0.59 |
+| LV myocardium | 0.86 | 2.1 | 0.56 |
+| RV cavity | 0.88 | 5.8 | 0.80 |
+| **mean** | **0.88** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`) — do not hand-edit.</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase, so this is the honest read
-(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 5.9%**, bias −5.2%, 95% LoA [−18, +8] (n=150).
+(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 6.2%**, bias −5.7%, 95% LoA [−18, +7] (n=150).
 
-**Canon-9 (unseen vendor):** mean Dice **0.85**. EF MAE is **not reported as a stable number** — at
-n=9 it swings (7.2% under a M&M-2-only model, 11.1% here) while Dice holds ~0.85. Canon is the honest
+**Canon-9 (unseen vendor):** mean Dice **0.84**. EF MAE is **not reported as a stable number** — at
+n=9 it swings (7.2% under a M&M-2-only model, 11.1% here) while Dice holds ~0.84. Canon is the honest
 *Dice* signal for unseen-vendor robustness; its EF is noise (the M&Ms-1 challenge withholds GT for
 most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
 
@@ -66,15 +66,17 @@ most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
 nnU-Net trained on the **identical generalization split** (Dataset029_BATTERY, 50 epochs / 1 fold —
 a floor), scored by the same eval layer:
 
+<!-- results:cardcompare -->
 | ACDC-150 | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
-| mean Dice | 0.912 | 0.886 |
-| EF MAE / bias | 5.6% / −4.2% | 5.9% / −5.2% |
-| Canon-9 mean Dice | 0.876 | 0.85 |
+| mean Dice | 0.912 | 0.884 |
+| EF MAE / bias | 5.6% / -4.2% | 6.2% / -5.7% |
+| Canon-9 Dice | 0.876 | 0.84 |
+<!-- /results:cardcompare -->
 
-Both numbers pool ED+ES. nnU-Net leads by **~2.6 Dice points** on ACDC (0.912 vs 0.886) and on
-unseen-vendor Canon (0.876 vs 0.85) — *even at its floor setting* (50ep/1fold; the full 1000ep ×
-5-fold + TTA ceiling, `cardiac-seg-yp3`, would pull further ahead). **EF is roughly level** (5.9% vs
+Both numbers pool ED+ES. nnU-Net leads by **~2.8 Dice points** on ACDC (0.912 vs 0.884) and on
+unseen-vendor Canon (0.876 vs 0.84) — *even at its floor setting* (50ep/1fold; the full 1000ep ×
+5-fold + TTA ceiling, `cardiac-seg-yp3`, would pull further ahead). **EF is roughly level** (6.2% vs
 5.6%). cardioseg's boundary is tighter on LV-cav (HD95 2.1 vs 3.3 mm) and myo (2.1 vs 2.9) — from
 largest-CC + TTA, which this nnU-Net run lacked. Net: a competent deployable model ~2–3 Dice points
 under nnU-Net's floor, EF-comparable, at ~57× fewer parameters.
@@ -87,9 +89,9 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
   unbiased (≈ −0.2%); hypertrophic (tiny cavity) is worst (EF MAE ~11.9%). Dice stays fairly flat (~0.88)
   across pathologies — masks aren't worse, the EF *ratio* is range-dependent. (See
   `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.)
-- **RV boundary** is the loosest (HD95 5.0 mm vs myo 2.1, LV-cav 2.1) — basal slices + the small ES cavity.
-- **Vendor:** the GE minority-vendor Dice deficit (0.879 under M&M-2-only) **closed** under pooled
-  training (0.903) — vendor diversity, not harmonization, fixed it.
+- **RV boundary** is the loosest (HD95 5.8 mm vs myo 2.1, LV-cav 2.1) — basal slices + the small ES cavity.
+- **Vendor:** in-domain M&M-2 vendors are level (val split, ED+ES: Siemens/Philips 0.87, GE 0.88) — **no
+  minority-vendor deficit**; pooled multi-vendor training (not harmonization) is the robustness lever.
 
 ## Limitations & caveats
 - Single modality (cine MRI short-axis), 2D slice model — no long-axis, no 3D context.

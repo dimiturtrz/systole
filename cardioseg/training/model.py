@@ -14,4 +14,5 @@ def build_unet(cfg: ModelCfg | None = None):
         channels=tuple(cfg.channels),
         strides=tuple(cfg.strides),
         num_res_units=cfg.res_units,
+        dropout=cfg.dropout,          # enables MC-dropout uncertainty at inference (iq7)
     )

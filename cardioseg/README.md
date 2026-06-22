@@ -124,29 +124,31 @@ vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early 
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 2.1 | 0.53 |
-| LV myocardium | 0.86 | 2.1 | 0.54 |
-| RV cavity | 0.88 | 5.0 | 0.76 |
-| **mean** | **0.89** | | |
+| LV cavity | 0.92 | 2.1 | 0.59 |
+| LV myocardium | 0.86 | 2.1 | 0.56 |
+| RV cavity | 0.88 | 5.8 | 0.80 |
+| **mean** | **0.88** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`). Published in-distribution ACDC is
 ~0.91–0.93 mean — context, not like-for-like (different test set; see the split caveat above).</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
-including it is the honest read. **EF vs GT: MAE 5.9%** (bias −5.2%, 95% LoA [−18, +8], n=150).
+including it is the honest read. **EF vs GT: MAE 6.2%** (bias −5.7%, 95% LoA [−18, +7], n=150).
 **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
+<!-- results:axis -->
 | held-out axis | n | mean Dice | EF MAE |
 |---|---|---|---|
-| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.89 | 5.9% |
-| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.85 | 11.1% \* |
+| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.88 | 6.2% |
+| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.84 | 13.5% \* |
+<!-- /results:axis -->
 
 \* Canon **n=9** — too thin to read EF on: the same axis gave EF MAE 7.2% under a M&M-2-only model,
-11.1% here (one collapsed case dominates 9), while Dice held ~0.85 both ways. The M&Ms-1 challenge
+11.1% here (one collapsed case dominates 9), while Dice held ~0.84 both ways. The M&Ms-1 challenge
 withholds GT for most of its Testing split (320 on disk, 213 labelled; Canon 50 → 9 with masks), so
 Canon is the honest *Dice* signal for unseen-vendor robustness; its EF is noise. Pooling M&Ms-1 into
-training (564 vs 360 subjects) lifted the ACDC axis (mean ~0.87 → 0.89 — the extra RV/vendor
+training (564 vs 360 subjects) lifted the ACDC axis (mean ~0.87 → 0.88 — the extra RV/vendor
 diversity paid off).
 
 **Diversity buys robustness — the asymmetry proves it:**
@@ -158,13 +160,13 @@ diversity paid off).
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-split + heavy aug + largest-CC + TTA lift the flagship to 0.89 Dice / 5.9% EF on ACDC-150 (top table).*
+split + heavy aug + largest-CC + TTA lift the flagship to 0.88 Dice / 6.2% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
 - **EF transfers worse than Dice** — volume calibration shifts across centres (in-domain EF MAE
   4.7% → cross-dataset ~6–9%); the chambers are right, the absolute mL drift.
-- **Surface metrics (ED+ES):** RV has the loosest boundary (HD95 5.0 mm vs myo 2.1, LV-cav 2.1) —
+- **Surface metrics (ED+ES):** RV has the loosest boundary (HD95 5.8 mm vs myo 2.1, LV-cav 2.1) —
   basal slices + the small ES cavity. ASSD stays sub-mm everywhere; full HD is the fragile max (one
   stray voxel → ~200 mm), **HD95** is the robust read.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
@@ -183,11 +185,11 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 <!-- results:strata -->
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.90 | 2.1% | -0.2% |
-| ischemic (MINF) | 31% | 0.88 | 4.1% | -3.4% |
-| rv_congenital | 57% | 0.88 | 6.5% | -5.9% |
-| normal (NOR) | 62% | 0.90 | 5.1% | -4.8% |
-| **hypertrophic (HCM)** | 70% | 0.87 | 11.9% | -11.5% |
+| dilated (DCM) | 20% | 0.90 | 1.7% | -0.4% |
+| ischemic (MINF) | 31% | 0.88 | 3.8% | -3.4% |
+| rv_congenital | 57% | 0.88 | 7.4% | -7.2% |
+| normal (NOR) | 62% | 0.89 | 6.3% | -5.9% |
+| **hypertrophic (HCM)** | 70% | 0.86 | 12.0% | -11.5% |
 <!-- /results:strata -->
 <sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`).</sub>
 

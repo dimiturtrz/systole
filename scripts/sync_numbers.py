@@ -53,6 +53,38 @@ def strata() -> str:
     return "\n".join(rows)
 
 
+def axis() -> str:
+    return "\n".join([
+        "| held-out axis | n | mean Dice | EF MAE |", "|---|---|---|---|",
+        f"| **ACDC** (centre / protocol shift, single-vendor) | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
+        f"| **Canon** (unseen vendor, M&Ms-1) | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% \\* |",
+    ])
+
+
+def cardcompare() -> str:  # 3-metric comparison used in both model cards
+    a, n = _A, _NN["acdc"]
+    return "\n".join([
+        "| ACDC-150 | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
+        f"| mean Dice | {n['dice']['mean']:.3f} | {a['dice']['mean']:.3f} |",
+        f"| EF MAE / bias | {n['ef_mae']}% / {n['ef_bias']:+.1f}% | {a['ef_mae']}% / {a['ef_bias']:+.1f}% |",
+        f"| Canon-9 Dice | {_NN['canon']['dice_mean']:.3f} | {_C['dice']['mean']:.2f} |",
+    ])
+
+
+def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ (Dice points = ×100)
+    a, n, e = _A["dice"], _NN["acdc"]["dice"], _E
+    dd = lambda k: (n[k] - a[k]) * 100
+    return "\n".join([
+        "| segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |", "|---|---|---|---|---|---|---|",
+        f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {a['mean']:.3f} | {a['LV-cav']:.3f} | "
+        f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_A['ef_mae']}% | deployable / ONNX |",
+        f"| **nnU-Net** (50 ep, 1 fold) | **{n['mean']:.3f}** | **{n['LV-cav']:.3f}** | **{n['LV-myo']:.3f}** | "
+        f"**{n['RV']:.3f}** | **{_NN['acdc']['ef_mae']}%** | baseline / not deployed |",
+        f"| Δ (nnU-Net − ours) | +{dd('mean'):.1f} | +{dd('LV-cav'):.1f} | +{dd('LV-myo'):.1f} | "
+        f"+{dd('RV'):.1f} | {_NN['acdc']['ef_mae'] - _A['ef_mae']:+.1f} | |",
+    ])
+
+
 def headline() -> str:
     return (f"ACDC-150 mean Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
             f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]); "
@@ -60,7 +92,8 @@ def headline() -> str:
             f"**{_NN['acdc']['dice']['mean']:.3f}** Dice / {_NN['acdc']['ef_mae']}% EF.")
 
 
-BLOCKS = {"compare": compare, "acdc": acdc, "strata": strata, "headline": headline}
+BLOCKS = {"compare": compare, "acdc": acdc, "strata": strata, "headline": headline,
+          "axis": axis, "cardcompare": cardcompare, "nnucompare": nnucompare}
 TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
            "baselines/nnunet/MODEL_CARD.md", "baselines/nnunet/README.md"]
 
