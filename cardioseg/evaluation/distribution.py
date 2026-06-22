@@ -58,6 +58,8 @@ def collect(run: Path, device: str, meta_rows):
                "pathology": r.get("pathology"), "vendor": r.get("vendor"),
                "field": f"{ft}T" if ft not in (None, "") else None}
         masks = {}
+        sd_acc = {cl: [] for cl in CLASSES}
+        di_acc = {cl: [] for cl in CLASSES}
         for tag in ("ED", "ES"):
             k = tag.lower()
             if f"{k}_img" not in c:
@@ -65,9 +67,14 @@ def collect(run: Path, device: str, meta_rows):
             pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device, tta=True))
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
             masks[tag] = (pred, gt)
-            if tag == "ED":
-                rec["sd"] = {cl: surface_distances(pred, gt, cl, sp) for cl in CLASSES}
-                rec["dice"] = {cl: dice(pred, gt, cl) for cl in CLASSES}
+            # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
+            # made the boundary/Dice numbers optimistic.
+            for cl in CLASSES:
+                sd_acc[cl].append(surface_distances(pred, gt, cl, sp))
+                di_acc[cl].append(dice(pred, gt, cl))
+        if any(di_acc[cl] for cl in CLASSES):
+            rec["sd"] = {cl: (np.concatenate(sd_acc[cl]) if sd_acc[cl] else np.array([])) for cl in CLASSES}
+            rec["dice"] = {cl: float(np.mean(di_acc[cl])) for cl in CLASSES if di_acc[cl]}
         if "ED" in masks and "ES" in masks:
             rec["ef_gt"] = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)[0]
             rec["ef_pred"] = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)[0]
@@ -87,7 +94,11 @@ def _pooled(rows):
 
 def plot_kde(dists, out: Path, label: str):
     fig, ax = plt.subplots(figsize=(7, 4))
-    xs = np.linspace(0, 12, 300)
+    # data-driven x-range so the outlier tail (the point of the plot) isn't clipped at 12 mm
+    pooled = [d for cl in CLASSES for d in dists[cl] if d.size]
+    allsd = np.concatenate(pooled) if pooled else np.array([0.0])
+    xmax = max(12.0, float(np.percentile(allsd, 99.5)))
+    xs = np.linspace(0, xmax, 400)
     for cl, (name, color) in CLASSES.items():
         sd = np.concatenate([d for d in dists[cl] if d.size])
         if sd.size < 2:
