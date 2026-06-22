@@ -40,7 +40,9 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only;
    vendor-aware histogram standardization may tighten the spread. (`bd cardiac-seg-qfz`)
 5. ⬜ **Bias calibration** — held-out linear EF correction, reported as such.
-6. ⬜ **Stronger segmentation** — nnU-Net baseline (done, see baselines/), 3D context.
+6. ⬜ **Stronger segmentation + SOTA benchmark** — nnU-Net baseline (done, see baselines/), 3D
+   context; beyond the nnU-Net floor, benchmark **CardioSAM** (current OSS SOTA) on our cross-vendor
+   split — cite + run cross-vendor only, since its published numbers are in-distribution (`bd cardiac-seg-0h7`).
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 

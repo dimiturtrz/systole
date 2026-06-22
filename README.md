@@ -72,7 +72,10 @@ Paths from here, roughly in effort order:
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
 ### Segmentation — ours vs SOTA
-Per-structure, M&M-2 → ACDC, our deployable model vs the nnU-Net SOTA baseline (**same eval**):
+**A 1.6 M-param model that holds level with nnU-Net's floor on held-out ACDC (0.91 vs 0.912 Dice) at
+~57× fewer parameters — and exports to run in the browser.**
+
+Per-structure, held-out ACDC, our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 | | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |
 |---|---|---|---|---|---|---|---|
@@ -191,6 +194,16 @@ Agent-driven build, human-owned judgment — coding agents scaffold the plumbing
 modeling decisions, the measurement correctness, and the evaluation. Data-structure reasoning and
 evaluation discipline carry over from prior ML work; the clinical specifics I learn as I go
 ([learning/](learning/)).
+
+## References
+- **ACDC** — Bernard et al., *Deep Learning Techniques for Automatic MRI Cardiac Multi-structures
+  Segmentation and Diagnosis: Is the Problem Solved?*, IEEE TMI 2018.
+- **M&Ms** (M&Ms-1) — Campello et al., *Multi-Centre, Multi-Vendor and Multi-Disease Cardiac
+  Segmentation: The M&Ms Challenge*, IEEE TMI 2021.
+- **M&Ms-2** — Martín-Isla et al., *M&Ms-2: Multi-Disease, Multi-View & Multi-Center Right
+  Ventricular Segmentation in Cardiac MRI*, 2023.
+- **nnU-Net** — Isensee et al., *nnU-Net: a self-configuring method for deep learning-based
+  biomedical image segmentation*, Nature Methods 2021.
 
 ## License
 Code is **MIT** ([LICENSE](LICENSE)). The datasets (ACDC, M&M-2) are **not** included and carry
