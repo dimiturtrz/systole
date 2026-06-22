@@ -1,9 +1,15 @@
-# Notice Board — cardiac-seg research
+# Research Notice Board
 
-| Date | Deep-dive | Status | Open questions |
-|---|---|---|---|
-| 2026-06-17 | [Cardiac MRI + EF Foundations](deep_dives/2026-06-17_cardiac-mri-ef-foundations.md) | settled | EF MAE for nnU-Net on ACDC test set (PDF unreadable); papillary inclusion rule confirmation; multi-vendor Dice gap |
-| 2026-06-17 | [Application Curriculum & Gaps](deep_dives/2026-06-17_application-curriculum-and-gaps.md) | partial | ACDC label integers **RESOLVED 2026-06-18** (verified geometrically on real masks: 0 bg / 1 RV / 2 myo / 3 LV-cav); ACDC basal/apical slice convention in eval script; nnU-Net ACDC per-class Dice (leaderboard not fetched); Gibbs EF impact quantitative study not found |
-| 2026-06-18 | [DL Segmentation + Computational Geometry Curriculum](deep_dives/2026-06-18_ml-geometry-application-curriculum.md) | grounded | UF EEL6935 PDF didn't fetch (ordering from abstract); CS231n/fast.ai exact syllabi not vetted; Bland-Altman canonical URL not pinned |
-| 2026-06-21 | [Intensity normalization & harmonization](deep_dives/2026-06-21_intensity-normalization-and-harmonization.md) | grounded | Multi-centre TRAINING > aug ≈ harmonization (lit) — we already do it. Nyúl = classic baseline not SOTA, mixed results, leans adaptation → A/B-validate not default; N4 = safe physical half. nnU-Net wins on z-score+aug, no explicit harmonization |
-| 2026-06-20 | [Dataset acquisition + annotation conventions](deep_dives/2026-06-20_dataset-acquisition-and-conventions.md) | grounded | **PAPILLARY RESOLVED**: ACDC/M&Ms-1/M&Ms-2 share the convention (papillary+trabeculae IN LV cavity; M&Ms-2 "follows ACDC standards") → NOT the EF-bias source, bias is domain/intensity. ACDC scanners = Siemens Aera 1.5T + Trio Tim 3T (Dijon). M&Ms-1 = 375/6 centres ES-DE-CA/4 vendors incl Canon. Open: M&Ms-1 per-vendor·field counts (TMI tables); ACDC per-patient 1.5T/3T split not public |
+## Open Questions
+
+(none pending)
+
+## Settled Findings
+
+| Topic | Deep-Dive | TL;DR |
+|-------|-----------|-------|
+| Cardiac MRI segmentation landscape (OSS, benchmarks, domain gaps, browser inference, simulators) | `2026-06-22_cardiac-segmentation-oss-landscape-unified.md` | nnU-Net (8.6k⭐) + MONAI (8.3k⭐) dominate; cross-vendor gap unsolved (47% Dice drop Siemens→Philips); browser stack (OHIF v3.10) exists but no cardiac implementations; MRI simulators roadmapped for cardiac but no high-fidelity synthetic datasets yet |
+
+## Progress Log
+
+- **2026-06-22**: Initial landscape survey complete. Five research angles covered: OSS frameworks, M&M benchmarks, domain generalization gap (Siemens→Philips ~42% Dice drop), browser-based inference (OHIF v3.10 April 2025), MRI simulators (JEMRIS, MRiLab, KomaMRI). ~25 tool calls, all findings cited.
