@@ -10,6 +10,9 @@ import numpy as np
 
 from cardioseg.types import Mask, Spacing
 
+# Canonical foreground classes: label -> (name, plot color). Single source for validate + distribution.
+CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef5350")}
+
 try:
     from scipy.ndimage import distance_transform_edt, binary_erosion
 except ImportError:

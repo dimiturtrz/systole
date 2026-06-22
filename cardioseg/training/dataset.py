@@ -24,6 +24,8 @@ from torch.utils.data import Dataset
 from cardioseg.data.store import load_arrays
 from cardioseg.types import Slice2D
 
+SIZE = 256  # the square grid the 2D model runs on — single source for eval/export (DataCfg.size mirrors it)
+
 
 def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
     """Centre pad/crop a [H, W] array to [size, size]."""

@@ -26,15 +26,12 @@ import torch
 from scipy.stats import gaussian_kde
 
 from cardioseg.training.model import build_unet
-from cardioseg.training.dataset import fit_square
+from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store, splits
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction
-from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice
+from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice, CLASSES
 from cardioseg.evaluation.postprocess import largest_cc_per_class
-
-CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef5350")}
-SIZE = 256
 
 
 def collect(run: Path, device: str, meta_rows):

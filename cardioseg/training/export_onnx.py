@@ -16,10 +16,9 @@ import numpy as np
 import torch
 
 from cardioseg.training.model import build_unet
-from cardioseg.training.dataset import fit_square
+from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store
 
-SIZE = 256
 PARITY_MIN = 99.0  # % argmax agreement required to ship
 
 
