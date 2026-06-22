@@ -1,13 +1,15 @@
 import type { HeartEntry } from './manifest';
 import { glbUrl } from './manifest';
 import type { HeartViewer } from './viewer';
+import type { SliceView, SliceFrame } from './sliceview';
+import { decodeSliceStrip } from './sliceview';
 import { efCategory, efError, fmtMl, fmtPct } from './metrics';
 import { showSpinner, hideSpinner } from './spinner';
 import { pickDefault } from './select';
 import { Segmenter } from './segment';
 import { readNifti, frame } from './nifti';
 import { chamberPolys } from './mesh';
-import { countLabel, volumeMl, TARGET_MM } from './preprocess';
+import { countLabel, volumeMl, TARGET_MM, SIZE } from './preprocess';
 
 const CARD =
   'position:fixed;top:12px;left:12px;z-index:10;background:rgba(20,24,30,.86);color:#cdd6e0;' +
@@ -28,10 +30,11 @@ interface Imported {
   frames?: (any | null)[][]; // segmented cine frames (if 4D) -> beating
   edIdx?: number;
   esIdx?: number;
+  sliceFrames?: SliceFrame[]; // grayscale + mask per slice, per frame -> the slice view
 }
 
 /** Top panel: Model dropdown + Hearts dropdown (each = defaults + import), drives the viewer. */
-export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName = 'mnm2'): void {
+export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, sliceView: SliceView, modelName = 'mnm2'): void {
   const seg = new Segmenter();
   const DEFAULT_MODEL = `models/${modelName}.onnx`;
   let modelSrc: string | Uint8Array = DEFAULT_MODEL;
@@ -75,6 +78,72 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
 
   mountLegend();
 
+  // ---- view toggle: 3D meshes <-> 2D slice loaf (same scene, same controls) ----
+  type Playable = { showFrame(i: number): void; play(fps: number, cb: (i: number) => void): void; pause(): void; isPlaying: boolean };
+  let view: '3d' | 'slices' = '3d';
+  let curN = 1, curEd = 0, curEs = 0;            // playback params for the current heart (shared by both views)
+  let curSlices: SliceFrame[] | null = null;     // decoded slice frames (one per cine frame), or null
+  let curEntry: HeartEntry | null = null;        // canned heart, for lazy slice decode
+  const cannedCache = new Map<string, SliceFrame[]>();
+  const toggleWrap = el('div',
+    'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:11;display:flex;' +
+    'background:rgba(20,24,30,.86);border:1px solid #2a323d;border-radius:8px;overflow:hidden;');
+  const btn3d = viewTab('3D heart');
+  const btnSl = viewTab('Slices');
+  toggleWrap.append(btn3d, btnSl);
+  document.body.appendChild(toggleWrap);
+
+  function buildControls(target: Playable): void {
+    controls.innerHTML = '';
+    if (curN > 1) animControls(curN, curEd, curEs, target);
+  }
+
+  function setView(v: '3d' | 'slices'): void {
+    view = v;
+    btn3d.style.background = v === '3d' ? '#2a3340' : 'transparent';
+    btnSl.style.background = v === 'slices' ? '#2a3340' : 'transparent';
+    if (v === '3d') {
+      sliceView.hide();
+      buildControls(viewer);
+    } else if (curSlices) {
+      sliceView.setSequence(curSlices, curEd);
+      sliceView.show();
+      buildControls(sliceView);
+    } else {
+      controls.innerHTML = '';
+      if (curEntry?.slices?.length) { sliceView.setMessage('loading slices…'); void ensureCanned(curEntry); }
+      else sliceView.setMessage('Import a scan (.nii.gz) to see slices.');
+    }
+  }
+
+  // Canned slices ship pre-baked (one PNG strip per cine frame, same prediction as the meshes) —
+  // decode all (no inference), so the slice loaf is instant + in sync with the 3D view. Cached.
+  async function ensureCanned(e: HeartEntry): Promise<void> {
+    const hit = cannedCache.get(e.patient);
+    if (hit) { if (curEntry === e) { curSlices = hit; if (view === 'slices') setView('slices'); } return; }
+    const files = e.slices;
+    if (!files?.length) return;
+    try {
+      const frames = await Promise.all(files.map((f) => decodeSliceStrip(glbUrl(f), e.sliceD ?? 1)));
+      cannedCache.set(e.patient, frames);
+      if (curEntry === e) { curSlices = frames; if (view === 'slices') setView('slices'); }
+    } catch (err: any) {
+      if (curEntry === e && view === 'slices') sliceView.setMessage(`slice load failed: ${err?.message ?? err}`);
+    }
+  }
+
+  /** Set the current heart's playback params + slice source, then render the active view + controls. */
+  function selectHeart(n: number, ed: number, es: number, slices: SliceFrame[] | null, canned: HeartEntry | null): void {
+    curN = n; curEd = ed; curEs = es; curEntry = canned;
+    curSlices = slices ?? (canned ? cannedCache.get(canned.patient) ?? null : null);
+    if (canned?.slices?.length && !curSlices) void ensureCanned(canned); // prefetch for an instant toggle
+    setView(view);
+  }
+
+  btn3d.addEventListener('click', () => setView('3d'));
+  btnSl.addEventListener('click', () => setView('slices'));
+  btn3d.style.background = '#2a3340'; // initial tab highlight
+
   // ---- model selection ----
   modelSel.addEventListener('change', () => {
     if (modelSel.value === IMPORT) {
@@ -111,25 +180,27 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   });
 
   function showCanned(e: HeartEntry): void {
-    controls.innerHTML = '';
     readout.innerHTML = cannedReadout(e);
-    if (e.frames && e.frames.length > 1) buildAnimated(e);
-    else buildStatic(e);
-  }
-
-  function showImported(im: Imported): void {
-    controls.innerHTML = '';
-    readout.innerHTML = im.readout;
-    if (im.frames && im.frames.length > 1) {
-      viewer.showSequence(im.frames);
-      animControls(im.frames.length, im.edIdx ?? 0, im.esIdx ?? 0);
+    if (e.frames && e.frames.length > 1) {
+      buildAnimated(e);
+      selectHeart(e.frames.length, e.ed_idx ?? 0, e.es_idx ?? 0, null, e);
     } else {
-      viewer.showStatic(im.polys);
+      buildStatic(e); // static canned: builds its own 3D ED/ES controls (no per-frame slices baked)
+      curN = 1; curEd = 0; curEs = 0; curSlices = null; curEntry = e;
+      if (view === 'slices') setView('slices'); // -> "no slices" message
     }
   }
 
-  /** Play/pause + scrub + ED/ES jump for a sequence already loaded in the viewer; opens paused at ED. */
-  function animControls(n: number, edIdx: number, esIdx: number): void {
+  function showImported(im: Imported): void {
+    readout.innerHTML = im.readout;
+    if (im.frames && im.frames.length > 1) viewer.showSequence(im.frames);
+    else viewer.showStatic(im.polys);
+    selectHeart(im.frames?.length ?? 1, im.edIdx ?? 0, im.esIdx ?? 0, im.sliceFrames ?? null, null);
+  }
+
+  /** Play/pause + scrub + ED/ES for a loaded cine — drives whichever view is active (3D or slices),
+   *  via the shared Playable interface, so both views use the SAME controls. Opens paused at ED. */
+  function animControls(n: number, edIdx: number, esIdx: number, target: Playable): void {
     const playBtn = button('▶ play');
     const label = el('span', 'color:#8aa0b6;font-size:12px;min-width:78px;text-align:right;') as HTMLSpanElement;
     const scrub = el('input', 'width:100%;') as HTMLInputElement;
@@ -145,19 +216,19 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
       scrub.value = String(i);
     };
     const stop = () => {
-      viewer.pause();
+      target.pause();
       playBtn.textContent = '▶ play';
     };
     const start = () => {
-      viewer.play(FPS, setLabel);
+      target.play(FPS, setLabel);
       playBtn.textContent = '❚❚ pause';
     };
     const jump = (i: number) => {
       stop();
-      viewer.showFrame(i);
+      target.showFrame(i);
       setLabel(i);
     };
-    playBtn.addEventListener('click', () => (viewer.isPlaying ? stop() : start()));
+    playBtn.addEventListener('click', () => (target.isPlaying ? stop() : start()));
     scrub.addEventListener('input', () => jump(Number(scrub.value)));
     jumps.children[0].addEventListener('click', () => jump(edIdx));
     jumps.children[1].addEventListener('click', () => jump(esIdx));
@@ -193,31 +264,33 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
   async function segmentSingle(name: string, v: Awaited<ReturnType<typeof readNifti>>): Promise<void> {
     status(`segmenting ${name}…`);
     const t0 = performance.now();
-    const masks = await seg.segmentVolume(frame(v, 0), v.d, v.h, v.w, v.spacingYX);
+    const { masks, gray } = await seg.segmentVolumeSlices(frame(v, 0), v.d, v.h, v.w, v.spacingYX);
     const secs = (performance.now() - t0) / 1000;
     const vox = TARGET_MM * TARGET_MM * v.zSpacing;
     const ro = importedReadout(name,
       volumeMl(countLabel(masks, 3), vox), volumeMl(countLabel(masks, 2), vox), volumeMl(countLabel(masks, 1), vox)) +
       `<div style="color:#8aa0b6;">${v.d} slices · ${seg.provider} · ${secs.toFixed(1)} s</div>`;
-    imported.set(name, { name, polys: chamberPolys(masks, v.zSpacing), readout: ro });
+    imported.set(name, { name, polys: chamberPolys(masks, v.zSpacing), readout: ro, sliceFrames: [{ gray, mask: masks, w: SIZE, h: SIZE }] });
   }
 
   async function segmentCine(name: string, label: string, v: Awaited<ReturnType<typeof readNifti>>): Promise<void> {
     const t0 = performance.now();
     const vox = TARGET_MM * TARGET_MM * v.zSpacing;
     const framePolys: (any | null)[][] = [];
+    const sliceFrames: SliceFrame[] = [];
     const lv: number[] = [];
     for (let i = 0; i < v.t; i++) {
       status(`segmenting ${label} ${i + 1}/${v.t}…`);
-      const masks = await seg.segmentVolume(frame(v, i), v.d, v.h, v.w, v.spacingYX);
+      const { masks, gray } = await seg.segmentVolumeSlices(frame(v, i), v.d, v.h, v.w, v.spacingYX);
       framePolys.push(chamberPolys(masks, v.zSpacing));
+      sliceFrames.push({ gray, mask: masks, w: SIZE, h: SIZE });
       lv.push(volumeMl(countLabel(masks, 3), vox));
     }
     const edIdx = argExtreme(lv, true); // ED = max LV-cavity volume (full)
     const esIdx = argExtreme(lv, false); // ES = min (empty)
     const secs = (performance.now() - t0) / 1000;
     imported.set(name, {
-      name, polys: framePolys[edIdx], frames: framePolys, edIdx, esIdx,
+      name, polys: framePolys[edIdx], frames: framePolys, edIdx, esIdx, sliceFrames,
       readout: cineReadout(lv[edIdx], lv[esIdx], lv, edIdx, esIdx, v.t, seg.provider, secs),
     });
   }
@@ -227,11 +300,12 @@ export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, modelName
     showSpinner();
     void viewer
       .loadSequence(e.frames!.map(glbUrl))
-      .then(() => animControls(e.frames!.length, e.ed_idx ?? 0, e.es_idx ?? 0))
+      .then(() => { if (view === '3d') buildControls(viewer); }) // rebuild once meshes are ready
       .finally(hideSpinner);
   }
 
   function buildStatic(e: HeartEntry): void {
+    controls.innerHTML = '';
     const edBtn = button('ED · full');
     const esBtn = button('ES · empty');
     controls.append(row(edBtn, esBtn));
@@ -369,6 +443,13 @@ function row(...kids: HTMLElement[]): HTMLDivElement {
 
 function button(label: string): HTMLButtonElement {
   const b = el('button', 'flex:1;background:#11151b;color:#cdd6e0;border:1px solid #2a323d;border-radius:6px;padding:6px;cursor:pointer;') as HTMLButtonElement;
+  b.textContent = label;
+  return b;
+}
+
+/** Segmented-control tab for the 3D/Slices view switch. */
+function viewTab(label: string): HTMLButtonElement {
+  const b = el('button', 'background:transparent;color:#cdd6e0;border:none;padding:7px 18px;cursor:pointer;font:13px system-ui;') as HTMLButtonElement;
   b.textContent = label;
   return b;
 }

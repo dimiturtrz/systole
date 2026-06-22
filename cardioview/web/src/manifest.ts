@@ -11,6 +11,8 @@ export interface HeartEntry {
   frames?: string[]; // beating-cycle glb files, in time order (if animated)
   ed_idx?: number; // index into frames for ED (full)
   es_idx?: number; // index into frames for ES (empty)
+  slices?: string[]; // per-frame baked slice strips (PNG: R=gray, G=label), aligned with `frames`
+  sliceD?: number; // slices per frame (each strip is sliceD * SIZE tall)
 }
 
 const DATA = 'data';

@@ -24,7 +24,7 @@ from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks
+from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks, square_stack
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -146,9 +146,26 @@ def run_animate(patients, model, device, model_name, stride=1):
         rspacing = (spacing[0], 1.5, 1.5)
         frames_t = list(range(0, vol.shape[0], stride))
         masks = {}
+        grays = {}
         for k, t in enumerate(frames_t):
             img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, 1.5)[0])
             masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device, tta=True))
+            grays[k] = square_stack(img)  # [D,SIZE,SIZE] grayscale aligned with the mask
+        # slice view: crop to the heart bbox over the whole cine (+margin) -> a compact loaf, not
+        # giant mostly-empty FOV planes. Same crop every frame so the stack is stable.
+        union = np.zeros((SIZE, SIZE), bool)
+        for k in masks:
+            union |= (masks[k] > 0).any(axis=0)
+        ys, xs = np.where(union)
+        M = 14
+        r0, r1, c0, c1 = ((max(0, int(ys.min()) - M), min(SIZE, int(ys.max()) + M + 1),
+                           max(0, int(xs.min()) - M), min(SIZE, int(xs.max()) + M + 1))
+                          if ys.size else (0, SIZE, 0, SIZE))
+        slice_files = []
+        for k in range(len(frames_t)):
+            sfn = f"{name}_f{k:02d}_slices.png"
+            save_strip(grays[k][:, r0:r1, c0:c1], masks[k][:, r0:r1, c0:c1], OUT / sfn)
+            slice_files.append(sfn)
         crop_masks, iso = shared_crop(masks, rspacing)
         files = []
         for k in range(len(frames_t)):
@@ -164,12 +181,30 @@ def run_animate(patients, model, device, model_name, stride=1):
         entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                      pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
                      frames=files, ed_idx=ed_k, es_idx=es_k,
-                     glb={"ED": files[ed_k], "ES": files[es_k]})
+                     glb={"ED": files[ed_k], "ES": files[es_k]},
+                     slices=slice_files, sliceD=int(masks[0].shape[0]))
         upsert_manifest(entry, model_name)
         print(f"  {name:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
               f"EF {entry['pred']['ef']}% (GT {gt.get('ef')}%)")
 
 
+
+
+def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:
+    """One cine frame's (already heart-cropped) slices -> a vertical RGBA PNG strip [D*H, W]:
+    R = grayscale (percentile-windowed for real MRI contrast), G = label (0..3). The web decodes it
+    directly (W from image width, H from height/D)."""
+    from PIL import Image
+
+    nz, h, w = gray.shape
+    lo, hi = np.percentile(gray, [1, 99])  # window: z-scored MRI has outliers; min/max washes out
+    g8 = np.clip((gray - lo) / ((hi - lo) or 1) * 255, 0, 255).astype(np.uint8)
+    rgba = np.zeros((nz * h, w, 4), np.uint8)
+    for z in range(nz):
+        rgba[z * h:(z + 1) * h, :, 0] = g8[z]
+        rgba[z * h:(z + 1) * h, :, 1] = mask[z]
+        rgba[z * h:(z + 1) * h, :, 3] = 255
+    Image.fromarray(rgba, "RGBA").save(path)
 
 
 def main():

@@ -31,6 +31,16 @@ export class Segmenter {
    * Returns one [SIZE,SIZE] label mask per slice.
    */
   async segmentVolume(vol: Float32Array, d: number, h: number, w: number, spacingYX: [number, number]): Promise<Uint8Array[]> {
+    return (await this.segmentVolumeSlices(vol, d, h, w, spacingYX)).masks;
+  }
+
+  /**
+   * Like segmentVolume, but also returns the per-slice grayscale the model actually saw
+   * (z-scored + fit_square'd, [SIZE,SIZE]) — aligned 1:1 with each mask, for the slice view.
+   */
+  async segmentVolumeSlices(
+    vol: Float32Array, d: number, h: number, w: number, spacingYX: [number, number],
+  ): Promise<{ masks: Uint8Array[]; gray: Float32Array[] }> {
     if (!this.session) throw new Error('model not loaded');
     const nh = resampledSize(h, spacingYX[0]);
     const nw = resampledSize(w, spacingYX[1]);
@@ -41,11 +51,13 @@ export class Segmenter {
     }
     const z = zscore(resampled);
     const masks: Uint8Array[] = [];
+    const gray: Float32Array[] = [];
     for (let s = 0; s < d; s++) {
       const sq = fitSquare(z.subarray(s * nh * nw, (s + 1) * nh * nw) as Float32Array, nh, nw);
+      gray.push(sq);
       masks.push(await this.runSlice(sq));
     }
-    return largestCcPerClass(masks, SIZE, SIZE);   // match the pipeline's postprocessing
+    return { masks: largestCcPerClass(masks, SIZE, SIZE), gray };   // postproc matches the pipeline
   }
 
   private async runSlice(input: Float32Array): Promise<Uint8Array> {

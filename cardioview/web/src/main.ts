@@ -1,8 +1,10 @@
 import { HeartViewer } from './viewer';
+import { SliceView } from './sliceview';
 import { loadManifest } from './manifest';
 import { mountPanel } from './panel';
 
 const viewer = new HeartViewer();
+const sliceView = new SliceView();
 let hearts: Awaited<ReturnType<typeof loadManifest>>['hearts'] = [];
 let model = 'acdc_aug';
 try {
@@ -12,4 +14,4 @@ try {
 } catch {
   /* no manifest is fine — import still works */
 }
-mountPanel(hearts, viewer, model);
+mountPanel(hearts, viewer, sliceView, model);
