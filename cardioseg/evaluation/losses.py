@@ -36,12 +36,29 @@ class DiceCEHD:
         return loss
 
 
+class DiceCETversky:
+    """Dice+CE + λ·Tversky(α,β). With β>α the Tversky term penalizes false positives harder, directly
+    discouraging over-segmentation (the ES cavity over-fill). Pure GPU region loss — stable from
+    epoch 0, no warmup, as fast as Dice (unlike Hausdorff-DT, which is CPU-bound on Windows)."""
+
+    def __init__(self, alpha: float = 0.3, beta: float = 0.7, lam: float = 1.0):
+        from monai.losses import DiceCELoss, TverskyLoss
+        self.dce = DiceCELoss(to_onehot_y=True, softmax=True)
+        self.tv = TverskyLoss(to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
+        self.lam = lam
+
+    def __call__(self, logits, y):
+        return self.dce(logits, y) + self.lam * self.tv(logits, y)
+
+
 def build_loss(cfg: LossCfg | None = None):
-    """Loss callable from a LossCfg. Returns an object with __call__(logits, y); for dice_ce_hd it
-    also has an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
+    """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
+    an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
     cfg = cfg or LossCfg()
     if cfg.kind == "dice_ce":
         return dice_ce_loss()
+    if cfg.kind == "dice_ce_tversky":
+        return DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda)
     if cfg.kind == "dice_ce_hd":
         return DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp)
-    raise ValueError(f"unknown loss kind {cfg.kind!r} (dice_ce | dice_ce_hd)")
+    raise ValueError(f"unknown loss kind {cfg.kind!r} (dice_ce | dice_ce_tversky | dice_ce_hd)")

@@ -45,10 +45,16 @@ class LossCfg:
     """Segmentation loss. dice_ce = MONAI Dice+CE (region, the baseline). dice_ce_hd adds a
     Hausdorff-DT boundary term (λ·HD), ramped in over `hd_warmup` epochs (HD losses diverge early) —
     targets the ES boundary over-segmentation that region losses are blind to (the EF-bias lever)."""
-    kind: str = "dice_ce"               # dice_ce | dice_ce_hd
-    hd_weight: float = 0.01            # λ on Hausdorff-DT (its raw scale is ~50x Dice -> keep small)
-    hd_warmup: int = 15                # pure Dice+CE for these epochs (HD not even computed -> fast)
-    hd_ramp: int = 5                   # then ramp HD 0 -> hd_weight over this many epochs
+    kind: str = "dice_ce"               # dice_ce | dice_ce_tversky | dice_ce_hd
+    # Tversky FP-penalty (dice_ce_tversky): beta>alpha penalizes false positives harder ->
+    # discourages over-segmentation (the ES cavity over-fill). Pure GPU region loss, no warmup.
+    tversky_alpha: float = 0.3          # FN weight
+    tversky_beta: float = 0.7           # FP weight (> alpha = punish over-seg)
+    tversky_lambda: float = 1.0         # weight of the Tversky term added to Dice+CE
+    # Hausdorff-DT (dice_ce_hd): NOTE CPU-bound on Windows (needs cucim, Linux-only) -> slow/unstable.
+    hd_weight: float = 0.01
+    hd_warmup: int = 15
+    hd_ramp: int = 5
 
 
 @dataclass
