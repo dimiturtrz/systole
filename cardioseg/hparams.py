@@ -66,12 +66,16 @@ class LossCfg:
 
 @dataclass
 class DataCfg:
-    """What data + how it's split. battery=True pools `sources` and holds out ACDC+Canon (a split
-    query); battery=False trains on `train_dataset` and tests on `test`."""
-    battery: bool = True
-    sources: tuple = ("acdc", "mnm2", "mnms1")  # store datasets to load for the battery pool
-    train_dataset: str = "mnm2"                 # named mode (battery=False)
-    test: str = "acdc"                          # named mode: acdc|mnm2|mnms1|canon|none
+    """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
+    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor) as the test
+    set; train/val = the rest, labelled. The criteria ARE the split — serialized to config.json, so
+    a run records e.g. 'held out acdc + Canon' literally, not an opaque label.
+
+    Defaults = the generalization split (ACDC centre-shift + Canon unseen-vendor). For the legacy
+    A/B, e.g. train M&M-2 -> test ACDC: sources=('mnm2','acdc'), test_datasets=('acdc',), test_vendors=()."""
+    sources: tuple = ("acdc", "mnm2", "mnms1")  # store datasets to load
+    test_datasets: tuple = ("acdc",)            # held out whole (centre/protocol shift)
+    test_vendors: tuple = ("Canon",)            # held out by vendor (unseen-vendor shift)
     inplane: float = 1.5
     n4: bool = False
     val_frac: float = 0.2

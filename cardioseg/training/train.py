@@ -1,11 +1,11 @@
 """Train a 2D U-Net from a TrainCfg (cardioseg.hparams) — one typed config in, model+metrics out.
 
-    python -m cardioseg.training.train --battery
-    python -m cardioseg.training.train --dataset mnm2 --test acdc --epochs 40
-    python -m cardioseg.training.train --battery --set aug.gamma_p=0.5 model.channels=(32,64,128,256,512)
+    python -m cardioseg.training.train --out runs/gen         # default split: hold out ACDC + Canon
+    python -m cardioseg.training.train --set data.test_vendors=('GE',) aug.gamma_p=0.5
 
-The held-out test is a query over the data store (battery = ACDC + Canon), never seen in train/val.
-The full config is serialized to runs/<run>/config.json for provenance + reproducibility.
+The split is criteria over the data cloud (DataCfg.test_datasets / test_vendors); held-out test =
+rows matching those, never seen in train/val. The full config is serialized to runs/<run>/config.json
+for provenance + reproducibility — the criteria ARE the record of what was held out.
 """
 import argparse
 import json
@@ -38,7 +38,6 @@ def _val_dice(model, val_dl, device) -> float:
 def train_seg(cfg: TrainCfg):
     """Train from one TrainCfg. Returns (model, results). Serializes config.json + metrics.json."""
     import numpy as np
-    import polars as pl
     import torch
     from torch.utils.data import DataLoader
     from ..evaluation.losses import build_loss
@@ -51,7 +50,7 @@ def train_seg(cfg: TrainCfg):
     from ..hparams import to_json
 
     d = cfg.data
-    out = Path(cfg.out_dir or f"runs/{'battery' if d.battery else d.train_dataset}")
+    out = Path(cfg.out_dir or "runs/seg")
     log = setup(out / "train.log")
     to_json(cfg, out / "config.json")          # full provenance, written up front
 
@@ -59,35 +58,22 @@ def train_seg(cfg: TrainCfg):
     np.random.seed(cfg.seed)                    # augmentation uses global np.random
     device = cfg.device or ("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
-    log.info("device=%s torch=%s seed=%s %s", device, torch.__version__, cfg.seed,
-             "battery (acdc+Canon held out)" if d.battery else f"dataset={d.train_dataset} test={d.test}")
+    log.info("device=%s torch=%s seed=%s | held out: datasets=%s vendors=%s", device,
+             torch.__version__, cfg.seed, list(d.test_datasets), list(d.test_vendors))
 
-    # splits are queries over the consolidated data store (builds processed/<ds>/ if missing)
+    # split = criteria over the consolidated store (builds processed/<ds>/ if missing)
     with timed(log, "store.load + split"):
-        if d.battery:
-            meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, workers=cfg.workers)
-            train_df, val_df, test_df = splits.battery(meta, d.val_frac, cfg.seed)
-        else:
-            train_all = store.load([d.train_dataset], inplane=d.inplane, n4=d.n4,
-                                   workers=cfg.workers).filter(pl.col("labelled"))
-            train_df, val_df = splits.patient_val(train_all, d.val_frac, cfg.seed)
-            if d.test == "canon":
-                test_df = store.load(["mnms1"], inplane=d.inplane, n4=d.n4, workers=cfg.workers).filter(
-                    (pl.col("vendor") == "Canon") & pl.col("labelled"))
-            elif d.test and d.test not in ("none", d.train_dataset):
-                test_df = store.load([d.test], inplane=d.inplane, n4=d.n4,
-                                     workers=cfg.workers).filter(pl.col("labelled"))
-            else:
-                test_df = None
+        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, workers=cfg.workers)
+        train_df, val_df, test_df = splits.make_split(
+            meta, d.test_datasets, d.test_vendors, d.val_frac, cfg.seed)
     if cfg.n_patients:                          # debug cap
         train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
-        test_df = test_df.head(cfg.n_patients) if test_df is not None else None
+        test_df = test_df.head(cfg.n_patients)
 
     with timed(log, f"build slice datasets ({len(train_df)}+{len(val_df)} subjects)"):
         train_ds, val_ds = datasets(splits.paths(train_df), splits.paths(val_df), d.size)
-    log.info("patients: %d train / %d val%s | slices: %d train / %d val",
-             len(train_df), len(val_df),
-             f" / {len(test_df)} test" if test_df is not None else "", len(train_ds), len(val_ds))
+    log.info("patients: %d train / %d val / %d test | slices: %d train / %d val",
+             len(train_df), len(val_df), len(test_df), len(train_ds), len(val_ds))
 
     # Dataset is fully in RAM + augmentation is GPU-batched, so DataLoader workers=0: on Windows
     # num_workers>0 PICKLES the whole in-RAM dataset to every worker (huge stall, GPU starves).
@@ -143,12 +129,12 @@ def train_seg(cfg: TrainCfg):
     dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), d.size, device)
     results = {"val": summarize(dice_per_class, ef_rows, surf)}
 
-    # held-out test (the generalization number) — a query over the store, not a dataset role
-    if test_df is not None and len(test_df):
-        label = "battery (acdc+Canon)" if d.battery else f"train={d.train_dataset} -> test={d.test}"
-        log.info("===== HELD-OUT TEST: %s (n=%d) =====", label, len(test_df))
+    # held-out test = the criteria split (datasets/vendors held out)
+    if len(test_df):
+        log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
+                 list(d.test_datasets), list(d.test_vendors), len(test_df))
         tdice, tef, tsurf = validate(model, splits.paths(test_df), d.size, device)
-        results["test_battery" if d.battery else f"test_{d.test}"] = summarize(tdice, tef, tsurf)
+        results["test"] = summarize(tdice, tef, tsurf)
 
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pth")
@@ -162,26 +148,19 @@ def train_seg(cfg: TrainCfg):
 if __name__ == "__main__":
     from ..hparams import apply_overrides
 
-    ap = argparse.ArgumentParser(description="train a 2D U-Net from a TrainCfg")
-    ap.add_argument("--battery", action="store_true", help="pool sources; hold out ACDC + Canon")
-    ap.add_argument("--dataset", choices=["acdc", "mnm2", "mnms1"], default=None, help="named-mode train set")
-    ap.add_argument("--test", choices=["acdc", "mnm2", "mnms1", "canon", "none"], default="acdc")
+    # Defaults = the generalization split (hold out ACDC + Canon). Change the split via the criteria
+    # on DataCfg with --set, e.g. legacy train M&M-2 -> test ACDC:
+    #   --set data.sources=('mnm2','acdc') data.test_datasets=('acdc',) data.test_vendors=()
+    ap = argparse.ArgumentParser(description="train a 2D U-Net from a TrainCfg (split = DataCfg criteria)")
     ap.add_argument("--epochs", type=int); ap.add_argument("--batch", type=int)
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--set", nargs="*", default=[], dest="overrides",
-                    help="deep cfg overrides, e.g. aug.gamma_p=0.5 model.channels=(32,64,128,256,512)")
+                    help="deep cfg overrides, e.g. data.test_vendors=('GE',) aug.gamma_p=0.5")
     a = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.battery:
-        cfg.data.battery = True
-    elif a.dataset:
-        cfg.data.battery = False
-        cfg.data.train_dataset, cfg.data.test = a.dataset, a.test
-    else:
-        ap.error("pass --battery or --dataset acdc|mnm2|mnms1")
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients"):
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))

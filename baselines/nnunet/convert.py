@@ -55,9 +55,11 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     import polars as pl
     from cardioseg.data import store, splits
     from cardioseg.data.mri.registry import get_adapter
+    from cardioseg.hparams import DataCfg
 
-    meta = store.load(None)
-    train_df, val_df, test_df = splits.battery(meta)
+    dc = DataCfg()                                           # the generalization criteria (acdc + Canon held out)
+    meta = store.load(list(dc.sources))
+    train_df, val_df, test_df = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac)
     tr = pl.concat([train_df, val_df])                       # nnU-Net does its own CV over Tr
     if n_patients:
         tr, test_df = tr.head(n_patients), test_df.head(n_patients)

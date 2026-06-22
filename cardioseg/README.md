@@ -53,7 +53,7 @@ pull **all** data and make our **own** splits — challenge splits aren't inheri
 
 ```bash
 python -m cardioseg.data.store                 # consolidate all + print the cloud summary
-python -m cardioseg.training.train --battery   # train; hold out ACDC + Canon (one split rule)
+python -m cardioseg.training.train             # train; default split holds out ACDC + Canon (criteria)
 ```
 
 | dataset | n | vendors | demographics | role |
@@ -78,19 +78,22 @@ must filter on mask *content*, not file existence (`mnms1_cases(labelled_only=Tr
 
 **Overlap caveat:** M&Ms-1 ⊃ ~195 of M&M-2 (shared NOR/HCM/LV per the M&M-2 docs; mapping
 unavailable) — so the two can't be each other's clean held-out test; ACDC is the only fully
-independent set. **Adopted split (2-axis battery):** train M&M-2 → test ACDC (centre shift) +
-Canon (unseen vendor); the overlapping M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
+independent set. **Default split (2-axis generalization):** hold out ACDC (centre shift) + Canon
+(unseen vendor) via DataCfg criteria (`test_datasets=('acdc',)`, `test_vendors=('Canon',)`); train =
+the rest, labelled. The overlapping M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
 Dataset-role decisions track in `bd cardiac-seg-bsz`.
 
 ## Train + evaluate
+The split is criteria over the data cloud (`DataCfg`, serialized to `config.json`) — no named splits,
+no flags. Defaults hold out ACDC + Canon; change the criteria with `--set`.
 ```bash
-# flagship: pooled-train, hold out ACDC (centre) + Canon (vendor) — one split rule
-python -m cardioseg.training.train --battery        # -> runs/battery/ (128-ep ceiling, early-stops ~106, ~6 min)
-# legacy single-source direction (e.g. the asymmetry A/B)
-python -m cardioseg.training.train --dataset acdc --test mnm2 --epochs 40   # -> runs/acdc/
-python -m cardioseg.evaluation.distribution --run runs/battery --eval acdc    # KDE + Bland-Altman -> plots/
-python -m cardioseg.evaluation.distribution --run runs/battery --eval canon   # the unseen-vendor axis
-python -m cardioseg.training.export_onnx --run runs/battery   # model.onnx (+INT8) for the web viewer
+python -m cardioseg.training.train --out runs/gen     # default split (hold out ACDC + Canon); ~6 min
+# a different split, e.g. legacy train M&M-2 -> test ACDC (the asymmetry A/B):
+python -m cardioseg.training.train --out runs/mnm2_acdc \
+    --set data.sources=('mnm2','acdc') data.test_datasets=('acdc',) data.test_vendors=()
+python -m cardioseg.evaluation.distribution --run runs/gen --eval acdc    # KDE + Bland-Altman -> plots/
+python -m cardioseg.evaluation.distribution --run runs/gen --eval canon   # the unseen-vendor axis
+python -m cardioseg.training.export_onnx --run runs/gen   # model.onnx (+INT8) for the web viewer
 ```
 Training reads the consolidated store (builds `processed/<ds>/` on first run), logs phase timings +
 per-epoch batch-rate to `runs/<run>/train.log`. In-RAM dataset + GPU-batched augment → `--workers`
@@ -99,7 +102,7 @@ parallelizes store consolidation, not the loader (DataLoader runs workers=0; AMP
 > Intended-use envelope, stratified metrics, failure modes + provenance → **[MODEL_CARD.md](MODEL_CARD.md)**.
 
 ## Results (seed 0, patient-level splits)
-Flagship = the **generalization battery**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
+Flagship = the **generalization split**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
 ex-Canon, 451 subjects), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
 vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early stopping + largest-CC
 + TTA. On the **ACDC-150** axis:
@@ -111,7 +114,7 @@ vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early 
 | RV cavity | 0.91 | 3.0 | 0.49 | ~0.88–0.92 |
 | **mean** | **0.90** | | | |
 
-**EF vs GT: MAE 7.1%** (bias −6.6%, n=150). **Two-axis battery** (one model, our own splits — the
+**EF vs GT: MAE 7.1%** (bias −6.6%, n=150). **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
 | held-out axis | n | mean Dice | EF MAE |
@@ -135,7 +138,7 @@ training (451 vs 290 subjects) lifted the solid ACDC axis (mean 0.89 → 0.90, *
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-battery + heavy aug + largest-CC + TTA lift the flagship to 0.90 Dice / 7.1% EF on ACDC-150 (top table).*
+pooled split + heavy aug + largest-CC + TTA lift the flagship to 0.90 Dice / 7.1% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
@@ -146,8 +149,8 @@ battery + heavy aug + largest-CC + TTA lift the flagship to 0.90 Dice / 7.1% EF 
   stays sub-mm everywhere; full HD is the fragile max (one stray voxel → ~200 mm), **HD95** is robust.
 - `runs/<run>/plots/`: per-class boundary-distance **KDE** + EF **Bland–Altman** (flagship below).
 
-![EF Bland–Altman — battery model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
-![Per-class boundary-distance KDE — battery model on held-out ACDC](docs/media/boundary_kde.png)
+![EF Bland–Altman — model on held-out ACDC: difference distribution + bias / 95% LoA](docs/media/ef_bland_altman.png)
+![Per-class boundary-distance KDE — model on held-out ACDC](docs/media/boundary_kde.png)
 
 ### Stratified — where it actually fails
 Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
@@ -179,7 +182,7 @@ right). See `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.
 
 ![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](docs/media/strata_pathology_acdc.png)
 
-**By vendor** (in-domain M&M-2 val, battery model) — read with care:
+**By vendor** (in-domain M&M-2 val) — read with care:
 
 | vendor | n | gtEF | mean Dice | EF MAE |
 |---|---|---|---|---|
@@ -209,12 +212,12 @@ cardioseg/
   data/mri/mnms1.py       # M&Ms-1 adapter (6-centre/4-vendor; 4D ED/ES + CSV)
   data/mri/registry.py    # name -> adapter (add a dataset = one file + one line)
   data/store.py           # consolidate adapters -> processed/<ds>/<paramkey>/{data,meta.csv}; load() = polars cloud
-  data/splits.py          # splits as polars queries (battery: hold out acdc + Canon)
+  data/splits.py          # split = criteria over the cloud (default: hold out acdc + Canon)
   preprocessing/preprocess.py   # the per-subject transform: resample in-plane + (N4) + z-score
   training/
     model.py              # MONAI U-Net factory (2D/3D)
     dataset.py            # 2D-slice dataset over consolidated npz paths
-    train.py              # training loop (--dataset/--test, or --battery; workers+AMP)
+    train.py              # training loop (split = DataCfg criteria; workers+AMP)
     export_onnx.py        # trained U-Net -> ONNX (+INT8 quant), torch-parity gated
   evaluation/
     measure.py            # chamber volumes + ejection fraction (spacing-aware)

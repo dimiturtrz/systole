@@ -80,7 +80,7 @@ def export(run: Path, verify_dir: Path, quantize: bool = True) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/battery", help="run dir holding model.pth")
+    ap.add_argument("--run", default="runs/gen", help="run dir holding model.pth")
     ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()

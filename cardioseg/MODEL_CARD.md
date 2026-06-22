@@ -1,4 +1,4 @@
-# Model Card — cardioseg 2D U-Net (generalization battery)
+# Model Card — cardioseg 2D U-Net (generalization split)
 
 A 2D short-axis cardiac MRI segmenter (LV cavity, LV myocardium, RV cavity) trained for **domain
 generalization** across scanner vendors and centres, with ejection fraction derived from the masks.
@@ -13,7 +13,7 @@ This card follows Mitchell et al. 2019; the failure-mode and limitation sections
   best-val checkpoint), largest-connected-component postprocessing, test-time augmentation (4 flips).
 - **Provenance:** every run serializes its full config to `runs/<run>/config.json` and embeds it in
   `metrics.json`. Seed 0. Note `cudnn.benchmark=True` → runs are not bit-identical across machines.
-- **Reproduce:** `python -m cardioseg.training.train --battery` (~6 min, RTX-class GPU).
+- **Reproduce:** `python -m cardioseg.training.train --out runs/gen` (default split holds out ACDC + Canon; ~6 min, RTX-class GPU).
 
 ## Intended use
 - **In scope:** research / methods demonstration of cross-vendor cardiac MRI segmentation and EF
@@ -31,8 +31,9 @@ Pooled multi-source "data cloud" (`data/store.py`), **451 labelled subjects**:
 - Label conventions remapped to canonical per dataset (verified geometrically); M&Ms-1 withheld-GT
   cases (zero-filled masks) are flagged and excluded.
 
-## Evaluation — two-axis generalization battery
-One model, held out along two independent shift axes (`--battery`):
+## Evaluation — two-axis generalization split
+One model, held out along two independent shift axes (DataCfg criteria: `test_datasets=('acdc',)`,
+`test_vendors=('Canon',)`):
 
 | held-out axis | n | what it isolates |
 |---|---|---|
@@ -58,10 +59,10 @@ n=9 it swings (7.2% under a M&M-2-only model, 15.4% here) while Dice holds ~0.85
 most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
 
 ### Benchmark context (nnU-Net)
-For reference, nnU-Net was run as an external benchmark — **but not on this battery**: it was measured
+For reference, nnU-Net was run as an external benchmark — **but not on this split**: it was measured
 on the older `M&M-2 → ACDC-100` config (mnm2-only train, 100-patient test), at a **floor setting
 (50 epochs, 1 fold)**, scoring mean Dice 0.909 / EF MAE 5.5% (vs our 2D U-Net 0.896 / 6.3% on the
-*same* old config). It is **not directly comparable** to the battery numbers above (different train
+*same* old config). It is **not directly comparable** to the generalization-split numbers above (different train
 pool, different + larger test set incl. unseen vendor). The full nnU-Net ceiling (1000ep × 5-fold +
 TTA) is not yet run (`cardiac-seg-yp3`). Read 0.909 as a floor-level reference point, not the SOTA bar.
 

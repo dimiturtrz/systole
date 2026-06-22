@@ -225,19 +225,17 @@ def plot_strata(rows, key, out: Path, label: str):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/battery", help="run dir with model.pth")
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "canon", "battery"],
-                    help="eval set as a store query (canon = mnms1 vendor==Canon; battery = acdc+Canon)")
+    ap.add_argument("--run", default="runs/seg", help="run dir with model.pth")
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "canon"],
+                    help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     run = Path(a.run)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # eval set = a query over the consolidated store (no adapter roles)
-    if a.eval == "battery":
-        _, _, df = splits.battery(store.load(None), seed=a.seed)
-    elif a.eval == "canon":
+    # eval set = a criteria filter over the consolidated store (no named splits)
+    if a.eval == "canon":
         df = store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
     else:
         df = store.load([a.eval]).filter(pl.col("labelled"))

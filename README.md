@@ -120,7 +120,7 @@ adapters into one **data cloud** (830 subjects, 4 vendors, harmonized pathology 
 ([link](https://www.creatis.insa-lyon.fr/Challenge/acdc/), 150, Siemens), **M&Ms-1** (320 on disk /
 213 labelled, 4 vendors incl. Canon). Each adapter remaps labels + parses metadata to a common schema;
 we pull *all* data and make our own splits. Flagship M&M-2 model holds across a 2-axis generalization
-battery (ACDC centre-shift 0.90 Dice, Canon unseen-vendor 0.85). Full schema + results →
+held-out split (ACDC centre-shift 0.90 Dice, Canon unseen-vendor 0.85). Full schema + results →
 **[cardioseg/](cardioseg/)**.
 
 **Config — one path, everything derived.** Copy the template, set a single `data` root:

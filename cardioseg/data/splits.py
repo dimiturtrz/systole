@@ -1,45 +1,36 @@
-"""Train/val/test splits as queries over the consolidated meta frame (data/store.py).
+"""Train/val/test splits as criteria over the consolidated meta frame (data/store.py).
 
-The roles aren't baked into the datasets — a split is a *rule* over metadata. The flagship
-generalization battery is one such rule: hold out a clean centre-shift set (ACDC) AND an unseen
-vendor (Canon), train on everything else that has usable masks.
+A split isn't a named thing — it's the data cloud filtered on criteria. Hold out everything matching
+`test_datasets` (whole dataset) or `test_vendors` (by vendor) as test; train/val = the rest, labelled.
+The criteria live on DataCfg (serialized to config.json), so a run self-documents what it held out.
 
-    meta = store.load()                 # the whole cloud
-    train, val, test = battery(meta)    # declarative split
+    meta = store.load(cfg.data.sources)
+    train, val, test = make_split(meta, cfg.data.test_datasets, cfg.data.test_vendors,
+                                  cfg.data.val_frac, cfg.seed)
 
-Swap the predicate to ask a different question (leave-one-vendor-out, pathology holdout, …) without
-touching the data layer.
+Change the criteria → change the split. No registry, no name, no flag.
 """
 from __future__ import annotations
 
 import polars as pl
 
 
-def split(meta: pl.DataFrame, test_expr: pl.Expr, train_expr: pl.Expr | None = None
-          ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """(train, test) by polars predicates. Default train = everything labelled and not in test."""
-    test = meta.filter(test_expr)
-    if train_expr is None:
-        train_expr = pl.col("labelled") & ~test_expr
-    train = meta.filter(train_expr)
-    return train, test
-
-
 def patient_val(train: pl.DataFrame, val_frac: float = 0.2, seed: int = 0
                 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Carve a deterministic val set out of train at the subject level (no slice leakage —
-    rows are already one-per-subject, but this keeps the contract explicit)."""
+    """Carve a deterministic val set out of train (subject-level; rows are one-per-subject)."""
     shuffled = train.sample(fraction=1.0, shuffle=True, seed=seed)
     n_val = max(1, round(len(shuffled) * val_frac))
     return shuffled[n_val:], shuffled[:n_val]
 
 
-def battery(meta: pl.DataFrame, val_frac: float = 0.2, seed: int = 0
-            ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """The generalization battery: test = ACDC (centre shift) ∪ Canon (unseen vendor); train+val =
-    everything else with usable masks. Returns (train, val, test)."""
-    test_expr = (pl.col("dataset") == "acdc") | ((pl.col("vendor") == "Canon") & pl.col("labelled"))
-    train_all, test = split(meta, test_expr)
+def make_split(meta: pl.DataFrame, test_datasets=(), test_vendors=(), val_frac: float = 0.2,
+               seed: int = 0) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """(train, val, test) from criteria. test = rows whose dataset ∈ test_datasets OR vendor ∈
+    test_vendors (+ labelled); train+val = everything else labelled, val carved at the subject level."""
+    test_expr = (pl.col("dataset").is_in(list(test_datasets))
+                 | pl.col("vendor").is_in(list(test_vendors))) & pl.col("labelled")
+    test = meta.filter(test_expr)
+    train_all = meta.filter(pl.col("labelled") & ~test_expr)
     train, val = patient_val(train_all, val_frac, seed)
     return train, val, test
 
