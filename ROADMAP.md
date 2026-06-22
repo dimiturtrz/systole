@@ -38,10 +38,10 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
    **~2–3 Dice points under the nnU-Net floor** (0.89 vs 0.912); EF roughly level (5.9 vs 5.6%); on a
    deployable ONNX model at ~57× fewer params.
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
-   histogram standardization may tighten the spread. **Deprioritized by evidence:** the GE
-   minority-vendor Dice deficit *closed under pooled training* (0.879 → 0.903) — vendor diversity, not
-   harmonization, fixed the gap. So the cheapest robustness lever is more multi-vendor data; harmonization
-   is a smaller, unproven win here. (`bd cardiac-seg-qfz`, low priority)
+   histogram standardization may tighten the spread. **Deprioritized by evidence:** in-domain M&M-2
+   vendors are level (val split, ED+ES: Siemens/Philips 0.867, GE 0.880) — **no minority-vendor
+   deficit** for harmonization to close. So the cheap robustness lever is more multi-vendor data
+   (already in); harmonization is a smaller, unproven win here. (`bd cardiac-seg-qfz`, low priority)
 5. ⬜ **Bias calibration** — held-out linear EF correction, reported as such.
 6. ⬜ **Stronger segmentation + SOTA benchmark** — nnU-Net baseline (done, see baselines/), 3D
    context; beyond the nnU-Net floor, benchmark **CardioSAM** (current OSS SOTA) on our cross-vendor

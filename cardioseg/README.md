@@ -190,22 +190,20 @@ right). See `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.
 
 ![EF error by pathology — Dice flat, HCM EF MAE spikes (small-cavity sensitivity)](docs/media/strata_pathology_acdc.png)
 
-**By vendor** (in-domain M&M-2 val) — read with care:
+**By vendor** (in-domain M&M-2 **val split** only, ED+ES; train-seen excluded) — read with care:
 
-| vendor | n | gtEF | mean Dice | EF MAE |
-|---|---|---|---|---|
-| Siemens | 43 | 48% | 0.889 | 12.1% |
-| Philips | 20 | 59% | 0.910 | 11.7% |
-| **GE** | 9 | 55% | 0.903 | 11.0% |
+| vendor | n | mean Dice | EF MAE |
+|---|---|---|---|
+| Siemens | 43 | 0.867 | 10.7% |
+| Philips | 17 | 0.867 | 8.7% |
+| **GE** | 10 | 0.880 | 7.3% |
 
-The **GE minority-vendor deficit closed**: under the M&M-2-only model GE had the lowest Dice (0.879);
-pooling M&Ms-1 into training lifted it to **0.903**, now level with Philips and *above* Siemens —
-more vendor diversity in train, not harmonization, fixed the gap. That weakens the standalone case
-for intensity harmonization (`qfz`): the cheapest robustness lever is still more multi-vendor data.
-(EF MAE ~11–12% across vendors here is the in-domain pathology mix — the ESV small-cavity effect, not
-a vendor signal; the clean per-vendor read is Dice.)
+The three vendors are **level in-domain** (Siemens/Philips 0.867, GE 0.880) — **no minority-vendor
+deficit** under pooled multi-vendor training. That weakens the standalone case for intensity
+harmonization (`qfz`): there's no vendor gap for it to close; the cheap robustness lever is more
+multi-vendor data, which is already in. (EF MAE varies here with the in-domain pathology mix — the
+ESV small-cavity effect, not a vendor signal; the clean per-vendor read is Dice.)
 
-![Dice + EF MAE by vendor — GE deficit closed under pooled training](docs/media/strata_vendor_mnm2.png)
 
 Published column = context, not a trophy: even multi-vendor, this is "competent on public
 benchmarks," not clinical-grade. M&M-2 is 3 vendors / 1.5–3T — broader than ACDC, still not the
