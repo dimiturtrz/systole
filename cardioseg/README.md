@@ -89,6 +89,14 @@ independent set. **Default split (2-axis generalization):** hold out ACDC (centr
 the rest, labelled. The overlapping M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
 Dataset-role decisions track in `bd cardiac-seg-bsz`.
 
+**Official splits — deliberate deviation (comparability caveat):** we do **not** inherit the datasets'
+own train/val/test splits; the cross-vendor DG criteria override them. ACDC is held out *in full* —
+all 150 (its official 100-train + 50-test), so our **ACDC-150 ⊋ the 50-case ACDC leaderboard test**
+and our Dice is **not** directly comparable to ACDC leaderboard numbers (the "published ACDC" column
+below is context, not like-for-like). M&M-2 + M&Ms-1 are pooled as training with an 80/20 *val* carve
+(their official splits unused — they're train data here). The nnU-Net baseline runs on the **same**
+criteria split, so that comparison *is* apples-to-apples; the leaderboard comparison is not (`bd cardiac-seg-1en`).
+
 ## Train + evaluate
 The split is criteria over the data cloud (`DataCfg`, serialized to `config.json`) — no named splits,
 no flags. Defaults hold out ACDC + Canon; change the criteria with `--set`.
