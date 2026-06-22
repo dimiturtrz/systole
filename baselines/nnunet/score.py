@@ -7,31 +7,39 @@ that's the whole architecture in one script.
 
     python -m baselines.nnunet.score \
         --pred <nnunet_output_dir> \
-        --gt   D:/data/nnUNet_raw/Dataset027_ACDC/labelsTr
+        --gt   D:/data/volumetric/mri/nnunet/raw/Dataset029_BATTERY/labelsTs \
+        --manifest D:/data/volumetric/mri/nnunet/raw/Dataset029_BATTERY/ts_manifest.json
 
-Case files are named <patient>_<ED|ES>.nii.gz (from convert.py), so EF pairs ED/ES.
+Case files are named <dataset>_<subject>_<ED|ES>.nii.gz (from convert.py), so EF pairs ED/ES.
+With --manifest, also reports the battery's two axes separately (acdc centre-shift vs canon vendor).
 """
 import argparse
+import json
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-from cardioseg.data.mri.data import load_nifti
+from cardioseg.data.mri.base import load_nifti
 from cardioseg.evaluation.evaluate import hd95
 from cardioseg.evaluation.measure import ejection_fraction
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
 
-def score(pred_dir: str, gt_dir: str) -> dict:
+def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
+    """Score predictions vs GT. `cases` (filenames) restricts to a subset (one battery axis)."""
     pred_dir, gt_dir = Path(pred_dir), Path(gt_dir)
     inter = {c: 0.0 for c in CLASSES}
     denom = {c: 0.0 for c in CLASSES}
     hds = {c: [] for c in CLASSES}
     frames = defaultdict(dict)   # patient -> {tag: (pred, gt, spacing)}
 
-    for pf in sorted(pred_dir.glob("*.nii.gz")):
+    files = sorted(pred_dir.glob("*.nii.gz"))
+    if cases is not None:
+        keep = set(cases)
+        files = [f for f in files if f.name in keep]
+    for pf in files:
         gf = gt_dir / pf.name
         if not gf.exists():
             continue
@@ -79,9 +87,19 @@ def score(pred_dir: str, gt_dir: str) -> dict:
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--pred", required=True, help="dir of nnU-Net predicted masks")
-    ap.add_argument("--gt", required=True, help="dir of matching GT masks (e.g. labelsTr)")
+    ap.add_argument("--gt", required=True, help="dir of matching GT masks (e.g. labelsTs)")
+    ap.add_argument("--manifest", default=None, help="ts_manifest.json -> also score per battery axis")
     a = ap.parse_args()
+    print("\n##### OVERALL (acdc+canon) #####")
     score(a.pred, a.gt)
+    if a.manifest:
+        man = json.loads(Path(a.manifest).read_text())
+        axes = defaultdict(list)
+        for case, info in man.items():
+            axes[info["axis"]].append(f"{case}.nii.gz")
+        for axis, cases in sorted(axes.items()):
+            print(f"\n##### AXIS: {axis} (n={len(cases)} cases) #####")
+            score(a.pred, a.gt, cases=cases)
 
 
 if __name__ == "__main__":
