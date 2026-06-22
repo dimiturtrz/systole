@@ -72,6 +72,7 @@ nnU-Net is ~**1 Dice point** ahead with **better EF** (smaller ES-over-seg bias)
 setting*; the full ceiling (1000ep × 5-fold + TTA, `cardiac-seg-yp3`) would be higher. Honest position:
 this 2D U-Net is **competent, ~1 point under nnU-Net's floor** on the same data. (One inversion: our
 boundary is tighter — LV-cav HD95 1.5 vs 3.5mm — from largest-CC + TTA, which this nnU-Net run lacked.)
+Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../baselines/nnunet/MODEL_CARD.md).
 
 ## Where it fails (stratified)
 - **HCM / small cavities — the main EF failure mode.** EF bias is **entirely end-systolic cavity
