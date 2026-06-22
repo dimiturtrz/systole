@@ -18,23 +18,20 @@ CLASS_NAMES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 def predict_volume(model, vol_img: Volume, size: int, device: str, tta: bool = False) -> Volume:
     """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
 
-    Each slice [H, W] -> [1, 1, size, size] -> model -> argmax over the 4 class
-    channels -> [size, size] label map; stacked back to [D, size, size].
+    All D slices go through the model in ONE batched forward ([D, 1, size, size]) rather than a
+    per-slice loop — ~D× fewer kernel launches, identical argmax output (the slices are independent).
 
     `tta` averages predictions over the 4 in-plane flips (test-time augmentation).
     """
     import torch
     from ..training.dataset import fit_square
 
-    preds = []
     model.eval()
+    xs = np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
     with torch.no_grad():
-        for z in range(vol_img.shape[0]):
-            x = fit_square(vol_img[z].astype(np.float32), size, 0.0)
-            x = torch.from_numpy(x)[None, None].to(device)
-            logits = _tta_logits(model, x) if tta else model(x)
-            preds.append(logits.argmax(1)[0].cpu().numpy().astype(np.uint8))
-    return np.stack(preds)
+        x = torch.from_numpy(xs)[:, None].to(device)          # [D, 1, size, size]
+        logits = _tta_logits(model, x) if tta else model(x)   # [D, C, size, size]
+        return logits.argmax(1).cpu().numpy().astype(np.uint8)  # [D, size, size]
 
 
 def _tta_logits(model, x):
