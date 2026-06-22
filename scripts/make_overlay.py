@@ -4,7 +4,7 @@ Two rows — a clean case and the worst-EF HCM case (the honest failure) — eac
 ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact shipped inference path
 (validate.predict_volume + largest-CC), so the picture matches the reported numbers.
 
-    conda run -n pytorch_training_env python scripts/make_overlay.py --run runs/battery
+    conda run -n pytorch_training_env python scripts/make_overlay.py --run runs/gen
 """
 import argparse
 from pathlib import Path
@@ -60,7 +60,7 @@ def _case(model, path, size, device):
 def main():
     import torch
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/battery")
+    ap.add_argument("--run", default="runs/gen")
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
     a = ap.parse_args()
 
