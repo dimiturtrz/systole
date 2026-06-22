@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "tqdm",
     "polars",      # the data store + splits (cardioseg/data/{store,splits}.py) — REQUIRED for training
+    "pydantic>=2",  # validated hyperparameter configs (cardioseg/hparams.py)
     "omegaconf",   # paths.yaml config loader (cardioseg/config.py)
     "monai>=1.5",
     # torch >=2.7 is required for NVIDIA Blackwell (sm_120, e.g. RTX 5090).

@@ -10,7 +10,6 @@ for provenance + reproducibility — the criteria ARE the record of what was hel
 import argparse
 import json
 import time
-from dataclasses import asdict
 from pathlib import Path
 
 from ..hparams import TrainCfg
@@ -138,7 +137,7 @@ def train_seg(cfg: TrainCfg):
 
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pth")
-    meta = {"config": asdict(cfg), "n_train": len(train_df), "n_val": len(val_df),
+    meta = {"config": cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df),
             "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     log.info("saved model + config + metrics -> %s/", out)

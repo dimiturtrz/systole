@@ -1,107 +1,107 @@
-"""Hyperparameters as injectable dataclasses — one typed source of truth per concern.
+"""Hyperparameters as injectable, *validated* configs (pydantic v2) — one typed source of truth.
 
 Each component takes its config as an argument (dependency injection): `build_unet(ModelCfg)`,
-`augment_batch(x, m, AugCfg)`, `train_seg(TrainCfg)`. Defaults live here (not scattered across
-argparse / module constants / function signatures), so a run is fully described by one `TrainCfg`
-— serialize it to `runs/<run>/config.json` and the run is reproducible + the model card has provenance.
+`augment_batch(x, m, AugCfg)`, `train_seg(TrainCfg)`. Defaults live here; a run is fully described by
+one `TrainCfg`, serialized to `runs/<run>/config.json` (provenance + reproducibility).
 
-Separate from `config.py` (paths.yaml): that's machine-specific *where data lives*; this is
-run-specific *experiment hyperparams*. Different lifetimes, different files.
+Why pydantic (not plain dataclasses): the fields cross a trust boundary — `--set` overrides and
+loaded config.json are user input. Bounds (`gamma_p∈[0,1]`, `val_frac∈(0,1)`, `loss.kind` enum, …)
++ `validate_assignment` mean a bad value is rejected AT LOAD with a clear error, instead of silently
+training 6 min on garbage. That's the boundary where validation pays (cardiac-seg-8y9); internal
+structs we fully control stay plain.
+
+Separate from `config.py` (paths.yaml = machine-specific *where data lives*); this is run-specific.
 """
 from __future__ import annotations
 
 import ast
-import json
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+_VALIDATE = ConfigDict(validate_assignment=True)   # setattr (used by --set) re-validates the field
 
 
-@dataclass
-class ModelCfg:
+class ModelCfg(BaseModel):
     """U-Net shape (MONAI). Injected into build_unet."""
-    spatial_dims: int = 2
-    in_channels: int = 1
-    out_channels: int = 4                       # bg / RV / LV-myo / LV-cav
-    channels: tuple = (16, 32, 64, 128, 256)
-    strides: tuple = (2, 2, 2, 2)
-    res_units: int = 2
+    model_config = _VALIDATE
+    spatial_dims: Literal[2, 3] = 2
+    in_channels: int = Field(1, ge=1)
+    out_channels: int = Field(4, ge=2)             # bg / RV / LV-myo / LV-cav
+    channels: tuple[int, ...] = (16, 32, 64, 128, 256)
+    strides: tuple[int, ...] = (2, 2, 2, 2)
+    res_units: int = Field(2, ge=0)
 
 
-@dataclass
-class AugCfg:
-    """GPU-batched augmentation. Geometric widths conservative (canonical orientation); intensity
-    widths broad to span the cross-vendor contrast gap. Injected into augment_batch."""
-    rot_deg: float = 20.0
-    scale: tuple = (0.85, 1.15)
-    gamma: tuple = (0.7, 1.5)
-    gamma_p: float = 0.3
-    blur_p: float = 0.2
-    contrast: tuple = (0.8, 1.2)
-    noise: float = 0.08
+class AugCfg(BaseModel):
+    """GPU-batched augmentation. Geometric widths conservative; intensity widths broad to span the
+    cross-vendor contrast gap. Injected into augment_batch."""
+    model_config = _VALIDATE
+    rot_deg: float = Field(20.0, ge=0)
+    scale: tuple[float, float] = (0.85, 1.15)
+    gamma: tuple[float, float] = (0.7, 1.5)
+    gamma_p: float = Field(0.3, ge=0, le=1)
+    blur_p: float = Field(0.2, ge=0, le=1)
+    contrast: tuple[float, float] = (0.8, 1.2)
+    noise: float = Field(0.08, ge=0)
 
 
-@dataclass
-class LossCfg:
-    """Segmentation loss. dice_ce = MONAI Dice+CE (region, the baseline). dice_ce_hd adds a
-    Hausdorff-DT boundary term (λ·HD), ramped in over `hd_warmup` epochs (HD losses diverge early) —
-    targets the ES boundary over-segmentation that region losses are blind to (the EF-bias lever)."""
-    kind: str = "dice_ce"               # dice_ce | dice_ce_tversky | dice_ce_hd
-    # Tversky FP-penalty (dice_ce_tversky): beta>alpha penalizes false positives harder ->
-    # discourages over-segmentation (the ES cavity over-fill). Pure GPU region loss, no warmup.
-    tversky_alpha: float = 0.3          # FN weight
-    tversky_beta: float = 0.7           # FP weight (> alpha = punish over-seg)
-    tversky_lambda: float = 1.0         # weight of the Tversky term added to Dice+CE
-    # Hausdorff-ER (dice_ce_her): erosion-based Hausdorff surrogate, pure-torch GPU (no DT/cucim).
-    # Targets FAR boundary errors (stray voxels, loose RV boundary). warmup -> ramp like HD.
-    her_weight: float = 0.5
-    her_alpha: float = 2.0              # distance exponent ((k+1)^alpha per erosion level)
-    her_erosions: int = 10             # erosion iterations (depth of distance proxy)
-    her_warmup: int = 5
-    her_ramp: int = 5
-    # Hausdorff-DT (dice_ce_hd): NOTE CPU-bound on Windows (needs cucim, Linux-only) -> slow/unstable.
-    hd_weight: float = 0.01
-    hd_warmup: int = 15
-    hd_ramp: int = 5
+class LossCfg(BaseModel):
+    """Segmentation loss. dice_ce = MONAI Dice+CE (region baseline). dice_ce_tversky adds an FP-penalty
+    (beta>alpha discourages over-seg). dice_ce_her adds a pure-GPU erosion-Hausdorff boundary term.
+    dice_ce_hd = Hausdorff-DT (CPU-bound on Windows: needs cucim = Linux-only)."""
+    model_config = _VALIDATE
+    kind: Literal["dice_ce", "dice_ce_tversky", "dice_ce_her", "dice_ce_hd"] = "dice_ce"
+    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FN weight
+    tversky_beta: float = Field(0.7, ge=0, le=1)   # FP weight (> alpha = punish over-seg)
+    tversky_lambda: float = Field(1.0, ge=0)
+    her_weight: float = Field(0.5, ge=0)
+    her_alpha: float = Field(2.0, ge=0)            # distance exponent ((k+1)^alpha per erosion level)
+    her_erosions: int = Field(10, ge=1)
+    her_warmup: int = Field(5, ge=0)
+    her_ramp: int = Field(5, ge=1)
+    hd_weight: float = Field(0.01, ge=0)
+    hd_warmup: int = Field(15, ge=0)
+    hd_ramp: int = Field(5, ge=1)
 
 
-@dataclass
-class DataCfg:
+class DataCfg(BaseModel):
     """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
-    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor) as the test
-    set; train/val = the rest, labelled. The criteria ARE the split — serialized to config.json, so
-    a run records e.g. 'held out acdc + Canon' literally, not an opaque label.
-
-    Defaults = the generalization split (ACDC centre-shift + Canon unseen-vendor). For the legacy
-    A/B, e.g. train M&M-2 -> test ACDC: sources=('mnm2','acdc'), test_datasets=('acdc',), test_vendors=()."""
-    sources: tuple = ("acdc", "mnm2", "mnms1")  # store datasets to load
-    test_datasets: tuple = ("acdc",)            # held out whole (centre/protocol shift)
-    test_vendors: tuple = ("Canon",)            # held out by vendor (unseen-vendor shift)
-    inplane: float = 1.5
+    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor); train/val =
+    the rest, labelled. The criteria ARE the split — serialized to config.json. Defaults = the
+    generalization split (ACDC centre-shift + Canon unseen-vendor)."""
+    model_config = _VALIDATE
+    sources: tuple[str, ...] = ("acdc", "mnm2", "mnms1")
+    test_datasets: tuple[str, ...] = ("acdc",)
+    test_vendors: tuple[str, ...] = ("Canon",)
+    inplane: float = Field(1.5, gt=0)
     n4: bool = False
-    val_frac: float = 0.2
-    size: int = 256
+    val_frac: float = Field(0.2, gt=0, lt=1)
+    size: int = Field(256, ge=32)
 
 
-@dataclass
-class TrainCfg:
-    """The whole run. asdict(this) -> config.json = full provenance."""
-    data: DataCfg = field(default_factory=DataCfg)
-    model: ModelCfg = field(default_factory=ModelCfg)
-    aug: AugCfg = field(default_factory=AugCfg)
-    loss: LossCfg = field(default_factory=LossCfg)
-    epochs: int = 128                           # ceiling; early stopping ends sooner
-    batch: int = 64
-    lr: float = 1e-3
-    patience: int = 20
-    workers: int = 6                            # store consolidation only (DataLoader is workers=0)
-    seed: int = 0
-    n_patients: int = 0                         # debug cap (0 = all)
-    device: str | None = None
-    out_dir: str | None = None
+class TrainCfg(BaseModel):
+    """The whole run. model_dump() -> config.json = full provenance."""
+    model_config = _VALIDATE
+    data: DataCfg = Field(default_factory=DataCfg)
+    model: ModelCfg = Field(default_factory=ModelCfg)
+    aug: AugCfg = Field(default_factory=AugCfg)
+    loss: LossCfg = Field(default_factory=LossCfg)
+    epochs: int = Field(128, ge=1)                 # ceiling; early stopping ends sooner
+    batch: int = Field(64, ge=1)
+    lr: float = Field(1e-3, gt=0)
+    patience: int = Field(20, ge=1)
+    workers: int = Field(6, ge=0)                  # store consolidation only (DataLoader is workers=0)
+    seed: int = Field(0, ge=0)
+    n_patients: int = Field(0, ge=0)               # debug cap (0 = all)
+    device: Optional[str] = None
+    out_dir: Optional[str] = None
 
 
 def _coerce(val: str, cur):
-    """Coerce an override string to the current field's type (bool/int/float/tuple via literal_eval)."""
+    """Parse an override string to the current field's type (tuples via literal_eval). pydantic's
+    validate_assignment then enforces the bounds when we setattr the result."""
     if isinstance(cur, bool):
         return val.lower() in ("1", "true", "yes", "on")
     if isinstance(cur, int):
@@ -109,12 +109,13 @@ def _coerce(val: str, cur):
     if isinstance(cur, float):
         return float(val)
     if isinstance(cur, (tuple, list)):
-        return type(cur)(ast.literal_eval(val))
+        return ast.literal_eval(val)
     return val
 
 
 def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
-    """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'model.channels=(32,64,128)')."""
+    """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'data.test_vendors=(\"GE\",)').
+    Each setattr is validated (validate_assignment) -> an out-of-bounds/typo value raises immediately."""
     for it in items or []:
         key, _, val = it.partition("=")
         *parents, leaf = key.strip().split(".")
@@ -127,12 +128,8 @@ def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
 
 def to_json(cfg: TrainCfg, path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(json.dumps(asdict(cfg), indent=2))
+    Path(path).write_text(cfg.model_dump_json(indent=2))
 
 
 def from_json(path: str | Path) -> TrainCfg:
-    d = json.loads(Path(path).read_text())
-    nested = ("data", "model", "aug", "loss")
-    return TrainCfg(data=DataCfg(**d["data"]), model=ModelCfg(**d["model"]),
-                    aug=AugCfg(**d["aug"]), loss=LossCfg(**d.get("loss", {})),
-                    **{k: v for k, v in d.items() if k not in nested})
+    return TrainCfg.model_validate_json(Path(path).read_text())

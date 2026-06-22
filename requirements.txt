@@ -11,6 +11,7 @@ nibabel
 matplotlib
 tqdm
 polars
+pydantic>=2
 omegaconf
 monai>=1.5
 
