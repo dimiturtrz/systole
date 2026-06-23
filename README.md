@@ -208,6 +208,8 @@ evaluation discipline carry over from prior ML work; the clinical specifics I le
   Ventricular Segmentation in Cardiac MRI*, 2023.
 - **nnU-Net** — Isensee et al., *nnU-Net: a self-configuring method for deep learning-based
   biomedical image segmentation*, Nature Methods 2021.
+- **MRI simulators** (for planned synthetic-acquisition augmentation — see [ROADMAP](ROADMAP.md)):
+  **KomaMRI** (Julia, GPU Bloch), **JEMRIS** (C++, full Bloch), **MRiLab** (MATLAB/GPU).
 
 ## License
 Code is **MIT** ([LICENSE](LICENSE)). The datasets (ACDC, M&M-2) are **not** included and carry

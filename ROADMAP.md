@@ -49,6 +49,24 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
+## Synthetic-acquisition augmentation — cross-vendor robustness (planned)
+A distinctive angle for the cross-vendor lane: take **real ACDC anatomy + labels** and **re-acquire**
+them under varied synthetic MRI physics (contrast / noise / bias-field = mimic other vendors), train on
+the augmented set, measure the cross-vendor robustness gain vs the no-aug baseline. The differentiation
+is the **honest cross-vendor eval** of synthetic-acquisition aug, not the simulator itself (`bd cardiac-seg-chm`).
+
+**Decision: build-first.** `mri-sim/` is an acquisition *visualizer*, not yet a re-acquisition engine —
+it can't re-image a labelled phantom with vendor-like variation. Enabler = **real-slice-as-phantom**
+(`bd cardiac-seg-w2n`) + tissue contrast / k-space (`clq` / `por` / `wpq`). So: build the phantom
+re-acquisition path first, then run the aug experiment.
+
+**OSS simulators to evaluate** (cite, don't blind-reinvent):
+- **KomaMRI** (Julia, GPU Bloch, cardiac on its roadmap) — most promising; the one to try first.
+- **JEMRIS** (C++, actively maintained, full Bloch + sequence support) — heavier, reference-grade.
+- **MRiLab** (MATLAB/GPU Bloch) — capable but largely stale/unmaintained.
+- Plus sim-to-real medical repos + the Generalized_MedIA collection for the eval framing.
+Survey: `research/deep_dives/2026-06-22_cardiac-segmentation-oss-landscape-unified.md`.
+
 ## Resolved (thinly): the machine axis is now tested
 Earlier the held-out test was single-vendor ACDC — only the cross-*centre* drop was measured. **Now
 the split holds out two axes** (criteria over the data cloud): ACDC (centre/protocol shift) **and
