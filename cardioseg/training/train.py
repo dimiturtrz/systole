@@ -136,8 +136,7 @@ def train_seg(cfg: TrainCfg):
         tdice, tef, tsurf = validate(model, splits.paths(test_df), d.size, device)
         results["test"] = summarize(tdice, tef, tsurf)
 
-    out.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out / "model.pth")
+    torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
     meta = {"config": cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df),
             "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))

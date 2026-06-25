@@ -28,7 +28,7 @@ from cardioseg.training.model import load_run, resolve_device
 from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store, splits
 from cardioseg.evaluation.validate import predict_volume
-from cardioseg.evaluation.measure import ejection_fraction
+from cardioseg.evaluation.measure import ejection_fraction, LOA_Z
 from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice, CLASSES
 from cardioseg.evaluation.postprocess import largest_cc_per_class
 
@@ -115,7 +115,7 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
     mean = (ef_gt + ef_pred) / 2
     diff = ef_pred - ef_gt
     bias, sd = float(np.mean(diff)), float(np.std(diff, ddof=1))
-    lo, hi = bias - 1.96 * sd, bias + 1.96 * sd
+    lo, hi = bias - LOA_Z * sd, bias + LOA_Z * sd
 
     fig = plt.figure(figsize=(7, 5))
     gs = fig.add_gridspec(2, 1, height_ratios=(1, 3), hspace=0.05)
@@ -275,7 +275,7 @@ def main():
 
 
 def lo_hi(bias, sd):
-    return f"{bias - 1.96 * sd:+.1f}, {bias + 1.96 * sd:+.1f}"
+    return f"{bias - LOA_Z * sd:+.1f}, {bias + LOA_Z * sd:+.1f}"
 
 
 if __name__ == "__main__":

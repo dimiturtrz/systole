@@ -19,6 +19,7 @@ import torch
 from cardioseg.config import FLAGSHIP_RUN
 from cardioseg.data import store
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
+from cardioseg.evaluation.measure import LOA_Z
 from cardioseg.evaluation.evaluate import surface_metrics, CLASSES
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
@@ -50,7 +51,7 @@ def _axis(run: Path, device: str, df, with_strata: bool) -> dict:
         assd[name] = round(float(m["assd"]), 2)
     out = {"n": len(rows), "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
            "hd95": hd95, "assd": assd, "ef_mae": round(float(np.mean(np.abs(diff))), 1),
-           "ef_bias": round(bias, 1), "ef_loa": [round(bias - 1.96 * sd, 1), round(bias + 1.96 * sd, 1)]}
+           "ef_bias": round(bias, 1), "ef_loa": [round(bias - LOA_Z * sd, 1), round(bias + LOA_Z * sd, 1)]}
     if with_strata:
         out["strata"] = strata_table(rows, "pathology")
     return out

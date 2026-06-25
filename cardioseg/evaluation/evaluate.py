@@ -50,11 +50,14 @@ def surface_distances(pred: Mask, gt: Mask, label: int, spacing: Spacing | None 
     return np.concatenate([dt_g[_surface(p)], dt_p[_surface(g)]]).astype(float)
 
 
+HD_PERCENTILE = 95  # robust-Hausdorff percentile (drops the top 5% boundary-distance outliers)
+
+
 def surface_metrics(sd: np.ndarray) -> dict[str, float]:
     """HD / HD95 / ASSD from a precomputed surface-distance array (one pass, no recompute)."""
     if sd.size == 0:
         return {"hd": float("nan"), "hd95": float("nan"), "assd": float("nan")}
-    return {"hd": float(sd.max()), "hd95": float(np.percentile(sd, 95)), "assd": float(sd.mean())}
+    return {"hd": float(sd.max()), "hd95": float(np.percentile(sd, HD_PERCENTILE)), "assd": float(sd.mean())}
 
 
 def hausdorff(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:

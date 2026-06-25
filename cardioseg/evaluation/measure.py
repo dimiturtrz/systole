@@ -12,6 +12,8 @@ import numpy as np
 from cardioseg.types import Mask, Spacing
 from cardioseg.labels import LV_CAV
 
+LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)
+
 
 def voxel_volume_ml(spacing: Spacing) -> float:
     """mm^3 per voxel -> mL (1 mL = 1000 mm^3). spacing = (z, y, x) mm."""

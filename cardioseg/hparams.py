@@ -115,6 +115,8 @@ def _coerce(val: str, cur):
         return float(val)
     if isinstance(cur, (tuple, list)):
         return ast.literal_eval(val)
+    if cur is None:                                       # Optional[str] field (device, out_dir)
+        return None if val.lower() in ("none", "null", "") else val
     return val
 
 
