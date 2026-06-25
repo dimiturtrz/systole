@@ -25,24 +25,31 @@ def _stack_slices(vol_img: Volume, size: int) -> np.ndarray:
     return np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
 
 
-def predict_volume_probs(model, vol_img: Volume, size: int, device: str):
-    """Mean-softmax over the 4 TTA flips for one z-scored [D, H, W] volume — the shared inference
-    primitive. Returns (pred uint8 [D, size, size], mean_softmax tensor [D, C, size, size] on `device`).
-    All D slices go through in one batched forward (~D× fewer kernel launches; slices are independent).
-    Uncertainty (entropy/confidence) is computed by callers from the returned mean_softmax."""
+def predict_volume_members(model, vol_img: Volume, size: int, device: str):
+    """Run the 4 TTA flips and keep them as a cheap K-member ensemble for uncertainty decomposition.
+    Returns (pred uint8 [D,size,size], mean_softmax [D,C,size,size], members [K,D,C,size,size]) on
+    `device`. The members enable the aleatoric/epistemic (BALD) split; mean is their average."""
     import torch
 
     model.eval()
     xs = _stack_slices(vol_img, size)
     with torch.no_grad():
         x = torch.from_numpy(xs)[:, None].to(device)          # [D, 1, size, size]
-        acc = None
+        flips = []
         for dims in _FLIPS:
             p = torch.softmax(model(torch.flip(x, dims) if dims else x), dim=1)
-            p = torch.flip(p, dims) if dims else p            # un-flip back before averaging
-            acc = p if acc is None else acc + p
-        mean = acc / len(_FLIPS)                               # [D, C, size, size] mean softmax
+            flips.append(torch.flip(p, dims) if dims else p)  # un-flip back before stacking
+        members = torch.stack(flips)                          # [K, D, C, size, size]
+        mean = members.mean(0)                                # [D, C, size, size] mean softmax
         pred = mean.argmax(1).to(torch.uint8).cpu().numpy()
+    return pred, mean, members
+
+
+def predict_volume_probs(model, vol_img: Volume, size: int, device: str):
+    """Mean-softmax over the 4 TTA flips — the shared inference primitive. Returns
+    (pred uint8 [D,size,size], mean_softmax [D,C,size,size]). See predict_volume_members for the
+    per-member stack used by the uncertainty decomposition."""
+    pred, mean, _ = predict_volume_members(model, vol_img, size, device)
     return pred, mean
 
 

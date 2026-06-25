@@ -19,16 +19,23 @@ import numpy as np
 
 
 def tta_uncertainty(model, vol_img, size, device):
-    """Return (pred uint8, entropy[0,1], confidence) each [D,size,size] for one z-scored volume.
-    Reuses the shared predict_volume_probs (mean softmax over the 4 TTA flips); entropy of that
-    mean (normalized by log C); confidence = max prob."""
-    from .validate import predict_volume_probs
+    """Decompose predictive uncertainty over the 4 TTA flips (a cheap K-member ensemble).
+    Returns (pred, total, conf, aleatoric, epistemic) — total/aleatoric/epistemic each [D,size,size]
+    in [0,1] (normalized by log C):
+        total      = H[mean]            (entropy of the mean softmax)
+        aleatoric  = mean_k H[p_k]      (expected per-member entropy — irreducible ambiguity)
+        epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
+    NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
+    here is a lower-bound proxy, not deep-ensemble gold."""
+    from .validate import predict_volume_members
 
-    pred, mean = predict_volume_probs(model, vol_img, size, device)  # [D,C,H,W] mean softmax on device
-    ent = -(mean * (mean + 1e-12).log()).sum(1)            # predictive entropy
-    ent = (ent / np.log(mean.shape[1])).cpu().numpy()      # normalize to [0,1]
-    conf = mean.max(1).values.cpu().numpy()                # confidence = max class prob
-    return pred, ent, conf
+    pred, mean, members = predict_volume_members(model, vol_img, size, device)  # mean [D,C,H,W]; members [K,D,C,H,W]
+    logc = np.log(mean.shape[1])
+    total = -(mean * (mean + 1e-12).log()).sum(1) / logc                        # H[mean]
+    aleat = (-(members * (members + 1e-12).log()).sum(2)).mean(0) / logc        # mean_k H[p_k]
+    epi = (total - aleat).clamp(min=0)                                          # BALD (>= 0 by Jensen)
+    conf = mean.max(1).values
+    return pred, total.cpu().numpy(), conf.cpu().numpy(), aleat.cpu().numpy(), epi.cpu().numpy()
 
 
 def _boundary(mask):
@@ -76,6 +83,7 @@ def main():
         df = store.load(["acdc"]).filter(pl.col("labelled"))
 
     confs, corrects, ents = [], [], []  # foreground-voxel calibration + error-detection samples
+    ales, epis = [], []                # aleatoric / epistemic (BALD) over foreground voxels
     bnd_u, int_u = [], []              # boundary vs interior uncertainty (sanity)
     cases = []                         # per-case uncertainty scores
     out = run / "plots"
@@ -86,10 +94,11 @@ def main():
         for tag in ("ed", "es"):
             if f"{tag}_img" not in c:
                 continue
-            pred, ent, conf = tta_uncertainty(model, c[f"{tag}_img"], SIZE, device)
+            pred, ent, conf, ale, epi = tta_uncertainty(model, c[f"{tag}_img"], SIZE, device)
             gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
             fg = (pred > 0) | (gt > 0)
             confs.append(conf[fg]); corrects.append((pred == gt)[fg]); ents.append(ent[fg])
+            ales.append(ale[fg]); epis.append(epi[fg])
             cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}",
                           "uncertainty": float(ent[fg].mean()) if fg.any() else 0.0})
             for z in range(pred.shape[0]):                      # boundary vs interior
@@ -114,10 +123,16 @@ def main():
     rocauc = float(roc_auc_score(wrong, ent_all))
     auprc = float(average_precision_score(wrong, ent_all))
 
+    # aleatoric/epistemic decomposition (BALD) over foreground — how much uncertainty is reducible
+    ale_m = float(np.concatenate(ales).mean()); epi_m = float(np.concatenate(epis).mean())
+    epi_frac = epi_m / max(ale_m + epi_m, 1e-9)
+
     (out / "uncertainty.json").write_text(json.dumps(
         {"ece": round(e, 4), "boundary_vs_interior_ratio": round(bratio, 2),
          "error_detection": {"auprc": round(auprc, 3), "base_rate": round(base, 3),
                              "lift_over_base": round(auprc / max(base, 1e-6), 1), "rocauc": round(rocauc, 3)},
+         "decomposition": {"aleatoric": round(ale_m, 4), "epistemic": round(epi_m, 4),
+                           "epistemic_fraction": round(epi_frac, 3)},
          "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
 
     # reliability diagram
@@ -133,6 +148,7 @@ def main():
 
     print(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
           f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
+          f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
           f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
     print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 

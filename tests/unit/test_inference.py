@@ -8,7 +8,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from cardioseg.training.model import build_unet, resolve_device, load_run
-from cardioseg.evaluation.validate import predict_volume, predict_volume_probs
+from cardioseg.evaluation.validate import predict_volume, predict_volume_probs, predict_volume_members
 
 SIZE = 32  # small grid; divisible by the 4 strides (2^4=16)
 
@@ -46,6 +46,20 @@ def test_predict_volume_no_tta_shape(model):
     vol = np.random.RandomState(2).randn(2, 32, 32).astype(np.float32)
     pred = predict_volume(model, vol, SIZE, "cpu", tta=False)
     assert pred.shape == (2, SIZE, SIZE) and pred.dtype == np.uint8
+
+
+def test_members_and_bald_decomposition(model):
+    """4 flip-members -> mean; BALD decomposition: total = aleatoric + epistemic, epistemic >= 0."""
+    vol = np.random.RandomState(4).randn(2, 32, 32).astype(np.float32)
+    pred, mean, members = predict_volume_members(model, vol, SIZE, "cpu")
+    assert tuple(members.shape) == (4, 2, 4, SIZE, SIZE)        # K=4 flips
+    assert torch.allclose(members.mean(0), mean, atol=1e-6)     # mean is the member average
+    from cardioseg.evaluation.uncertainty import tta_uncertainty
+    p, total, conf, ale, epi = tta_uncertainty(model, vol, SIZE, "cpu")
+    assert np.array_equal(p, pred)
+    assert (epi >= -1e-6).all()                                 # BALD >= 0 (Jensen)
+    assert np.allclose(total, ale + epi, atol=1e-5)            # total = aleatoric + epistemic
+    assert total.max() <= 1.0 + 1e-6 and ale.min() >= -1e-6    # normalized to [0,1]
 
 
 # --- load_run: rebuilds arch from config.json; falls back when absent ---
