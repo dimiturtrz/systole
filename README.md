@@ -2,8 +2,9 @@
 
 **What this is.** systole segments the heart from cardiac MRI and computes its **ejection
 fraction** — then asks the question most demos skip: *does that number survive a change of
-scanner?* The model trains on a multi-vendor dataset and is tested on a held-out single-centre one
-it never saw; segmentation generalizes (Dice **0.88**, near the in-domain ceiling), while EF —
+scanner?* The model trains on two vendors (Siemens + Philips, 495 subjects) and is evaluated on
+a centre-shift held-out set (ACDC, val) and two fully unseen vendors (Canon + GE, test);
+segmentation generalizes (Dice **0.88** on ACDC, **0.84** on unseen Canon+GE), while EF —
 a ratio of volumes — is the honest hard part. The thread tying it together is geometry: per-voxel
 labels → a clinical number.
 
@@ -30,22 +31,26 @@ with **EDV / ESV / LVEF vs ground truth**. Or drop in your own `.nii.gz` → seg
 
 ## The pipeline + results — [cardioseg](cardioseg/)
 The science layer: data → preprocess → 2D U-Net → measure (EF) → evaluate. The flagship model is
-set up for **domain generalization**: trained on a pooled multi-vendor cloud (**M&M-2 + M&Ms-1**,
-564 labelled subjects, 4 vendors, 1.5T + 3T), held out along **two axes** — **ACDC** (centre/protocol
-shift, 150 it never saw) and **Canon** (a scanner vendor never in training).
+set up for **domain generalization**: trained on Siemens + Philips only (**M&M-2 + M&Ms-1**, 495
+labelled subjects, 2 vendors, 1.5T + 3T), validated on **ACDC** (centre/protocol shift, 150
+subjects, used for early-stopping + calibration), and tested on **Canon + GE** (two scanner vendors
+never seen in training, n=78 total).
 
 ### Ejection fraction — the clinical output
-EF is the number a clinician acts on, so it's the result that matters. On held-out **ACDC-150**
-(centre/protocol shift), the pooled multi-vendor model with heavy augmentation + early stopping +
-largest-CC + TTA: **MAE 6.2%**, bias **−5.7%** (systematic underprediction), 95% LoA [−18, +7]. The
-chambers are right; absolute volumes drift as calibration shifts across centres.
+EF is the number a clinician acts on, so it's the result that matters. On **ACDC-150**
+(val, centre/protocol shift), the model with heavy augmentation + early stopping + largest-CC +
+TTA: **MAE 6.5%**, bias **−5.6%** (systematic underprediction), 95% LoA [−20.1, +8.9]. The
+chambers are right; absolute volumes drift as calibration shifts across centres. On the two
+**unseen-vendor test sets** (Canon n=9, GE n=69), EF MAE is ~11–12%: Canon 11.9%, GE 11.3% —
+a larger cross-vendor gap that reflects the harder OOD shift.
 
 ![EF Bland–Altman — flagship on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
 
-**Not clinically usable yet** — MAE 6.2% and LoA ±13 are still past the ±5% clinical bar. The
-plot splits the error in two: a systematic **−5.7% bias** (the curve sits left of zero —
-correctable) and a **spread** (tightened by the work below). EF is a *ratio* of two volumes,
-so it magnifies per-frame segmentation error — the masks are good (Dice 0.88), the derived number isn't.
+**Not clinically usable yet** — MAE 6.5% on val and ~11% on unseen vendors are still past the ±5%
+clinical bar. The plot splits the error in two: a systematic **−5.6% bias** (the curve sits left
+of zero — correctable) and a **spread** (tightened by the work below). EF is a *ratio* of two
+volumes, so it magnifies per-frame segmentation error — the masks are good (Dice 0.88), the
+derived number isn't.
 
 **Where it fails — stratified (read carefully).** Dice is uniform across pathologies (~0.90), so
 **the masks aren't worse anywhere** — the EF spread is a *ratio* effect, not a segmentation one.
@@ -64,7 +69,7 @@ Paths from here, roughly in effort order:
 - ✅ **Heavy augmentation + early stopping** (applied) — wider geometry + vendor-style intensity
   jitter (gamma / contrast / blur), GPU-batched; trained to a val-Dice plateau (~95 epochs, kept
   the best checkpoint), plus multi-source pooling (M&M-2 + M&Ms-1). RV Dice 0.84 → **0.88**,
-  mean → **0.88**, EF MAE 8.2 → **6.2%**, LoA ±27 → ±13.
+  mean → **0.88**, EF MAE 8.2 → **6.5%** (ACDC val), LoA tightened.
 - **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
   histogram standardization may tighten the spread. (Dice already transfers, so this is a smaller
   lever for EF than for segmentation — but it's the obvious gap.)
@@ -72,15 +77,15 @@ Paths from here, roughly in effort order:
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
 ### Segmentation — ours vs SOTA
-**A 1.6 M-param model: ~2–3 Dice points under nnU-Net's floor on held-out ACDC (0.88 vs 0.912), EF
-roughly level (6.2 vs 5.6%), at ~57× fewer parameters — and it exports to run in the browser.**
+**A 1.6 M-param model: ~2–3 Dice points under nnU-Net's floor on ACDC val (0.88 vs 0.912), EF
+roughly level (6.5 vs 5.6%), at ~57× fewer parameters — and it exports to run in the browser.**
 
 Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 <!-- results:compare -->
 | | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |
 |---|---|---|---|---|---|---|---|
-| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.92 | 0.86 | 0.88 | **0.88** | 6.2% |
+| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.92 | 0.86 | 0.88 | **0.88** | 6.5% |
 | nnU-Net (SOTA baseline) | 92 M | 19 G | 0.95 | 0.88 | 0.91 | **0.91** | 5.6% |
 <!-- /results:compare -->
 <sub>numbers auto-filled from `cardioseg/RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit the table above.</sub>
@@ -91,15 +96,16 @@ Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA b
 largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. **The alternative,** nnU-Net
 (self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
 scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
-clean-export). On ACDC, nnU-Net leads by **~2.8 Dice points** (0.912 vs 0.884) and on unseen-vendor
-Canon (0.876 vs 0.84); **EF is roughly level** (5.6 vs 6.2%). cardioseg's boundary is tighter on
+clean-export). On ACDC (val), nnU-Net leads by **~2.8 Dice points** (0.912 vs 0.884) and on unseen-vendor
+Canon (0.876 vs 0.84); **EF is roughly level** (5.6 vs 6.5%). cardioseg's boundary is tighter on
 LV-cav (HD95 2.1 vs 3.3 mm) and myo (2.1 vs 2.9), comparable on RV. This is at **~57× the parameters
 and ~23× the FLOPs**, and ONNX-exportable; nnU-Net's sliding-window pipeline isn't.
 
 *Caveat — this nnU-Net is under-powered on purpose:* 50 epochs / 1 fold / 2D, not its full recipe
 (1000 ep × 5-fold ensemble + TTA + config search). So 0.912 is its **floor** — the full recipe would
 pull further ahead. The baseline proves *"I can run + score SOTA through my own eval,"*
-not *"I matched its ceiling."*
+not *"I matched its ceiling."* *(Note: nnU-Net numbers are on the old split — ACDC-as-test, 564-subject
+train — and have not been re-run on the current split. Provisional.)*
 
 **Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
 and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +
@@ -107,13 +113,15 @@ surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**.
 
 ## Honest limits — the clinical-grade gap
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
-- **EF precision.** 95% LoA are ±13% — still past the ±5% clinical bar. And part of the
+- **EF precision.** On the ACDC val (centre-shift) 95% LoA are [−20, +9]; on unseen vendors wider
+  still — both far past the ±5% clinical bar. And part of the
   underprediction is *intrinsic*: even nnU-Net (SOTA) keeps a **−4% bias** cross-domain, so a better
   segmenter tightens the spread but doesn't erase the lean — it's calibration, not just model quality.
-- **The unseen-vendor test is thin.** We hold out two axes — ACDC (centre shift) **and Canon** (a
-  scanner vendor never in training). So the machine axis *is* tested now — but Canon has only **n=9
-  labelled** (M&Ms-1 withholds most Testing GT), enough for a Dice signal (~0.87) but too noisy for EF.
-  Leave-one-vendor-out (n up to ~190 for GE/Philips) would give proper unseen-vendor stats; not yet run.
+- **Unseen-vendor EF degrades.** Two vendors never in training (Canon n=9, GE n=69, total n=78)
+  both score Dice **0.84** and EF MAE **~11–12%** — Canon and GE agree independently, so the
+  cross-vendor signal is robust, but the clinical gap is real (11% vs 6.5% on ACDC val). Canon
+  has only 9 labelled subjects (M&Ms-1 withholds most Testing GT), so GE (n=69) carries the EF
+  signal; Canon confirms Dice. The LoA on unseen vendors is not yet characterised in full.
 - **Validation is thin.** One 80/20 split — no cross-validation, confidence intervals, or
   test–retest; no per-case uncertainty / out-of-distribution flag.
 - **Not a device.** Public research data only; no DICOM/PII handling, no prospective or regulatory
@@ -128,8 +136,8 @@ adapters into one **data cloud** (830 subjects, 4 vendors, harmonized pathology 
 **M&M-2** ([link](https://www.ub.edu/mnms-2/), 360, 3 vendors), **ACDC**
 ([link](https://www.creatis.insa-lyon.fr/Challenge/acdc/), 150, Siemens), **M&Ms-1** (320 on disk /
 213 labelled, 4 vendors incl. Canon). Each adapter remaps labels + parses metadata to a common schema;
-we pull *all* data and make our own splits. Flagship pooled multi-source model holds across a 2-axis
-generalization held-out split (ACDC centre-shift 0.88 Dice, Canon unseen-vendor 0.84). Full schema + results →
+we pull *all* data and make our own splits. Flagship model trained on Siemens+Philips only; validated on ACDC (centre-shift, 0.88 Dice) and
+tested on Canon+GE (unseen vendors, 0.84 Dice, n=78). Full schema + results →
 **[cardioseg/](cardioseg/)**.
 
 **Config — one path, everything derived.** Copy the template, set a single `data` root:

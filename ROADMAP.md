@@ -9,15 +9,15 @@ Status tags: ✅ done · 🔄 doing · ⬜ planned.
 
 ## Where it stands (2026-06)
 **MRI lane is delivered, and went past the original Gate 1.** Beyond "train on ACDC,
-report Dice + EF," the model is now set up for **domain generalization**: trained on a pooled
-multi-vendor cloud (**M&M-2 + M&Ms-1**, 564 labelled subjects, 4 vendors) and held out along
-**two axes** — **ACDC** (centre/protocol shift, 150 it never saw) and **Canon** (unseen vendor).
+report Dice + EF," the model is now set up for **domain generalization**: trained on
+Siemens+Philips from M&M-2+M&Ms-1 (**495 labelled subjects**, 2 vendors); val = ACDC-150
+(centre/protocol shift); test = Canon+GE (unseen vendors, held out entirely).
 
-- **Segmentation generalizes** — pooled → held-out ACDC mean Dice **0.88** (ED+ES), near the in-domain
-  ACDC ceiling; unseen-vendor Canon **0.84**. The reverse (single-centre ACDC → multi-vendor)
-  collapses to **0.70** (RV 0.85 → 0.59): diversity in training is what holds up. That asymmetry
-  is the headline result.
-- **EF improved, not yet clinical** — held-out ACDC EF MAE **6.2%**, bias −5.7%, LoA ±13 — down
+- **Segmentation generalizes** — val ACDC mean Dice **0.88** (ED+ES), near the in-domain ACDC
+  ceiling; unseen-vendor Canon+GE both **0.839** (n=78 combined — two independent scanners agree).
+  The reverse (single-centre ACDC → multi-vendor) collapses to **0.70** (RV 0.85 → 0.59): diversity
+  in training is what holds up. That asymmetry is the headline result.
+- **EF improved, not yet clinical** — val ACDC EF MAE **6.5%**, bias −5.6%, LoA [−20.1, +8.9] — down
   from the ±27 pre-postproc start, still past the ≈±5% clinical bar. EF is a ratio of two volumes,
   so it amplifies per-frame mask error. Good masks, fragile derived number. See **EF paths** below.
 - **Shipped alongside:** [cardioview](cardioview/) browser viewer (beating 3D hearts +
@@ -34,8 +34,9 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 2. ✅ **Test-time augmentation** — in-plane flip averaging at inference, no retrain.
 3. ✅ **Heavy augmentation + early stopping + multi-source pooling** (GPU-batched) — wider geometry +
    vendor-style intensity jitter; trained to a val-Dice plateau (~95 ep, best checkpoint kept); pooled
-   M&M-2 + M&Ms-1. RV Dice 0.84 → **0.88**, mean 0.87 → **0.88** (ED+ES), EF MAE 8.2 → **6.2%**, LoA ±27 → ±13.
-   **~2–3 Dice points under the nnU-Net floor** (0.88 vs 0.912); EF roughly level (6.2 vs 5.6%); on a
+   M&M-2 + M&Ms-1 (Siemens+Philips, 495 subjects). RV Dice 0.84 → **0.88**, mean 0.87 → **0.88**
+   (ED+ES), EF MAE 8.2 → **6.5%**, LoA ±27 → [−20.1, +8.9].
+   **~2–3 Dice points under the nnU-Net floor** (0.88 vs 0.912); EF roughly level (6.5 vs 5.6%); on a
    deployable ONNX model at ~57× fewer params.
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
    histogram standardization may tighten the spread. **Deprioritized by evidence:** in-domain M&M-2
@@ -92,14 +93,13 @@ JEMRIS (C++ — very high integration cost), MRiLab (MATLAB — dead since 2017)
 `research/deep_dives/2026-06-24_mri-sim-libs-eval.md`. Earlier landscape survey:
 `research/deep_dives/2026-06-22_cardiac-segmentation-oss-landscape-unified.md`.
 
-## Resolved (thinly): the machine axis is now tested
+## Resolved: the machine axis is now tested (n=78, two vendors agree)
 Earlier the held-out test was single-vendor ACDC — only the cross-*centre* drop was measured. **Now
-the split holds out two axes** (criteria over the data cloud): ACDC (centre/protocol shift) **and
-Canon** (a scanner vendor never in training). **M&Ms-1** (320 on disk / 213 labelled, 4 vendors incl.
-Canon) is pooled into training, so the flagship trains on 4 vendors. The machine axis *is* tested —
-but Canon is **n=9 labelled** (M&Ms-1 withholds most Testing GT): enough for a Dice signal (~0.84),
-too thin for EF. **Still open:** leave-one-vendor-out (n up to ~190 for GE/Philips) for proper
-unseen-vendor stats. Tracked: `bd cardiac-seg-bsz`.
+the split holds out unseen vendors entirely:** Canon (n=9 labelled, M&Ms-1 withholds most Testing GT)
+and GE (n=69) are both excluded from training and scored independently. Both return Dice **0.839** and
+EF MAE **~11–12%** — independent agreement at n=78 makes this a robust unseen-vendor signal. Training
+narrows to Siemens+Philips (495 subjects); GE moved from train to test. **Still open:**
+leave-one-vendor-out CV for proper confidence intervals. Tracked: `bd cardiac-seg-bsz`.
 
 ## How this is driven — the circuit
 Field understanding drives the roadmap. Each topic runs the loop:

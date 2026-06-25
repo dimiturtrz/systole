@@ -1,13 +1,13 @@
 # cardioseg — the pipeline
 
 The science layer: cardiac MRI → segmentation → ejection fraction → evaluation, set up for
-**domain generalization** (train on multi-vendor **M&M-2**, test on held-out single-centre
-**ACDC**). Python (PyTorch + MONAI). The browser demo ([cardioview](../cardioview/)) consumes
+**domain generalization** (train on Siemens+Philips, validate on centre-shifted **ACDC**, test on
+unseen vendors **Canon+GE**). Python (PyTorch + MONAI). The browser demo ([cardioview](../cardioview/)) consumes
 what this produces.
 
-![Held-out ACDC — MRI / ground truth / prediction: clean DCM (EF 17→17%) vs worst HCM (77→48%)](docs/media/seg_overlay.png)
+![ACDC val — MRI / ground truth / prediction: clean DCM (EF 17→17%) vs worst HCM (77→48%)](docs/media/seg_overlay.png)
 
-*Our model on held-out ACDC (trained on other scanners). Top: a clean dilated heart. Bottom: the
+*Our model on ACDC val set (trained on Siemens+Philips from M&M-2+M&Ms-1). Top: a clean dilated heart. Bottom: the
 worst hypertrophic case — small thick-walled cavities are where the end-systolic over-segmentation
 bites. RV blue · LV-myo green · LV-cav red.*
 
@@ -64,9 +64,9 @@ python -m cardioseg.training.train             # train; default split holds out 
 
 | dataset | n | vendors | demographics | role |
 |---|---|---|---|---|
-| **ACDC** | 150 (train 100 + test 50, both labelled) | Siemens only | height/weight → BSA | clean cross-centre test |
-| **M&M-2** | 360 | Siemens 219 / Philips 88 / GE 53 | — | multi-vendor train |
-| **M&Ms-1** | 320 on disk / **213 labelled** | Philips 125 / Siemens 95 / GE 50 / **Canon 50** (9 labelled) | age / sex / h+w | broadest; **Canon = clean unseen-vendor test** (overlap-free) |
+| **ACDC** | 150 (train 100 + test 50, both labelled) | Siemens only | height/weight → BSA | **val** (centre/protocol shift; early stopping + calibration) |
+| **M&M-2** | 360 | Siemens 219 / Philips 88 / GE 53 | — | train (Siemens+Philips only; GE excluded from train) |
+| **M&Ms-1** | 320 on disk / **213 labelled** | Philips 125 / Siemens 95 / GE 50 / **Canon 50** (9 labelled) | age / sex / h+w | train (Siemens+Philips); **Canon+GE = unseen-vendor test** (held out entirely) |
 
 **Unification** each adapter handles: label remap to canonical (0 bg / 1 RV / 2 myo / 3 LV-cav —
 M&M-2 & M&Ms-1 are LV=1, verified geometrically); ED/ES selection; `meta()` parsing of acquisition +
@@ -84,9 +84,10 @@ must filter on mask *content*, not file existence (`mnms1_cases(labelled_only=Tr
 
 **Overlap caveat:** M&Ms-1 ⊃ ~195 of M&M-2 (shared NOR/HCM/LV per the M&M-2 docs; mapping
 unavailable) — so the two can't be each other's clean held-out test; ACDC is the only fully
-independent set. **Default split (2-axis generalization):** hold out ACDC (centre shift) + Canon
-(unseen vendor) via DataCfg criteria (`test_datasets=('acdc',)`, `test_vendors=('Canon',)`); train =
-the rest, labelled. The overlapping M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
+independent set. **Default split:** train on Siemens+Philips from M&M-2+M&Ms-1 (495 labelled
+subjects); val = ACDC (centre shift); test = Canon+GE (unseen vendors, held out entirely) via
+DataCfg criteria (`test_datasets=('acdc',)`, `test_vendors=('Canon','GE')`). The overlapping
+M&Ms-1 270 parks pending dedup (`bd cardiac-seg-3ah`).
 Dataset-role decisions track in `bd cardiac-seg-bsz`.
 
 **Official splits — deliberate deviation (comparability caveat):** we do **not** inherit the datasets'
@@ -116,40 +117,40 @@ parallelizes store consolidation, not the loader (DataLoader runs workers=0; AMP
 > Intended-use envelope, stratified metrics, failure modes + provenance → **[MODEL_CARD.md](MODEL_CARD.md)**.
 
 ## Results (seed 0, patient-level splits)
-Flagship = the **generalization split**: train on the pooled multi-source cloud (M&M-2 + M&Ms-1
-ex-Canon, 564 labelled subjects — 451 train / 113 val), hold out **two axes** — ACDC (centre/protocol shift) and Canon (unseen
-vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early stopping + largest-CC
-+ TTA. On the **ACDC-150** axis:
+Flagship = the **generalization split**: train on Siemens+Philips from M&M-2+M&Ms-1 (**495 labelled
+subjects**); val = ACDC-150 (centre/protocol shift, used for early stopping + calibration); test =
+Canon+GE (unseen vendors, held out entirely). One declarative split rule (`data/splits.py`). Heavy
+aug + early stopping + largest-CC + TTA. On the **ACDC val** axis:
 
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 2.1 | 0.59 |
+| LV cavity | 0.92 | 2.1 | 0.58 |
 | LV myocardium | 0.86 | 2.1 | 0.56 |
-| RV cavity | 0.88 | 5.8 | 0.80 |
+| RV cavity | 0.88 | 7.0 | 0.90 |
 | **mean** | **0.88** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`). Published in-distribution ACDC is
 ~0.91–0.93 mean — context, not like-for-like (different test set; see the split caveat above).</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
-including it is the honest read. **EF vs GT: MAE 6.2%** (bias −5.7%, 95% LoA [−18, +7], n=150).
+including it is the honest read. **EF vs GT: MAE 6.5%** (bias −5.6%, 95% LoA [−20.1, +8.9], n=150).
 **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
 <!-- results:axis -->
-| held-out axis | n | mean Dice | EF MAE |
-|---|---|---|---|
-| **ACDC** (centre / protocol shift, single-vendor) | 150 | 0.88 | 6.2% |
-| **Canon** (unseen vendor, M&Ms-1) | 9 | 0.84 | 13.5% \* |
+| held-out axis | role | n | mean Dice | EF MAE |
+|---|---|---|---|---|
+| **ACDC** — centre / protocol shift | val | 150 | 0.88 | 6.5% |
+| **Canon** — unseen vendor | test | 9 | 0.84 | 11.9% |
+| **GE** — unseen vendor | test | 69 | 0.84 | 11.3% |
 <!-- /results:axis -->
 
-\* Canon **n=9** — too thin to read EF on: the same axis gave EF MAE 7.2% under a M&M-2-only model,
-11.1% here (one collapsed case dominates 9), while Dice held ~0.84 both ways. The M&Ms-1 challenge
-withholds GT for most of its Testing split (320 on disk, 213 labelled; Canon 50 → 9 with masks), so
-Canon is the honest *Dice* signal for unseen-vendor robustness; its EF is noise. Pooling M&Ms-1 into
-training (564 vs 360 subjects) lifted the ACDC axis (mean ~0.87 → 0.88 — the extra RV/vendor
-diversity paid off).
+Canon **n=9** (M&Ms-1 withholds GT for most of Testing: 320 on disk, 213 labelled, Canon 50 → 9
+usable) and GE **n=69** are both **unseen-vendor** test sets, scored independently. Both return Dice
+**0.839** and EF MAE **~11–12%** — independent agreement at n=78 total makes this a robust
+unseen-vendor signal (not a fluke of one thin split). Pooling M&Ms-1 into training (vs 360 subjects
+alone) lifted the ACDC val axis (mean ~0.87 → 0.88 — extra vendor diversity paid off).
 
 **Diversity buys robustness — the asymmetry proves it:**
 
@@ -160,7 +161,7 @@ diversity paid off).
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-split + heavy aug + largest-CC + TTA lift the flagship to 0.88 Dice / 6.2% EF on ACDC-150 (top table).*
+split + heavy aug + largest-CC + TTA lift the flagship to 0.88 Dice / 6.5% EF on ACDC-150 (top table).*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
@@ -185,11 +186,11 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 <!-- results:strata -->
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.90 | 1.7% | -0.4% |
-| ischemic (MINF) | 31% | 0.88 | 3.8% | -3.4% |
-| rv_congenital | 57% | 0.88 | 7.4% | -7.2% |
-| normal (NOR) | 62% | 0.89 | 6.3% | -5.9% |
-| **hypertrophic (HCM)** | 70% | 0.86 | 12.0% | -11.5% |
+| dilated (DCM) | 20% | 0.90 | 1.8% | -0.4% |
+| ischemic (MINF) | 31% | 0.88 | 4.4% | -3.2% |
+| rv_congenital | 57% | 0.88 | 7.1% | -6.5% |
+| normal (NOR) | 62% | 0.89 | 6.3% | -6.0% |
+| **hypertrophic (HCM)** | 70% | 0.86 | 13.0% | -12.1% |
 <!-- /results:strata -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`).</sub>
 
@@ -245,6 +246,13 @@ regressed EF ~2pp with no Dice gain, `bd cardiac-seg-bp4`).
   errors are the rare class.)
 - **Calibration: ECE 0.093** (foreground voxels) — mildly miscalibrated, reported not hidden
   (reliability diagram: `docs/media/reliability.png`).
+- **BALD decomposition** (4-flip TTA): total uncertainty splits into aleatoric (irreducible boundary
+  ambiguity) and epistemic (reducible model uncertainty). On Canon (unseen vendor): aleatoric 0.063 /
+  epistemic 0.029 — ~69% irreducible, ~31% reducible. Most Canon uncertainty is genuine boundary
+  ambiguity, not model ignorance; more Canon training data would close the epistemic slice only.
+- **Temperature scaling** (T=2.49, fit on ACDC val): ECE val 0.124→0.050, Canon 0.224→0.138, GE
+  0.225→0.135. Calibration partially transfers to unseen vendors but the OOD gap remains — post-hoc
+  scaling is not a substitute for in-distribution calibration data.
 
 `python -m cardioseg.evaluation.uncertainty --run runs/gen --eval acdc`
 

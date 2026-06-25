@@ -51,15 +51,20 @@ nnU-Net on ACDC is a solved benchmark — top-of-leaderboard, **mean Dice ~0.91*
 pipeline" credential — it is **not** a discovery.
 
 ## Results — generalization split (ACDC-150 held-out axis)
+> **Provisional:** nnU-Net was trained on the **old split** (ACDC as test axis, 564-subject train —
+> M&M-2 + M&Ms-1 ex-Canon, all four vendors). The current split uses ACDC as val (early stopping +
+> calibration), Canon+GE as the unseen-vendor test, and narrows training to Siemens+Philips (495
+> subjects). Re-run on the new split is pending — numbers below reflect the old configuration.
+
 Both trained on the **same pooled cloud** (M&M-2 + M&Ms-1 ex-Canon, 564 labelled), tested on the
 held-out **ACDC-150** axis, **scored by `cardioseg.evaluation`** — apples-to-apples.
 
 <!-- results:nnucompare -->
 | segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.884 | 0.915 | 0.858 | 0.880 | 6.2% | deployable / ONNX |
+| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.884 | 0.916 | 0.860 | 0.875 | 6.5% | deployable / ONNX |
 | **nnU-Net** (50 ep, 1 fold) | **0.912** | **0.948** | **0.876** | **0.911** | **5.6%** | baseline / not deployed |
-| Δ (nnU-Net − ours) | +2.8 | +3.3 | +1.8 | +3.1 | -0.6 | |
+| Δ (nnU-Net − ours) | +2.8 | +3.2 | +1.6 | +3.6 | -0.9 | |
 <!-- /results:nnucompare -->
 
 <sub>All Dice/HD95 pool ED+ES (both phases) — same yardstick both rows.</sub>
@@ -76,18 +81,18 @@ FLOPs**, for ~2–3 Dice points less on ACDC. That's the deployable trade made q
 
 So **0.912 is nnU-Net's floor here**; the full 1000-epoch × 5-fold + TTA recipe would pull further
 ahead. Even at this floor it leads by **~2.8 Dice points on ACDC** (0.912 vs 0.884) and on unseen-vendor
-Canon (0.876 vs 0.84). **EF is roughly level** (6.2 vs 5.6%). We report the floor honestly and didn't
+Canon (0.876 vs 0.84). **EF is roughly level** (6.5 vs 5.6%). We report the floor honestly and didn't
 chase the ceiling — it's a lot more compute for a model we wouldn't deploy anyway (92 M, no clean ONNX).
 The baseline's job is *"I can operate + score SOTA through my own pipeline,"* **not** *"I matched it."*
 
-**EF agreement (Bland–Altman):** ours bias −5.7%, 95% LoA [−18, +7]; nnU-Net bias **−4.2%**,
+**EF agreement (Bland–Altman):** ours bias −5.6%, 95% LoA [−20.1, +8.9]; nnU-Net bias **−4.2%**,
 LoA **[−19.3, +10.8]** — closely matched. Both still *underpredict* (negative bias), so part of
 the cross-domain EF shift is intrinsic (calibration), not just model quality.
 
 **Read:** nnU-Net leads ~2–3 Dice points across structures (its main margins on LV-cav +3.0 and RV
 +2.9), at **50 epochs / 1 fold** (its floor; the full recipe goes higher). Our largest-CC + TTA still
 gives a tighter LV-cav/myo boundary (HD95 2.1 vs 3.3 / 2.9 mm), and the clinical number (EF) is
-near-identical (6.2 vs 5.6%). (Both rows are each model's deployable output, ED+ES, same eval.)
+near-identical (6.5 vs 5.6%). (Both rows are each model's deployable output, ED+ES, same eval.)
 
 *The gap is the honest price of a deployable, ONNX-exportable, fully-understood model —
 and it names the remaining levers to close it on our clean U-Net while staying exportable

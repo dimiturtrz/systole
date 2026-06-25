@@ -24,21 +24,22 @@ This card follows Mitchell et al. 2019; the failure-mode and limitation sections
   non-cine sequences, or other anatomy.
 
 ## Training data
-Pooled multi-source "data cloud" (`data/store.py`), **564 labelled subjects** (451 train / 113 val):
-- **M&M-2** (Siemens / Philips / GE, 1.5T+3T) + **M&Ms-1 excluding Canon** (Siemens / Philips / GE).
-- ACDC and the Canon vendor are **held out entirely** (never in train/val).
+Pooled multi-source "data cloud" (`data/store.py`), **495 labelled subjects** (Siemens+Philips only):
+- **M&M-2** (Siemens / Philips, 1.5T+3T) + **M&Ms-1** (Siemens / Philips) — GE excluded from train.
+- ACDC = val (centre/protocol shift, early stopping + calibration); Canon+GE = **test (held out entirely)**.
 - Splits are our own (a polars query, `data/splits.py`) — challenge splits are not inherited.
 - Label conventions remapped to canonical per dataset (verified geometrically); M&Ms-1 withheld-GT
   cases (zero-filled masks) are flagged and excluded.
 
-## Evaluation — two-axis generalization split
-One model, held out along two independent shift axes (DataCfg criteria: `test_datasets=('acdc',)`,
-`test_vendors=('Canon',)`):
+## Evaluation — generalization split
+One model, one declarative split rule (DataCfg criteria: `test_datasets=('acdc',)`,
+`test_vendors=('Canon','GE')`):
 
-| held-out axis | n | what it isolates |
+| split role | n | what it isolates |
 |---|---|---|
-| **ACDC** | 150 | centre / protocol shift (single-vendor Siemens, fully independent) |
-| **Canon** (M&Ms-1) | 9 | **unseen vendor** (a scanner brand never in training) |
+| **ACDC** — val | 150 | centre / protocol shift (single-vendor Siemens; early stopping + calibration) |
+| **Canon** — test | 9 | **unseen vendor** (never in training; M&Ms-1 withholds most GT) |
+| **GE** — test | 69 | **unseen vendor** (never in training; independent of Canon) |
 
 ## Performance
 
@@ -47,22 +48,25 @@ One model, held out along two independent shift axes (DataCfg criteria: `test_da
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 2.1 | 0.59 |
+| LV cavity | 0.92 | 2.1 | 0.58 |
 | LV myocardium | 0.86 | 2.1 | 0.56 |
-| RV cavity | 0.88 | 5.8 | 0.80 |
+| RV cavity | 0.88 | 7.0 | 0.90 |
 | **mean** | **0.88** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit.</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase, so this is the honest read
-(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 6.2%**, bias −5.7%, 95% LoA [−18, +7] (n=150).
+(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 6.5%**, bias −5.6%, 95% LoA [−20.1, +8.9] (n=150).
 
-**Canon-9 (unseen vendor):** mean Dice **0.84**. EF MAE is **not reported as a stable number** — at
-n=9 it swings (7.2% under a M&M-2-only model, 11.1% here) while Dice holds ~0.84. Canon is the honest
-*Dice* signal for unseen-vendor robustness; its EF is noise (the M&Ms-1 challenge withholds GT for
-most of its Testing split — 320 on disk, 213 labelled, Canon 50 → 9 usable).
+**Unseen-vendor test (Canon n=9 + GE n=69 = 78 total):** both return mean Dice **0.839** and EF MAE
+**~11–12%** (Canon 11.9%, bias −11.9%; GE 11.3%, bias −10.9%) — independent agreement at n=78 makes
+this a robust unseen-vendor signal. Canon n=9 is thin because M&Ms-1 withholds GT for most of its
+Testing split (320 on disk, 213 labelled, Canon 50 → 9 usable); GE n=69 is the larger leg.
 
 ### Benchmark (nnU-Net, same split)
+> **Provisional:** nnU-Net numbers below are on the **old split** (ACDC as test, 564-subject train).
+> Re-run on the new split (ACDC=val, Canon+GE=test, 495-subject train) is pending.
+
 nnU-Net trained on the **identical generalization split** (Dataset029_BATTERY, 50 epochs / 1 fold —
 a floor), scored by the same eval layer:
 
@@ -70,13 +74,13 @@ a floor), scored by the same eval layer:
 | ACDC-150 | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
 | mean Dice | 0.912 | 0.884 |
-| EF MAE / bias | 5.6% / -4.2% | 6.2% / -5.7% |
+| EF MAE / bias | 5.6% / -4.2% | 6.5% / -5.6% |
 | Canon-9 Dice | 0.876 | 0.84 |
 <!-- /results:cardcompare -->
 
 Both numbers pool ED+ES. nnU-Net leads by **~2.8 Dice points** on ACDC (0.912 vs 0.884) and on
 unseen-vendor Canon (0.876 vs 0.84) — *even at its floor setting* (50ep/1fold; the full 1000ep ×
-5-fold + TTA ceiling, `cardiac-seg-yp3`, would pull further ahead). **EF is roughly level** (6.2% vs
+5-fold + TTA ceiling, `cardiac-seg-yp3`, would pull further ahead). **EF is roughly level** (6.5% vs
 5.6%). cardioseg's boundary is tighter on LV-cav (HD95 2.1 vs 3.3 mm) and myo (2.1 vs 2.9) — from
 largest-CC + TTA, which this nnU-Net run lacked. Net: a competent deployable model ~2–3 Dice points
 under nnU-Net's floor, EF-comparable, at ~57× fewer parameters.
@@ -102,7 +106,7 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
   zero-shot). So it's reported, not patched. Also **not** corrected by a
   constant offset (size-dependent → would over-correct dilated hearts) and **not** a measurement bug
   (volumes are computed correctly). The honest fix is segmentation-side at ES (`cardiac-seg-7oe`).
-- Unseen-vendor evidence is thin (Canon n=9); Dice is the only readable metric there.
+- Unseen-vendor test is Canon n=9 + GE n=69 (n=78 total). Canon GT is thin (M&Ms-1 withholds most Testing labels); GE n=69 is the larger leg. Both vendors agree at Dice 0.839 / EF MAE ~11–12%.
 - Public-benchmark performance ≠ deployment performance. "Competent on public benchmarks," not clinical.
 
 ## References

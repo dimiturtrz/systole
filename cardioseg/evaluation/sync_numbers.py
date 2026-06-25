@@ -15,8 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 R = json.loads((ROOT / "cardioseg/RESULTS.json").read_text())
-_A = R["flagship"]["acdc"]
-_C = R["flagship"]["canon"]
+_A = R["flagship"]["acdc"]      # val: ACDC (held-out centre / protocol shift)
+_C = R["flagship"]["canon"]     # test: unseen vendor Canon
+_G = R["flagship"]["ge"]        # test: unseen vendor GE
 _NN = R["nnunet"]
 _E = R["efficiency"]
 
@@ -56,9 +57,10 @@ def strata() -> str:
 
 def axis() -> str:
     return "\n".join([
-        "| held-out axis | n | mean Dice | EF MAE |", "|---|---|---|---|",
-        f"| **ACDC** (centre / protocol shift, single-vendor) | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
-        f"| **Canon** (unseen vendor, M&Ms-1) | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% \\* |",
+        "| held-out axis | role | n | mean Dice | EF MAE |", "|---|---|---|---|---|",
+        f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
+        f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% |",
+        f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
     ])
 
 
@@ -87,10 +89,10 @@ def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ (Dice points
 
 
 def headline() -> str:
-    return (f"ACDC-150 mean Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
-            f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]); "
-            f"Canon-9 unseen-vendor **{_C['dice']['mean']:.2f}**; nnU-Net baseline "
-            f"**{_NN['acdc']['dice']['mean']:.3f}** Dice / {_NN['acdc']['ef_mae']}% EF.")
+    return (f"Unseen-vendor (held out: Canon n={_C['n']} + GE n={_G['n']}) mean Dice "
+            f"**{_C['dice']['mean']:.2f}** / **{_G['dice']['mean']:.2f}**, EF MAE {_C['ef_mae']} / {_G['ef_mae']}%; "
+            f"ACDC centre-shift (val, n={_A['n']}) Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
+            f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]).")
 
 
 BLOCKS = {"compare": compare, "acdc": acdc, "strata": strata, "headline": headline,
