@@ -67,7 +67,8 @@ pytest                                        # testpaths = tests/ (unit + integ
 - `cardioview/` — browser viewer (TS+Vite+vtk.js): beating 3D hearts + in-browser ONNX segmentation.
 - `mri-sim/` — TS MRI acquisition visualizer (deprioritized).
 - `baselines/nnunet/` — SOTA reference, quarantined (own env, never a cardioseg dep).
-- `research/` — deep-dives + `diversity_factors.md`; `learning/` — theory writeups. Public docs = README + ROADMAP.
+- `research/` — deep-dives; `learning/` — theory writeups. Public docs = README + ROADMAP. The
+  domain-shift / variance-taxonomy canonical doc lives in `cardioseg/preprocessing/normalization/README.md`.
 - Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `cardioseg/evaluation/sync_numbers.py` fills doc marker blocks.
 
 ## Conventions & Patterns

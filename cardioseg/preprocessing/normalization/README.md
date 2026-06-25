@@ -1,44 +1,109 @@
-# cardioseg/preprocessing/normalization — inter-scanner variance, handled at the right layer
+# cardioseg/preprocessing/normalization — domain shift, handled at the right layer
 
-MRI intensity is **uncalibrated** — unlike CT's Hounsfield units, a cine-MRI pixel value has no
-absolute meaning (it depends on coil gain, recon auto-scaling, sequence weighting). So the same
-tissue reads differently across scanners, and **inter-scanner variance is the core obstacle** to a
-model trained on one set generalizing to another. This package organizes how we attack it.
+The central obstacle to a cardiac-MRI model trained on one set generalizing to another is **domain
+shift**: the train and deployment image distributions differ. MRI makes it acute because intensity is
+**uncalibrated** — unlike CT's Hounsfield units, a cine-MRI pixel value has no absolute meaning (it
+depends on coil gain, recon auto-scaling, sequence weighting), so the same tissue reads differently
+across scanners. This package is how we name that variance and decide what to do with each kind.
 
-## The principle: knowable → correct; unknowable → normalize
+## The ML framing (so the vocabulary is standard)
 
-You don't pick "physical vs statistical" by taste. **If the variance is knowable** (a number we can
-parse, or a field we can estimate from the image) → remove it at its source. **If it's unknowable**
-(no parameter, no anchor) → normalize it statistically (or learn invariance via augmentation). Same
-question, two answers.
+- **Domain shift** (a.k.a. dataset / distribution shift) — the umbrella. Decomposes (Moreno-Torres 2012)
+  into **covariate shift** (P(x) changes, P(y|x) stays — *the scanner/intensity case*: images differ,
+  the anatomy→label relationship doesn't), **label/prior shift** (P(y) changes — disease mix per site),
+  and **concept shift** (P(y|x) changes — e.g. annotation-protocol differences).
+- **Acquisition shift** — the MRI-specific name for scanner/protocol-induced covariate shift; also
+  called **scanner / site / vendor effects** or **batch effects** (term borrowed from genomics).
+- **Domain generalization (DG)** — training to generalize to *unseen* domains (vs *domain adaptation*,
+  which targets a known one). The M&Ms challenge is a multi-vendor DG benchmark; so is our split.
+- Task-irrelevant variance is **nuisance variation**. The whole job: separate signal from nuisance.
 
-Three knowability tiers map 1:1 to the right tool:
+**Three strategy families attack it — and they are the two forces below:**
+| family | what it does | force |
+|---|---|---|
+| **harmonization / normalization / standardization** (ComBat, Nyúl, N4, z-score) | *remove* the nuisance variance | strip |
+| **data augmentation / domain randomization** | *add* variance so the model learns invariance | diversify |
+| **domain adaptation** | adapt to a specific known target | (not our setting — we hold targets out) |
+
+## The principle: knowable → correct; unknowable → normalize/diversify
+
+You don't pick physical-vs-statistical by taste. **If the variance is knowable** (a number we can parse,
+or a field we can estimate from the image) → remove it at its source. **If it's unknowable** (no
+parameter, no anchor) → normalize it statistically, or learn invariance to it via augmentation. Same
+question, two answers. Knowability tiers map 1:1 to the right tool:
 
 | tier | source | tool | reproducible? |
 |---|---|---|---|
 | header | NIfTI affine | read | ✓ deterministic |
 | sidecar | Info.cfg / CSV / folders | **parse** | ✓ deterministic ← *the bulk* |
-| paper | challenge paper | LLM/manual + `verified` flag | sourced, not regenerated |
+| paper | challenge paper | cite + `verified` flag | sourced, not regenerated |
 | image-derived | the pixels | N4 / blood-pool ref / vol-curve | ✓ deterministic |
-| (none) | — | statistical / augmentation / accept | n/a |
+| (none) | — | statistical normalize / augment / accept | n/a |
 
-## The 5 buckets × 2 axes
+## The variance-source taxonomy (5 buckets × 2 forces)
 
-| bucket | knowable → correct/parse | unknowable → normalize |
-|---|---|---|
-| **machine** (between scanners) | spacing (header), vendor/scanner/field/centre (sidecar+paper) | recon scale → z-score / Nyúl |
-| **scan** (between scans) | bias field → N4 (image) | receive gain → z-score |
-| **patient** (between people) | age/sex/BSA (sidecar), heart locate+orient (image) | body habitus → augmentation |
-| **temporal** (within cine) | ED/ES frames (sidecar / vol-curve) | residual motion |
-| **annotation** (between labelers) | label convention (geom verify), papillary/basal rule (paper) | inter-observer noise → **irreducible LoA floor** |
+Each row is a source of variance; the shift-type names which P(·) it moves; the two columns are the
+*knowable→correct* and *unknowable→normalize/diversify* handling.
+
+| bucket | shift type | knowable → correct / parse | unknowable → normalize / diversify |
+|---|---|---|---|
+| **machine** (between scanners) | covariate | spacing (header), vendor/scanner/field/centre (sidecar+paper) | recon scale → z-score / Nyúl; contrast → augment |
+| **scan** (between scans) | covariate | bias field → N4 (image) | receive gain → z-score |
+| **patient** (between people) | covariate + label | age/sex/BSA (sidecar), heart locate+orient (image) | body habitus → augmentation |
+| **temporal** (within cine) | — | ED/ES frames (sidecar / vol-curve) | residual motion → augment |
+| **annotation** (between labelers) | concept | label convention (geom verify), papillary/basal rule (paper) | inter-observer noise → **irreducible LoA floor** |
 
 The bottom-right is the honest endpoint: even two human experts disagree on EF, so our limits of
 agreement **cannot beat the inter-observer floor**. We aim to reach it, not pretend past it.
 
-## Per-dataset coverage — what each ships vs what we fetch
+## The duality: every factor, modeled both directions
 
-Legend: **AUTO** parse shipped file · **WEB** fetch from paper (cited) · **LLM** present but needs
-restructuring · **ABSENT** → image-derived or unknowable fallback.
+The two forces are **duals** — the forward model that *generates* a factor is the inverse of the
+estimator that *removes* it. Write the physics once, run it both ways:
+- bias field: a smooth-field *generator* (augment) vs **N4**, its *estimator* (strip)
+- vendor intensity: histogram *retarget-to-vendor* (augment) vs *match-to-reference* = harmonization (strip)
+
+**Rule — per factor, pick ONE direction.** Stripping *and* augmenting the same axis = adding back what
+you just removed (wasteful, sometimes harmful). Strip when the factor is pure nuisance and reliably
+estimable; diversify when stripping is unreliable or discards signal.
+
+### Factor registry
+
+| factor | physical cause | augment (add) | normalize (strip) | current call | status |
+|---|---|---|---|---|---|
+| per-volume brightness/scale | acquisition gain, windowing | gamma/contrast (have) | z-score per volume (have) | both, crude | ✅ |
+| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **undecided** — A/B strip vs diversify | ⬜ aug side |
+| vendor intensity dist. | T1-weighting, flip angle, recon LUT | random gamma + histogram retarget (T1) | histogram standardization (Nyúl) = harmonization `qfz` | diversify (qfz parked: vendors level in-domain) | ⬜ aug side |
+| noise floor / distribution | magnitude op on complex signal | Rician noise (T1) — we use plain Gaussian | denoise / variance-stabilize | diversify (Rician) | ⬜ |
+| k-space artifacts | corrupted k-space, motion in acq | ghosting, spike (T1) | de-ghost / artifact reject | diversify (rare, hard to strip) | ⬜ |
+| geometry / orientation | pose, FOV, slice prescription | flip/rotate/scale (have) | resample to common grid (have) | both | ✅ |
+| contrast space (whole) | everything above, jointly | SynthSeg label→random-intensity (T2) | — (no cheap canonical contrast) | diversify (contrast-agnostic) | ⬜ T2 |
+| full acquisition physics | sequence TR/TE/flip, tissue T1/T2/PD | CMRsim Bloch sim (T3) | — | diversify (maximalist) | ⬜ T3 |
+
+**Geometry/orientation** is the proof the pattern works — we already do *both* cleanly (resample strips,
+affine aug diversifies). **Bias field** is the highest-value undecided row: build the smooth-field model
+once for T1, get N4 (its inverse) nearly free, A/B the two directions on that single axis.
+
+## Synthetic-data tiers — the *augment* column's roadmap
+
+How much of the picture is generated rises across tiers; anatomy is always real ACDC labels (none
+invents new hearts). Full plan + sim-lib evaluation in
+[`research/deep_dives/2026-06-24_mri-sim-libs-eval.md`](../../../research/deep_dives/2026-06-24_mri-sim-libs-eval.md);
+tracked `bd cardiac-seg-{chm,jp1,bgc,276}`.
+
+```
+real image  ──perturb──>           T1: augmentation     (TorchIO physics transforms)
+real labels ──paint random──>      T2: synth-appearance (SynthSeg pattern)
+real labels ──simulate physics──>  T3: synth-physics    (CMRsim / Bloch)
+```
+- **T1** (`jp1`, recommended first) — bias-field + Rician + k-space + histogram-match into
+  `cardioseg/training/augment.py`. M&Ms challenge credits intensity aug + histogram matching for the
+  vendor gap (Zeng 2021 ≈ 0.905 LV Dice unseen-vendor). Cheapest, highest evidence.
+- **T2** (`bgc`) — SynthSeg-style per-label intensity randomization → a contrast-**agnostic** model.
+- **T3** (`276`) — CMRsim Bloch sim from per-tissue T1/T2/PD; physically grounded, no seg-aug precedent.
+
+## Per-dataset coverage — what each ships vs what we fetch
+Legend: **AUTO** parse shipped file · **WEB** fetch from paper (cited) · **ABSENT** → image-derived / unknowable fallback.
 
 | field | ACDC | M&M-2 | M&Ms-1 |
 |---|---|---|---|
@@ -53,39 +118,31 @@ restructuring · **ABSENT** → image-derived or unknowable fallback.
 | ED/ES | AUTO (Info.cfg) | AUTO (files) | AUTO (csv) |
 | label convention | AUTO (geom) | AUTO (geom) | AUTO (geom) |
 | papillary / basal rule | WEB (shared ✓) | WEB | WEB |
-| official split | AUTO (folders) | LLM (readme→struct) | AUTO (folders) |
+| official split | AUTO (folders) | WEB | AUTO (folders) |
 | intensity scale | ABSENT → z-score | ABSENT | ABSENT |
 | inter-observer | ABSENT → floor | ABSENT | ABSENT |
 
-**Finding (2026-06-20 research):** ACDC / M&Ms-1 / M&Ms-2 **share** the LV-cavity convention
-(papillary + trabeculae included; M&Ms-2 "follows ACDC standards") → the cross-dataset EF bias is
-*not* a label-protocol mismatch; it's domain/intensity. See
-`research/deep_dives/2026-06-20_dataset-acquisition-and-conventions.md`.
+**Finding (2026-06-20 research):** ACDC / M&Ms-1 / M&Ms-2 **share** the LV-cavity convention (papillary
++ trabeculae included; M&Ms-2 "follows ACDC standards") → the cross-dataset EF bias is *not* a
+label-protocol mismatch; it's domain/intensity. See
+`research/deep_dives/2026-06-20_dataset-acquisition-and-conventions.md` and
+`research/deep_dives/2026-06-21_intensity-normalization-and-harmonization.md`.
 
 ## Reproducibility — data in data, source in repo, no artifacts
-
-- **Datasets + their metadata sidecars + extracted reference values** live **out-of-repo**
-  (`D:/data/volumetric/mri/`), per-dataset (`raw/<ds>/meta/`) + cross-dataset (`common/normalization/`,
-  may be empty = "we don't have it" → graceful fallback).
-- **This package = source only** (parsers + transforms). It **commits no data artifacts**: the
-  metadata view is *regenerated* by parsing shipped sidecars (deterministic); anything cached in the
-  repo tree is gitignored. The repo describes *how* (parser + cited sources), the data stays the data.
-- **Provenance** per value: `{value, source, by: auto|llm|human, verified}`. The bulk is `by: auto`
-  (parsed). A small paper-extracted layer is `by: llm/human` with `verified` gating — unverified is
-  visibly unverified. Absence → per-scan fallback, never a silent default.
-- **Splits**: honor each dataset's *official* split where possible (comparability with published
-  numbers); deviations documented.
+- Datasets + sidecars + extracted reference values live **out-of-repo** (`<data>/raw/<ds>/meta/`).
+- **This package = source only** (parsers + transforms); it commits no data artifacts. The metadata
+  view is *regenerated* by parsing shipped sidecars (deterministic); cached files are gitignored.
+- **Provenance** per value: `{value, source, by: auto|paper, verified}` — the bulk is `by: auto`
+  (parsed); the paper layer is `verified`-gated, unverified stays visibly unverified. Absence →
+  per-scan fallback, never a silent default.
 
 ## Status / contents
-- **AUTO parser** ✅ — `data/mri/{acdc,mnm2,mnms1}.py` `meta()` parses the shipped sidecars
-  (Info.cfg / CSVs) → acquisition + demographics with per-field `_source`.
-- **Paper layer** ✅ — `sources.yaml`: the cited WEB/paper-tier constants (ACDC vendor/field, …),
-  each `{value, source, verified}`; unverified fields stay visibly unverified.
-- **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`
-  (`{value, source, by, verified}` per field; regenerable, out-of-repo) + `load_meta()` with
+- **AUTO parser** ✅ — `data/mri/{acdc,mnm2,mnms1}.py` `meta()` parses sidecars → `_source` per field.
+- **Paper layer** ✅ — `sources.yaml`: cited WEB/paper constants, each `{value, source, verified}`.
+- **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`; `load_meta()` with
   per-scan fallback. `python -m cardioseg.preprocessing.normalization.persist`.
-- **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of the
-  paywalled/register-gated sources to fetch manually.
-- **N4** ✅ — `n4.py` (bias correction). **Nyúl standardization** ⬜ — spec.
+- **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of gated sources.
+- **N4** ✅ — `n4.py` (bias correction; params in `DataCfg.n4_params`, recorded in config.json).
+- **Nyúl histogram standardization** ⬜ · **synth-aug T1/T2/T3** ⬜ (see tiers above).
 
-Referenced from the main [README](../../README.md#data-normalization).
+Referenced from the main [README](../../../README.md#domain-shift--normalization).

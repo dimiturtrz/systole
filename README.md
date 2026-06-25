@@ -160,22 +160,34 @@ python -m cardioseg.training.export_onnx --run runs/gen                  # needs
 A run is reproducible from its `config.json` (the split criteria + all hyperparams are serialized).
 nnU-Net baseline is separate: `pip install -e .[nnunet]`, then `baselines/nnunet/` (convert → `run_battery.sh`).
 
-## Data normalization
-MRI intensity is uncalibrated (no Hounsfield-like anchor), so inter-scanner variance is the core
-problem. We organize it by **5 source buckets × 2 axes**: *knowable* variance is removed at the
-right layer (parse it / correct it physically); *unknowable* variance is normalized statistically.
+## Domain shift & normalization
+The reason a model trained on one scanner fails on another is **domain shift** — specifically
+**covariate shift** (a.k.a. **acquisition shift** / scanner *batch effects*): the images change, the
+anatomy→label relationship doesn't. MRI intensity is uncalibrated (no Hounsfield-like anchor), so this
+is *the* core obstacle to cross-vendor generalization. Beating it is **domain generalization** (DG) —
+generalizing to vendors held out of training (the M&Ms challenge setting, and ours).
 
-| bucket | knowable → correct/parse | unknowable → normalize |
-|---|---|---|
-| **machine** | spacing, vendor, field, scanner, centre | recon scale → z-score / Nyúl |
-| **scan** | bias field → N4 | receive gain → z-score |
-| **patient** | age/sex/BSA, heart locate + orient | body shape → augmentation |
-| **temporal** | ED/ES frames | residual motion |
-| **annotation** | label convention, papillary rule | inter-observer → irreducible floor |
+Two opposing forces handle it, and they're **duals** (same physics model, run forward or inverse):
+- **harmonize / normalize** (strip the nuisance variance) — z-score, N4 bias correction, Nyúl;
+- **augment / domain-randomize** (add variance so the model learns invariance).
 
-Most knowable fields are *parsed from what the datasets ship* (Info.cfg / CSV / folders) — reproducible,
-deterministic. A few come from the dataset papers (cited, verified-flagged). Full schema, per-dataset
-coverage, and the build pipeline → **[cardioseg/preprocessing/normalization/](cardioseg/preprocessing/normalization/)**.
+We pick by **knowability**: *knowable* variance (a parsable number or an estimable field) is removed at
+its source; *unknowable* variance is normalized statistically or learned around via augmentation. The
+variance is mapped as **5 source buckets × 2 forces**:
+
+| bucket | shift | knowable → correct / parse | unknowable → normalize / diversify |
+|---|---|---|---|
+| **machine** | covariate | spacing, vendor, field, scanner, centre | recon scale → z-score / Nyúl; contrast → augment |
+| **scan** | covariate | bias field → N4 | receive gain → z-score |
+| **patient** | covariate+label | age/sex/BSA, heart locate + orient | body habitus → augmentation |
+| **temporal** | — | ED/ES frames | residual motion → augment |
+| **annotation** | concept | label convention, papillary rule | inter-observer → **irreducible LoA floor** |
+
+Knowable fields are *parsed from what the datasets ship* (Info.cfg / CSV / folders) — deterministic,
+reproducible; a few are paper-cited (verified-flagged). The augment column has a 3-tier synthetic-data
+roadmap (perturb real → SynthSeg label-paint → Bloch sim). **Full taxonomy, the factor-by-factor
+strip-vs-diversify registry, per-dataset coverage, and the build pipeline →
+[cardioseg/preprocessing/normalization/](cardioseg/preprocessing/normalization/README.md).**
 
 ## Tests
 ```bash
