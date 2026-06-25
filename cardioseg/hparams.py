@@ -71,6 +71,15 @@ class LossCfg(BaseModel):
     hd_ramp: int = Field(5, ge=1)
 
 
+class N4Cfg(BaseModel):
+    """N4 bias-field correction params (the SimpleITK path, preprocessing/normalization/n4.py).
+    Serialized inside DataCfg so a run with n4=True fully records what it ran (+ keys its cache)."""
+    model_config = _VALIDATE
+    shrink: int = Field(4, ge=1)               # downsample factor for the field fit (speed)
+    iters: tuple[int, ...] = (50, 50, 50)      # per-level fitting iterations
+    fwhm: float = Field(0.15, gt=0)            # bias-field FWHM
+
+
 class DataCfg(BaseModel):
     """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
     everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor); train/val =
@@ -82,6 +91,7 @@ class DataCfg(BaseModel):
     test_vendors: tuple[str, ...] = ("Canon",)
     inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
+    n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
     val_frac: float = Field(0.2, gt=0, lt=1)
     size: int = Field(DEFAULT_SIZE, ge=32)
 

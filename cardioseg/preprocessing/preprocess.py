@@ -51,14 +51,14 @@ def resample_inplane(
 
 def preprocess_case(
     patient_dir: str | Path, target_inplane: float = TARGET_INPLANE,
-    loader=load_ed_es, n4: bool = False,
+    loader=load_ed_es, n4: bool = False, n4_params=None,
 ) -> dict:
     """Load + resample + (N4) + z-score one subject's ED/ES. PURE (no disk I/O).
 
     Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.
     `loader` is the dataset adapter's load_ed_es (labels already canonical). `n4` runs N4 bias-field
-    correction (resample -> N4 -> z-score), physical + per-scan. The store (data/store.py) writes
-    the result to disk; this just computes it.
+    correction (resample -> N4 -> z-score) with `n4_params` (an N4Cfg; defaults if None), physical +
+    per-scan. The store (data/store.py) writes the result to disk; this just computes it.
     """
     patient_dir = Path(patient_dir)
     d = loader(patient_dir)
@@ -72,7 +72,9 @@ def preprocess_case(
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
             from cardioseg.preprocessing.normalization.n4 import n4_bias
-            img = n4_bias(img, isp)
+            from cardioseg.hparams import N4Cfg
+            p = n4_params or N4Cfg()
+            img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
         out[f"{tag.lower()}_img"] = zscore(img)
         out[f"{tag.lower()}_gt"] = gt
         new_sp = isp

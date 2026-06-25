@@ -26,6 +26,7 @@ import numpy as np
 import polars as pl
 
 from cardioseg.config import data_root
+from cardioseg.hparams import N4Cfg
 from cardioseg.data.mri.pathology import harmonize
 from cardioseg.data.mri.registry import get_adapter
 from cardioseg.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
@@ -41,12 +42,19 @@ META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "pathology
                "field_T", "centre", "age", "age_band", "sex", "height", "weight", "bsa", "labelled"]
 
 
-def param_key(inplane: float = TARGET_INPLANE, n4: bool = False) -> str:
-    return f"inplane{str(inplane).replace('.', 'p')}" + ("_n4" if n4 else "")
+def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None) -> str:
+    """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
+    too, so different N4 settings never collide on one cache dir."""
+    key = f"inplane{str(inplane).replace('.', 'p')}"
+    if n4:
+        p = n4_params or N4Cfg()
+        key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
+    return key
 
 
-def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False) -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4)
+def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
+                n4_params: N4Cfg | None = None) -> Path:
+    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params)
 
 
 def _bsa(height, weight):
@@ -99,13 +107,13 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
 
 
 def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
-          workers: int | None = None, rebuild: bool = False) -> Path:
+          n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False) -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
 
     Process-if-missing: skips subjects already written; re-emits meta.csv each call. Parallel
     (ThreadPool — resample/N4 release the GIL). Returns the processed dir.
     """
-    out = dataset_dir(name, inplane, n4)
+    out = dataset_dir(name, inplane, n4, n4_params)
     data_dir = out / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     adapter = get_adapter(name)
@@ -113,7 +121,8 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
     todo = cases if rebuild else [c for c in cases if not (data_dir / f"{c.name}.npz").exists()]
 
     def _one(case: Path):
-        arrays = preprocess_case(case, target_inplane=inplane, loader=adapter.load_ed_es, n4=n4)
+        arrays = preprocess_case(case, target_inplane=inplane, loader=adapter.load_ed_es,
+                                 n4=n4, n4_params=n4_params)
         npz = {k: v for k, v in arrays.items() if k != "patient"}
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
@@ -148,15 +157,15 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
 
 def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
-         n4: bool = False, workers: int | None = None) -> pl.DataFrame:
+         n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None) -> pl.DataFrame:
     """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
     (the data cloud, for these params). Adds an absolute `path` column to each npz. names=None -> all."""
     names = SOURCE_DATASETS if names is None else ([names] if isinstance(names, str) else list(names))
     frames = []
     for name in names:
-        out = dataset_dir(name, inplane, n4)
+        out = dataset_dir(name, inplane, n4, n4_params)
         if not (out / "meta.csv").exists():
-            build(name, inplane, n4, workers=workers)
+            build(name, inplane, n4, n4_params=n4_params, workers=workers)
         df = pl.read_csv(out / "meta.csv", infer_schema_length=10000)
         df = df.with_columns((pl.lit(str(out / "data")) + "/" + pl.col("file")).alias("path"))
         frames.append(df)

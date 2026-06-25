@@ -65,3 +65,17 @@ def test_override_optional_none_literal():
 def test_override_optional_string_preserved():
     cfg = apply_overrides(TrainCfg(), ["device=cuda"])
     assert cfg.device == "cuda"                          # real value still passes through
+
+
+# --- N4Cfg: nested in DataCfg, recorded in config.json, bounds enforced ---
+def test_n4cfg_in_config_roundtrip(tmp_path):
+    cfg = TrainCfg()
+    assert "n4_params" in cfg.model_dump()["data"]       # recorded even when n4=False
+    p = tmp_path / "c.json"; to_json(cfg, p)
+    assert from_json(p) == cfg
+
+
+def test_n4cfg_reject_bad_shrink():
+    from cardioseg.hparams import N4Cfg
+    with pytest.raises(ValidationError):
+        N4Cfg(shrink=0)                                  # shrink >= 1
