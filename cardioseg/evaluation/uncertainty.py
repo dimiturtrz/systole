@@ -17,30 +17,17 @@ from pathlib import Path
 
 import numpy as np
 
-_FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA already averages over
-
 
 def tta_uncertainty(model, vol_img, size, device):
     """Return (pred uint8, entropy[0,1], confidence) each [D,size,size] for one z-scored volume.
-    Mean softmax over the 4 flips; entropy of that mean (normalized by log C); confidence = max prob."""
-    import torch
-    from ..training.dataset import fit_square
+    Reuses the shared predict_volume_probs (mean softmax over the 4 TTA flips); entropy of that
+    mean (normalized by log C); confidence = max prob."""
+    from .validate import predict_volume_probs
 
-    model.eval()
-    xs = np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
-    with torch.no_grad():
-        x = torch.from_numpy(xs)[:, None].to(device)          # [D,1,H,W]
-        acc = None
-        for dims in _FLIPS:
-            v = torch.flip(x, dims) if dims else x
-            p = torch.softmax(model(v), dim=1)
-            p = torch.flip(p, dims) if dims else p
-            acc = p if acc is None else acc + p
-        mean = acc / len(_FLIPS)                                # [D,C,H,W] mean softmax
-        pred = mean.argmax(1).to(torch.uint8).cpu().numpy()
-        ent = -(mean * (mean + 1e-12).log()).sum(1)            # predictive entropy
-        ent = (ent / np.log(mean.shape[1])).cpu().numpy()      # normalize to [0,1]
-        conf = mean.max(1).values.cpu().numpy()                # confidence = max class prob
+    pred, mean = predict_volume_probs(model, vol_img, size, device)  # [D,C,H,W] mean softmax on device
+    ent = -(mean * (mean + 1e-12).log()).sum(1)            # predictive entropy
+    ent = (ent / np.log(mean.shape[1])).cpu().numpy()      # normalize to [0,1]
+    conf = mean.max(1).values.cpu().numpy()                # confidence = max class prob
     return pred, ent, conf
 
 

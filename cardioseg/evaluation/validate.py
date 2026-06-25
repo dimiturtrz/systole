@@ -16,37 +16,51 @@ from cardioseg.evaluation.evaluate import CLASSES
 CLASS_NAMES = {k: name for k, (name, _) in CLASSES.items()}   # single source: evaluate.CLASSES
 
 
+_FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
+
+
+def _stack_slices(vol_img: Volume, size: int) -> np.ndarray:
+    """Square-fit every slice of a [D, H, W] volume -> [D, size, size] float array (model input grid)."""
+    from ..training.dataset import fit_square
+    return np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
+
+
+def predict_volume_probs(model, vol_img: Volume, size: int, device: str):
+    """Mean-softmax over the 4 TTA flips for one z-scored [D, H, W] volume — the shared inference
+    primitive. Returns (pred uint8 [D, size, size], mean_softmax tensor [D, C, size, size] on `device`).
+    All D slices go through in one batched forward (~D× fewer kernel launches; slices are independent).
+    Uncertainty (entropy/confidence) is computed by callers from the returned mean_softmax."""
+    import torch
+
+    model.eval()
+    xs = _stack_slices(vol_img, size)
+    with torch.no_grad():
+        x = torch.from_numpy(xs)[:, None].to(device)          # [D, 1, size, size]
+        acc = None
+        for dims in _FLIPS:
+            p = torch.softmax(model(torch.flip(x, dims) if dims else x), dim=1)
+            p = torch.flip(p, dims) if dims else p            # un-flip back before averaging
+            acc = p if acc is None else acc + p
+        mean = acc / len(_FLIPS)                               # [D, C, size, size] mean softmax
+        pred = mean.argmax(1).to(torch.uint8).cpu().numpy()
+    return pred, mean
+
+
 def predict_volume(model, vol_img: Volume, size: int, device: str, tta: bool = False) -> Volume:
     """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
 
-    All D slices go through the model in ONE batched forward ([D, 1, size, size]) rather than a
-    per-slice loop — ~D× fewer kernel launches, identical argmax output (the slices are independent).
-
-    `tta` averages predictions over the 4 in-plane flips (test-time augmentation).
-    """
+    `tta=True` averages over the 4 in-plane flips (delegates to predict_volume_probs); `tta=False`
+    is a single batched forward. argmax of the flip-sum == argmax of the mean, so results match."""
     import torch
-    from ..training.dataset import fit_square
 
+    if tta:
+        pred, _ = predict_volume_probs(model, vol_img, size, device)
+        return pred
     model.eval()
-    xs = np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
+    xs = _stack_slices(vol_img, size)
     with torch.no_grad():
         x = torch.from_numpy(xs)[:, None].to(device)          # [D, 1, size, size]
-        logits = _tta_logits(model, x) if tta else model(x)   # [D, C, size, size]
-        return logits.argmax(1).cpu().numpy().astype(np.uint8)  # [D, size, size]
-
-
-def _tta_logits(model, x):
-    """Average softmax over the 4 in-plane flips (identity, H, W, HW), un-flipping each
-    output back before averaging. argmax of the sum == argmax of the mean."""
-    import torch
-
-    acc = None
-    for dims in ([], [2], [3], [2, 3]):
-        v = torch.flip(x, dims) if dims else x
-        out = torch.softmax(model(v), dim=1)
-        out = torch.flip(out, dims) if dims else out
-        acc = out if acc is None else acc + out
-    return acc
+        return model(x).argmax(1).cpu().numpy().astype(np.uint8)
 
 
 def validate(
