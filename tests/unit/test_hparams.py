@@ -54,3 +54,14 @@ def test_override_valid_scalar_and_tuple():
 def test_override_out_of_bounds_rejected():
     with pytest.raises(ValidationError):
         apply_overrides(TrainCfg(), ["aug.gamma_p=5"])   # validate_assignment fires
+
+
+# --- _coerce on Optional[str] fields (currently-None): "none"-literal -> None, else string ---
+def test_override_optional_none_literal():
+    cfg = apply_overrides(TrainCfg(), ["device=None"])
+    assert cfg.device is None                            # not the string "None"
+
+
+def test_override_optional_string_preserved():
+    cfg = apply_overrides(TrainCfg(), ["device=cuda"])
+    assert cfg.device == "cuda"                          # real value still passes through
