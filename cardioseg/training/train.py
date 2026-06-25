@@ -42,7 +42,7 @@ def train_seg(cfg: TrainCfg):
     from torch.utils.data import DataLoader
     from ..evaluation.losses import build_loss
     from ..evaluation.validate import validate, summarize
-    from .model import build_unet
+    from .model import build_unet, resolve_device
     from .dataset import datasets
     from .augment import augment_batch
     from ..data import store, splits
@@ -56,7 +56,7 @@ def train_seg(cfg: TrainCfg):
 
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)                    # augmentation uses global np.random
-    device = cfg.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(cfg.device)
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
     log.info("device=%s torch=%s seed=%s | held out: datasets=%s vendors=%s", device,
              torch.__version__, cfg.seed, list(d.test_datasets), list(d.test_vendors))

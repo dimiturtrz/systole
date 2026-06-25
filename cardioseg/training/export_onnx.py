@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from cardioseg.config import FLAGSHIP_RUN
-from cardioseg.training.model import build_unet
+from cardioseg.training.model import load_run
 from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store
 
@@ -24,10 +24,8 @@ PARITY_MIN = 99.0  # % argmax agreement required to ship
 
 
 def load_model(run: Path):
-    model = build_unet()
-    model.load_state_dict(torch.load(run / "model.pth", map_location="cpu"))
-    model.eval()
-    return model
+    """Load run weights on CPU for export — architecture from the run's saved config.json."""
+    return load_run(run, "cpu")[0]
 
 
 def parity(model, onnx_path: Path, npz_path) -> float:

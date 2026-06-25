@@ -22,10 +22,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
-import torch
 from scipy.stats import gaussian_kde
 
-from cardioseg.training.model import build_unet
+from cardioseg.training.model import load_run, resolve_device
 from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store, splits
 from cardioseg.evaluation.validate import predict_volume
@@ -42,9 +41,7 @@ def collect(run: Path, device: str, meta_rows):
     `meta_rows` = iterable of meta dicts (e.g. polars df.iter_rows(named=True)) carrying `path`
     (the consolidated npz) + vendor/pathology/field_T columns.
     """
-    model = build_unet().to(device)
-    model.load_state_dict(torch.load(run / "model.pth", map_location=device))
-    model.eval()
+    model, _, _ = load_run(run, device)
 
     rows = []
     for r in meta_rows:
@@ -240,7 +237,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     run = Path(a.run)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = resolve_device()
 
     # eval set = a criteria filter over the consolidated store (no named splits)
     if a.eval == "canon":

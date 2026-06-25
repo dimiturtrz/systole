@@ -46,13 +46,11 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
 
 
 def load_model(weights: str, device):
-    """Build the 2D U-Net and load trained weights (matches training: spatial_dims=2, 4 classes)."""
-    import torch
-    from cardioseg.training.model import build_unet
+    """Load the trained U-Net for a run (architecture from the run's config.json, so it can't
+    mismatch a default). `weights` is the run's model.pth; its parent dir is the run."""
+    from cardioseg.training.model import load_run
 
-    model = build_unet().to(device)
-    model.load_state_dict(torch.load(weights, map_location=device))
-    model.eval()
+    model, _, _ = load_run(Path(weights).parent, device)
     return model
 
 
