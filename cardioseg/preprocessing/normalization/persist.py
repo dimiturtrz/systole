@@ -5,8 +5,8 @@ with the paper-cited overlay (sources.yaml), tagging each field {value, source, 
 Reproducible by design: re-running regenerates the bulk from the sidecars deterministically; only the
 small paper-cited layer is hand-curated (and visibly flagged verified / unverified).
 
-    python -m cardioseg.normalization.persist --dataset acdc
-    python -m cardioseg.normalization.persist            # all
+    python -m cardioseg.preprocessing.normalization.persist --dataset acdc
+    python -m cardioseg.preprocessing.normalization.persist            # all
 """
 import argparse
 from pathlib import Path

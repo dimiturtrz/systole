@@ -1,4 +1,4 @@
-# cardioseg/normalization — inter-scanner variance, handled at the right layer
+# cardioseg/preprocessing/normalization — inter-scanner variance, handled at the right layer
 
 MRI intensity is **uncalibrated** — unlike CT's Hounsfield units, a cine-MRI pixel value has no
 absolute meaning (it depends on coil gain, recon auto-scaling, sequence weighting). So the same
@@ -83,7 +83,7 @@ restructuring · **ABSENT** → image-derived or unknowable fallback.
   each `{value, source, verified}`; unverified fields stay visibly unverified.
 - **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`
   (`{value, source, by, verified}` per field; regenerable, out-of-repo) + `load_meta()` with
-  per-scan fallback. `python -m cardioseg.normalization.persist`.
+  per-scan fallback. `python -m cardioseg.preprocessing.normalization.persist`.
 - **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of the
   paywalled/register-gated sources to fetch manually.
 - **N4** ✅ — `n4.py` (bias correction). **Nyúl standardization** ⬜ — spec.

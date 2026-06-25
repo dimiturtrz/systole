@@ -175,7 +175,7 @@ right layer (parse it / correct it physically); *unknowable* variance is normali
 
 Most knowable fields are *parsed from what the datasets ship* (Info.cfg / CSV / folders) — reproducible,
 deterministic. A few come from the dataset papers (cited, verified-flagged). Full schema, per-dataset
-coverage, and the build pipeline → **[cardioseg/normalization/](cardioseg/normalization/)**.
+coverage, and the build pipeline → **[cardioseg/preprocessing/normalization/](cardioseg/preprocessing/normalization/)**.
 
 ## Tests
 ```bash

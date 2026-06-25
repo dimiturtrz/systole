@@ -5,7 +5,7 @@ Reads runs/<run>/{config.json, metrics.json} and renders runs/<run>/MODEL_CARD.m
 plus standard templated narrative (intended-use, limitations). Called automatically at training end
 (cardioseg.training.train) and re-runnable:
 
-    python -m cardioseg.modelcard --run runs/gen
+    python -m cardioseg.evaluation.modelcard --run runs/gen
 
 The curated repo card (cardioseg/MODEL_CARD.md) keeps the deeper analysis; this is the factual,
 always-in-sync per-run card.

@@ -70,7 +70,7 @@ def preprocess_case(
         img, isp = resample_inplane(d[tag]["img"], sp, target_inplane, is_mask=False)
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
-            from cardioseg.normalization.n4 import n4_bias
+            from cardioseg.preprocessing.normalization.n4 import n4_bias
             img = n4_bias(img, isp)
         out[f"{tag.lower()}_img"] = zscore(img)
         out[f"{tag.lower()}_gt"] = gt

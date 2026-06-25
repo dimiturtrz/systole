@@ -3,7 +3,7 @@
 **Date**: 2026-06-21
 **Status**: grounded (web-cited; reasoning is ours)
 **Why**: decide what to build for `qfz` (N4 / Nyúl) and how hard to lean on it. Companion to the
-design in [`cardioseg/normalization/README.md`](../../cardioseg/normalization/README.md) — that's
+design in [`cardioseg/preprocessing/normalization/README.md`](../../cardioseg/preprocessing/normalization/README.md) — that's
 the *architecture*; this is the *evidence + the honest "is it worth it" call*.
 
 ## TL;DR

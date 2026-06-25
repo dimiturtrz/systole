@@ -40,7 +40,7 @@ def train_seg(cfg: TrainCfg):
     import numpy as np
     import torch
     from torch.utils.data import DataLoader
-    from ..evaluation.losses import build_loss
+    from .losses import build_loss
     from ..evaluation.validate import validate, summarize
     from .model import build_unet, resolve_device
     from .dataset import datasets
@@ -146,7 +146,7 @@ def train_seg(cfg: TrainCfg):
     # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a
     # hiccup logs and moves on, never fails a finished training run.
     try:
-        from ..modelcard import generate
+        from ..evaluation.modelcard import generate
         generate(out)
         log.info("wrote %s/MODEL_CARD.md", out)
     except Exception as e:
