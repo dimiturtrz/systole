@@ -16,7 +16,9 @@ import argparse
 import json
 from pathlib import Path
 
-_ORDER = ("LV-cav", "LV-myo", "RV")
+from cardioseg.labels import CLASS_NAMES
+
+_ORDER = tuple(reversed(CLASS_NAMES))  # display order: LV-cav, LV-myo, RV
 
 
 def _perf_table(r: dict) -> str:

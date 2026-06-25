@@ -155,9 +155,9 @@ def main():
 
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
-    from matplotlib.colors import ListedColormap
+    from ..labels import overlay_cmap
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
-    cmap = ListedColormap([(0, 0, 0, 0), (0.36, 0.55, 0.94, .5), (1, .79, .36, .5), (.94, .33, .33, .5)])
+    cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
     ax[0].imshow(img, cmap="gray"); ax[0].set_title(f"{name} ED  z={z}")
     ax[1].imshow(img, cmap="gray"); ax[1].imshow(pred, cmap=cmap, vmin=0, vmax=3, interpolation="nearest"); ax[1].set_title("prediction")

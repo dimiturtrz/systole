@@ -10,6 +10,7 @@ cardioseg/types.py for the convention.
 import numpy as np
 
 from cardioseg.types import Mask, Spacing
+from cardioseg.labels import LV_CAV
 
 
 def voxel_volume_ml(spacing: Spacing) -> float:
@@ -23,7 +24,7 @@ def label_volume_ml(mask: Mask, label: int, spacing: Spacing) -> float:
 
 
 def ejection_fraction(
-    ed_mask: Mask, es_mask: Mask, spacing: Spacing, lv_label: int = 3
+    ed_mask: Mask, es_mask: Mask, spacing: Spacing, lv_label: int = LV_CAV
 ) -> tuple[float, float, float]:
     """EF = (EDV - ESV) / EDV in percent, from LV blood-pool volumes (mL).
 

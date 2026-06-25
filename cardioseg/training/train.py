@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from ..hparams import TrainCfg
+from ..labels import FOREGROUND
 
 
 def _val_dice(model, val_dl, device) -> float:
@@ -20,18 +21,18 @@ def _val_dice(model, val_dl, device) -> float:
     import torch
     import numpy as np
 
-    inter = {c: 0.0 for c in (1, 2, 3)}
-    denom = {c: 0.0 for c in (1, 2, 3)}
+    inter = {c: 0.0 for c in FOREGROUND}
+    denom = {c: 0.0 for c in FOREGROUND}
     model.eval()
     with torch.no_grad():
         for x, y in val_dl:
             x, y = x.to(device), y.to(device)
             pred = model(x).argmax(1)
-            for c in (1, 2, 3):
+            for c in FOREGROUND:
                 p, g = pred == c, y == c
                 inter[c] += 2.0 * (p & g).sum().item()
                 denom[c] += (p.sum() + g.sum()).item()
-    return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in (1, 2, 3)]))
+    return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
 
 def train_seg(cfg: TrainCfg):

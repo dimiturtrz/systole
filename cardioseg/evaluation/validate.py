@@ -93,8 +93,8 @@ def validate(
                     m = surface_metrics(sd)
                     surf[cl]["hd95"].append(m["hd95"]); surf[cl]["assd"].append(m["assd"])
         if "ED" in vols and "ES" in vols:
-            ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing, lv_label=3)
-            ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing, lv_label=3)
+            ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
+            ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
             ef_rows.append(dict(patient=Path(npz_path).stem, group=c.get("group"),
                                 ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
 

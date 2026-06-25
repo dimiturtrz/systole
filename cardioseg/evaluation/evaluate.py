@@ -9,9 +9,7 @@ shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 import numpy as np
 
 from cardioseg.types import Mask, Spacing
-
-# Canonical foreground classes: label -> (name, plot color). Single source for validate + distribution.
-CLASSES = {1: ("RV", "#5b8def"), 2: ("LV-myo", "#ffca5b"), 3: ("LV-cav", "#ef5350")}
+from cardioseg.labels import CLASSES, FOREGROUND  # re-exported here for back-compat callers
 
 try:
     from scipy.ndimage import distance_transform_edt, binary_erosion
@@ -28,7 +26,7 @@ def dice(pred: Mask, gt: Mask, label: int) -> float:
     return 2.0 * np.logical_and(p, g).sum() / denom
 
 
-def dice_all(pred: Mask, gt: Mask, labels: tuple[int, ...] = (1, 2, 3)) -> dict[int, float]:
+def dice_all(pred: Mask, gt: Mask, labels: tuple[int, ...] = FOREGROUND) -> dict[int, float]:
     """Per-label Dice -> {label: dice}."""
     return {int(l): dice(pred, gt, l) for l in labels}
 

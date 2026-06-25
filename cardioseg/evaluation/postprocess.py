@@ -9,9 +9,10 @@ import numpy as np
 from scipy.ndimage import label as _cc_label
 
 from cardioseg.types import Mask
+from cardioseg.labels import FOREGROUND
 
 
-def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = (1, 2, 3)) -> Mask:
+def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = FOREGROUND) -> Mask:
     """Keep only the largest 3D connected component of each foreground class.
 
     mask: [D, H, W] integer label map (classes disjoint, as from argmax). Returns a cleaned

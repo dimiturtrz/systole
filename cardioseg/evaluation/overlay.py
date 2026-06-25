@@ -50,9 +50,9 @@ def _case(model, path, size, device):
     pred_es = largest_cc_per_class(predict_volume(model, c["es_img"], size, device, tta=True))
     gt_ed = np.stack([fit_square(s, size, 0) for s in c["ed_gt"]])
     img_ed = np.stack([fit_square(s, size, 0.0) for s in c["ed_img"]])
-    ef_p, _, _ = ejection_fraction(pred_ed, pred_es, spacing, lv_label=3)
+    ef_p, _, _ = ejection_fraction(pred_ed, pred_es, spacing)
     gt_es = np.stack([fit_square(s, size, 0) for s in c["es_gt"]])
-    ef_g, _, _ = ejection_fraction(gt_ed, gt_es, spacing, lv_label=3)
+    ef_g, _, _ = ejection_fraction(gt_ed, gt_es, spacing)
     z = _mid_slice(gt_ed)
     return dict(group=c.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
                 ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)

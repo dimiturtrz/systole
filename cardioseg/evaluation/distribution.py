@@ -73,8 +73,8 @@ def collect(run: Path, device: str, meta_rows):
             rec["sd"] = {cl: (np.concatenate(sd_acc[cl]) if sd_acc[cl] else np.array([])) for cl in CLASSES}
             rec["dice"] = {cl: float(np.mean(di_acc[cl])) for cl in CLASSES if di_acc[cl]}
         if "ED" in masks and "ES" in masks:
-            rec["ef_gt"] = ejection_fraction(masks["ED"][1], masks["ES"][1], sp, lv_label=3)[0]
-            rec["ef_pred"] = ejection_fraction(masks["ED"][0], masks["ES"][0], sp, lv_label=3)[0]
+            rec["ef_gt"] = ejection_fraction(masks["ED"][1], masks["ES"][1], sp)[0]
+            rec["ef_pred"] = ejection_fraction(masks["ED"][0], masks["ES"][0], sp)[0]
         rows.append(rec)
     return rows
 
