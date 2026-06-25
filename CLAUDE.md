@@ -68,7 +68,7 @@ pytest                                        # testpaths = tests/ (unit + integ
 - `mri-sim/` — TS MRI acquisition visualizer (deprioritized).
 - `baselines/nnunet/` — SOTA reference, quarantined (own env, never a cardioseg dep).
 - `research/` — deep-dives + `diversity_factors.md`; `learning/` — theory writeups. Public docs = README + ROADMAP.
-- Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `scripts/sync_numbers.py` fills doc marker blocks.
+- Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `cardioseg/evaluation/sync_numbers.py` fills doc marker blocks.
 
 ## Conventions & Patterns
 

@@ -129,7 +129,7 @@ vendor) — as one declarative split rule (`data/splits.py`). Heavy aug + early 
 | RV cavity | 0.88 | 5.8 | 0.80 |
 | **mean** | **0.88** | | |
 <!-- /results:acdc -->
-<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`). Published in-distribution ACDC is
+<sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`). Published in-distribution ACDC is
 ~0.91–0.93 mean — context, not like-for-like (different test set; see the split caveat above).</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
@@ -191,7 +191,7 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 | normal (NOR) | 62% | 0.89 | 6.3% | -5.9% |
 | **hypertrophic (HCM)** | 70% | 0.86 | 12.0% | -11.5% |
 <!-- /results:strata -->
-<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`).</sub>
+<sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`).</sub>
 
 **Mechanism (decomposed, not hand-waved — `4yf`):** split EF into its two volumes and the bias
 localizes cleanly. **EDV is accurate** (ACDC pred/gt 1.01 → ED cavity convention matches across

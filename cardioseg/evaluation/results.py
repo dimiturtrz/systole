@@ -1,5 +1,5 @@
 """Emit cardioseg/RESULTS.json — the ONE canonical source of published numbers (flagship ACDC + Canon,
-the nnU-Net baseline, efficiency). `scripts/sync_numbers.py` renders the doc tables/stats from this,
+the nnU-Net baseline, efficiency). `cardioseg/evaluation/sync_numbers.py` renders the doc tables/stats from this,
 so a number lives in a single place and the docs can't drift. Regenerate after any eval:
 
     python -m cardioseg.evaluation.results --run runs/gen

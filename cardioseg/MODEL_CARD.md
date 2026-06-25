@@ -52,7 +52,7 @@ One model, held out along two independent shift axes (DataCfg criteria: `test_da
 | RV cavity | 0.88 | 5.8 | 0.80 |
 | **mean** | **0.88** | | |
 <!-- /results:acdc -->
-<sub>auto-filled from `RESULTS.json` (`scripts/sync_numbers.py`) — do not hand-edit.</sub>
+<sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit.</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase, so this is the honest read
 (ED-only would be ~2 Dice points higher). EF vs GT: **MAE 6.2%**, bias −5.7%, 95% LoA [−18, +7] (n=150).

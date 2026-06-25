@@ -5,7 +5,7 @@ lives in ONE place and the markdown can't drift. Each renderable table sits betw
     ...auto-generated, do not hand-edit...
     <!-- /results:compare -->
 
-Run after regenerating RESULTS.json (cardioseg.evaluation.results):  python scripts/sync_numbers.py
+Run after regenerating RESULTS.json (cardioseg.evaluation.results):  python -m cardioseg.evaluation.sync_numbers
 Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep those few; the tables
 (where the drift happened) are now generated.
 """
@@ -13,7 +13,8 @@ import json
 import re
 from pathlib import Path
 
-R = json.loads(Path("cardioseg/RESULTS.json").read_text())
+ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
+R = json.loads((ROOT / "cardioseg/RESULTS.json").read_text())
 _A = R["flagship"]["acdc"]
 _C = R["flagship"]["canon"]
 _NN = R["nnunet"]
@@ -101,7 +102,7 @@ TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
 def main():
     total = 0
     for f in TARGETS:
-        p = Path(f)
+        p = ROOT / f
         txt = orig = p.read_text()
         for key, fn in BLOCKS.items():
             pat = re.compile(rf"(<!-- results:{key} -->).*?(<!-- /results:{key} -->)", re.DOTALL)
