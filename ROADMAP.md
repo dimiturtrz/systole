@@ -49,23 +49,47 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
-## Synthetic-acquisition augmentation — cross-vendor robustness (planned)
-A distinctive angle for the cross-vendor lane: take **real ACDC anatomy + labels** and **re-acquire**
-them under varied synthetic MRI physics (contrast / noise / bias-field = mimic other vendors), train on
-the augmented set, measure the cross-vendor robustness gain vs the no-aug baseline. The differentiation
-is the **honest cross-vendor eval** of synthetic-acquisition aug, not the simulator itself (`bd cardiac-seg-chm`).
+## Synthetic data — cross-vendor robustness, three tiers (planned)
+A distinctive angle for the cross-vendor lane: don't just train on real images — perturb or regenerate
+them to widen the contrast space the model sees, then measure the cross-vendor robustness gain vs the
+no-aug baseline. The differentiation is the **honest cross-vendor eval**, not the generator itself
+(`bd cardiac-seg-chm`). The "synthetic" axis is a spectrum, not one thing — three tiers, increasing in
+how much of the *picture* is generated (anatomy is always real ACDC; none invents new hearts):
 
-**Decision: build-first.** `mri-sim/` is an acquisition *visualizer*, not yet a re-acquisition engine —
-it can't re-image a labelled phantom with vendor-like variation. Enabler = **real-slice-as-phantom**
-(`bd cardiac-seg-w2n`) + tissue contrast / k-space (`clq` / `por` / `wpq`). So: build the phantom
-re-acquisition path first, then run the aug experiment.
+```
+real image  ──perturb──>           Tier 1: augmentation   (TorchIO)
+real labels ──paint random──>      Tier 2: synth-appearance (SynthSeg pattern)
+real labels ──simulate physics──>  Tier 3: synth-physics  (CMRsim / Bloch)
+```
 
-**OSS simulators to evaluate** (cite, don't blind-reinvent):
-- **KomaMRI** (Julia, GPU Bloch, cardiac on its roadmap) — most promising; the one to try first.
-- **JEMRIS** (C++, actively maintained, full Bloch + sequence support) — heavier, reference-grade.
-- **MRiLab** (MATLAB/GPU Bloch) — capable but largely stale/unmaintained.
-- Plus sim-to-real medical repos + the Generalized_MedIA collection for the eval framing.
-Survey: `research/deep_dives/2026-06-22_cardiac-segmentation-oss-landscape-unified.md`.
+- **Tier 1 — augmentation of real images.** Real image stays; perturb it (bias field, Rician noise,
+  k-space ghosting/spike, gamma/contrast shift) so it looks like another scanner. Anatomy *and* pixels
+  real, roughened. Library: **TorchIO** (`RandomBiasField/Ghosting/Spike/Motion/Noise` + histogram
+  matching) — extends `augment.py`, no sim build. **1–2 days.** Highest evidence: the M&Ms challenge
+  credits intensity-driven aug + histogram matching for the vendor gap (Zeng et al. 2021 hit 0.905 LV
+  Dice on an unseen vendor). Lowest effort, proven payoff.
+- **Tier 2 — synthetic appearance from labels (SynthSeg pattern).** Discard the real image's
+  intensities; keep only the **label map**; paint each region a randomly-sampled brightness each epoch →
+  a fully invented picture over real anatomy. Trains a **contrast-agnostic** model (generalize to *any*
+  scanner, not mimic one). No real pixels, no T1/T2 maps, no Bloch. Library: **SynthSeg** (Billot 2023,
+  cardiac+CT-extended, FreeSurfer OSS); DRIFTS (2024) shows +5 DSC from per-label intensity clustering.
+  **3–5 days.** The distinctive full-synth angle.
+- **Tier 3 — synthetic physics from labels (Bloch sim).** Same label→image route as Tier 2, but assign
+  per-tissue T1/T2/PD (literature values: myo T1≈1000 ms@1.5 T, blood≈1600, fat≈250) and *simulate*
+  vendor-like signal under varied TR/TE/flip. Physically grounded. Library: **CMRsim** (Weine 2024, ETH,
+  *MRM*) — the only cardiac-purpose-built Python Bloch sim; MRzero/FaBiAN do this for brain. **2–4 weeks**,
+  no published cardiac-seg-aug precedent, and may still miss vendor recon-pipeline effects (k-space
+  filtering, SENSE/GRAPPA). The maximalist showcase, not the cheap robustness win.
+
+**Recommended order:** Tier 1 first (measure Canon Dice delta) → Tier 2 if more contrast diversity is
+needed → Tier 3 only with a specific hypothesis that k-space/physics, not intensity distribution, is the
+failure mode. **All three are wanted** as a synthetic-data story; effort/payoff just differs.
+
+**Sim libs evaluated** (cite, don't blind-reinvent): TorchIO/MONAI (Tier 1), SynthSeg (Tier 2),
+CMRsim / MRzero / FaBiAN (Tier 3 Python Bloch); KomaMRI (Julia — wrong ecosystem for a Python loop),
+JEMRIS (C++ — very high integration cost), MRiLab (MATLAB — dead since 2017). Full evaluation:
+`research/deep_dives/2026-06-24_mri-sim-libs-eval.md`. Earlier landscape survey:
+`research/deep_dives/2026-06-22_cardiac-segmentation-oss-landscape-unified.md`.
 
 ## Resolved (thinly): the machine axis is now tested
 Earlier the held-out test was single-vendor ACDC — only the cross-*centre* drop was measured. **Now
