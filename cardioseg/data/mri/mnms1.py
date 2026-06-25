@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 from cardioseg.data.mri.base import (
-    DatasetAdapter, MNM_LABEL_MAP, PatientData, apply_label_map, load_csv_info, load_nifti, to_float,
+    DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
@@ -88,17 +88,14 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
     case = Path(case)
     row = mnms1_info(root).get(case.name, {})
     img_p, gt_p = _sa(case)
-    out: PatientData = {"group": row.get("Pathology"), "spacing": None}
-    for tag in ("ED", "ES"):
+
+    def resolve(tag):
         idx = row.get(tag)
-        if idx is None or idx == "" or not img_p.exists():
-            continue
-        f = int(float(idx))
-        img, sp = load_nifti(img_p, frame=f)
-        gt, _ = load_nifti(gt_p, frame=f)
-        out["spacing"] = sp
-        out[tag] = {"img": img, "gt": apply_label_map(gt, LABEL_MAP)}
-    return out
+        if idx is None or idx == "":
+            return None
+        return img_p, gt_p, int(float(idx))   # 4D cine -> frame index from the CSV
+
+    return load_frames(row.get("Pathology"), resolve, LABEL_MAP)
 
 
 class Mnms1Adapter(DatasetAdapter):

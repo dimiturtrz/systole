@@ -78,6 +78,25 @@ def load_nifti(path: str | Path, frame: int | None = None) -> tuple[Volume, Spac
     return arr, (zz, zy, zx)
 
 
+def load_frames(group, resolve, label_map: dict[int, int]) -> "PatientData":
+    """Shared ED/ES loader skeleton for the adapters. `resolve(tag)` returns (img_path, gt_path,
+    frame|None) for that cardiac phase, or None to skip it; the adapter-specific bit is just that
+    closure. Loads each frame (4D-aware via `frame`), remaps the mask to canonical, carries spacing."""
+    out: PatientData = {"group": group, "spacing": None}
+    for tag in ("ED", "ES"):
+        r = resolve(tag)
+        if r is None:
+            continue
+        img_p, gt_p, frame = r
+        if not Path(img_p).exists():
+            continue
+        img, sp = load_nifti(img_p, frame=frame)
+        gt, _ = load_nifti(gt_p, frame=frame)
+        out["spacing"] = sp
+        out[tag] = {"img": img, "gt": apply_label_map(gt, label_map)}
+    return out
+
+
 def apply_label_map(gt: Mask, label_map: dict[int, int]) -> Mask:
     """Remap raw integer labels to the canonical convention. Identity map -> unchanged."""
     import numpy as np

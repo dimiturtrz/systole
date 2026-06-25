@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cardioseg.config import data_root
 from cardioseg.data.mri.base import (
-    DatasetAdapter, Frame, PatientData, load_nifti, identify_lv_cavity, to_float,
+    DatasetAdapter, Frame, PatientData, load_nifti, load_frames, identify_lv_cavity, to_float,
     LV_CAVITY, LV_MYO, RV_CAVITY,
 )
 
@@ -60,17 +60,12 @@ def load_ed_es(patient_dir: str | Path) -> PatientData:
     """
     patient_dir = Path(patient_dir)
     cfg = parse_info_cfg(patient_dir)
-    out: PatientData = {"group": cfg.get("Group"), "spacing": None}
-    for tag in ("ED", "ES"):
+
+    def resolve(tag):
         fno = cfg.get(tag)
-        if fno is None:
-            continue
-        img_p, gt_p = frame_paths(patient_dir, fno)
-        img, sp = load_nifti(img_p)
-        gt, _ = load_nifti(gt_p)
-        out["spacing"] = sp
-        out[tag] = {"img": img, "gt": gt}
-    return out
+        return (*frame_paths(patient_dir, fno), None) if fno is not None else None
+
+    return load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
 
 class AcdcAdapter(DatasetAdapter):

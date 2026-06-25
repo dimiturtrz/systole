@@ -13,7 +13,7 @@ from pathlib import Path
 
 from cardioseg.config import data_root
 from cardioseg.data.mri.base import (
-    DatasetAdapter, MNM_LABEL_MAP, PatientData, apply_label_map, load_csv_info, load_nifti, to_float,
+    DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
@@ -56,17 +56,12 @@ def load_ed_es(patient_dir: str | Path, view: str = "SA") -> PatientData:
     patient_dir = Path(patient_dir)
     pid = patient_dir.name
     grp = mnm2_info(patient_dir.parent.parent).get(pid, {}).get("DISEASE")
-    out: PatientData = {"group": grp, "spacing": None}
-    for tag in ("ED", "ES"):
-        img_p = patient_dir / f"{pid}_{view}_{tag}.nii.gz"
-        gt_p = patient_dir / f"{pid}_{view}_{tag}_gt.nii.gz"
-        if not img_p.exists():
-            continue
-        img, sp = load_nifti(img_p)
-        gt, _ = load_nifti(gt_p)
-        out["spacing"] = sp
-        out[tag] = {"img": img, "gt": apply_label_map(gt, LABEL_MAP)}
-    return out
+
+    def resolve(tag):
+        return (patient_dir / f"{pid}_{view}_{tag}.nii.gz",
+                patient_dir / f"{pid}_{view}_{tag}_gt.nii.gz", None)
+
+    return load_frames(grp, resolve, LABEL_MAP)
 
 
 class Mnm2Adapter(DatasetAdapter):

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from cardioseg.data.mri.base import (
-    to_float, apply_label_map, load_csv_info, load_nifti, MNM_LABEL_MAP,
+    to_float, apply_label_map, load_csv_info, load_nifti, load_frames, MNM_LABEL_MAP,
 )
 
 
@@ -73,3 +73,27 @@ def test_load_nifti_4d_frame(tmp_path):
     p = tmp_path / "cine.nii.gz"; nib.save(img, p)
     vol, _ = load_nifti(p, frame=2)
     assert vol.shape == (3, 2, 2) and float(vol.max()) == 9.0   # picked frame 2
+
+
+# --- load_frames template: resolve drives it; skip-None, missing-file skip, label-map applied ---
+def _write_nii(tmp_path, name, arr):
+    nib = pytest.importorskip("nibabel")
+    img = nib.Nifti1Image(arr.astype(np.float32), np.eye(4)); img.header.set_zooms((1, 1, 1))
+    p = tmp_path / name; nib.save(img, p)
+    return p
+
+
+def test_load_frames_resolve_and_label_map(tmp_path):
+    img_p = _write_nii(tmp_path, "img.nii.gz", np.ones((2, 2, 2)))
+    gt_p = _write_nii(tmp_path, "gt.nii.gz", np.array([[[0, 1]], [[2, 3]]]))  # raw labels
+    # resolve: ED -> the files; ES -> None (skip)
+    out = load_frames("DCM", lambda tag: (img_p, gt_p, None) if tag == "ED" else None, MNM_LABEL_MAP)
+    assert out["group"] == "DCM" and "ES" not in out and out["spacing"] is not None
+    assert sorted(int(x) for x in np.unique(out["ED"]["gt"])) == [0, 1, 2, 3]   # remapped (1<->3)
+
+
+def test_load_frames_missing_file_skipped(tmp_path):
+    """A resolve pointing at a non-existent image is skipped, not an error."""
+    out = load_frames(None, lambda tag: (tmp_path / "nope.nii.gz", tmp_path / "nope_gt.nii.gz", None),
+                      {0: 0})
+    assert "ED" not in out and "ES" not in out
