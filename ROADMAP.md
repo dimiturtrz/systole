@@ -49,7 +49,8 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 7. ⬜ **Eval rigor** — 5-fold CV instead of one split (`bd cardiac-seg-4ev`); uncertainty /
    calibration flags (`bd cardiac-seg-iq7`).
 
-## Synthetic data — cross-vendor robustness, three tiers (planned)
+## Augmentation + synthetic data — cross-vendor robustness, three tiers (planned)
+<!-- Tier 1 = augmentation (perturb real images); Tiers 2-3 = synthetic generation (invent from labels) — distinct families. -->
 A distinctive angle for the cross-vendor lane: don't just train on real images — perturb or regenerate
 them to widen the contrast space the model sees, then measure the cross-vendor robustness gain vs the
 no-aug baseline. The differentiation is the **honest cross-vendor eval**, not the generator itself

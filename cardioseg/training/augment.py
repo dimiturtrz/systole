@@ -1,13 +1,30 @@
-"""GPU-batched training augmentation.
+"""GPU-batched training augmentation — the *diversify* force of domain generalization.
 
-The old augmentation ran scipy rotate/zoom/gaussian_filter **per item, on the CPU, inside the
-DataLoader workers** — the throughput bottleneck that starved the GPU. This does the same recipe
-on the whole batch on the GPU in torch: one affine grid_sample for flip+rotate+scale, vectorized
-intensity jitter. No python per-item loop, no scipy.
+Augmentation here means **perturbing real images** so the model learns invariance to nuisance
+variance (the cross-vendor / acquisition shift). It is the dual of the *strip* force, N4 /
+histogram standardization in `preprocessing/normalization/` — see that package's README for the
+full variance taxonomy + the strip-vs-diversify decision per factor. NB augmentation (perturb what
+is real) is distinct from *synthetic generation* (invent images from labels — SynthSeg / Bloch sim);
+that is a separate concern with its own home, not this file.
 
-Geometric (image AND mask together) teaches shape/orientation invariance — helps the thin RV/myo.
-Intensity (image only) simulates the scanner/vendor contrast + resolution variation that drives
-the cross-dataset gap.
+Two kinds, both per-sample and vectorized (no python loop, no scipy — the old per-item CPU recipe
+starved the GPU):
+- **geometric** (image AND mask together, one affine grid_sample) — flip/rotate/scale → shape /
+  orientation invariance; helps the thin RV/myo.
+- **intensity** (image only) — gamma, contrast, blur, noise → scanner/vendor contrast + resolution
+  variation.
+
+Idioms (match these when adding transforms): per-sample params via `torch.rand(b,...)`; probabilistic
+application via `do_X = (rand < p)` masks (`out = do_X*transformed + (1-do_X)*orig`).
+
+Input is **already z-scored** (post-preprocess), so intensity ops are domain-*randomization* in
+z-space, not physics-exact — fine for invariance, but a true multiplicative bias field would have to
+run pre-z-score. Planned MRI-physics transforms (Tier 1, `bd cardiac-seg-jp1`): smooth bias-field
+modulation (the N4 dual), Rician noise (we use plain Gaussian today), k-space ghost/spike. Histogram
+matching is the *targeted* harmonization method — it needs a vendor reference, so it lives in
+`normalization/`, not here.
+
+Hyperparams from the injected AugCfg. Uses torch's global RNG — seed it (torch.manual_seed) for repro.
 """
 from __future__ import annotations
 

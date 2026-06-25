@@ -84,23 +84,30 @@ estimable; diversify when stripping is unreliable or discards signal.
 affine aug diversifies). **Bias field** is the highest-value undecided row: build the smooth-field model
 once for T1, get N4 (its inverse) nearly free, A/B the two directions on that single axis.
 
-## Synthetic-data tiers — the *augment* column's roadmap
+## The diversify force — two distinct families: augmentation vs generation
 
-How much of the picture is generated rises across tiers; anatomy is always real ACDC labels (none
-invents new hearts). Full plan + sim-lib evaluation in
+The *diversify* column splits into two genuinely different things (don't conflate them): **augmentation**
+*perturbs real images*; **synthetic generation** *invents images from labels*. Anatomy is always real
+ACDC labels (none invents new hearts). Full plan + sim-lib evaluation in
 [`research/deep_dives/2026-06-24_mri-sim-libs-eval.md`](../../../research/deep_dives/2026-06-24_mri-sim-libs-eval.md);
 tracked `bd cardiac-seg-{chm,jp1,bgc,276}`.
 
 ```
-real image  ──perturb──>           T1: augmentation     (TorchIO physics transforms)
-real labels ──paint random──>      T2: synth-appearance (SynthSeg pattern)
-real labels ──simulate physics──>  T3: synth-physics    (CMRsim / Bloch)
+AUGMENTATION  real image  ──perturb──>          T1  (physics transforms)        -> training/augment.py
+GENERATION    real labels ──paint random──>     T2  synth-appearance (SynthSeg)  -> own module (future)
+              real labels ──simulate physics──> T3  synth-physics (CMRsim/Bloch) -> own module (future)
 ```
-- **T1** (`jp1`, recommended first) — bias-field + Rician + k-space + histogram-match into
-  `cardioseg/training/augment.py`. M&Ms challenge credits intensity aug + histogram matching for the
+- **T1 — augmentation** (`jp1`, recommended first): bias-field + Rician + k-space into
+  `cardioseg/training/augment.py`; histogram-match into this package (it needs a vendor reference, so
+  it's harmonization, not a random batch op). M&Ms credits intensity aug + histogram matching for the
   vendor gap (Zeng 2021 ≈ 0.905 LV Dice unseen-vendor). Cheapest, highest evidence.
-- **T2** (`bgc`) — SynthSeg-style per-label intensity randomization → a contrast-**agnostic** model.
-- **T3** (`276`) — CMRsim Bloch sim from per-tissue T1/T2/PD; physically grounded, no seg-aug precedent.
+- **T2 — generation** (`bgc`): SynthSeg-style per-label intensity randomization → a contrast-**agnostic**
+  model. A *generator*, not augment.py — gets its own module.
+- **T3 — generation** (`276`): CMRsim Bloch sim from per-tissue T1/T2/PD; physically grounded, no
+  seg-aug precedent. Also its own module.
+
+Augmentation (T1) stays small (a handful of transforms in one file). Generation (T2/T3) is a separate
+concern that would grow its own home; it is **not** part of `augment.py` or this package.
 
 ## Per-dataset coverage — what each ships vs what we fetch
 Legend: **AUTO** parse shipped file · **WEB** fetch from paper (cited) · **ABSENT** → image-derived / unknowable fallback.

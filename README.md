@@ -184,8 +184,9 @@ variance is mapped as **5 source buckets × 2 forces**:
 | **annotation** | concept | label convention, papillary rule | inter-observer → **irreducible LoA floor** |
 
 Knowable fields are *parsed from what the datasets ship* (Info.cfg / CSV / folders) — deterministic,
-reproducible; a few are paper-cited (verified-flagged). The augment column has a 3-tier synthetic-data
-roadmap (perturb real → SynthSeg label-paint → Bloch sim). **Full taxonomy, the factor-by-factor
+reproducible; a few are paper-cited (verified-flagged). The diversify force splits into **augmentation**
+(perturb real images — physics transforms in `training/augment.py`) and **synthetic generation** (invent
+images from labels — SynthSeg / Bloch sim, a separate concern). **Full taxonomy, the factor-by-factor
 strip-vs-diversify registry, per-dataset coverage, and the build pipeline →
 [cardioseg/preprocessing/normalization/](cardioseg/preprocessing/normalization/README.md).**
 
