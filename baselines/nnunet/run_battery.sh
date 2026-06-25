@@ -20,5 +20,6 @@ nnUNetv2_predict -i "$DS/imagesTs" -o "$PRED" -d 29 -c 2d -f 0 -tr nnUNetTrainer
 
 echo "=== score (per battery axis) ==="
 cd /d/personal_projects/cardiac-seg
-python -m baselines.nnunet.score --pred "$PRED" --gt "$DS/labelsTs" --manifest "$DS/ts_manifest.json"
+python -m baselines.nnunet.score --pred "$PRED" --gt "$DS/labelsTs" --manifest "$DS/ts_manifest.json" \
+    --out baselines/nnunet/results.json   # single source read by cardioseg/evaluation/results.py
 echo "=== NNUNET BATTERY DONE ==="

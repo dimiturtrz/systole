@@ -1,0 +1,13 @@
+{
+  "_note": "nnU-Net v2 (2d, fold0, 50ep) scored by baselines/nnunet/score.py — regenerate with --out; read by cardioseg/evaluation/results.py. Seeded from the last measured run; ED+ES pooled.",
+  "acdc": {
+    "dice": {"RV": 0.911, "LV-myo": 0.876, "LV-cav": 0.948, "mean": 0.912},
+    "hd95": {"RV": 5.1, "LV-myo": 2.9, "LV-cav": 3.3},
+    "ef_mae": 5.6,
+    "ef_bias": -4.2,
+    "ef_loa": [-19.3, 10.8]
+  },
+  "canon": {
+    "dice": {"mean": 0.876}
+  }
+}

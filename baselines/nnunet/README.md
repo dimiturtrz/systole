@@ -37,7 +37,8 @@ bash baselines/nnunet/run_battery.sh
 #   nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity
 #   nnUNetv2_train 29 2d 0                       # ... folds 0..4 for the full ensemble
 #   nnUNetv2_predict -i $nnUNet_raw/Dataset029_BATTERY/imagesTs -o <pred_dir> -d 29 -c 2d
-#   python -m baselines.nnunet.score --pred <pred_dir> --manifest <.../ts_manifest.json>
+#   python -m baselines.nnunet.score --pred <pred_dir> --manifest <.../ts_manifest.json> \
+#       --out baselines/nnunet/results.json   # single source read by cardioseg/evaluation/results.py
 ```
 Data + `raw/preprocessed/results/pred` all live **outside the repo**, namespaced under
 `<data>/nnunet/` (derived from `paths.yaml` / `CARDIAC_DATA` via `cardioseg.config`) — nothing

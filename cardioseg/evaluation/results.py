@@ -4,8 +4,9 @@ so a number lives in a single place and the docs can't drift. Regenerate after a
 
     python -m cardioseg.evaluation.results --run runs/gen
 
-All flagship numbers pool ED+ES (the honest read). nnU-Net is a static block (measured once via
-baselines/nnunet/score.py, ED+ES; we don't re-run it here — refresh by hand if that baseline changes).
+All flagship numbers pool ED+ES (the honest read). nnU-Net numbers are read from
+baselines/nnunet/results.json (emitted by baselines/nnunet/score.py --out, ED+ES) — single source,
+no hand-copy; refresh by re-running that baseline's score.py.
 """
 import argparse
 import json
@@ -19,12 +20,16 @@ from cardioseg.data import store
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
 from cardioseg.evaluation.evaluate import surface_metrics, CLASSES
 
-# nnU-Net v2 (2d, fold0, 50ep) on the SAME split, scored by baselines/nnunet/score.py (ED+ES). Static.
+ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
+
+# nnU-Net v2 (2d, fold0, 50ep) on the SAME split, scored by baselines/nnunet/score.py (ED+ES).
+_bj = json.loads((ROOT / "baselines/nnunet/results.json").read_text())
 NNUNET = {
-    "acdc": {"dice": {"LV-cav": 0.948, "LV-myo": 0.876, "RV": 0.911, "mean": 0.912},
-             "hd95": {"LV-cav": 3.3, "LV-myo": 2.9, "RV": 5.1}, "ef_mae": 5.6, "ef_bias": -4.2},
-    "canon": {"dice_mean": 0.876},
+    "acdc": {"dice": _bj["acdc"]["dice"], "hd95": _bj["acdc"]["hd95"],
+             "ef_mae": _bj["acdc"]["ef_mae"], "ef_bias": _bj["acdc"]["ef_bias"]},
+    "canon": {"dice_mean": _bj["canon"]["dice"]["mean"]},
 }
+# Architectural constants (fvcore single-forward), not a baseline measurement — stay static.
 EFFICIENCY = {"ours": {"params": "1.6 M", "flops": "0.8 G"},
               "nnunet": {"params": "92 M", "flops": "19 G"}}
 _NAMES = [CLASSES[c][0] for c in CLASSES]  # RV, LV-myo, LV-cav
