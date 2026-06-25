@@ -52,18 +52,26 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+pip install -e ".[all]"      # core + extras (n4/export/viz/nnunet/dev). pyproject = source of truth.
+# torch FIRST from CUDA index (plain PyPI is CPU): pip install torch --index-url https://download.pytorch.org/whl/cu128
+conda activate pytorch_training_env          # the working env here
+export PYTHONPATH=/d/personal_projects/cardiac-seg   # scripts run as modules from repo root
+pytest                                        # testpaths = tests/ (unit + integration)
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+- `cardioseg/` — the pipeline: ACDC/M&M-2/M&Ms-1 → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav)
+  → consolidated store → 2D MONAI U-Net → EF → evaluate (Dice/HD95/ASSD + EF). Flagship run = `runs/gen`.
+- `cardioview/` — browser viewer (TS+Vite+vtk.js): beating 3D hearts + in-browser ONNX segmentation.
+- `mri-sim/` — TS MRI acquisition visualizer (deprioritized).
+- `baselines/nnunet/` — SOTA reference, quarantined (own env, never a cardioseg dep).
+- `research/` — deep-dives + `diversity_factors.md`; `learning/` — theory writeups. Public docs = README + ROADMAP.
+- Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `scripts/sync_numbers.py` fills doc marker blocks.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Tasks → `bd` (beads) only** (see above). **Data lives out of repo** under `<data>/raw/` (gitignored).
+- Env quirks: `conda run` swallows stdout + rejects multiline `-c` (write script files); `/tmp` doesn't survive
+  Windows-python round-trip (use repo-relative paths). CRLF→LF + beads "auto-export git add failed" warnings are benign.
