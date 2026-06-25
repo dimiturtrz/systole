@@ -90,8 +90,13 @@ class DataCfg(BaseModel):
     generalization split (ACDC centre-shift + Canon unseen-vendor)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
-    test_datasets: tuple[str, ...] = ("acdc",)
-    test_vendors: tuple[str, ...] = ("Canon",)
+    # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely.
+    # VAL = ACDC (a held-out centre/protocol) — a real domain-shift tuning signal that is NOT test,
+    # so aug/calibration are tuned without peeking at test. TRAIN = the rest (Siemens + Philips).
+    test_datasets: tuple[str, ...] = ()
+    test_vendors: tuple[str, ...] = ("Canon", "GE")
+    val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
+    val_vendors: tuple[str, ...] = ()
     inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
     n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless

@@ -64,8 +64,10 @@ def heldout_set(model_name: str) -> set[str]:
         from cardioseg.data import store, splits
         dc = from_json(cfg_path).data
         meta = store.load(list(dc.sources))
-        _, _, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac)
-        return set(test.get_column("subject_id").to_list())
+        train, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
+                                             val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
+        # "held out" = anything the model did NOT train on (val OR test) — ACDC is now val, still unseen.
+        return set(val.get_column("subject_id").to_list()) | set(test.get_column("subject_id").to_list())
     _, val = split_patients(list(acdc_cases()), 0.2, 0)
     return {c.name for c in val}
 

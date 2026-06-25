@@ -10,7 +10,9 @@ from cardioseg.hparams import TrainCfg, AugCfg, apply_overrides, to_json, from_j
 # --- accept: valid defaults + roundtrip ---
 def test_defaults_valid():
     cfg = TrainCfg()
-    assert cfg.data.test_datasets == ("acdc",) and cfg.loss.kind == "dice_ce"
+    # split: TEST = unseen vendors (Canon+GE), VAL = ACDC (held-out centre), TRAIN = the rest
+    assert cfg.data.test_vendors == ("Canon", "GE") and cfg.data.val_datasets == ("acdc",)
+    assert cfg.data.test_datasets == () and cfg.loss.kind == "dice_ce"
     assert 0 <= cfg.aug.gamma_p <= 1
 
 

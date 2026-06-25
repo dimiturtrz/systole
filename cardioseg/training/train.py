@@ -66,7 +66,8 @@ def train_seg(cfg: TrainCfg):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers)
         train_df, val_df, test_df = splits.make_split(
-            meta, d.test_datasets, d.test_vendors, d.val_frac, cfg.seed)
+            meta, d.test_datasets, d.test_vendors, d.val_frac, cfg.seed,
+            val_datasets=d.val_datasets, val_vendors=d.val_vendors)
     if cfg.n_patients:                          # debug cap
         train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
         test_df = test_df.head(cfg.n_patients)

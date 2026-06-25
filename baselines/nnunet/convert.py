@@ -57,10 +57,13 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     from cardioseg.data.mri.registry import get_adapter
     from cardioseg.hparams import DataCfg
 
-    dc = DataCfg()                                           # the generalization criteria (acdc + Canon held out)
+    dc = DataCfg()                                           # the generalization criteria (Canon+GE test, ACDC val)
     meta = store.load(list(dc.sources))
-    train_df, val_df, test_df = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac)
-    tr = pl.concat([train_df, val_df])                       # nnU-Net does its own CV over Tr
+    train_df, val_df, test_df = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
+                                                  val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
+    tr = train_df                                            # nnU-Net trains on our TRAIN (Si+Ph); does its
+    #                                                          own internal CV. ACDC=val is NOT given to it
+    #                                                          (apples-to-apples: our model doesn't train on it).
     if n_patients:
         tr, test_df = tr.head(n_patients), test_df.head(n_patients)
 
