@@ -7,15 +7,15 @@ frames are labelled. ED/ES frame indices + vendor/centre/age/sex/h+w in the CSV.
 
 Labels: same flip as M&M-2 (raw 1=LV-cav) -> canonical via label_map.
 """
-import csv as _csv
 import os
 from pathlib import Path
 
-from cardioseg.data.mri.base import PatientData, apply_label_map
+from cardioseg.data.mri.base import (
+    DatasetAdapter, MNM_LABEL_MAP, PatientData, apply_label_map, load_csv_info, load_nifti, to_float,
+)
 
-LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}
+LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
 
-_INFO_CACHE: dict[str, dict[str, dict[str, str]]] = {}
 _SPLITS = ("Training/Labeled", "Validation", "Testing")
 
 
@@ -51,34 +51,13 @@ def data_root_raw() -> str:
     return data_root("raw")
 
 
-def _load_4d_frame(path: Path, frame: int):
-    """Load one time-frame of a 4D NIfTI -> ([D,H,W], spacing (z,y,x) mm)."""
-    import nibabel as nib
-    import numpy as np
-    img = nib.load(str(path))
-    arr = np.asanyarray(img.dataobj)              # (x, y, z, t)
-    vol = arr[..., frame] if arr.ndim == 4 else arr
-    vol = np.transpose(vol, (2, 1, 0))            # -> (z, y, x) = [D, H, W]
-    zx, zy, zz = img.header.get_zooms()[:3]
-    return vol, (zz, zy, zx)
-
-
 def mnms1_info(root: str | Path | None = None) -> dict[str, dict[str, str]]:
     """{External code -> CSV row (Vendor, Centre, ED, ES, Age, Sex, Height, Weight, Pathology)}."""
     base = _root(root)
-    key = str(base)
-    if key in _INFO_CACHE:
-        return _INFO_CACHE[key]
-    info: dict[str, dict[str, str]] = {}
     csvs = list(base.glob("*.csv")) + list(base.glob("*/*.csv"))
-    if csvs:
-        with csvs[0].open(newline="") as f:
-            for row in _csv.DictReader(f):
-                code = (row.get("External code") or row.get("External_code") or "").strip()
-                if code:
-                    info[code] = {k: (v or "").strip() for k, v in row.items()}
-    _INFO_CACHE[key] = info
-    return info
+    if not csvs:
+        return {}
+    return load_csv_info(csvs[0], "External code", alt_key_col="External_code")
 
 
 def _sa(case: Path) -> tuple[Path, Path]:
@@ -115,14 +94,14 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
         if idx is None or idx == "" or not img_p.exists():
             continue
         f = int(float(idx))
-        img, sp = _load_4d_frame(img_p, f)
-        gt, _ = _load_4d_frame(gt_p, f)
+        img, sp = load_nifti(img_p, frame=f)
+        gt, _ = load_nifti(gt_p, frame=f)
         out["spacing"] = sp
         out[tag] = {"img": img, "gt": apply_label_map(gt, LABEL_MAP)}
     return out
 
 
-class Mnms1Adapter:
+class Mnms1Adapter(DatasetAdapter):
     """M&Ms-1: 6-centre / 4-vendor (incl. Canon); richest demographics (age/sex/BSA)."""
     name = "mnms1"
     label_map = LABEL_MAP
@@ -139,15 +118,8 @@ class Mnms1Adapter:
         return {
             "group": r.get("Pathology"),
             "vendor": r.get("VendorName") or r.get("Vendor"), "centre": r.get("Centre"),
-            "age": _f(r.get("Age")), "sex": r.get("Sex"),
-            "height": _f(r.get("Height")), "weight": _f(r.get("Weight")),
+            "age": to_float(r.get("Age")), "sex": r.get("Sex"),
+            "height": to_float(r.get("Height")), "weight": to_float(r.get("Weight")),
             "scanner": None, "field_T": None,   # not in CSV (paper tables)
             "_source": {"all": "csv", "field_T": "paper(unfilled)"},
         }
-
-
-def _f(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None

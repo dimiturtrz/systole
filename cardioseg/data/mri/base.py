@@ -14,6 +14,41 @@ from cardioseg.types import Image, Mask, Spacing, Volume
 LV_CAVITY, LV_MYO, RV_CAVITY = 3, 2, 1
 CANONICAL_LABELS = {0: "background", 1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
+# M&Ms raw labels (1=LV-cav, 2=myo, 3=RV) -> canonical; shared by the M&M-2 + M&Ms-1 adapters.
+MNM_LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}
+
+_CSV_CACHE: dict[str, dict[str, dict[str, str]]] = {}
+
+
+def to_float(v):
+    """Parse a CSV/cfg field to float; None on missing/garbage. Shared by all adapters."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def load_csv_info(csv_path, key_col: str, *, alt_key_col: str | None = None,
+                  key_transform=None) -> dict[str, dict[str, str]]:
+    """Parse a metadata CSV -> {key -> {column: stripped value}}, cached by path.
+
+    key comes from `key_col` (or `alt_key_col` if that column is absent — datasets ship both
+    'External code'/'External_code' spellings); `key_transform` post-processes it (e.g. zero-pad)."""
+    cache_key = str(csv_path)
+    if cache_key in _CSV_CACHE:
+        return _CSV_CACHE[cache_key]
+    import csv
+    info: dict[str, dict[str, str]] = {}
+    p = Path(csv_path)
+    if p.exists():
+        with p.open(newline="") as f:
+            for row in csv.DictReader(f):
+                k = (row.get(key_col) or (row.get(alt_key_col) if alt_key_col else None) or "").strip()
+                if k:
+                    info[key_transform(k) if key_transform else k] = {kk: (vv or "").strip() for kk, vv in row.items()}
+    _CSV_CACHE[cache_key] = info
+    return info
+
 
 class Frame(TypedDict):
     """One cardiac-phase frame: image + its label mask, both [D, H, W]."""
@@ -29,12 +64,15 @@ class PatientData(TypedDict, total=False):
     ES: Frame                  # end-systole (emptiest)
 
 
-def load_nifti(path: str | Path) -> tuple[Volume, Spacing]:
-    """Load a 3D NIfTI volume. Returns (array [D, H, W], spacing (z, y, x) mm)."""
+def load_nifti(path: str | Path, frame: int | None = None) -> tuple[Volume, Spacing]:
+    """Load a NIfTI volume -> (array [D, H, W], spacing (z, y, x) mm). For a 4D cine, pass
+    `frame` to extract one time-index ([x,y,z,t] -> [D,H,W]); 3D inputs ignore `frame`."""
     import nibabel as nib
     import numpy as np
     img = nib.load(str(path))
-    arr = np.asanyarray(img.dataobj)          # NIfTI is x,y,z
+    arr = np.asanyarray(img.dataobj)          # NIfTI is x,y,z (,t)
+    if frame is not None and arr.ndim == 4:
+        arr = arr[..., frame]
     arr = np.transpose(arr, (2, 1, 0))        # -> z,y,x (D,H,W)
     zx, zy, zz = img.header.get_zooms()[:3]
     return arr, (zz, zy, zx)

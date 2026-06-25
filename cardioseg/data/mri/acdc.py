@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cardioseg.config import data_root
 from cardioseg.data.mri.base import (
-    Frame, PatientData, load_nifti, identify_lv_cavity,
+    DatasetAdapter, Frame, PatientData, load_nifti, identify_lv_cavity, to_float,
     LV_CAVITY, LV_MYO, RV_CAVITY,
 )
 
@@ -73,7 +73,7 @@ def load_ed_es(patient_dir: str | Path) -> PatientData:
     return out
 
 
-class AcdcAdapter:
+class AcdcAdapter(DatasetAdapter):
     """ACDC: single-centre Siemens (Dijon), the canonical-label held-out test set."""
     name = "acdc"
     label_map = LABEL_MAP
@@ -89,15 +89,8 @@ class AcdcAdapter:
         cfg = parse_info_cfg(case)
         return {
             "group": cfg.get("Group"),
-            "height": _f(cfg.get("Height")), "weight": _f(cfg.get("Weight")),
+            "height": to_float(cfg.get("Height")), "weight": to_float(cfg.get("Weight")),
             "age": None, "sex": None,
             "vendor": "Siemens", "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
             "centre": "Dijon", "_source": {"vendor": "paper", "field_T": "paper", "rest": "Info.cfg"},
         }
-
-
-def _f(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None

@@ -8,16 +8,15 @@ Per-subject DISEASE/VENDOR/SCANNER/FIELD in dataset_information.csv.
 Labels: raw 1=LV-cav, 2=myo, 3=RV — opposite of ACDC. `label_map` remaps to canonical
 (verified geometrically: myo=2 -> LV=1 in raw). The flip is interface data, not buried logic.
 """
-import csv as _csv
 import os
 from pathlib import Path
 
 from cardioseg.config import data_root
-from cardioseg.data.mri.base import PatientData, apply_label_map, load_nifti
+from cardioseg.data.mri.base import (
+    DatasetAdapter, MNM_LABEL_MAP, PatientData, apply_label_map, load_csv_info, load_nifti, to_float,
+)
 
-LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}   # raw -> canonical (LV-cav 1->3, RV 3->1)
-
-_INFO_CACHE: dict[str, dict[str, dict[str, str]]] = {}
+LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
 
 
 def _dataset_dir(root: str | Path | None = None) -> Path:
@@ -48,19 +47,8 @@ def mnm2_cases(root: str | Path | None = None) -> list[Path]:
 def mnm2_info(root: str | Path | None = None) -> dict[str, dict[str, str]]:
     """{subject_code (zero-padded NNN) -> {DISEASE, VENDOR, SCANNER, FIELD}}."""
     d = _dataset_dir(root)
-    key = str(d)
-    if key in _INFO_CACHE:
-        return _INFO_CACHE[key]
-    csvp = d.parent / "dataset_information.csv"
-    info: dict[str, dict[str, str]] = {}
-    if csvp.exists():
-        with csvp.open(newline="") as f:
-            for row in _csv.DictReader(f):
-                code = (row.get("SUBJECT_CODE") or "").strip()
-                if code:
-                    info[code.zfill(3)] = {k: (v or "").strip() for k, v in row.items()}
-    _INFO_CACHE[key] = info
-    return info
+    return load_csv_info(d.parent / "dataset_information.csv", "SUBJECT_CODE",
+                         key_transform=lambda c: c.zfill(3))
 
 
 def load_ed_es(patient_dir: str | Path, view: str = "SA") -> PatientData:
@@ -81,7 +69,7 @@ def load_ed_es(patient_dir: str | Path, view: str = "SA") -> PatientData:
     return out
 
 
-class Mnm2Adapter:
+class Mnm2Adapter(DatasetAdapter):
     """M&M-2: multi-vendor training source; labels remapped to canonical via label_map."""
     name = "mnm2"
     label_map = LABEL_MAP
@@ -98,14 +86,7 @@ class Mnm2Adapter:
         return {
             "group": info.get("DISEASE"),
             "vendor": info.get("VENDOR"), "scanner": info.get("SCANNER"),
-            "field_T": _f(info.get("FIELD")),
+            "field_T": to_float(info.get("FIELD")),
             "centre": None, "age": None, "sex": None, "height": None, "weight": None,
             "_source": {"all": "dataset_information.csv"},
         }
-
-
-def _f(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
