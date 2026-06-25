@@ -4,6 +4,11 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from cardioseg.training.augment import augment_batch
+from cardioseg.hparams import AugCfg
+
+# everything off except (toggled) bias — flip is always-on, so isolate via same-seed bias on/off
+_NO_INTENSITY = dict(rot_deg=0.0, scale=(1.0, 1.0), gamma_p=0.0, blur_p=0.0,
+                     contrast=(1.0, 1.0), noise=0.0)
 
 
 def _batch():
@@ -35,6 +40,30 @@ def test_image_finite_and_actually_changed():
     a, _ = augment_batch(img, mask)
     assert torch.isfinite(a).all()        # no NaN/Inf from gamma/grid_sample
     assert not torch.allclose(a, img)     # augmentation did something
+
+
+def test_bias_field_off_is_noop():
+    """bias_p=0 -> identical to the same-seed run as if the bias branch did nothing (it's gated off)."""
+    img = torch.rand(4, 1, 64, 64) + 1.0          # positive -> clean ratio later
+    mask = torch.zeros(4, 64, 64, dtype=torch.long); mask[:, 20:44, 20:44] = 3
+    off = AugCfg(**_NO_INTENSITY, bias_p=0.0)
+    torch.manual_seed(3); a0, _ = augment_batch(img.clone(), mask.clone(), off)
+    torch.manual_seed(3); a0b, _ = augment_batch(img.clone(), mask.clone(), off)
+    assert torch.allclose(a0, a0b)                 # deterministic; bias off contributes nothing
+
+
+def test_bias_field_smooth_multiplicative():
+    """Toggling bias on (same seed) multiplies by a smooth, bounded ~1+/-strength field; mask untouched."""
+    img = torch.rand(4, 1, 64, 64) + 1.0          # positive, no near-zero -> stable ratio
+    mask = torch.zeros(4, 64, 64, dtype=torch.long); mask[:, 20:44, 20:44] = 3
+    off = AugCfg(**_NO_INTENSITY, bias_p=0.0)
+    on = AugCfg(**_NO_INTENSITY, bias_p=1.0, bias_strength=0.3)
+    torch.manual_seed(3); a_off, b_off = augment_batch(img.clone(), mask.clone(), off)
+    torch.manual_seed(3); a_on, b_on = augment_batch(img.clone(), mask.clone(), on)
+    assert torch.equal(b_on, b_off)               # same seed -> same geometry; bias is intensity-only
+    assert not torch.allclose(a_on, a_off)        # field applied
+    ratio = a_on / a_off                          # = the bias field (geometry cancels)
+    assert ratio.min() > 0.69 and ratio.max() < 1.31   # within 1 +/- 0.3, smooth & bounded
 
 
 def test_deterministic_under_seed():

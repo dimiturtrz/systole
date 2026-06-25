@@ -83,6 +83,15 @@ def augment_batch(
     do_b = (torch.rand(b, 1, 1, 1, device=dev) < cfg.blur_p).to(dt)
     img = do_b * F.conv2d(img, k, padding=1) + (1 - do_b) * img                 # occasional blur
 
+    # smooth bias-field modulation (scan bucket; the N4 dual). Coarse 4x4 random field -> bilinear
+    # upsample = low-freq, then multiply (1 +/- strength). On z-scored input this is a smooth
+    # across-FOV contrast drift, domain-randomization not physics-exact.
+    do_bf = (torch.rand(b, 1, 1, 1, device=dev) < cfg.bias_p).to(dt)
+    low = torch.rand(b, 1, 4, 4, device=dev, dtype=dt) * 2 - 1
+    field = 1.0 + cfg.bias_strength * F.interpolate(low, size=img.shape[-2:], mode="bilinear",
+                                                    align_corners=False)
+    img = do_bf * (img * field) + (1 - do_bf) * img
+
     c_lo, c_hi = cfg.contrast
     contrast = torch.rand(b, 1, 1, 1, device=dev) * (c_hi - c_lo) + c_lo
     img = img * contrast + torch.randn_like(img) * cfg.noise                    # contrast + noise

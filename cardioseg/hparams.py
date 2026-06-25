@@ -50,6 +50,9 @@ class AugCfg(BaseModel):
     blur_p: float = Field(0.2, ge=0, le=1)
     contrast: tuple[float, float] = (0.8, 1.2)
     noise: float = Field(0.08, ge=0)
+    # MRI-physics aug (Tier 1, scan bucket). bias_p=0 -> off (default = old behavior).
+    bias_p: float = Field(0.0, ge=0, le=1)         # prob of a smooth bias-field modulation
+    bias_strength: float = Field(0.3, ge=0)        # max +/- fractional field deviation across the FOV
 
 
 class LossCfg(BaseModel):
