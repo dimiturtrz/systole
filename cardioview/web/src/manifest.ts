@@ -26,7 +26,7 @@ export async function loadManifest(): Promise<Manifest> {
   const r = await fetch(`${DATA}/manifest.json`);
   if (!r.ok) throw new Error(`manifest fetch failed: ${r.status}`);
   const j = await r.json();
-  return Array.isArray(j) ? { model: 'acdc_aug', hearts: j } : j; // back-compat with array form
+  return Array.isArray(j) ? { model: 'gen', hearts: j } : j; // back-compat with array form
 }
 
 export const glbUrl = (file: string): string => `${DATA}/${file}`;

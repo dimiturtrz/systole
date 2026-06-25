@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
+from cardioseg.config import FLAGSHIP_RUN
 from cardioseg.hparams import from_json
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square
@@ -60,7 +61,7 @@ def _case(model, path, size, device):
 def main():
     import torch
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/gen")
+    ap.add_argument("--run", default=FLAGSHIP_RUN)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
     a = ap.parse_args()
 

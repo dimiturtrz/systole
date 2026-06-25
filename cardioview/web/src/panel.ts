@@ -34,7 +34,7 @@ interface Imported {
 }
 
 /** Top panel: Model dropdown + Hearts dropdown (each = defaults + import), drives the viewer. */
-export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, sliceView: SliceView, modelName = 'mnm2'): void {
+export function mountPanel(entries: HeartEntry[], viewer: HeartViewer, sliceView: SliceView, modelName = 'gen'): void {
   const seg = new Segmenter();
   const DEFAULT_MODEL = `models/${modelName}.onnx`;
   let modelSrc: string | Uint8Array = DEFAULT_MODEL;

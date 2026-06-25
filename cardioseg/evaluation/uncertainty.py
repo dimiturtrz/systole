@@ -72,13 +72,14 @@ def main():
     import polars as pl
     import torch
 
+    from ..config import FLAGSHIP_RUN
     from ..data import store
     from ..training.model import build_unet
     from ..training.dataset import fit_square, SIZE
     from ..hparams import from_json
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/gen")
+    ap.add_argument("--run", default=FLAGSHIP_RUN)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
     a = ap.parse_args()
     run = Path(a.run)

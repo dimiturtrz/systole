@@ -28,3 +28,14 @@ def _root() -> str:
 def data_root(kind: str = "raw") -> str:
     """Absolute root for 'raw' (inputs) or 'processed' (cache): `<data>/<kind>`."""
     return str(Path(_root()) / kind)
+
+
+# The shipped flagship run dir (repo-relative): trained on the pooled multi-vendor cloud
+# (M&M-2 + M&Ms-1), held out ACDC + Canon. SINGLE SOURCE for "which run is flagship" —
+# bump here only; all eval/export/viewer defaults reference it. See ROADMAP.
+FLAGSHIP_RUN = "runs/gen"
+
+
+def flagship_model() -> str:
+    """Path to the flagship trained weights: `<FLAGSHIP_RUN>/model.pth`."""
+    return f"{FLAGSHIP_RUN}/model.pth"

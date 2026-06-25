@@ -24,7 +24,7 @@ from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class
-from common import CHAMBERS, SIZE, MODELS, load_model, patient_dir, masks as build_masks, square_stack
+from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, patient_dir, masks as build_masks, square_stack
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -213,7 +213,7 @@ def main():
     # Default hearts come from paths.yaml (cardioview.hearts); fallback = one per condition.
     ap.add_argument("--patients", nargs="*", default=None)
     ap.add_argument("--source", default="pred", choices=["pred", "gt"])
-    ap.add_argument("--model", default="mnm2", choices=list(MODELS))
+    ap.add_argument("--model", default=DEFAULT_MODEL, choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
     a = ap.parse_args()
     # canned demo hearts (one per pathology); override with --patients (IDs or full paths).

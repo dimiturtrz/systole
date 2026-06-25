@@ -14,14 +14,14 @@ from pathlib import Path
 
 from cardioseg.training.export_onnx import export as build_onnx
 from cardioseg.data.mri.acdc import acdc_cases
-from common import MODELS
+from common import MODELS, DEFAULT_MODEL
 
 OUT = Path("cardioview/web/public/models")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default="mnm2", choices=list(MODELS))
+    ap.add_argument("--model", default=DEFAULT_MODEL, choices=list(MODELS))
     ap.add_argument("--verify", default=None)
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()

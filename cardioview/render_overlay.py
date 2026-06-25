@@ -24,7 +24,7 @@ from skimage.measure import marching_cubes
 from cardioseg.preprocessing.preprocess import preprocess_case
 from cardioseg.evaluation.measure import ejection_fraction
 from render_volume import normalize, to_imagedata
-from common import CHAMBERS, MODELS, load_model, patient_dir, square_stack, masks as build_masks
+from common import CHAMBERS, MODELS, DEFAULT_MODEL, load_model, patient_dir, square_stack, masks as build_masks
 from geometry import bbox_slices
 
 
@@ -127,7 +127,7 @@ def main():
     ap.add_argument("--patient", default="patient001")
     ap.add_argument("--phase", default="ED", choices=["ED", "ES"])
     ap.add_argument("--source", default="pred", choices=["pred", "gt"])
-    ap.add_argument("--model", default="acdc_aug", choices=list(MODELS))
+    ap.add_argument("--model", default=DEFAULT_MODEL, choices=list(MODELS))
     ap.add_argument("--margin", type=float, default=12.0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--interactive", action="store_true")

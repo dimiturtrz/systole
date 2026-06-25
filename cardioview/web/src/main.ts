@@ -6,7 +6,7 @@ import { mountPanel } from './panel';
 const viewer = new HeartViewer();
 const sliceView = new SliceView();
 let hearts: Awaited<ReturnType<typeof loadManifest>>['hearts'] = [];
-let model = 'acdc_aug';
+let model = 'gen'; // fallback only; the real name comes from the manifest below
 try {
   const m = await loadManifest();
   hearts = m.hearts;

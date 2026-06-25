@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from cardioseg.config import FLAGSHIP_RUN
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store
@@ -79,7 +80,7 @@ def export(run: Path, verify_dir: Path, quantize: bool = True) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/gen", help="run dir holding model.pth")
+    ap.add_argument("--run", default=FLAGSHIP_RUN, help="run dir holding model.pth")
     ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()

@@ -22,15 +22,14 @@ pip install -e .
 #    https://www.creatis.insa-lyon.fr/Challenge/acdc/); point paths.yaml at them
 cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc; M&M-2 sits beside it
 
-# 3. train the demo model (see cardioseg/README) -> runs/mnm2_to_acdc/model.pth
-#    multi-vendor M&M-2 train, ACDC held out — split = DataCfg criteria (no --dataset/--test flags)
-python -m cardioseg.training.train --out runs/mnm2_to_acdc --epochs 40 \
-    --set data.sources=('mnm2','acdc') data.test_datasets=('acdc',) data.test_vendors=()
+# 3. train the flagship (see cardioseg/README) -> runs/gen/model.pth
+#    = cardioseg.config.FLAGSHIP_RUN: pooled M&M-2 + M&Ms-1, ACDC + Canon held out.
 
 # 4. bake the web assets (the viewer follows the model via the manifest). Hearts come from
 #    paths.yaml (cardioview.hearts) — ACDC patients the flagship never trained on.
-python cardioview/export_onnx.py --model mnm2         # -> web/public/models/mnm2.onnx
-python cardioview/export_web.py --mode animate --model mnm2   # -> web/public/data/*.glb + manifest.json
+#    --model defaults to 'gen' (cardioview/common.py DEFAULT_MODEL).
+python cardioview/export_onnx.py --model gen          # -> web/public/models/gen.onnx (flagship; default)
+python cardioview/export_web.py --mode animate --model gen    # -> web/public/data/*.glb + manifest.json
 
 # 5. run the viewer
 cd cardioview/web && npm install && npm run dev        # http://localhost:5173

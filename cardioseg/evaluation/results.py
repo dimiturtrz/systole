@@ -16,6 +16,7 @@ import numpy as np
 import polars as pl
 import torch
 
+from cardioseg.config import FLAGSHIP_RUN
 from cardioseg.data import store
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
 from cardioseg.evaluation.evaluate import surface_metrics, CLASSES
@@ -70,7 +71,7 @@ def build(run: Path) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/gen")
+    ap.add_argument("--run", default=FLAGSHIP_RUN)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
     a = ap.parse_args()
     res = build(Path(a.run))
