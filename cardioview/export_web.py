@@ -53,7 +53,19 @@ def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
     return mesh.compute_normals(auto_orient_normals=True, split_vertices=False)
 
 
-def heldout_set() -> set[str]:
+def heldout_set(model_name: str) -> set[str]:
+    """Subject IDs the model did NOT train on — derived from the run's saved config
+    (the flagship holds out ALL ACDC, not an 80/20 val slice). Falls back to the legacy
+    80/20 ACDC val split for older runs without a config.json."""
+    run = Path(MODELS[model_name]).parent
+    cfg_path = run / "config.json"
+    if cfg_path.exists():
+        from cardioseg.hparams import from_json
+        from cardioseg.data import store, splits
+        dc = from_json(cfg_path).data
+        meta = store.load(list(dc.sources))
+        _, _, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac)
+        return set(test.get_column("subject_id").to_list())
     _, val = split_patients(list(acdc_cases()), 0.2, 0)
     return {c.name for c in val}
 
@@ -116,7 +128,7 @@ def frame_indices(pdir):
 
 
 def run(patients, source, model, device, model_name):
-    held = heldout_set()
+    held = heldout_set(model_name)
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
@@ -138,7 +150,7 @@ def run(patients, source, model, device, model_name):
 
 def run_animate(patients, model, device, model_name, stride=1):
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry."""
-    held = heldout_set()
+    held = heldout_set(model_name)
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name

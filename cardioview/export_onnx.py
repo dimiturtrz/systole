@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from cardioseg.training.export_onnx import export as build_onnx
-from cardioseg.data.mri.acdc import acdc_cases
+from cardioseg.data import store
 from common import MODELS, DEFAULT_MODEL
 
 OUT = Path("cardioview/web/public/models")
@@ -27,8 +27,10 @@ def main() -> None:
     a = ap.parse_args()
 
     run = Path(MODELS[a.model]).parent  # runs/<name>/model.pth -> runs/<name>
-    verify_dir = Path(a.verify) if a.verify else acdc_cases()[0]
-    onnx = build_onnx(run, verify_dir, a.quantize)  # runs/<name>/model.onnx
+    # parity check needs a CONSOLIDATED-STORE npz (not a raw patient dir) — same source as
+    # cardioseg.training.export_onnx's own default.
+    verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
+    onnx = build_onnx(run, verify, a.quantize)  # runs/<name>/model.onnx
 
     OUT.mkdir(parents=True, exist_ok=True)
     dst = OUT / f"{a.model}.onnx"
