@@ -12,12 +12,13 @@ from pathlib import Path
 
 import numpy as np
 
+from cardioseg.config import DEFAULT_INPLANE
 from cardioseg.data.mri.acdc import load_ed_es
 from cardioseg.types import Image, Spacing, Volume
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
 # model trains on. The single source of truth. Slices (z) are left untouched (2D-model convention).
-TARGET_INPLANE = 1.5
+TARGET_INPLANE = DEFAULT_INPLANE
 ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
 
 

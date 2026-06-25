@@ -21,10 +21,11 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from cardioseg.config import DEFAULT_SIZE
 from cardioseg.data.store import load_arrays
 from cardioseg.types import Slice2D
 
-SIZE = 256  # the square grid the 2D model runs on — single source for eval/export (DataCfg.size mirrors it)
+SIZE = DEFAULT_SIZE  # square grid the 2D model runs on; single source = config.DEFAULT_SIZE (== DataCfg.size)
 
 
 def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
@@ -64,7 +65,7 @@ class ACDCSliceDataset(Dataset):
     def __init__(
         self,
         npz_paths: list[str | Path],
-        size: int = 256,
+        size: int = DEFAULT_SIZE,
         frames: tuple[str, ...] = ("ED", "ES"),
         keep_empty: bool = False,
         augment: bool = False,
@@ -102,7 +103,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def datasets(train_paths: list[str], val_paths: list[str], size: int = 256
+def datasets(train_paths: list[str], val_paths: list[str], size: int = DEFAULT_SIZE
              ) -> tuple[ACDCSliceDataset, ACDCSliceDataset]:
     """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
 

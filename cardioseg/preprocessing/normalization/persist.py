@@ -13,10 +13,10 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from cardioseg.config import data_root
+from cardioseg.config import data_root, KNOWN_DATASETS
 from cardioseg.data.mri.registry import get_adapter
 
-_DATASETS = ("acdc", "mnm2", "mnms1")
+_DATASETS = KNOWN_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"
 
 

@@ -20,6 +20,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from cardioseg.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
+
 _VALIDATE = ConfigDict(validate_assignment=True)   # setattr (used by --set) re-validates the field
 
 
@@ -75,13 +77,13 @@ class DataCfg(BaseModel):
     the rest, labelled. The criteria ARE the split — serialized to config.json. Defaults = the
     generalization split (ACDC centre-shift + Canon unseen-vendor)."""
     model_config = _VALIDATE
-    sources: tuple[str, ...] = ("acdc", "mnm2", "mnms1")
+    sources: tuple[str, ...] = KNOWN_DATASETS
     test_datasets: tuple[str, ...] = ("acdc",)
     test_vendors: tuple[str, ...] = ("Canon",)
-    inplane: float = Field(1.5, gt=0)
+    inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
     val_frac: float = Field(0.2, gt=0, lt=1)
-    size: int = Field(256, ge=32)
+    size: int = Field(DEFAULT_SIZE, ge=32)
 
 
 class TrainCfg(BaseModel):
