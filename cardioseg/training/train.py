@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..hparams import TrainCfg
 from ..labels import FOREGROUND
+from ..tracking import start as start_tracking
 
 
 def _val_dice(model, val_dl, device) -> float:
@@ -92,6 +93,8 @@ def train_seg(cfg: TrainCfg):
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
     best_dice, best_state, bad = -1.0, None, 0
     nb = len(dl)
+    trk = start_tracking("cardioseg", out.name,
+                         {**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)})
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
         model.train()
@@ -121,6 +124,7 @@ def train_seg(cfg: TrainCfg):
         dt = time.perf_counter() - t0
         log.info("epoch %2d  train_loss %.4f  val_dice %.4f%s  (%.1fs, %.1f batch/s)",
                  ep, tot / nb, vd, " *" if improved else "", dt, nb / dt)
+        trk.metric("train_loss", tot / nb, step=ep); trk.metric("val_dice", vd, step=ep)
         if bad >= cfg.patience:
             log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
             break
@@ -143,6 +147,12 @@ def train_seg(cfg: TrainCfg):
             "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     log.info("saved model + config + metrics -> %s/", out)
+
+    trk.summary(results)                                    # final per-axis dice/EF
+    for f in ("config.json", "metrics.json", "train.log"):
+        trk.artifact(out / f)
+    trk.artifact(out / "plots")
+    trk.end()
 
     # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a
     # hiccup logs and moves on, never fails a finished training run.

@@ -28,7 +28,8 @@ n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True). N
 export = ["onnxruntime"]     # ONNX export + parity check (cardioseg/training/export_onnx.py)
 viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
-all = ["SimpleITK", "onnxruntime", "pyvista", "nnunetv2>=2.5", "pytest"]
+track = ["mlflow"]           # optional experiment tracking (cardioseg/tracking.py); guarded, local backend
+all = ["SimpleITK", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

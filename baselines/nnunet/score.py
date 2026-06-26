@@ -115,6 +115,12 @@ def main():
         Path(a.out).write_text(json.dumps(out, indent=2))
         print(f"\nwrote {a.out}: " + " · ".join(f"{ax} mean {r['dice']['mean']}" for ax, r in per_axis.items()))
 
+    if per_axis:                                          # log the scored baseline alongside our runs
+        from cardioseg.tracking import start
+        trk = start("cardioseg", "nnunet-baseline", {"segmenter": "nnU-Net", "config": "2d/fold0/50ep"})
+        trk.summary({ax: {"dice_mean": r["dice"]["mean"], "ef_mae": r.get("ef_mae")} for ax, r in per_axis.items()})
+        trk.end()
+
 
 if __name__ == "__main__":
     main()

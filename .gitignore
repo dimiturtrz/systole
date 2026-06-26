@@ -36,3 +36,6 @@ cardioview/web/debug-*.png
 
 # private job-application material — never public
 applications/
+
+# MLflow local tracking store (Phase 1; runs/ + RESULTS.json stay canonical)
+mlruns/
