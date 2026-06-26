@@ -91,6 +91,16 @@ def main():
     print(f"wrote {a.out}: " + " · ".join(
         f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
+    # log the CANONICAL per-axis numbers into the run's mlflow entry (resumes the train run)
+    from cardioseg.tracking import track_run
+    trk = track_run("cardioseg", Path(a.run).name, run_dir=Path(a.run))
+    for ax, v in f.items():
+        trk.metric(f"{ax}_dice_mean", v["dice"]["mean"])
+        trk.metric(f"{ax}_ef_mae", v["ef_mae"])
+        trk.metric(f"{ax}_ef_bias", v["ef_bias"])
+    trk.artifact(a.out)
+    trk.end()
+
 
 if __name__ == "__main__":
     main()

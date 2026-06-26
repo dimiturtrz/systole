@@ -152,6 +152,14 @@ def main():
           f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
     print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
+    from ..tracking import track_run
+    trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+    ev = a.eval
+    trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
+    trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)
+    trk.artifact(out / "uncertainty.json"); trk.artifact(out / "reliability.png")
+    trk.end()
+
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
     from ..labels import overlay_cmap

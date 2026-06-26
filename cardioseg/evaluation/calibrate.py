@@ -113,6 +113,14 @@ def main():
     (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
     print(f"-> {run}/plots/calibration.json")
 
+    from ..tracking import track_run
+    trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+    trk.metric("temp_T", T)
+    for name, ax in report["axes"].items():
+        trk.metric(f"{name}_ece_uncal", ax["ece_uncal"]); trk.metric(f"{name}_ece_temp", ax["ece_temp"])
+    trk.artifact(run / "plots" / "calibration.json")
+    trk.end()
+
 
 if __name__ == "__main__":
     main()

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..hparams import TrainCfg
 from ..labels import FOREGROUND
-from ..tracking import start as start_tracking
+from ..tracking import track_run
 
 
 def _val_dice(model, val_dl, device) -> float:
@@ -93,8 +93,8 @@ def train_seg(cfg: TrainCfg):
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
     best_dice, best_state, bad = -1.0, None, 0
     nb = len(dl)
-    trk = start_tracking("cardioseg", out.name,
-                         {**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)})
+    trk = track_run("cardioseg", out.name, run_dir=out,
+                    params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)})
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
         model.train()

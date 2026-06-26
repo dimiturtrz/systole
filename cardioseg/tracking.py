@@ -75,7 +75,7 @@ class _Live:
 
 
 def start(experiment: str, run_name: str, params: dict | None = None):
-    """Begin a tracked run (local mlruns/). Returns a handle; a no-op handle if tracking is off."""
+    """Begin a fresh tracked run (local mlruns/). Returns a handle; no-op if tracking is off."""
     mlflow = _mlflow()
     if mlflow is None:
         return _Noop()
@@ -89,3 +89,55 @@ def start(experiment: str, run_name: str, params: dict | None = None):
         return _Live(mlflow)
     except Exception:
         return _Noop()      # tracking must never break a run
+
+
+def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None = None):
+    """Resume the run tied to `run_dir` (via runs/<name>/.mlflow_run_id) if it exists, else start a
+    fresh one and persist its id there. Lets the post-hoc eval (results/uncertainty/calibrate) log the
+    CANONICAL numbers into the SAME run train.py created — so the UI compares real numbers, not just
+    training curves."""
+    mlflow = _mlflow()
+    if mlflow is None:
+        return _Noop()
+    try:
+        _MLRUNS.mkdir(exist_ok=True)
+        mlflow.set_tracking_uri(_MLRUNS.as_uri())
+        mlflow.set_experiment(experiment)
+        idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
+        rid = idf.read_text().strip() if idf and idf.exists() else None
+        if rid:
+            mlflow.start_run(run_id=rid)                 # resume — don't re-log params
+        else:
+            mlflow.start_run(run_name=run_name)
+            if params:
+                mlflow.log_params(_flat(params))
+            if idf:
+                idf.write_text(mlflow.active_run().info.run_id)
+        return _Live(mlflow)
+    except Exception:
+        return _Noop()
+
+
+def backfill(experiment: str = "cardioseg"):
+    """One-shot: log existing runs/<name>/{config,metrics}.json as runs, so the UI has history.
+    Skips runs already tracked (have .mlflow_run_id). `python -m cardioseg.tracking`."""
+    import json
+    runs_dir = _ROOT / "runs"
+    n = 0
+    for mj in sorted(runs_dir.glob("*/metrics.json")):
+        rd = mj.parent
+        if (rd / ".mlflow_run_id").exists():
+            continue
+        m = json.loads(mj.read_text())
+        trk = track_run(experiment, rd.name, run_dir=rd, params=m.get("config", {}))
+        trk.summary(m.get("results", {}))               # val/test train-time numbers
+        for f in ("config.json", "metrics.json"):
+            trk.artifact(rd / f)
+        trk.end()
+        print(f"backfilled {rd.name}")
+        n += 1
+    print(f"backfilled {n} run(s)")
+
+
+if __name__ == "__main__":
+    backfill()
