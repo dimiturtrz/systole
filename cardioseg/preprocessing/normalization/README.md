@@ -72,7 +72,7 @@ estimable; diversify when stripping is unreliable or discards signal.
 | factor | physical cause | augment (add) | normalize (strip) | current call | status |
 |---|---|---|---|---|---|
 | per-volume brightness/scale | acquisition gain, windowing | gamma/contrast (have) | z-score per volume (have) | both, crude | ✅ |
-| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | augment **regressed** (see Findings); strip (N4) A/B running | 🔬 |
+| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **settled non-lever**: augment regressed *and* strip (N4) regressed → leave it (z-score only) | ✅ resolved |
 | vendor intensity dist. | T1-weighting, flip angle, recon LUT | random gamma + histogram retarget (T1) | histogram standardization (Nyúl) = harmonization `qfz` | diversify (qfz parked: vendors level in-domain) | ⬜ aug side |
 | noise floor / distribution | magnitude op on complex signal | Rician noise (T1) — we use plain Gaussian | denoise / variance-stabilize | diversify (Rician) | ⬜ |
 | k-space artifacts | corrupted k-space, motion in acq | ghosting, spike (T1) | de-ghost / artifact reject | diversify (rare, hard to strip) | ⬜ |
@@ -98,13 +98,19 @@ which is the result:
 3. **Deep-ensembling buys nothing** on unseen vendors (Canon Dice +0.000, GE +0.006 — within noise),
    confirming low headroom.
 
+4. **The strip dual (N4) regressed too.** Normalizing the bias factor (N4, default params) made it
+   *worse*, EF most of all: ACDC EF 6.5→7.3%, Canon 11.9→15.0%, GE 11.3→13.5% (Dice ~flat, −0.006 on the
+   test vendors). So **both directions of the bias-field factor hurt** — augment *and* strip. The taxonomy's
+   "undecided: strip vs diversify" for bias-field is **resolved: neither** — leave it (z-score only). The
+   bias field simply isn't where the cross-vendor gap lives.
+
 **Conclusion:** the cross-vendor gap is mostly **aleatoric** (boundary/partial-volume ambiguity) +
-**model-class** limits — *not* reducible by augmentation or same-recipe ensembling. The honest move is to
-report the floor. The real reducible lever is a **stronger model class** (3D / nnU-Net direction —
-evidenced by nnU-Net's cross-class ~2.8 Dice lead, which a same-recipe ensemble is structurally blind to).
-The *strip* dual of the failed bias-aug — **N4 bias correction** — is the active counter-experiment
-(does normalizing the factor help where augmenting it didn't?). Tracked: `bd cardiac-seg-{jp1,chm}`; runs
-logged in MLflow.
+**model-class** limits — *not* reducible by augmentation, same-recipe ensembling, *or* bias normalization.
+The honest move is to report the floor. The real reducible lever is a **stronger model class** (3D /
+nnU-Net direction — evidenced by nnU-Net's cross-class ~2.8 Dice lead, which a same-recipe ensemble is
+structurally blind to). The duality experiment (augment ↔ strip the same factor) is itself the result:
+both hurt → the factor is settled. Tracked: `bd cardiac-seg-{jp1,chm}`; runs logged in MLflow
+(gen / aug_bias / n4 / seeds comparable on canonical axes).
 
 ## The diversify force — two distinct families: augmentation vs generation
 
