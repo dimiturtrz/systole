@@ -152,6 +152,9 @@ def train_seg(cfg: TrainCfg):
     for f in ("config.json", "metrics.json", "train.log"):
         trk.artifact(out / f)
     trk.artifact(out / "plots")
+    from ..config import FLAGSHIP_RUN                        # register a model version (catalog)
+    trk.log_model(model, "cardioseg-unet",
+                  alias="production" if out.name == Path(FLAGSHIP_RUN).name else None)
     trk.end()
 
     # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a

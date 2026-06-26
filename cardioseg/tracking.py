@@ -44,6 +44,7 @@ class _Noop:
     def metric(self, *a, **k): pass
     def summary(self, *a, **k): pass
     def artifact(self, *a, **k): pass
+    def log_model(self, *a, **k): pass
     def end(self): pass
 
 
@@ -67,6 +68,18 @@ class _Live:
         try:
             if Path(path).exists():
                 self._m.log_artifact(str(path))
+        except Exception: pass
+
+    def log_model(self, model, registered_name, alias=None):
+        """Log the torch model into this run + register a version (catalog). `alias` (e.g.
+        'production') points at the just-logged version. Guarded — never breaks a run."""
+        try:
+            import mlflow.pytorch
+            mlflow.pytorch.log_model(model, name="model", registered_model_name=registered_name)
+            if alias:
+                c = self._m.tracking.MlflowClient()
+                v = max(int(mv.version) for mv in c.search_model_versions(f"name='{registered_name}'"))
+                c.set_registered_model_alias(registered_name, alias, str(v))
         except Exception: pass
 
     def end(self):
@@ -139,5 +152,28 @@ def backfill(experiment: str = "cardioseg"):
     print(f"backfilled {n} run(s)")
 
 
+def register_all(experiment: str = "cardioseg", registered_name: str = "cardioseg-unet"):
+    """Register each runs/<name>/model.pth as a version of `registered_name` (catalog), resuming its
+    run so the version links to it; the flagship (config.FLAGSHIP_RUN) gets the 'production' alias.
+    runs/ + FLAGSHIP_RUN stay the resolver — this is a versioned record, not the load path."""
+    from .training.model import load_run
+    from .config import FLAGSHIP_RUN
+    flagship = Path(FLAGSHIP_RUN).name
+    n = 0
+    for pth in sorted((_ROOT / "runs").glob("*/model.pth")):
+        rd = pth.parent
+        model, _, _ = load_run(rd, "cpu")
+        trk = track_run(experiment, rd.name, run_dir=rd)        # resume the run
+        trk.log_model(model, registered_name, alias=("production" if rd.name == flagship else None))
+        trk.end()
+        print(f"registered {rd.name}" + ("  (production)" if rd.name == flagship else ""))
+        n += 1
+    print(f"registered {n} model version(s) under '{registered_name}'")
+
+
 if __name__ == "__main__":
-    backfill()
+    import argparse
+    ap = argparse.ArgumentParser(description="MLflow utilities (Phase 1).")
+    ap.add_argument("--register", action="store_true", help="register runs/* as model versions (catalog)")
+    a = ap.parse_args()
+    register_all() if a.register else backfill()
