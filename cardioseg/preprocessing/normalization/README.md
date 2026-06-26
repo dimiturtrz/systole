@@ -72,7 +72,7 @@ estimable; diversify when stripping is unreliable or discards signal.
 | factor | physical cause | augment (add) | normalize (strip) | current call | status |
 |---|---|---|---|---|---|
 | per-volume brightness/scale | acquisition gain, windowing | gamma/contrast (have) | z-score per volume (have) | both, crude | ✅ |
-| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **undecided** — A/B strip vs diversify | ⬜ aug side |
+| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | augment **regressed** (see Findings); strip (N4) A/B running | 🔬 |
 | vendor intensity dist. | T1-weighting, flip angle, recon LUT | random gamma + histogram retarget (T1) | histogram standardization (Nyúl) = harmonization `qfz` | diversify (qfz parked: vendors level in-domain) | ⬜ aug side |
 | noise floor / distribution | magnitude op on complex signal | Rician noise (T1) — we use plain Gaussian | denoise / variance-stabilize | diversify (Rician) | ⬜ |
 | k-space artifacts | corrupted k-space, motion in acq | ghosting, spike (T1) | de-ghost / artifact reject | diversify (rare, hard to strip) | ⬜ |
@@ -81,8 +81,30 @@ estimable; diversify when stripping is unreliable or discards signal.
 | full acquisition physics | sequence TR/TE/flip, tissue T1/T2/PD | CMRsim Bloch sim (T3) | — | diversify (maximalist) | ⬜ T3 |
 
 **Geometry/orientation** is the proof the pattern works — we already do *both* cleanly (resample strips,
-affine aug diversifies). **Bias field** is the highest-value undecided row: build the smooth-field model
-once for T1, get N4 (its inverse) nearly free, A/B the two directions on that single axis.
+affine aug diversifies). **Bias field** is the row we're actively A/B-ing in both directions (Findings below).
+
+## Findings — the augmentation wave hit an aleatoric floor (measured)
+
+We pushed the *diversify* side hard and it **did not move the unseen-vendor gap** — and we measured *why*,
+which is the result:
+
+1. **Bias-field augmentation regressed.** Adding a smooth bias-field perturbation (p=0.3) made the
+   unseen-vendor (Canon) result slightly *worse* — Dice 0.839→0.827, ECE 0.172→0.192, error-detection
+   AUPRC 0.600→0.563. "Confidently wrong," not "honestly uncertain" → a self-inflicted distribution
+   mismatch (the perturbation was redundant with existing contrast aug + ran post-z-score).
+2. **The reducible headroom is small.** Uncertainty decomposition (BALD): on Canon only ~31% of the
+   uncertainty is epistemic (reducible) via the weak TTA estimate; a **4-seed deep ensemble** puts it
+   lower (~15–18%) — the seeds *agree*, so more of the same recipe / more aug can't help.
+3. **Deep-ensembling buys nothing** on unseen vendors (Canon Dice +0.000, GE +0.006 — within noise),
+   confirming low headroom.
+
+**Conclusion:** the cross-vendor gap is mostly **aleatoric** (boundary/partial-volume ambiguity) +
+**model-class** limits — *not* reducible by augmentation or same-recipe ensembling. The honest move is to
+report the floor. The real reducible lever is a **stronger model class** (3D / nnU-Net direction —
+evidenced by nnU-Net's cross-class ~2.8 Dice lead, which a same-recipe ensemble is structurally blind to).
+The *strip* dual of the failed bias-aug — **N4 bias correction** — is the active counter-experiment
+(does normalizing the factor help where augmenting it didn't?). Tracked: `bd cardiac-seg-{jp1,chm}`; runs
+logged in MLflow.
 
 ## The diversify force — two distinct families: augmentation vs generation
 

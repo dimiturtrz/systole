@@ -87,6 +87,12 @@ real labels ──simulate physics──>  Tier 3: synth-physics  (CMRsim / Bloc
 needed → Tier 3 only with a specific hypothesis that k-space/physics, not intensity distribution, is the
 failure mode. **All three are wanted** as a synthetic-data story; effort/payoff just differs.
 
+> **Tier 1 result (measured, negative):** bias-field augmentation *regressed* the unseen-vendor gap; a
+> 4-seed deep ensemble shows only ~15–18% reducible (epistemic) headroom — the gap is mostly aleatoric +
+> model-class, not aug-reducible. So Tier 1 is **concluded** (report the floor); the real lever is a
+> stronger model class (nnU-Net/3D). Tier 2 (generation) and the *strip* dual (N4 / harmonization) remain
+> the live threads. Full findings → [normalization README](cardioseg/preprocessing/normalization/README.md#findings--the-augmentation-wave-hit-an-aleatoric-floor-measured).
+
 **Sim libs evaluated** (cite, don't blind-reinvent): TorchIO/MONAI (Tier 1), SynthSeg (Tier 2),
 CMRsim / MRzero / FaBiAN (Tier 3 Python Bloch); KomaMRI (Julia — wrong ecosystem for a Python loop),
 JEMRIS (C++ — very high integration cost), MRiLab (MATLAB — dead since 2017). Full evaluation:
