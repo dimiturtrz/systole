@@ -59,12 +59,14 @@ class _Live:
         except Exception: pass
 
     def summary(self, results: dict):
-        """Log final per-axis scalars (e.g. {'test': {'dice_mean':..,'ef_mae':..}}) as <axis>_<k>."""
+        """Log the TRAIN-TIME per-axis scalars as fit_<axis>_<k> (e.g. fit_val_dice_mean). The 'fit_'
+        prefix marks these as in-loop validate() numbers — distinct from the authoritative canonical
+        metrics (acdc/canon/ge_*) that results.py logs. Don't let them masquerade as the test number."""
         for axis, d in (results or {}).items():
             if isinstance(d, dict):
                 for k in ("dice_mean", "ef_mae"):
                     if isinstance(d.get(k), (int, float)):
-                        self.metric(f"{axis}_{k}", d[k])
+                        self.metric(f"fit_{axis}_{k}", d[k])
 
     def artifact(self, path):
         try:
