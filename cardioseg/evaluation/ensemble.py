@@ -33,6 +33,40 @@ def ensemble_decompose(models, vol_img, size, device):
     return pred.cpu().numpy(), total.cpu().numpy(), aleat.cpu().numpy(), epi.cpu().numpy()
 
 
+def ensemble_score(models, df, size, device):
+    """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
+    like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
+    import numpy as np
+    from ..data import store
+    from ..training.dataset import fit_square
+    from ..labels import FOREGROUND, LV_CAV
+    from .postprocess import largest_cc_per_class
+    from .measure import ejection_fraction
+
+    inter = {c: 0.0 for c in FOREGROUND}; den = {c: 0.0 for c in FOREGROUND}
+    diffs = []
+    for r in df.iter_rows(named=True):
+        c = store.load_arrays(r["path"]); sp = tuple(float(s) for s in c["spacing"])
+        preds, gts = {}, {}
+        for tag in ("ed", "es"):
+            if f"{tag}_img" not in c:
+                continue
+            pred = largest_cc_per_class(ensemble_decompose(models, c[f"{tag}_img"], size, device)[0])
+            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            preds[tag], gts[tag] = pred, gt
+            for cl in FOREGROUND:
+                p, g = pred == cl, gt == cl
+                inter[cl] += 2.0 * np.logical_and(p, g).sum(); den[cl] += p.sum() + g.sum()
+        if "ed" in preds and "es" in preds:
+            efp = ejection_fraction(preds["ed"], preds["es"], sp)[0]
+            efg = ejection_fraction(gts["ed"], gts["es"], sp)[0]
+            if not (np.isnan(efp) or np.isnan(efg)):
+                diffs.append(efp - efg)
+    dice = {cl: (inter[cl] / den[cl] if den[cl] else float("nan")) for cl in FOREGROUND}
+    return {"dice_mean": round(float(np.nanmean(list(dice.values()))), 3),
+            "ef_mae": round(float(np.mean(np.abs(diffs))), 1) if diffs else float("nan")}
+
+
 def _eval_df(cfg, which):
     import polars as pl
     from ..data import store, splits
@@ -45,46 +79,58 @@ def _eval_df(cfg, which):
     return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
 
-def main():
+def _headroom(models, df, size, device):
+    """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
     from ..data import store
-    from ..training.dataset import fit_square, SIZE
-    from ..training.model import load_run, resolve_device
+    from ..training.dataset import fit_square
     from .uncertainty import tta_uncertainty
-
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
-    ap.add_argument("--eval", default="canon", help="axis: canon | ge | acdc")
-    a = ap.parse_args()
-    device = resolve_device()
-    loaded = [load_run(r, device) for r in a.runs]
-    models = [m for m, _, _ in loaded]
-    cfg = loaded[0][1]                                   # split criteria from the first run's config
-    df = _eval_df(cfg, a.eval)
-
-    ens_ale, ens_epi = [], []                            # deep-ensemble foreground voxels
-    tta_ale, tta_epi = [], []                            # single-model (gen) TTA, same voxels
+    ea, ee, ta, te = [], [], [], []
     for r in df.iter_rows(named=True):
         c = store.load_arrays(r["path"])
         for tag in ("ed", "es"):
             if f"{tag}_img" not in c:
                 continue
-            pred, _, ale, epi = ensemble_decompose(models, c[f"{tag}_img"], SIZE, device)
-            gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            pred, _, ale, epi = ensemble_decompose(models, c[f"{tag}_img"], size, device)
+            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
             fg = (pred > 0) | (gt > 0)
-            ens_ale.append(ale[fg]); ens_epi.append(epi[fg])
-            _, _, _, ta, te = tta_uncertainty(models[0], c[f"{tag}_img"], SIZE, device)
-            tta_ale.append(ta[fg]); tta_epi.append(te[fg])
+            ea.append(ale[fg]); ee.append(epi[fg])
+            _, _, _, sa, se_ = tta_uncertainty(models[0], c[f"{tag}_img"], size, device)
+            ta.append(sa[fg]); te.append(se_[fg])
+    f = lambda al, ep: (float(np.concatenate(ep).mean()) /
+                        max(float(np.concatenate(al).mean()) + float(np.concatenate(ep).mean()), 1e-9))
+    return f(ea, ee), f(ta, te)             # ensemble reducible-frac, single(TTA) reducible-frac
 
-    def frac(ale, epi):
-        a_, e_ = float(np.concatenate(ale).mean()), float(np.concatenate(epi).mean())
-        return a_, e_, e_ / max(a_ + e_, 1e-9)
-    ea, ee, ef = frac(ens_ale, ens_epi)
-    ta, te, tf = frac(tta_ale, tta_epi)
-    print(f"axis {a.eval} (n={len(df)}), K={len(models)} models")
-    print(f"  deep-ensemble : aleatoric {ea:.3f} / epistemic {ee:.3f}  -> {ef:.0%} reducible")
-    print(f"  single (TTA)  : aleatoric {ta:.3f} / epistemic {te:.3f}  -> {tf:.0%} reducible")
-    print(f"  => weak TTA hid {ef - tf:+.0%} of reducible headroom" if ef > tf else
-          f"  => TTA estimate already near-ensemble ({ef:.0%} vs {tf:.0%})")
+
+def main():
+    from ..training.dataset import SIZE
+    from ..training.model import load_run, resolve_device
+    from ..tracking import start
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
+    ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
+    a = ap.parse_args()
+    device = resolve_device()
+    loaded = [load_run(r, device) for r in a.runs]
+    models = [m for m, _, _ in loaded]
+    cfg = loaded[0][1]
+    trk = start("cardioseg", f"ensemble-{len(models)}seed",
+                {"members": len(models), "runs": ",".join(Path(r).name for r in a.runs)})
+    for ax in a.eval:
+        df = _eval_df(cfg, ax)
+        if not len(df):
+            continue
+        ens = ensemble_score(models, df, SIZE, device)          # K models
+        sgl = ensemble_score(models[:1], df, SIZE, device)      # single (gen)
+        ef_red, tf_red = _headroom(models, df, SIZE, device)
+        dd = ens["dice_mean"] - sgl["dice_mean"]
+        print(f"axis {ax} (n={len(df)}, K={len(models)}): "
+              f"Dice ensemble {ens['dice_mean']} vs single {sgl['dice_mean']} ({dd:+.3f}) | "
+              f"EF MAE {ens['ef_mae']} vs {sgl['ef_mae']} | reducible {ef_red:.0%} (ensemble) / {tf_red:.0%} (TTA)")
+        trk.metric(f"{ax}_dice_ensemble", ens["dice_mean"]); trk.metric(f"{ax}_dice_single", sgl["dice_mean"])
+        trk.metric(f"{ax}_ef_ensemble", ens["ef_mae"]); trk.metric(f"{ax}_ef_single", sgl["ef_mae"])
+        trk.metric(f"{ax}_reducible_ensemble", round(ef_red, 3)); trk.metric(f"{ax}_reducible_tta", round(tf_red, 3))
+    trk.end()
 
 
 if __name__ == "__main__":

@@ -96,6 +96,8 @@ def start(experiment: str, run_name: str, params: dict | None = None):
         _MLRUNS.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(_MLRUNS.as_uri())
         mlflow.set_experiment(experiment)
+        try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
+        except Exception: pass
         mlflow.start_run(run_name=run_name)
         if params:
             mlflow.log_params(_flat(params))
@@ -116,6 +118,8 @@ def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None 
         _MLRUNS.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(_MLRUNS.as_uri())
         mlflow.set_experiment(experiment)
+        try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
+        except Exception: pass
         idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
         rid = idf.read_text().strip() if idf and idf.exists() else None
         if rid:
