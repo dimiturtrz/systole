@@ -96,6 +96,7 @@ def train_seg(cfg: TrainCfg):
     trk = track_run("cardioseg", out.name, run_dir=out,
                     params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)},
                     tags={"split": "+".join(d.test_vendors) or "legacy", "seed": cfg.seed})
+    fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
         model.train()
@@ -129,6 +130,7 @@ def train_seg(cfg: TrainCfg):
         if bad >= cfg.patience:
             log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
             break
+    trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
     if best_state is not None:
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
