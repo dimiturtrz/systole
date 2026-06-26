@@ -44,6 +44,7 @@ class _Noop:
     def metric(self, *a, **k): pass
     def summary(self, *a, **k): pass
     def artifact(self, *a, **k): pass
+    def tag(self, *a, **k): pass
     def log_model(self, *a, **k): pass
     def end(self): pass
 
@@ -70,16 +71,24 @@ class _Live:
                 self._m.log_artifact(str(path))
         except Exception: pass
 
-    def log_model(self, model, registered_name, alias=None):
-        """Log the torch model into this run + register a version (catalog). `alias` (e.g.
-        'production') points at the just-logged version. Guarded — never breaks a run."""
+    def tag(self, key, value):
+        try: self._m.set_tag(key, str(value))
+        except Exception: pass
+
+    def log_model(self, model, registered_name, alias=None, description=None, version_tags=None):
+        """Log the torch model + register a version (catalog). `alias` (e.g. 'production') points at it;
+        `description`/`version_tags` make the auto-numbered version readable. Guarded."""
         try:
             import mlflow.pytorch
             mlflow.pytorch.log_model(model, name="model", registered_model_name=registered_name)
+            c = self._m.tracking.MlflowClient()
+            v = str(max(int(mv.version) for mv in c.search_model_versions(f"name='{registered_name}'")))
+            if description:
+                c.update_model_version(registered_name, v, description=description)
+            for k, val in (version_tags or {}).items():
+                c.set_model_version_tag(registered_name, v, k, str(val))
             if alias:
-                c = self._m.tracking.MlflowClient()
-                v = max(int(mv.version) for mv in c.search_model_versions(f"name='{registered_name}'"))
-                c.set_registered_model_alias(registered_name, alias, str(v))
+                c.set_registered_model_alias(registered_name, alias, v)
         except Exception: pass
 
     def end(self):
@@ -87,7 +96,7 @@ class _Live:
         except Exception: pass
 
 
-def start(experiment: str, run_name: str, params: dict | None = None):
+def start(experiment: str, run_name: str, params: dict | None = None, tags: dict | None = None):
     """Begin a fresh tracked run (local mlruns/). Returns a handle; no-op if tracking is off."""
     mlflow = _mlflow()
     if mlflow is None:
@@ -101,12 +110,15 @@ def start(experiment: str, run_name: str, params: dict | None = None):
         mlflow.start_run(run_name=run_name)
         if params:
             mlflow.log_params(_flat(params))
+        for k, v in (tags or {}).items():
+            mlflow.set_tag(k, str(v))
         return _Live(mlflow)
     except Exception:
         return _Noop()      # tracking must never break a run
 
 
-def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None = None):
+def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None = None,
+              tags: dict | None = None):
     """Resume the run tied to `run_dir` (via runs/<name>/.mlflow_run_id) if it exists, else start a
     fresh one and persist its id there. Lets the post-hoc eval (results/uncertainty/calibrate) log the
     CANONICAL numbers into the SAME run train.py created — so the UI compares real numbers, not just
@@ -130,6 +142,8 @@ def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None 
                 mlflow.log_params(_flat(params))
             if idf:
                 idf.write_text(mlflow.active_run().info.run_id)
+        for k, v in (tags or {}).items():
+            mlflow.set_tag(k, str(v))
         return _Live(mlflow)
     except Exception:
         return _Noop()
@@ -156,28 +170,57 @@ def backfill(experiment: str = "cardioseg"):
     print(f"backfilled {n} run(s)")
 
 
-def register_all(experiment: str = "cardioseg", registered_name: str = "cardioseg-unet"):
-    """Register each runs/<name>/model.pth as a version of `registered_name` (catalog), resuming its
-    run so the version links to it; the flagship (config.FLAGSHIP_RUN) gets the 'production' alias.
-    runs/ + FLAGSHIP_RUN stay the resolver — this is a versioned record, not the load path."""
+MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line
+
+
+def run_kind(name: str, is_flagship: bool, same_split: bool) -> str:
+    """Classify a run for tagging/grouping."""
+    if is_flagship: return "flagship"
+    if name.startswith("seed"): return "seed"
+    if "aug" in name or "bias" in name: return "ablation"
+    return "candidate" if same_split else "xdataset"
+
+
+def recurate(experiment: str = "cardioseg", old: str = "cardioseg-unet"):
+    """Curate the registry: drop the lumped `old` model; tag every run (kind/split); register ONLY
+    deployable candidates (runs whose split matches the flagship's) as versions of MODEL_NAME with
+    readable descriptions + version tags; flagship gets the 'production' alias. Old experiments stay
+    tracked runs, not registry versions. runs/ + FLAGSHIP_RUN remain the resolver."""
     from .training.model import load_run
     from .config import FLAGSHIP_RUN
-    flagship = Path(FLAGSHIP_RUN).name
-    n = 0
+    from .hparams import from_json
+    mlflow = _mlflow()
+    if mlflow is None:
+        print("mlflow off"); return
+    mlflow.set_tracking_uri(_MLRUNS.as_uri())
+    c = mlflow.tracking.MlflowClient()
+    try: c.delete_registered_model(old)                 # drop the polluted catalog
+    except Exception: pass
+
+    flagname = Path(FLAGSHIP_RUN).name
+    fcfg = from_json(Path(FLAGSHIP_RUN) / "config.json").data
+    fsplit = (tuple(fcfg.test_vendors), tuple(fcfg.val_datasets))
     for pth in sorted((_ROOT / "runs").glob("*/model.pth")):
         rd = pth.parent
-        model, _, _ = load_run(rd, "cpu")
-        trk = track_run(experiment, rd.name, run_dir=rd)        # resume the run
-        trk.log_model(model, registered_name, alias=("production" if rd.name == flagship else None))
+        cp = rd / "config.json"
+        cfg = from_json(cp).data if cp.exists() else None
+        same = bool(cfg) and (tuple(cfg.test_vendors), tuple(cfg.val_datasets)) == fsplit
+        split = "+".join(cfg.test_vendors) if cfg else "legacy"
+        kind = run_kind(rd.name, rd.name == flagname, same)
+        trk = track_run(experiment, rd.name, run_dir=rd, tags={"kind": kind, "split": split})
+        if same:                                        # deployable candidate -> register a version
+            model, _, _ = load_run(rd, "cpu")
+            trk.log_model(model, MODEL_NAME, alias=("production" if rd.name == flagname else None),
+                          description=f"{rd.name} · split={split} · {kind}",
+                          version_tags={"run": rd.name, "split": split, "kind": kind})
         trk.end()
-        print(f"registered {rd.name}" + ("  (production)" if rd.name == flagship else ""))
-        n += 1
-    print(f"registered {n} model version(s) under '{registered_name}'")
+        print(f"{rd.name:14} kind={kind:10} {'REGISTERED' if same else 'run-only'}")
+    print(f"-> registry '{MODEL_NAME}': candidates only; production -> {flagname}")
 
 
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="MLflow utilities (Phase 1).")
-    ap.add_argument("--register", action="store_true", help="register runs/* as model versions (catalog)")
+    ap.add_argument("--recurate", action="store_true", help="curate registry + tag runs (kind/split)")
     a = ap.parse_args()
-    register_all() if a.register else backfill()
+    recurate() if a.recurate else backfill()

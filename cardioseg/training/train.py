@@ -94,7 +94,8 @@ def train_seg(cfg: TrainCfg):
     best_dice, best_state, bad = -1.0, None, 0
     nb = len(dl)
     trk = track_run("cardioseg", out.name, run_dir=out,
-                    params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)})
+                    params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)},
+                    tags={"split": "+".join(d.test_vendors) or "legacy", "seed": cfg.seed})
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
         model.train()
@@ -153,8 +154,13 @@ def train_seg(cfg: TrainCfg):
         trk.artifact(out / f)
     trk.artifact(out / "plots")
     from ..config import FLAGSHIP_RUN                        # register a model version (catalog)
-    trk.log_model(model, "cardioseg-unet",
-                  alias="production" if out.name == Path(FLAGSHIP_RUN).name else None)
+    from ..tracking import MODEL_NAME
+    flag = out.name == Path(FLAGSHIP_RUN).name
+    split = "+".join(d.test_vendors) or "legacy"
+    trk.tag("kind", "flagship" if flag else "candidate")
+    trk.log_model(model, MODEL_NAME, alias="production" if flag else None,
+                  description=f"{out.name} · split={split} · seed={cfg.seed}",
+                  version_tags={"run": out.name, "split": split, "seed": cfg.seed})
     trk.end()
 
     # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a
