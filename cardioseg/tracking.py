@@ -14,7 +14,8 @@ import os
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
-_MLRUNS = _ROOT / "mlruns"
+_MLRUNS = _ROOT / "mlruns"                          # artifact store (default root)
+_DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"   # metadata + registry (file store deprecated)
 
 
 def _mlflow():
@@ -103,7 +104,7 @@ def start(experiment: str, run_name: str, params: dict | None = None, tags: dict
         return _Noop()
     try:
         _MLRUNS.mkdir(exist_ok=True)
-        mlflow.set_tracking_uri(_MLRUNS.as_uri())
+        mlflow.set_tracking_uri(_DB_URI)
         mlflow.set_experiment(experiment)
         try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
         except Exception: pass
@@ -128,7 +129,7 @@ def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None 
         return _Noop()
     try:
         _MLRUNS.mkdir(exist_ok=True)
-        mlflow.set_tracking_uri(_MLRUNS.as_uri())
+        mlflow.set_tracking_uri(_DB_URI)
         mlflow.set_experiment(experiment)
         try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
         except Exception: pass
@@ -192,7 +193,7 @@ def recurate(experiment: str = "cardioseg", old: str = "cardioseg-unet"):
     mlflow = _mlflow()
     if mlflow is None:
         print("mlflow off"); return
-    mlflow.set_tracking_uri(_MLRUNS.as_uri())
+    mlflow.set_tracking_uri(_DB_URI)
     c = mlflow.tracking.MlflowClient()
     try: c.delete_registered_model(old)                 # drop the polluted catalog
     except Exception: pass

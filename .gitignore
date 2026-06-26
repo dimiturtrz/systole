@@ -39,3 +39,5 @@ applications/
 
 # MLflow local tracking store (Phase 1; runs/ + RESULTS.json stay canonical)
 mlruns/
+mlflow.db
+mlartifacts/
