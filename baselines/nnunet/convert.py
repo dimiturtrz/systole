@@ -68,6 +68,9 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
         tr, test_df = tr.head(n_patients), test_df.head(n_patients)
 
     ds = Path(out_root) / f"Dataset{dataset_id:03d}_BATTERY"
+    import shutil
+    if ds.exists():
+        shutil.rmtree(ds)              # wipe stale cases — a prior split's files must NOT linger
     for sub in ("imagesTr", "labelsTr", "imagesTs", "labelsTs"):
         (ds / sub).mkdir(parents=True, exist_ok=True)
 
