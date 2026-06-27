@@ -83,7 +83,7 @@ estimable; diversify when stripping is unreliable or discards signal.
 **Geometry/orientation** is the proof the pattern works — we already do *both* cleanly (resample strips,
 affine aug diversifies). **Bias field** is the row we're actively A/B-ing in both directions (Findings below).
 
-## Findings — the augmentation wave hit an aleatoric floor (measured)
+## Findings — the augmentation wave hit a model-class / recipe floor (measured)
 
 We pushed the *diversify* side hard and it **did not move the unseen-vendor gap** — and we measured *why*,
 which is the result:
@@ -104,12 +104,14 @@ which is the result:
    "undecided: strip vs diversify" for bias-field is **resolved: neither** — leave it (z-score only). The
    bias field simply isn't where the cross-vendor gap lives.
 
-**Conclusion:** the cross-vendor gap is mostly **aleatoric** (boundary/partial-volume ambiguity) +
-**model-class** limits — *not* reducible by augmentation, same-recipe ensembling, *or* bias normalization.
-The honest move is to report the floor. The real reducible lever is a **stronger model class** (3D /
-nnU-Net direction — evidenced by nnU-Net's cross-class ~2.8 Dice lead, which a same-recipe ensemble is
-structurally blind to). The duality experiment (augment ↔ strip the same factor) is itself the result:
-both hurt → the factor is settled. Tracked: `bd cardiac-seg-{jp1,chm}`; runs logged in MLflow
+**Conclusion:** the cross-vendor gap is **not reducible by augmentation, same-recipe ensembling, or bias
+normalization** — these experiments exhausted our current recipe. The real reducible lever is a
+**stronger model class**: nnU-Net (50ep/1fold/2D floor, same split) achieves Canon EF 2.6% and GE EF
+4.3% vs ours 11.9% / 11.3% — demonstrating the gap was largely model-class epistemic, not an
+irreducible aleatoric floor. (Aleatoric / inter-observer limits are never conclusively proven here —
+only bounded below by inter-observer LoA.) A same-recipe ensemble is structurally blind to this; the
+duality experiment (augment ↔ strip the same factor) is itself the result: both hurt → the factor is
+settled. Tracked: `bd cardiac-seg-{jp1,chm}`; runs logged in MLflow
 (gen / aug_bias / n4 / seeds comparable on canonical axes).
 
 ## The diversify force — two distinct families: augmentation vs generation

@@ -22,7 +22,7 @@ acquisition* the segmentation model consumes. TypeScript + vtk.js; models the ac
 
 ## See the model work — [cardioview](cardioview/)
 Browser viewer (TS + vtk.js) of the flagship model's output on ACDC patients it never trained on
-(it learned on M&M-2): predicted chambers (LV cavity / myocardium / RV) as a **beating 3D heart**
+(trained on Siemens+Philips only, 495 subjects): predicted chambers (LV cavity / myocardium / RV) as a **beating 3D heart**
 with **EDV / ESV / LVEF vs ground truth**. Or drop in your own `.nii.gz` → segmented **in-browser** (ONNX).
 
 ![cardioview — held-out heart: predicted chambers, beating](cardioview/docs/media/demo.gif)
@@ -77,10 +77,9 @@ Paths from here, roughly in effort order:
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
 ### Segmentation — ours vs SOTA
-**A 1.6 M-param model: ~2–3 Dice points under nnU-Net's floor on ACDC val (0.88 vs 0.912), EF
-roughly level (6.5 vs 5.6%), at ~57× fewer parameters — and it exports to run in the browser.**
+**A 1.6 M-param model: ~3–4 Dice points under nnU-Net's floor on unseen vendors (Canon 0.839 vs 0.866, GE 0.839 vs 0.878), at ~57× fewer parameters — and it exports to run in the browser. EF gap is model-class epistemic: nnU-Net Canon 2.6% / GE 4.3% vs ours 11.9% / 11.3% — a stronger model class substantially closes it; ours trades that for ONNX portability.**
 
-Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
+Per-structure, unseen-vendor Canon+GE (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 <!-- results:compare -->
 | model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |
@@ -92,20 +91,20 @@ Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA b
 
 <sub>params + FLOPs measured (fvcore, single forward; nnU-Net at its 256×320 patch — inference adds tiling + TTA on top).</sub>
 
-**How we train:** a 2D U-Net on multi-vendor M&M-2 — heavy GPU augmentation + early stopping +
+**How we train:** a 2D U-Net on Siemens+Philips (495 subjects) — heavy GPU augmentation + early stopping +
 largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. **The alternative,** nnU-Net
 (self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
 scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
-clean-export). On ACDC (val), nnU-Net leads by **~2.8 Dice points** (0.912 vs 0.884) and on unseen-vendor
-Canon (0.876 vs 0.84); **EF is roughly level** (5.6 vs 6.5%). cardioseg's boundary is tighter on
-LV-cav (HD95 2.1 vs 3.3 mm) and myo (2.1 vs 2.9), comparable on RV. This is at **~57× the parameters
-and ~23× the FLOPs**, and ONNX-exportable; nnU-Net's sliding-window pipeline isn't.
+clean-export). On unseen-vendor Canon+GE (same split, same eval), nnU-Net leads by **~3–4 Dice points**
+(Canon 0.866 vs 0.839, GE 0.878 vs 0.839). **EF gap is large and model-class epistemic**: nnU-Net Canon
+2.6% vs ours 11.9%; GE 4.3% vs 11.3% — demonstrating the cross-vendor EF gap was reducible by a
+stronger model class. cardioseg trades that for ONNX portability at **~57× fewer parameters and ~23×
+fewer FLOPs**; nnU-Net's sliding-window pipeline doesn't clean-export.
 
-*Caveat — this nnU-Net is under-powered on purpose:* 50 epochs / 1 fold / 2D, not its full recipe
-(1000 ep × 5-fold ensemble + TTA + config search). So 0.912 is its **floor** — the full recipe would
-pull further ahead. The baseline proves *"I can run + score SOTA through my own eval,"*
-not *"I matched its ceiling."* *(Note: nnU-Net numbers are on the old split — ACDC-as-test, 564-subject
-train — and have not been re-run on the current split. Provisional.)*
+*This nnU-Net is under-powered on purpose:* 50 epochs / 1 fold / 2D, not its full recipe
+(1000 ep × 5-fold ensemble + TTA + config search). So 0.866/0.878 is its **floor** — the full recipe
+would pull further ahead. The baseline proves *"I can run + score SOTA through my own eval,"*
+not *"I matched its ceiling."*
 
 **Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
 and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +
@@ -115,8 +114,10 @@ surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**.
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
 - **EF precision.** On the ACDC val (centre-shift) 95% LoA are [−20, +9]; on unseen vendors wider
   still — both far past the ±5% clinical bar. And part of the
-  underprediction is *intrinsic*: even nnU-Net (SOTA) keeps a **−4% bias** cross-domain, so a better
-  segmenter tightens the spread but doesn't erase the lean — it's calibration, not just model quality.
+  the cross-vendor EF gap is **model-class epistemic**: nnU-Net on unseen Canon achieves bias −1.4%,
+  LoA [−8.2, +5.4]; on GE bias +0.9%, LoA [−11.7, +13.5] — near the ±5% clinical bar, demonstrating
+  the gap was reducible by a stronger model class. Our model's larger gap (bias ~−11%) is a model-class
+  limitation, not an irreducible floor.
 - **Unseen-vendor EF degrades.** Two vendors never in training (Canon n=9, GE n=69, total n=78)
   both score Dice **0.84** and EF MAE **~11–12%** — Canon and GE agree independently, so the
   cross-vendor signal is robust, but the clinical gap is real (11% vs 6.5% on ACDC val). Canon

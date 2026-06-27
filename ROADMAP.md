@@ -35,9 +35,12 @@ The cross-dataset EF is the honest weak spot; the roadmap out of it, in effort o
 3. ✅ **Heavy augmentation + early stopping + multi-source pooling** (GPU-batched) — wider geometry +
    vendor-style intensity jitter; trained to a val-Dice plateau (~95 ep, best checkpoint kept); pooled
    M&M-2 + M&Ms-1 (Siemens+Philips, 495 subjects). RV Dice 0.84 → **0.88**, mean 0.87 → **0.88**
-   (ED+ES), EF MAE 8.2 → **6.5%**, LoA ±27 → [−20.1, +8.9].
-   **~2–3 Dice points under the nnU-Net floor** (0.88 vs 0.912); EF roughly level (6.5 vs 5.6%); on a
-   deployable ONNX model at ~57× fewer params.
+   (ED+ES), EF MAE 8.2 → **6.5%** (ACDC val), LoA ±27 → [−20.1, +8.9].
+   On unseen vendors nnU-Net leads **~3–4 Dice points** (Canon 0.866 / GE 0.878 vs our 0.839) and its
+   **EF is far better** (Canon 2.6% / GE 4.3% vs our 11.9% / 11.3%) — the cross-vendor EF gap is largely
+   **model-class epistemic** (reducible by a stronger arch), not the floor. Ours trades it for a
+   deployable ONNX model at ~57× fewer params. The forward lever = stronger model class (instance norm /
+   finer spacing / 3D), not more aug/normalization (both settled-negative, see normalization README).
 4. ⬜ **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
    histogram standardization may tighten the spread. **Deprioritized by evidence:** in-domain M&M-2
    vendors are level (val split, ED+ES: Siemens/Philips 0.867, GE 0.880) — **no minority-vendor

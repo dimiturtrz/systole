@@ -21,35 +21,36 @@ This is a benchmark/reference model, not the project's shipped model — see
 
 ## Training & evaluation data
 
-> **Provisional:** this run used the **old split** — ACDC as the held-out test axis, 564-subject
-> train (M&M-2 + M&Ms-1 ex-Canon, all four vendors including GE). The current split uses ACDC as
-> val (early stopping + calibration), Canon+GE as the unseen-vendor test, and narrows training to
-> Siemens+Philips (495 subjects). Re-run on the new split is pending.
-
-Split as run (old configuration):
-- **Train+val (nnU-Net does its own CV):** M&M-2 + M&Ms-1 ex-Canon, labelled — 564 subjects / 1128
-  ED+ES cases (all four vendors: Siemens, Philips, GE; Canon excluded).
-- **Held out:** ACDC-150 (centre/protocol shift) + Canon-9 (unseen vendor) — 159 subjects / 318
-  cases. Per-case axis tagged in `ts_manifest.json`; scored per axis by `baselines/nnunet/score.py`.
+- **Train+val (nnU-Net does its own CV):** Siemens+Philips from M&M-2+M&Ms-1 — **495 labelled
+  subjects** (GE excluded from train).
+- **Val:** ACDC-150 (centre/protocol shift; used by the main model for early stopping + calibration —
+  not a nnU-Net test axis here).
+- **Held out (test):** Canon-9 + GE-69 = **78 subjects** (two fully unseen vendors). Per-case axis
+  tagged in `ts_manifest.json`; scored per axis by `baselines/nnunet/score.py`.
 
 ## Performance (scored by cardioseg.evaluation, same yardstick)
 
-**ACDC-150 (centre/protocol shift):**
+**Unseen-vendor test — Canon (n=9):**
 
 | structure | Dice | HD95 (mm) |
 |---|---|---|
-| LV cavity | 0.948 | 3.3 |
-| LV myocardium | 0.876 | 2.9 |
-| RV cavity | 0.911 | 5.1 |
-| **mean** | **0.912** | |
+| LV cavity | 0.892 | 5.9 |
+| LV myocardium | 0.829 | 8.1 |
+| RV cavity | 0.878 | 6.8 |
+| **mean** | **0.866** | |
 
-EF vs GT: **MAE 5.6%**, bias −4.2%, 95% LoA [−19.3, +10.8] (n=150).
+EF vs GT: **MAE 2.6%**, bias −1.4%, 95% LoA [−8.2, +5.4] (n=9).
 
-**Canon-9 (unseen vendor, old split):** mean Dice **0.876**; EF MAE 2.3% but **n=9 → not a reliable
-EF number** (M&Ms-1 withholds most Testing GT; only 9 Canon cases are labelled). GE was in training
-on the old split — it moves to the unseen-vendor test on the new split (pending re-run).
+**Unseen-vendor test — GE (n=69):**
 
-**Pooled (159):** mean Dice 0.907, EF MAE 5.4%, bias −4.1%.
+| structure | Dice | HD95 (mm) |
+|---|---|---|
+| LV cavity | 0.914 | 5.1 |
+| LV myocardium | 0.842 | 4.7 |
+| RV cavity | 0.877 | 5.8 |
+| **mean** | **0.878** | |
+
+EF vs GT: **MAE 4.3%**, bias +0.9%, 95% LoA [−11.7, +13.5] (n=69).
 
 ## vs the cardioseg 2D U-Net (same split, same eval)
 
@@ -61,17 +62,21 @@ on the old split — it moves to the unseen-vendor test on the new split (pendin
 | Canon / GE EF MAE | **2.6 / 4.3%** | 11.9 / 11.3% |
 <!-- /results:cardcompare -->
 
-- Both pool ED+ES. nnU-Net leads by **~2.8 Dice points** on ACDC (0.912 vs 0.884) and on unseen-vendor
-  Canon (0.876 vs 0.84), even at this floor setting. **EF is roughly level** (5.6% vs 6.5%). cardioseg
-  is ~2–3 Dice points under the nnU-Net floor at ~57× fewer parameters.
-- **One offset:** cardioseg's boundary is *tighter* (LV-cav HD95 2.1 vs 3.3 mm, myo 2.1 vs 2.9) — from its
-  largest-CC + TTA postprocessing, which **this nnU-Net run did not apply**. So the HD95 gap is a
-  postproc artifact, not a modelling result; read Dice/EF as the fair head-to-head.
+Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.839) and
+GE (0.878 vs 0.839), even at this floor setting. **EF gap is dramatic** — nnU-Net Canon 2.6% vs
+cardioseg 11.9%; GE 4.3% vs 11.3%. The EF gap is model-class epistemic (reducible by a stronger
+model): a stronger segmenter substantially closes it. cardioseg trades that for ONNX portability at
+~57× fewer parameters.
+
+- **One offset:** cardioseg's boundary is *tighter* on LV-cav HD95 (2.1 vs 5.9 mm Canon) — from its
+  largest-CC + TTA postprocessing, which **this nnU-Net run did not apply**. Read Dice/EF as the fair
+  head-to-head; HD95 gap is a postproc artifact.
 
 ## Limitations
 - **Floor, not ceiling** (50ep/1fold/no-ensemble) — the true nnU-Net SOTA bar is higher (`yp3`).
 - **No postprocessing/TTA** in this run → inflated boundary metrics relative to a tuned nnU-Net.
-- Unseen-vendor test on old split: Canon **n=9** only — Dice signal only, EF is noise. New split adds GE n=69 as a second unseen-vendor leg (pending re-run).
+- Canon **n=9** is thin (M&Ms-1 withholds most Testing GT); Dice signal is real but EF at n=9 is
+  noisy. GE n=69 is the reliable unseen-vendor leg.
 - Same data-distribution caveats as the main model: public-benchmark performance ≠ deployment.
 
 ## Reproduce

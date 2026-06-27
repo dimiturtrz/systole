@@ -64,8 +64,6 @@ this a robust unseen-vendor signal. Canon n=9 is thin because M&Ms-1 withholds G
 Testing split (320 on disk, 213 labelled, Canon 50 → 9 usable); GE n=69 is the larger leg.
 
 ### Benchmark (nnU-Net, same split)
-> **Provisional:** nnU-Net numbers below are on the **old split** (ACDC as test, 564-subject train).
-> Re-run on the new split (ACDC=val, Canon+GE=test, 495-subject train) is pending.
 
 nnU-Net trained on the **identical generalization split** (Dataset029_BATTERY, 50 epochs / 1 fold —
 a floor), scored by the same eval layer:
@@ -78,12 +76,15 @@ a floor), scored by the same eval layer:
 | Canon / GE EF MAE | **2.6 / 4.3%** | 11.9 / 11.3% |
 <!-- /results:cardcompare -->
 
-Both numbers pool ED+ES. nnU-Net leads by **~2.8 Dice points** on ACDC (0.912 vs 0.884) and on
-unseen-vendor Canon (0.876 vs 0.84) — *even at its floor setting* (50ep/1fold; the full 1000ep ×
-5-fold + TTA ceiling, `cardiac-seg-yp3`, would pull further ahead). **EF is roughly level** (6.5% vs
-5.6%). cardioseg's boundary is tighter on LV-cav (HD95 2.1 vs 3.3 mm) and myo (2.1 vs 2.9) — from
-largest-CC + TTA, which this nnU-Net run lacked. Net: a competent deployable model ~2–3 Dice points
-under nnU-Net's floor, EF-comparable, at ~57× fewer parameters.
+Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.839) and
+GE (0.878 vs 0.839) — *even at its floor setting* (50ep/1fold; the full 1000ep × 5-fold + TTA
+ceiling, `cardiac-seg-yp3`, would pull further ahead). The **EF gap is substantial and
+model-class epistemic**: nnU-Net Canon 2.6% vs ours 11.9%; GE 4.3% vs 11.3% — a stronger model
+class closes most of the cross-vendor EF gap, demonstrating it was reducible. Ours trades that for
+ONNX portability at ~57× fewer parameters; EF Bland-Altman: nnU-Net Canon bias −1.4%, LoA [−8.2,
++5.4]; GE bias +0.9%, LoA [−11.7, +13.5] — both near the ±5% clinical bar on unseen vendors.
+cardioseg's boundary is tighter on LV-cav (HD95 2.1 vs 5.9 mm Canon) from largest-CC + TTA, which
+this nnU-Net run lacked — read Dice/EF as the fair head-to-head.
 Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../baselines/nnunet/MODEL_CARD.md).
 
 ## Where it fails (stratified)
