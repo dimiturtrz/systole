@@ -22,15 +22,16 @@ _NN = R["nnunet"]
 _E = R["efficiency"]
 
 
-def compare() -> str:
-    d, n = _A["dice"], _NN["acdc"]["dice"]
+def compare() -> str:   # ours vs SOTA on the UNSEEN vendors (Canon, GE) — same split + macro eval
+    o, n = _E["ours"], _E["nnunet"]
     return "\n".join([
-        "| | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |",
-        "|---|---|---|---|---|---|---|---|",
-        f"| **ours** (ONNX-deployable) | **{_E['ours']['params']}** | **{_E['ours']['flops']}** | "
-        f"{d['LV-cav']:.2f} | {d['LV-myo']:.2f} | {d['RV']:.2f} | **{d['mean']:.2f}** | {_A['ef_mae']}% |",
-        f"| nnU-Net (SOTA baseline) | {_E['nnunet']['params']} | {_E['nnunet']['flops']} | "
-        f"{n['LV-cav']:.2f} | {n['LV-myo']:.2f} | {n['RV']:.2f} | **{n['mean']:.2f}** | {_NN['acdc']['ef_mae']}% |",
+        "| model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |",
+        "|---|---|---|---|---|---|---|",
+        f"| **ours** (ONNX-deployable) | **{o['params']}** | **{o['flops']}** | "
+        f"{_C['dice']['mean']:.2f} | {_C['ef_mae']}% | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
+        f"| nnU-Net (SOTA baseline) | {n['params']} | {n['flops']} | "
+        f"{_NN['canon']['dice']['mean']:.2f} | **{_NN['canon']['ef_mae']}%** | "
+        f"{_NN['ge']['dice']['mean']:.2f} | **{_NN['ge']['ef_mae']}%** |",
     ])
 
 
@@ -64,27 +65,27 @@ def axis() -> str:
     ])
 
 
-def cardcompare() -> str:  # 3-metric comparison used in both model cards
-    a, n = _A, _NN["acdc"]
+def cardcompare() -> str:  # unseen-vendor comparison used in both model cards
     return "\n".join([
-        "| ACDC-150 | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
-        f"| mean Dice | {n['dice']['mean']:.3f} | {a['dice']['mean']:.3f} |",
-        f"| EF MAE / bias | {n['ef_mae']}% / {n['ef_bias']:+.1f}% | {a['ef_mae']}% / {a['ef_bias']:+.1f}% |",
-        f"| Canon-9 Dice | {_NN['canon']['dice_mean']:.3f} | {_C['dice']['mean']:.2f} |",
+        "| unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
+        f"| Canon mean Dice | {_NN['canon']['dice']['mean']:.3f} | {_C['dice']['mean']:.3f} |",
+        f"| GE mean Dice | {_NN['ge']['dice']['mean']:.3f} | {_G['dice']['mean']:.3f} |",
+        f"| Canon / GE EF MAE | **{_NN['canon']['ef_mae']} / {_NN['ge']['ef_mae']}%** | {_C['ef_mae']} / {_G['ef_mae']}% |",
     ])
 
 
-def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ (Dice points = ×100)
-    a, n, e = _A["dice"], _NN["acdc"]["dice"], _E
+def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
+    a, n = _G["dice"], _NN["ge"]["dice"]
     dd = lambda k: (n[k] - a[k]) * 100
     return "\n".join([
-        "| segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |", "|---|---|---|---|---|---|---|",
+        "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
+        "|---|---|---|---|---|---|---|",
         f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {a['mean']:.3f} | {a['LV-cav']:.3f} | "
-        f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_A['ef_mae']}% | deployable / ONNX |",
+        f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
         f"| **nnU-Net** (50 ep, 1 fold) | **{n['mean']:.3f}** | **{n['LV-cav']:.3f}** | **{n['LV-myo']:.3f}** | "
-        f"**{n['RV']:.3f}** | **{_NN['acdc']['ef_mae']}%** | baseline / not deployed |",
+        f"**{n['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
         f"| Δ (nnU-Net − ours) | +{dd('mean'):.1f} | +{dd('LV-cav'):.1f} | +{dd('LV-myo'):.1f} | "
-        f"+{dd('RV'):.1f} | {_NN['acdc']['ef_mae'] - _A['ef_mae']:+.1f} | |",
+        f"+{dd('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
     ])
 
 

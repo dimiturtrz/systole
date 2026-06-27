@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from cardioseg.data.mri.base import load_nifti
-from cardioseg.evaluation.evaluate import hd95
+from cardioseg.evaluation.evaluate import hd95, dice as dice1
 from cardioseg.evaluation.measure import ejection_fraction
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
@@ -32,9 +32,8 @@ CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
     """Score predictions vs GT. `cases` (filenames) restricts to a subset (one battery axis)."""
     pred_dir, gt_dir = Path(pred_dir), Path(gt_dir)
-    inter = {c: 0.0 for c in CLASSES}
-    denom = {c: 0.0 for c in CLASSES}
     hds = {c: [] for c in CLASSES}
+    percase = defaultdict(lambda: {c: [] for c in CLASSES})   # pid -> class -> [per-frame dice]
     frames = defaultdict(dict)   # patient -> {tag: (pred, gt, spacing)}
 
     files = sorted(pred_dir.glob("*.nii.gz"))
@@ -47,26 +46,26 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
             continue
         pred, sp = load_nifti(pf)
         gt, _ = load_nifti(gf)
+        stem = pf.name[:-7]                     # strip .nii.gz
+        pid = stem.rsplit("_", 1)[0] if "_" in stem else stem
         for c in CLASSES:
-            p, g = pred == c, gt == c
-            inter[c] += 2.0 * np.logical_and(p, g).sum()
-            denom[c] += p.sum() + g.sum()
+            percase[pid][c].append(dice1(pred, gt, c))    # per-frame dice (macro-aggregated below)
             h = hd95(pred, gt, c, sp)
             if not np.isnan(h):
                 hds[c].append(h)
-        stem = pf.name[:-7]                     # strip .nii.gz
         if "_" in stem:
-            pid, tag = stem.rsplit("_", 1)
-            frames[pid][tag] = (pred, gt, sp)
+            frames[pid][stem.rsplit("_", 1)[1]] = (pred, gt, sp)
 
-    print("=== nnU-Net baseline, scored by cardioseg.evaluation ===")
-    dice, hd95, dmean = {}, {}, []
+    # macro Dice (matches cardioseg.evaluation): per case = mean ED+ES dice; then mean over cases.
+    print("=== nnU-Net baseline, scored by cardioseg.evaluation (macro: mean over cases) ===")
+    dice, hd95d, dmean = {}, {}, []          # hd95d (not hd95 — that's the imported fn used above)
     for c, name in CLASSES.items():
-        d = inter[c] / denom[c] if denom[c] else float("nan")
+        per = [float(np.mean(percase[p][c])) for p in percase if percase[p][c]]
+        d = float(np.mean(per)) if per else float("nan")
         dmean.append(d)
         hh = float(np.mean(hds[c])) if hds[c] else float("nan")
         dice[name] = round(d, 3)
-        hd95[name] = round(hh, 1)
+        hd95d[name] = round(hh, 1)
         print(f"  {name:7} Dice {d:.3f}  HD95 {hh:.1f} mm")
     mean_dice = float(np.nanmean(dmean))
     print(f"  mean Dice {mean_dice:.3f}")
@@ -78,7 +77,7 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
             ef_p, *_ = ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
             ef_g, *_ = ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
             diffs.append(ef_p - ef_g)
-    out = {"dice": {**dice, "mean": round(mean_dice, 3)}, "hd95": hd95, "ef_mae": float("nan")}
+    out = {"dice": {**dice, "mean": round(mean_dice, 3)}, "hd95": hd95d, "ef_mae": float("nan")}
     if diffs:
         d = np.array(diffs)
         mae, bias, sd = float(np.mean(np.abs(d))), float(d.mean()), float(d.std(ddof=1))

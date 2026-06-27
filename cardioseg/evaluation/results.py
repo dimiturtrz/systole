@@ -27,11 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluatio
 
 # nnU-Net v2 (2d, fold0, 50ep) on the SAME split, scored by baselines/nnunet/score.py (ED+ES).
 _bj = json.loads((ROOT / "baselines/nnunet/results.json").read_text())
-NNUNET = {
-    "acdc": {"dice": _bj["acdc"]["dice"], "hd95": _bj["acdc"]["hd95"],
-             "ef_mae": _bj["acdc"]["ef_mae"], "ef_bias": _bj["acdc"]["ef_bias"]},
-    "canon": {"dice_mean": _bj["canon"]["dice"]["mean"]},
-}
+# nnU-Net axes = the held-out vendors it was tested on (Canon, GE) — same split + macro eval as ours.
+NNUNET = {v: {"dice": _bj[v]["dice"], "hd95": _bj[v]["hd95"],
+              "ef_mae": _bj[v]["ef_mae"], "ef_bias": _bj[v]["ef_bias"]}
+          for v in ("canon", "ge") if v in _bj}
 # Architectural constants (fvcore single-forward), not a baseline measurement — stay static.
 EFFICIENCY = {"ours": {"params": "1.6 M", "flops": "0.8 G"},
               "nnunet": {"params": "92 M", "flops": "19 G"}}

@@ -145,23 +145,35 @@
     }
   },
   "nnunet": {
-    "acdc": {
+    "canon": {
       "dice": {
-        "RV": 0.911,
-        "LV-myo": 0.876,
-        "LV-cav": 0.948,
-        "mean": 0.912
+        "RV": 0.878,
+        "LV-myo": 0.829,
+        "LV-cav": 0.892,
+        "mean": 0.866
       },
       "hd95": {
-        "RV": 5.1,
-        "LV-myo": 2.9,
-        "LV-cav": 3.3
+        "RV": 6.8,
+        "LV-myo": 8.1,
+        "LV-cav": 5.9
       },
-      "ef_mae": 5.6,
-      "ef_bias": -4.2
+      "ef_mae": 2.6,
+      "ef_bias": -1.4
     },
-    "canon": {
-      "dice_mean": 0.876
+    "ge": {
+      "dice": {
+        "RV": 0.877,
+        "LV-myo": 0.842,
+        "LV-cav": 0.914,
+        "mean": 0.878
+      },
+      "hd95": {
+        "RV": 5.8,
+        "LV-myo": 4.7,
+        "LV-cav": 5.1
+      },
+      "ef_mae": 4.3,
+      "ef_bias": 0.9
     }
   },
   "efficiency": {

@@ -54,11 +54,11 @@ on the old split — it moves to the unseen-vendor test on the new split (pendin
 ## vs the cardioseg 2D U-Net (same split, same eval)
 
 <!-- results:cardcompare -->
-| ACDC-150 | nnU-Net (50ep/fold0) | this model |
+| unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
-| mean Dice | 0.912 | 0.884 |
-| EF MAE / bias | 5.6% / -4.2% | 6.5% / -5.6% |
-| Canon-9 Dice | 0.876 | 0.84 |
+| Canon mean Dice | 0.866 | 0.839 |
+| GE mean Dice | 0.878 | 0.839 |
+| Canon / GE EF MAE | **2.6 / 4.3%** | 11.9 / 11.3% |
 <!-- /results:cardcompare -->
 
 - Both pool ED+ES. nnU-Net leads by **~2.8 Dice points** on ACDC (0.912 vs 0.884) and on unseen-vendor

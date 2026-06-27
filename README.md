@@ -83,10 +83,10 @@ roughly level (6.5 vs 5.6%), at ~57× fewer parameters — and it exports to run
 Per-structure, held-out ACDC (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 <!-- results:compare -->
-| | params | FLOPs | LV-cav | myo | RV | **mean Dice** | EF MAE |
-|---|---|---|---|---|---|---|---|
-| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.92 | 0.86 | 0.88 | **0.88** | 6.5% |
-| nnU-Net (SOTA baseline) | 92 M | 19 G | 0.95 | 0.88 | 0.91 | **0.91** | 5.6% |
+| model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |
+|---|---|---|---|---|---|---|
+| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.84 | 11.9% | 0.84 | 11.3% |
+| nnU-Net (SOTA baseline) | 92 M | 19 G | 0.87 | **2.6%** | 0.88 | **4.3%** |
 <!-- /results:compare -->
 <sub>numbers auto-filled from `cardioseg/RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit the table above.</sub>
 

@@ -80,7 +80,7 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     # axis manifest: which held-out test cases are the centre-shift (acdc) vs unseen-vendor (canon)
     manifest = {}
     for r in test_df.iter_rows(named=True):
-        axis = "canon" if r.get("vendor") == "Canon" else r["dataset"]
+        axis = (r.get("vendor") or r["dataset"]).lower()   # per-vendor axis (canon / ge) — the held-out unit
         for tag in ("ED", "ES"):
             manifest[f"{r['dataset']}_{r['subject_id']}_{tag}"] = {"axis": axis, "vendor": r.get("vendor")}
     (ds / "ts_manifest.json").write_text(json.dumps(manifest, indent=2))

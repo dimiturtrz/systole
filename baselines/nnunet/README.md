@@ -60,11 +60,11 @@ Both trained on the **same pooled cloud** (M&M-2 + M&Ms-1 ex-Canon, 564 labelled
 held-out **ACDC-150** axis, **scored by `cardioseg.evaluation`** — apples-to-apples.
 
 <!-- results:nnucompare -->
-| segmenter | mean Dice | LV-cav | myo | RV | EF MAE | notes |
+| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.884 | 0.916 | 0.860 | 0.875 | 6.5% | deployable / ONNX |
-| **nnU-Net** (50 ep, 1 fold) | **0.912** | **0.948** | **0.876** | **0.911** | **5.6%** | baseline / not deployed |
-| Δ (nnU-Net − ours) | +2.8 | +3.2 | +1.6 | +3.6 | -0.9 | |
+| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.839 | 0.852 | 0.797 | 0.869 | 11.3% | deployable / ONNX |
+| **nnU-Net** (50 ep, 1 fold) | **0.878** | **0.914** | **0.842** | **0.877** | **4.3%** | baseline / not deployed |
+| Δ (nnU-Net − ours) | +3.9 | +6.2 | +4.5 | +0.8 | -7.0 | |
 <!-- /results:nnucompare -->
 
 <sub>All Dice/HD95 pool ED+ES (both phases) — same yardstick both rows.</sub>
