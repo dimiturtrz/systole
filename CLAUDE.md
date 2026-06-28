@@ -62,9 +62,17 @@ pytest                                        # testpaths = tests/ (unit + integ
 
 ## Architecture Overview
 
-- `cardioseg/` — the pipeline: ACDC/M&M-2/M&Ms-1 → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav)
-  → consolidated store → 2D MONAI U-Net → EF → evaluate (Dice/HD95/ASSD + EF). Flagship run = `runs/gen`.
+- `core/` — the shared, modality-agnostic kernel: `types`, `config`, `hparams`, `obs`, `labels`,
+  `model` (build_unet/load_run), `inference` (predict_volume + TTA), `evaluate`/`measure`/`postprocess`
+  (Dice/HD95/EF/largest-CC), `export_onnx`, `preprocessing/` (resample/N4/z-score/fit_square),
+  `data/` (store, splits, geo, mri/* adapters + registry). **Dependency rule: core imports NEITHER
+  cardioseg NOR cardioview.** (bd cardiac-seg-t8p)
+- `cardioseg/` — training + eval *orchestration* on top of core: the pipeline ACDC/M&M-2/M&Ms-1/CMRxMotion
+  → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav) → consolidated store → 2D MONAI U-Net → EF
+  → evaluate. Holds `training/`, `evaluation/` (validate/distribution/ensemble/calibrate/…),
+  `preprocessing/normalization/` (dataset-metadata tooling). Flagship run = `runs/gen`.
 - `cardioview/` — browser viewer (TS+Vite+vtk.js): beating 3D hearts + in-browser ONNX segmentation.
+  Depends only on `core` (never on cardioseg).
 - `mri-sim/` — TS MRI acquisition visualizer (deprioritized).
 - `baselines/nnunet/` — SOTA reference, quarantined (own env, never a cardioseg dep).
 - `research/` — deep-dives; `learning/` — theory writeups. Public docs = README + ROADMAP. The
