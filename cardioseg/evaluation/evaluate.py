@@ -8,7 +8,7 @@ shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
 import numpy as np
 
-from cardioseg.types import Mask, Spacing
+from core.types import Mask, Spacing
 from cardioseg.labels import CLASSES, FOREGROUND  # re-exported here for back-compat callers
 
 try:

@@ -21,9 +21,9 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from cardioseg.config import DEFAULT_SIZE
+from core.config import DEFAULT_SIZE
 from cardioseg.data.store import load_arrays
-from cardioseg.types import Slice2D
+from core.types import Slice2D
 
 SIZE = DEFAULT_SIZE  # square grid the 2D model runs on; single source = config.DEFAULT_SIZE (== DataCfg.size)
 

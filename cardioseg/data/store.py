@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cardioseg.config import data_root
+from core.config import data_root
 from cardioseg.hparams import N4Cfg
 from cardioseg.data.mri.pathology import harmonize
 from cardioseg.data.mri.registry import get_adapter

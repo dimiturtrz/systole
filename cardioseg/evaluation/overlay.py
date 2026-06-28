@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
-from cardioseg.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_RUN
 from cardioseg.hparams import from_json
 from cardioseg.training.model import build_unet
 from cardioseg.training.dataset import fit_square

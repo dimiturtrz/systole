@@ -11,7 +11,7 @@ Labels: raw 1=LV-cav, 2=myo, 3=RV — opposite of ACDC. `label_map` remaps to ca
 import os
 from pathlib import Path
 
-from cardioseg.config import data_root
+from core.config import data_root
 from cardioseg.data.mri.base import (
     DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )

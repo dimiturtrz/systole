@@ -9,7 +9,7 @@ cardioseg/types.py for the convention.
 """
 import numpy as np
 
-from cardioseg.types import Mask, Spacing
+from core.types import Mask, Spacing
 from cardioseg.labels import LV_CAV
 
 LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)

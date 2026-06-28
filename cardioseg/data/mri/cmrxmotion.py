@@ -15,7 +15,7 @@ the unified store grew a column for (null on the other datasets).
 import os
 from pathlib import Path
 
-from cardioseg.config import data_root
+from core.config import data_root
 from cardioseg.data.mri.base import (
     DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )

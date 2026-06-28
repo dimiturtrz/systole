@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cardioseg.types import Spacing, Volume
+from core.types import Spacing, Volume
 
 
 def n4_bias(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,

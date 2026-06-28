@@ -155,7 +155,7 @@ def train_seg(cfg: TrainCfg):
     for f in ("config.json", "metrics.json", "train.log"):
         trk.artifact(out / f)
     trk.artifact(out / "plots")
-    from ..config import FLAGSHIP_RUN                        # register a model version (catalog)
+    from core.config import FLAGSHIP_RUN                        # register a model version (catalog)
     from ..tracking import MODEL_NAME
     flag = out.name == Path(FLAGSHIP_RUN).name
     split = "+".join(d.test_vendors) or "legacy"

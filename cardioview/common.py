@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cardioseg.config import data_root, flagship_model
+from core.config import data_root, flagship_model
 from cardioseg.training.dataset import fit_square
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
@@ -19,7 +19,7 @@ CHAMBERS = {
     1: ("RV cavity", "#5b8def"),
 }
 SIZE = 256  # square grid the 2D model runs on
-# gen = the shipped flagship (cardioseg.config.FLAGSHIP_RUN): pooled multi-vendor cloud
+# gen = the shipped flagship (core.config.FLAGSHIP_RUN): pooled multi-vendor cloud
 # (M&M-2 + M&Ms-1), held out ACDC + Canon — its numbers are the ones the docs report.
 # mnm2/acdc/acdc_aug = older single-/cross-dataset runs, kept for comparison.
 MODELS = {

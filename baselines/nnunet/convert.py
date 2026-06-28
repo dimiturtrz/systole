@@ -97,7 +97,7 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
 
 
 def main():
-    from cardioseg.config import data_root
+    from core.config import data_root
 
     ap = argparse.ArgumentParser(description=__doc__)
     # Default to the data-namespaced raw dir (<data>/nnunet/raw) derived from cardioseg's path

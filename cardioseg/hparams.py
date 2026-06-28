@@ -20,7 +20,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from cardioseg.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
+from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
 
 _VALIDATE = ConfigDict(validate_assignment=True)   # setattr (used by --set) re-validates the field
 

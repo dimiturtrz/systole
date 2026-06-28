@@ -58,7 +58,7 @@ def _root(root: str | Path | None = None) -> Path:
 
 
 def data_root_raw() -> str:
-    from cardioseg.config import data_root
+    from core.config import data_root
     return data_root("raw")
 
 

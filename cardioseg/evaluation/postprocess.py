@@ -8,7 +8,7 @@ of each class is the standard cheap clean-up (and what nnU-Net tests for, too).
 import numpy as np
 from scipy.ndimage import label as _cc_label
 
-from cardioseg.types import Mask
+from core.types import Mask
 from cardioseg.labels import FOREGROUND
 
 

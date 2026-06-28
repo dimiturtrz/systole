@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from cardioseg.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_RUN
 from cardioseg.training.model import load_run
 from cardioseg.training.dataset import fit_square, SIZE
 from cardioseg.data import store

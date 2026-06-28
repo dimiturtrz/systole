@@ -9,7 +9,7 @@ Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm
 from pathlib import Path
 from typing import Protocol, TypedDict, runtime_checkable
 
-from cardioseg.types import Image, Mask, Spacing, Volume
+from core.types import Image, Mask, Spacing, Volume
 
 LV_CAVITY, LV_MYO, RV_CAVITY = 3, 2, 1
 CANONICAL_LABELS = {0: "background", 1: "RV", 2: "LV-myo", 3: "LV-cav"}

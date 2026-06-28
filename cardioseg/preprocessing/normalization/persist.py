@@ -13,7 +13,7 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from cardioseg.config import data_root, KNOWN_DATASETS
+from core.config import data_root, KNOWN_DATASETS
 from cardioseg.data.mri.registry import get_adapter
 
 _DATASETS = KNOWN_DATASETS

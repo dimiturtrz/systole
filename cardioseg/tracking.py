@@ -190,7 +190,7 @@ def recurate(experiment: str = "cardioseg", old: str = "cardioseg-unet"):
     readable descriptions + version tags; flagship gets the 'production' alias. Old experiments stay
     tracked runs, not registry versions. runs/ + FLAGSHIP_RUN remain the resolver."""
     from .training.model import load_run
-    from .config import FLAGSHIP_RUN
+    from core.config import FLAGSHIP_RUN
     from .hparams import from_json
     mlflow = _mlflow()
     if mlflow is None:

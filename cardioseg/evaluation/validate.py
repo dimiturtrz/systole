@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cardioseg.types import Volume
+from core.types import Volume
 from cardioseg.evaluation.evaluate import CLASSES
 
 CLASS_NAMES = {k: name for k, (name, _) in CLASSES.items()}   # single source: evaluate.CLASSES

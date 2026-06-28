@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cardioseg.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_RUN
 from cardioseg.data import store, splits
 from cardioseg.hparams import from_json
 from cardioseg.training.model import resolve_device

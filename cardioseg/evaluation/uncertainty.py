@@ -65,7 +65,7 @@ def main():
     import matplotlib.pyplot as plt
     import polars as pl
 
-    from ..config import FLAGSHIP_RUN
+    from core.config import FLAGSHIP_RUN
     from ..data import store
     from ..training.model import load_run
     from ..training.dataset import fit_square, SIZE
