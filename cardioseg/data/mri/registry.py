@@ -7,9 +7,10 @@ from cardioseg.data.mri.base import DatasetAdapter
 from cardioseg.data.mri.acdc import AcdcAdapter
 from cardioseg.data.mri.mnm2 import Mnm2Adapter
 from cardioseg.data.mri.mnms1 import Mnms1Adapter
+from cardioseg.data.mri.cmrxmotion import CmrxMotionAdapter
 
 _ADAPTERS: dict[str, DatasetAdapter] = {
-    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter())
+    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter(), CmrxMotionAdapter())
 }
 
 

@@ -34,12 +34,15 @@ from cardioseg.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
 # adapter registry: "canon" is a registered adapter but it's a vendor SLICE of mnms1 (a split query,
 # vendor=="Canon"), never its own processed folder — else its subjects double-count in the cloud.
-SOURCE_DATASETS = ["acdc", "mnm2", "mnms1"]
+SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
 
 # common meta schema — the unified cloud columns. `file` points at the npz in data/; `raw_path` is
-# the original scan dir (the scan's "filename"); `labelled` flags usable masks (M&Ms-1 withholds some).
+# the original scan dir (the scan's "filename"); `labelled` flags usable masks (M&Ms-1 + CMRxMotion
+# withhold some). `motion_grade` (CMRxMotion respiratory-motion severity 1-3) is the schema growing
+# to hold a genuinely new stratification axis — null on datasets that don't carry it.
 META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "pathology", "pathology_raw",
-               "field_T", "centre", "age", "age_band", "sex", "height", "weight", "bsa", "labelled"]
+               "field_T", "centre", "age", "age_band", "sex", "height", "weight", "bsa",
+               "motion_grade", "labelled"]
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None) -> str:
@@ -102,7 +105,8 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
         "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
         "centre": meta.get("centre"), "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
         "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
-        "bsa": _bsa(meta.get("height"), meta.get("weight")), "labelled": _is_labelled(arrays),
+        "bsa": _bsa(meta.get("height"), meta.get("weight")),
+        "motion_grade": meta.get("motion_grade"), "labelled": _is_labelled(arrays),
     }
 
 

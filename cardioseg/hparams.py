@@ -90,10 +90,12 @@ class DataCfg(BaseModel):
     generalization split (ACDC centre-shift + Canon unseen-vendor)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
-    # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely.
-    # VAL = ACDC (a held-out centre/protocol) — a real domain-shift tuning signal that is NOT test,
-    # so aug/calibration are tuned without peeking at test. TRAIN = the rest (Siemens + Philips).
-    test_datasets: tuple[str, ...] = ()
+    # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
+    # cmrxmotion as a whole (single-vendor Siemens motion-robustness set — must be held out by
+    # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
+    # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
+    # at test. TRAIN = the rest (Siemens + Philips).
+    test_datasets: tuple[str, ...] = ("cmrxmotion",)
     test_vendors: tuple[str, ...] = ("Canon", "GE")
     val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
     val_vendors: tuple[str, ...] = ()

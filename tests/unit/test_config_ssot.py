@@ -23,3 +23,10 @@ def test_dataset_vocab_single_sourced():
 
 def test_flagship_model_path():
     assert flagship_model() == f"{FLAGSHIP_RUN}/model.pth"
+
+
+def test_cmrxmotion_held_out_by_default():
+    """cmrxmotion is single-vendor Siemens — if it's a known source but NOT held out, it would
+    silently pollute Siemens train. Guard the invariant: wired AND held out by dataset."""
+    assert "cmrxmotion" in KNOWN_DATASETS
+    assert "cmrxmotion" in DataCfg().test_datasets

@@ -50,6 +50,7 @@ def collect(run: Path, device: str, meta_rows):
         ft = r.get("field_T")
         rec = {"patient": Path(r["path"]).stem,
                "pathology": r.get("pathology"), "vendor": r.get("vendor"),
+               "motion_grade": r.get("motion_grade"),
                "field": f"{ft}T" if ft not in (None, "") else None}
         masks = {}
         sd_acc = {cl: [] for cl in CLASSES}
@@ -231,7 +232,7 @@ def plot_strata(rows, key, out: Path, label: str):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default="runs/seg", help="run dir with model.pth")
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "canon"],
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
                     help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
@@ -265,7 +266,7 @@ def main():
 
     # --- stratified (only axes with >1 group present) ---
     strata = {}
-    for key in ("vendor", "pathology", "field"):
+    for key in ("vendor", "pathology", "field", "motion_grade"):
         if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
             strata[key] = strata_table(rows, key)
             plot_strata(rows, key, out / f"strata_{key}.png", label)

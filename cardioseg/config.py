@@ -44,5 +44,5 @@ def flagship_model() -> str:
 # --- pipeline constants (single source; config-default + module-constant readers reference these) ---
 DEFAULT_SIZE = 256        # square in-plane grid the 2D model runs on (DataCfg.size + dataset.SIZE)
 DEFAULT_INPLANE = 1.5     # in-plane resample target (mm); ACDC/M&M in-plane ~1.2-1.6 (DataCfg.inplane)
-KNOWN_DATASETS = ("acdc", "mnm2", "mnms1")           # the wired MRI datasets (DataCfg.sources, persist)
+KNOWN_DATASETS = ("acdc", "mnm2", "mnms1", "cmrxmotion")  # the wired MRI datasets (DataCfg.sources, persist)
 KNOWN_VENDORS = ("Siemens", "Philips", "GE", "Canon")  # canonical scanner-vendor names
