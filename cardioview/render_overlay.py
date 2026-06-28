@@ -21,7 +21,7 @@ import numpy as np
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
-from cardioseg.preprocessing.preprocess import preprocess_case
+from core.preprocessing.preprocess import preprocess_case
 from cardioseg.evaluation.measure import ejection_fraction
 from render_volume import normalize, to_imagedata
 from common import CHAMBERS, MODELS, DEFAULT_MODEL, load_model, patient_dir, square_stack, masks as build_masks
@@ -56,7 +56,8 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     import pyvista as pv
     import torch
 
-    case = preprocess_case(patient_dir(patient))
+    from cardioseg.data.mri.acdc import load_ed_es
+    case = preprocess_case(patient_dir(patient), loader=load_ed_es)
     spacing = tuple(float(s) for s in case["spacing"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = None if source == "gt" else load_model(MODELS[model_name], device)

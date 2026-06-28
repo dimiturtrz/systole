@@ -1,7 +1,7 @@
 """Unit tests for preprocessing transforms (no disk / no real data)."""
 import numpy as np
 
-from cardioseg.preprocessing.preprocess import zscore, resample_inplane
+from core.preprocessing.preprocess import zscore, resample_inplane
 
 
 def test_zscore_zero_mean_unit_std():

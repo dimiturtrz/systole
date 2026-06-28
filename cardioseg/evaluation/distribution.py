@@ -25,7 +25,7 @@ import polars as pl
 from scipy.stats import gaussian_kde
 
 from cardioseg.training.model import load_run, resolve_device
-from cardioseg.training.dataset import fit_square, SIZE
+from core.preprocessing.preprocess import fit_square, SIZE
 from cardioseg.data import store, splits
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction, LOA_Z

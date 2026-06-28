@@ -29,7 +29,7 @@ from core.config import data_root
 from core.hparams import N4Cfg
 from cardioseg.data.mri.pathology import harmonize
 from cardioseg.data.mri.registry import get_adapter
-from cardioseg.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
+from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
 # adapter registry: "canon" is a registered adapter but it's a vendor SLICE of mnms1 (a split query,

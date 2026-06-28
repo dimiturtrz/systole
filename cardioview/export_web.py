@@ -18,9 +18,9 @@ import torch
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
-from cardioseg.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
+from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from cardioseg.training.dataset import split_patients
-from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg
+from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class
@@ -134,7 +134,7 @@ def run(patients, source, model, device, model_name):
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
-        case = preprocess_case(pdir)
+        case = preprocess_case(pdir, loader=load_ed_es)
         spacing = tuple(float(s) for s in case["spacing"])
         masks = build_masks(case, source, model, device)
         crop_masks, iso = shared_crop(masks, spacing)
@@ -190,7 +190,7 @@ def run_animate(patients, model, device, model_name, stride=1):
         ed_k = nearest_index(frames_t, edi)
         es_k = nearest_index(frames_t, esi)
         ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-        case = preprocess_case(pdir)
+        case = preprocess_case(pdir, loader=load_ed_es)
         gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
         entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                      pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,

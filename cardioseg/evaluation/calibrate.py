@@ -22,7 +22,7 @@ def _gather(model, paths, size, device, per_vol=4000, seed=0):
     subsampled to ~per_vol voxels/volume — plenty for a 1-param fit + ECE, bounded memory."""
     import torch
     from ..data import store
-    from ..training.dataset import fit_square
+    from core.preprocessing.preprocess import fit_square
 
     rng = np.random.RandomState(seed)
     L, Y = [], []

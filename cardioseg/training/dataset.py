@@ -21,24 +21,11 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from core.config import DEFAULT_SIZE
 from cardioseg.data.store import load_arrays
 from core.types import Slice2D
-
-SIZE = DEFAULT_SIZE  # square grid the 2D model runs on; single source = config.DEFAULT_SIZE (== DataCfg.size)
-
-
-def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
-    """Centre pad/crop a [H, W] array to [size, size]."""
-    h, w = arr.shape
-    out = np.full((size, size), pad_value, dtype=arr.dtype)
-    # source crop window (centred)
-    sh, sw = max(0, (h - size) // 2), max(0, (w - size) // 2)
-    src = arr[sh:sh + size, sw:sw + size]
-    ch, cw = src.shape
-    dh, dw = (size - ch) // 2, (size - cw) // 2
-    out[dh:dh + ch, dw:dw + cw] = src
-    return out
+# fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
+# training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
+from core.preprocessing.preprocess import fit_square, SIZE
 
 
 def split_patients(
@@ -65,7 +52,7 @@ class ACDCSliceDataset(Dataset):
     def __init__(
         self,
         npz_paths: list[str | Path],
-        size: int = DEFAULT_SIZE,
+        size: int = SIZE,
         frames: tuple[str, ...] = ("ED", "ES"),
         keep_empty: bool = False,
         augment: bool = False,
@@ -103,7 +90,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def datasets(train_paths: list[str], val_paths: list[str], size: int = DEFAULT_SIZE
+def datasets(train_paths: list[str], val_paths: list[str], size: int = SIZE
              ) -> tuple[ACDCSliceDataset, ACDCSliceDataset]:
     """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
 

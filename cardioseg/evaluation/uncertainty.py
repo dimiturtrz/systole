@@ -68,7 +68,7 @@ def main():
     from core.config import FLAGSHIP_RUN
     from ..data import store
     from ..training.model import load_run
-    from ..training.dataset import fit_square, SIZE
+    from core.preprocessing.preprocess import fit_square, SIZE
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_RUN)

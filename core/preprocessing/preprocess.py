@@ -12,14 +12,28 @@ from pathlib import Path
 
 import numpy as np
 
-from core.config import DEFAULT_INPLANE
-from cardioseg.data.mri.acdc import load_ed_es
-from core.types import Image, Spacing, Volume
+from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
+from core.types import Image, Slice2D, Spacing, Volume
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
 # model trains on. The single source of truth. Slices (z) are left untouched (2D-model convention).
 TARGET_INPLANE = DEFAULT_INPLANE
+SIZE = DEFAULT_SIZE                          # square grid the 2D model runs on (== DataCfg.size)
 ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
+
+
+def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
+    """Centre pad/crop a [H, W] array to [size, size] — the model-grid fit, used by both the
+    training Dataset and inference (predict_volume stacks fit-squared slices)."""
+    h, w = arr.shape
+    out = np.full((size, size), pad_value, dtype=arr.dtype)
+    # source crop window (centred)
+    sh, sw = max(0, (h - size) // 2), max(0, (w - size) // 2)
+    src = arr[sh:sh + size, sw:sw + size]
+    ch, cw = src.shape
+    dh, dw = (size - ch) // 2, (size - cw) // 2
+    out[dh:dh + ch, dw:dw + cw] = src
+    return out
 
 
 def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
@@ -50,13 +64,14 @@ def resample_inplane(
 
 
 def preprocess_case(
-    patient_dir: str | Path, target_inplane: float = TARGET_INPLANE,
-    loader=load_ed_es, n4: bool = False, n4_params=None,
+    patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE,
+    n4: bool = False, n4_params=None,
 ) -> dict:
     """Load + resample + (N4) + z-score one subject's ED/ES. PURE (no disk I/O).
 
     Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.
-    `loader` is the dataset adapter's load_ed_es (labels already canonical). `n4` runs N4 bias-field
+    `loader` (required) is the dataset adapter's load_ed_es (labels already canonical) — injected so
+    this kernel never imports the data layer. `n4` runs N4 bias-field
     correction (resample -> N4 -> z-score) with `n4_params` (an N4Cfg; defaults if None), physical +
     per-scan. The store (data/store.py) writes the result to disk; this just computes it.
     """
@@ -71,7 +86,7 @@ def preprocess_case(
         img, isp = resample_inplane(d[tag]["img"], sp, target_inplane, is_mask=False)
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
-            from cardioseg.preprocessing.normalization.n4 import n4_bias
+            from core.preprocessing.n4 import n4_bias
             from core.hparams import N4Cfg
             p = n4_params or N4Cfg()
             img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)

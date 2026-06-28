@@ -21,7 +21,7 @@ _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (ident
 
 def _stack_slices(vol_img: Volume, size: int) -> np.ndarray:
     """Square-fit every slice of a [D, H, W] volume -> [D, size, size] float array (model input grid)."""
-    from ..training.dataset import fit_square
+    from core.preprocessing.preprocess import fit_square
     return np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
 
 
@@ -85,7 +85,7 @@ def validate(
     from .measure import ejection_fraction
     from .postprocess import largest_cc_per_class
     from .evaluate import surface_distances, surface_metrics
-    from ..training.dataset import fit_square
+    from core.preprocessing.preprocess import fit_square
     from ..data.store import load_arrays
 
     inter = {c: 0.0 for c in CLASS_NAMES}

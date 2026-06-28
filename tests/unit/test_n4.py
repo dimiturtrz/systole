@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("SimpleITK")
-from cardioseg.preprocessing.normalization.n4 import n4_bias
+from core.preprocessing.n4 import n4_bias
 
 
 def _biased():

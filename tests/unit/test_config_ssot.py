@@ -12,7 +12,7 @@ def test_size_single_sourced():
 
 
 def test_inplane_single_sourced():
-    from cardioseg.preprocessing.preprocess import TARGET_INPLANE
+    from core.preprocessing.preprocess import TARGET_INPLANE
     assert DEFAULT_INPLANE == DataCfg().inplane == TARGET_INPLANE
 
 

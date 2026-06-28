@@ -14,8 +14,8 @@ classes (upsample/downsample/identity; pad/crop; normal/zero/full/degenerate EF)
 import numpy as np
 import pytest
 
-from cardioseg.preprocessing.preprocess import resample_inplane, zscore
-from cardioseg.training.dataset import fit_square
+from core.preprocessing.preprocess import resample_inplane, zscore
+from core.preprocessing.preprocess import fit_square
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
 from cardioseg.evaluation.evaluate import (

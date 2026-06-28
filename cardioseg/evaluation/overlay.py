@@ -18,7 +18,7 @@ from matplotlib.colors import ListedColormap
 from core.config import FLAGSHIP_RUN
 from core.hparams import from_json
 from cardioseg.training.model import build_unet
-from cardioseg.training.dataset import fit_square
+from core.preprocessing.preprocess import fit_square
 from cardioseg.data import store, splits
 from cardioseg.data.store import load_arrays
 from cardioseg.evaluation.validate import predict_volume

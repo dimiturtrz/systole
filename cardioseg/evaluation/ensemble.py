@@ -38,7 +38,7 @@ def ensemble_score(models, df, size, device):
     like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
     import numpy as np
     from ..data import store
-    from ..training.dataset import fit_square
+    from core.preprocessing.preprocess import fit_square
     from ..labels import FOREGROUND, LV_CAV
     from .postprocess import largest_cc_per_class
     from .measure import ejection_fraction
@@ -82,7 +82,7 @@ def _eval_df(cfg, which):
 def _headroom(models, df, size, device):
     """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
     from ..data import store
-    from ..training.dataset import fit_square
+    from core.preprocessing.preprocess import fit_square
     from .uncertainty import tta_uncertainty
     ea, ee, ta, te = [], [], [], []
     for r in df.iter_rows(named=True):

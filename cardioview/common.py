@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from core.config import data_root, flagship_model
-from cardioseg.training.dataset import fit_square
+from core.preprocessing.preprocess import fit_square
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
 CHAMBERS = {
