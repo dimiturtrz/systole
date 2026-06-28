@@ -3,7 +3,7 @@ If someone re-hardcodes a value, one of these fails (that's the point)."""
 from core.config import (
     DEFAULT_SIZE, DEFAULT_INPLANE, KNOWN_DATASETS, FLAGSHIP_RUN, flagship_model,
 )
-from cardioseg.hparams import DataCfg
+from core.hparams import DataCfg
 
 
 def test_size_single_sourced():

@@ -1,10 +1,10 @@
 """MONAI U-Net factory (2D or 3D) + run loading. Shape comes from an injected ModelCfg
-(cardioseg.hparams); load_run rebuilds it from a run's saved config so the architecture
+(core.hparams); load_run rebuilds it from a run's saved config so the architecture
 always matches the weights."""
 
 from pathlib import Path
 
-from cardioseg.hparams import ModelCfg
+from core.hparams import ModelCfg
 
 
 def build_unet(cfg: ModelCfg | None = None):
@@ -37,7 +37,7 @@ def load_run(run, device: str | None = None):
     cfg_path = run / "config.json"
     cfg = None
     if cfg_path.exists():
-        from cardioseg.hparams import from_json
+        from core.hparams import from_json
         cfg = from_json(cfg_path)
     device = resolve_device(device)
     model = build_unet(cfg.model if cfg else None).to(device)

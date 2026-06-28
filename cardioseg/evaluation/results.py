@@ -17,7 +17,7 @@ import polars as pl
 
 from core.config import FLAGSHIP_RUN
 from cardioseg.data import store, splits
-from cardioseg.hparams import from_json
+from core.hparams import from_json
 from cardioseg.training.model import resolve_device
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
 from cardioseg.evaluation.measure import LOA_Z

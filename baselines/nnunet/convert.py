@@ -55,7 +55,7 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     import polars as pl
     from cardioseg.data import store, splits
     from cardioseg.data.mri.registry import get_adapter
-    from cardioseg.hparams import DataCfg
+    from core.hparams import DataCfg
 
     dc = DataCfg()                                           # the generalization criteria (Canon+GE test, ACDC val)
     meta = store.load(list(dc.sources))

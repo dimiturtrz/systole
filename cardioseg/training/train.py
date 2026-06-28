@@ -1,4 +1,4 @@
-"""Train a 2D U-Net from a TrainCfg (cardioseg.hparams) — one typed config in, model+metrics out.
+"""Train a 2D U-Net from a TrainCfg (core.hparams) — one typed config in, model+metrics out.
 
     python -m cardioseg.training.train --out runs/gen         # default split: hold out ACDC + Canon
     python -m cardioseg.training.train --set data.test_vendors=('GE',) aug.gamma_p=0.5
@@ -12,7 +12,7 @@ import json
 import time
 from pathlib import Path
 
-from ..hparams import TrainCfg
+from core.hparams import TrainCfg
 from ..labels import FOREGROUND
 from ..tracking import track_run
 
@@ -48,7 +48,7 @@ def train_seg(cfg: TrainCfg):
     from .augment import augment_batch
     from ..data import store, splits
     from ..obs import setup, timed, progress
-    from ..hparams import to_json
+    from core.hparams import to_json
 
     d = cfg.data
     out = Path(cfg.out_dir or "runs/seg")
@@ -184,7 +184,7 @@ def train_seg(cfg: TrainCfg):
 
 
 if __name__ == "__main__":
-    from ..hparams import apply_overrides
+    from core.hparams import apply_overrides
 
     # Defaults = the generalization split (hold out ACDC + Canon). Change the split via the criteria
     # on DataCfg with --set, e.g. legacy train M&M-2 -> test ACDC:

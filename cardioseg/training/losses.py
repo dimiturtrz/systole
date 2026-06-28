@@ -1,11 +1,11 @@
-"""Segmentation losses, built from a LossCfg (cardioseg.hparams).
+"""Segmentation losses, built from a LossCfg (core.hparams).
 
 Baseline `dice_ce` (MONAI Dice+CE) is the cardiac standard: CE gives stable gradients, Dice handles
 the heavy bg/fg imbalance. Both are *region* losses — blind to a thin boundary over-fill (the ES
 cavity over-segmentation that drives the EF bias). `dice_ce_hd` adds a Hausdorff-DT boundary term,
 ramped in over a warmup (HD losses diverge if applied from epoch 0), to attack that directly.
 """
-from cardioseg.hparams import LossCfg
+from core.hparams import LossCfg
 
 
 def dice_ce_loss(to_onehot_y=True, softmax=True, **kw):

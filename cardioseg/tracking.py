@@ -191,7 +191,7 @@ def recurate(experiment: str = "cardioseg", old: str = "cardioseg-unet"):
     tracked runs, not registry versions. runs/ + FLAGSHIP_RUN remain the resolver."""
     from .training.model import load_run
     from core.config import FLAGSHIP_RUN
-    from .hparams import from_json
+    from core.hparams import from_json
     mlflow = _mlflow()
     if mlflow is None:
         print("mlflow off"); return

@@ -4,7 +4,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from cardioseg.training.augment import augment_batch
-from cardioseg.hparams import AugCfg
+from core.hparams import AugCfg
 
 # everything off except (toggled) bias — flip is always-on, so isolate via same-seed bias on/off
 _NO_INTENSITY = dict(rot_deg=0.0, scale=(1.0, 1.0), gamma_p=0.0, blur_p=0.0,

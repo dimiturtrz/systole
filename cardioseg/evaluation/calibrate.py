@@ -80,7 +80,7 @@ def main():
     import torch
     import polars as pl
     from ..data import store, splits
-    from ..hparams import from_json
+    from core.hparams import from_json
     from ..training.model import load_run
 
     ap = argparse.ArgumentParser(description=__doc__)

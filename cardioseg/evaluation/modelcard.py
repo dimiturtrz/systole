@@ -83,7 +83,7 @@ def generate(run_dir: str | Path) -> Path:
         "audited — the data lacks coverage on the held-out set.",
         "",
         f"**Reproduce:** `runs/{run.name}/config.json` fully specifies this run "
-        "(`cardioseg.hparams.from_json` → `train_seg`).",
+        "(`core.hparams.from_json` → `train_seg`).",
     ]
     out = run / "MODEL_CARD.md"
     out.write_text("\n".join(parts) + "\n")

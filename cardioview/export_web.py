@@ -60,7 +60,7 @@ def heldout_set(model_name: str) -> set[str]:
     run = Path(MODELS[model_name]).parent
     cfg_path = run / "config.json"
     if cfg_path.exists():
-        from cardioseg.hparams import from_json
+        from core.hparams import from_json
         from cardioseg.data import store, splits
         dc = from_json(cfg_path).data
         meta = store.load(list(dc.sources))

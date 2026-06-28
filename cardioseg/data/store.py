@@ -26,7 +26,7 @@ import numpy as np
 import polars as pl
 
 from core.config import data_root
-from cardioseg.hparams import N4Cfg
+from core.hparams import N4Cfg
 from cardioseg.data.mri.pathology import harmonize
 from cardioseg.data.mri.registry import get_adapter
 from cardioseg.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
