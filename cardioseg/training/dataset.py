@@ -28,19 +28,6 @@ from core.types import Slice2D
 from core.preprocessing.preprocess import fit_square, SIZE
 
 
-def split_patients(
-    cases: list[Path], val_frac: float = 0.2, seed: int = 0
-) -> tuple[list[Path], list[Path]]:
-    """Deterministic patient-level train/val split -> (train_dirs, val_dirs)."""
-    cases = list(cases)
-    idx = np.random.default_rng(seed).permutation(len(cases))
-    n_val = max(1, int(round(len(cases) * val_frac)))
-    val_names = {cases[i].name for i in idx[:n_val]}
-    train = [c for c in cases if c.name not in val_names]
-    val = [c for c in cases if c.name in val_names]
-    return train, val
-
-
 class ACDCSliceDataset(Dataset):
     """All ED+ES short-axis slices from the given consolidated subjects, as (img, mask).
 

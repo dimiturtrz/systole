@@ -16,9 +16,9 @@ import pytest
 
 from core.preprocessing.preprocess import resample_inplane, zscore
 from core.preprocessing.preprocess import fit_square
-from cardioseg.evaluation.validate import predict_volume
-from cardioseg.evaluation.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
-from cardioseg.evaluation.evaluate import (
+from core.inference import predict_volume
+from core.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
+from core.evaluate import (
     dice, assd, hd95, hausdorff, surface_distances, surface_metrics,
 )
 

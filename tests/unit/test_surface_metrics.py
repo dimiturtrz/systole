@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 
-from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, hausdorff, hd95, assd
+from core.evaluate import surface_distances, surface_metrics, hausdorff, hd95, assd
 
 
 def _square(n=30, lo=10, hi=20, shift=0, label=3):

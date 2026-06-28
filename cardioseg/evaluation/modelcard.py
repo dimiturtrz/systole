@@ -16,7 +16,7 @@ import argparse
 import json
 from pathlib import Path
 
-from cardioseg.labels import CLASS_NAMES
+from core.labels import CLASS_NAMES
 
 _ORDER = tuple(reversed(CLASS_NAMES))  # display order: LV-cav, LV-myo, RV
 

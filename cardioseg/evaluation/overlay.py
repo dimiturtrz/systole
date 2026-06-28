@@ -17,13 +17,13 @@ from matplotlib.colors import ListedColormap
 
 from core.config import FLAGSHIP_RUN
 from core.hparams import from_json
-from cardioseg.training.model import build_unet
+from core.model import build_unet
 from core.preprocessing.preprocess import fit_square
 from core.data import store, splits
 from core.data.store import load_arrays
-from cardioseg.evaluation.validate import predict_volume
-from cardioseg.evaluation.postprocess import largest_cc_per_class
-from cardioseg.evaluation.measure import ejection_fraction
+from core.inference import predict_volume
+from core.postprocess import largest_cc_per_class
+from core.measure import ejection_fraction
 
 # 0 bg transparent, 1 RV blue, 2 myo green, 3 LV-cav red
 _CMAP = ListedColormap([(0, 0, 0, 0), (0.20, 0.45, 0.95, 0.55),

@@ -81,7 +81,7 @@ def main():
     import polars as pl
     from core.data import store, splits
     from core.hparams import from_json
-    from ..training.model import load_run
+    from core.model import load_run
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default="runs/gen")

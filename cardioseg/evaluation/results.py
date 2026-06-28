@@ -18,10 +18,10 @@ import polars as pl
 from core.config import FLAGSHIP_RUN
 from core.data import store, splits
 from core.hparams import from_json
-from cardioseg.training.model import resolve_device
+from core.model import resolve_device
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
-from cardioseg.evaluation.measure import LOA_Z
-from cardioseg.evaluation.evaluate import surface_metrics, CLASSES
+from core.measure import LOA_Z
+from core.evaluate import surface_metrics, CLASSES
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 

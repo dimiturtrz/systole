@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from core.preprocessing.preprocess import fit_square
-from cardioseg.training.dataset import split_patients
+from core.data.splits import split_patients
 
 
 def test_fit_square_pads_small_centred():

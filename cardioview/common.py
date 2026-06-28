@@ -1,6 +1,6 @@
 """Shared cardioview IO + constants: data paths, model loading, chamber colors.
 
-Pulls the data root from cardioseg's central config (paths.yaml; CARDIAC_DATA_ROOT
+Pulls the data root from core's central config (paths.yaml; CARDIAC_DATA_ROOT
 overrides), so cardioview has no hardcoded machine paths.
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
 def load_model(weights: str, device):
     """Load the trained U-Net for a run (architecture from the run's config.json, so it can't
     mismatch a default). `weights` is the run's model.pth; its parent dir is the run."""
-    from cardioseg.training.model import load_run
+    from core.model import load_run
 
     model, _, _ = load_run(Path(weights).parent, device)
     return model
@@ -66,8 +66,8 @@ def masks(case: dict, source: str, model=None, device=None) -> dict:
     Predictions get largest-CC post-processing (matches the cardioseg pipeline), so the
     displayed EF/volumes line up with the reported numbers.
     """
-    from cardioseg.evaluation.validate import predict_volume
-    from cardioseg.evaluation.postprocess import largest_cc_per_class
+    from core.inference import predict_volume
+    from core.postprocess import largest_cc_per_class
 
     out = {}
     for tag in ("ED", "ES"):

@@ -22,7 +22,7 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from core.preprocessing.preprocess import preprocess_case
-from cardioseg.evaluation.measure import ejection_fraction
+from core.measure import ejection_fraction
 from render_volume import normalize, to_imagedata
 from common import CHAMBERS, MODELS, DEFAULT_MODEL, load_model, patient_dir, square_stack, masks as build_masks
 from geometry import bbox_slices
@@ -64,7 +64,7 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     split_tag = ""
     if source == "pred":  # honesty: was this patient in the model's training set?
         from core.data.mri.acdc import acdc_cases
-        from cardioseg.training.dataset import split_patients
+        from core.data.splits import split_patients
         _, val = split_patients(list(acdc_cases()), 0.2, 0)
         held = patient in {c.name for c in val}
         split_tag = "  held-out" if held else "  TRAIN-seen"

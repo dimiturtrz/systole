@@ -8,8 +8,8 @@ import pytest
 from core.data.mri.acdc import (
     acdc_cases, load_ed_es, identify_lv_cavity, LV_CAVITY,
 )
-from cardioseg.evaluation.measure import ejection_fraction
-from cardioseg.evaluation.evaluate import dice
+from core.measure import ejection_fraction
+from core.evaluate import dice
 
 _CASES = acdc_cases()
 needs_data = pytest.mark.skipif(not _CASES, reason="ACDC data not present (set CARDIAC_DATA_ROOT)")

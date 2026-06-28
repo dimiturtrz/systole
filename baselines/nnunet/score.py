@@ -23,8 +23,8 @@ from pathlib import Path
 import numpy as np
 
 from core.data.mri.base import load_nifti
-from cardioseg.evaluation.evaluate import hd95, dice as dice1
-from cardioseg.evaluation.measure import ejection_fraction
+from core.evaluate import hd95, dice as dice1
+from core.measure import ejection_fraction
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 

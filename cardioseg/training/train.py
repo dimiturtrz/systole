@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from core.hparams import TrainCfg
-from ..labels import FOREGROUND
+from core.labels import FOREGROUND
 from ..tracking import track_run
 
 
@@ -43,7 +43,7 @@ def train_seg(cfg: TrainCfg):
     from torch.utils.data import DataLoader
     from .losses import build_loss
     from ..evaluation.validate import validate, summarize
-    from .model import build_unet, resolve_device
+    from core.model import build_unet, resolve_device
     from .dataset import datasets
     from .augment import augment_batch
     from core.data import store, splits
@@ -174,7 +174,7 @@ def train_seg(cfg: TrainCfg):
     except Exception as e:
         log.warning("model card skipped: %s", e)
     try:
-        from .export_onnx import export
+        from core.export_onnx import export
         export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
     except ImportError:
         log.info("ONNX export skipped (pip install .[export] for onnxruntime)")

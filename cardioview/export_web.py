@@ -19,11 +19,11 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
-from cardioseg.training.dataset import split_patients
+from core.data.splits import split_patients
 from core.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
-from cardioseg.evaluation.measure import ejection_fraction
-from cardioseg.evaluation.validate import predict_volume
-from cardioseg.evaluation.postprocess import largest_cc_per_class
+from core.measure import ejection_fraction
+from core.inference import predict_volume
+from core.postprocess import largest_cc_per_class
 from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, patient_dir, masks as build_masks, square_stack
 from geometry import keep_largest, bbox_slices, nearest_index
 
@@ -124,7 +124,7 @@ def load_4d(pdir, name: str):
 
 
 def frame_indices(pdir):
-    """0-based ED, ES frame indices (Info.cfg parsing reused from cardioseg)."""
+    """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
     cfg = parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 

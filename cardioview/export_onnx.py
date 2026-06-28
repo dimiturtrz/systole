@@ -1,7 +1,7 @@
 """Place the trained ONNX into the web viewer.
 
 The actual export (+ INT8 quant + parity gate) lives with training:
-cardioseg.training.export_onnx writes runs/<name>/model.onnx. Here we just run it and
+core.export_onnx writes runs/<name>/model.onnx. Here we just run it and
 copy the artifact to web/public/models/<name>.onnx (served as the bundled model).
 
     python cardioview/export_onnx.py --model acdc_aug
@@ -12,7 +12,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from cardioseg.training.export_onnx import export as build_onnx
+from core.export_onnx import export as build_onnx
 from core.data import store
 from common import MODELS, DEFAULT_MODEL
 
@@ -28,7 +28,7 @@ def main() -> None:
 
     run = Path(MODELS[a.model]).parent  # runs/<name>/model.pth -> runs/<name>
     # parity check needs a CONSOLIDATED-STORE npz (not a raw patient dir) — same source as
-    # cardioseg.training.export_onnx's own default.
+    # core.export_onnx's own default.
     verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
     onnx = build_onnx(run, verify, a.quantize)  # runs/<name>/model.onnx
 

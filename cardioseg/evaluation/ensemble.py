@@ -20,7 +20,7 @@ def ensemble_decompose(models, vol_img, size, device):
     """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
     [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
     import torch
-    from .validate import predict_volume_probs
+    from core.inference import predict_volume_probs
 
     mems = [predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
     members = torch.stack(mems)                                                  # [K,D,C,H,W]
@@ -39,9 +39,9 @@ def ensemble_score(models, df, size, device):
     import numpy as np
     from core.data import store
     from core.preprocessing.preprocess import fit_square
-    from ..labels import FOREGROUND, LV_CAV
-    from .postprocess import largest_cc_per_class
-    from .measure import ejection_fraction
+    from core.labels import FOREGROUND, LV_CAV
+    from core.postprocess import largest_cc_per_class
+    from core.measure import ejection_fraction
 
     inter = {c: 0.0 for c in FOREGROUND}; den = {c: 0.0 for c in FOREGROUND}
     diffs = []
@@ -103,7 +103,7 @@ def _headroom(models, df, size, device):
 
 def main():
     from ..training.dataset import SIZE
-    from ..training.model import load_run, resolve_device
+    from core.model import load_run, resolve_device
     from ..tracking import start
 
     ap = argparse.ArgumentParser(description=__doc__)

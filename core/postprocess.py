@@ -9,7 +9,7 @@ import numpy as np
 from scipy.ndimage import label as _cc_label
 
 from core.types import Mask
-from cardioseg.labels import FOREGROUND
+from core.labels import FOREGROUND
 
 
 def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = FOREGROUND) -> Mask:

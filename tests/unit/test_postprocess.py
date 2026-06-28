@@ -1,7 +1,7 @@
 """Unit tests for largest-CC post-processing — equivalence classes of the input mask."""
 import numpy as np
 
-from cardioseg.evaluation.postprocess import largest_cc_per_class
+from core.postprocess import largest_cc_per_class
 
 
 def _blob(mask, lab, z, y, x, r):

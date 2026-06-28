@@ -12,7 +12,24 @@ Change the criteria → change the split. No registry, no name, no flag.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+import numpy as np
 import polars as pl
+
+
+def split_patients(cases: list[Path], val_frac: float = 0.2, seed: int = 0
+                   ) -> tuple[list[Path], list[Path]]:
+    """Deterministic patient-level train/val split over raw case dirs -> (train_dirs, val_dirs).
+    The path-list counterpart to patient_val (which splits the meta frame); used where a caller has
+    case directories rather than the consolidated store (e.g. the viewer's held-out check)."""
+    cases = list(cases)
+    idx = np.random.default_rng(seed).permutation(len(cases))
+    n_val = max(1, int(round(len(cases) * val_frac)))
+    val_names = {cases[i].name for i in idx[:n_val]}
+    train = [c for c in cases if c.name not in val_names]
+    val = [c for c in cases if c.name in val_names]
+    return train, val
 
 
 def patient_val(train: pl.DataFrame, val_frac: float = 0.2, seed: int = 0

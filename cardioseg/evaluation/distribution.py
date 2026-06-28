@@ -24,13 +24,13 @@ import numpy as np
 import polars as pl
 from scipy.stats import gaussian_kde
 
-from cardioseg.training.model import load_run, resolve_device
+from core.model import load_run, resolve_device
 from core.preprocessing.preprocess import fit_square, SIZE
 from core.data import store, splits
-from cardioseg.evaluation.validate import predict_volume
-from cardioseg.evaluation.measure import ejection_fraction, LOA_Z
-from cardioseg.evaluation.evaluate import surface_distances, surface_metrics, dice, CLASSES
-from cardioseg.evaluation.postprocess import largest_cc_per_class
+from core.inference import predict_volume
+from core.measure import ejection_fraction, LOA_Z
+from core.evaluate import surface_distances, surface_metrics, dice, CLASSES
+from core.postprocess import largest_cc_per_class
 
 
 def collect(run: Path, device: str, meta_rows):

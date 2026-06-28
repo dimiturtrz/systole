@@ -4,7 +4,7 @@ Lives with training because the ONNX is a model artifact — it's written next t
 under the run dir. Gated by argmax parity vs PyTorch on a real patient; if a consumer
 (e.g. cardioview's browser viewer) would segment differently, it isn't shipped.
 
-    python -m cardioseg.training.export_onnx --run runs/acdc_aug
+    python -m core.export_onnx --run runs/acdc_aug
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from core.config import FLAGSHIP_RUN
-from cardioseg.training.model import load_run
+from core.model import load_run
 from core.preprocessing.preprocess import fit_square, SIZE
 from core.data import store
 

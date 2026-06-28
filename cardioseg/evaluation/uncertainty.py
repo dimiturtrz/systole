@@ -27,7 +27,7 @@ def tta_uncertainty(model, vol_img, size, device):
         epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
     NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
     here is a lower-bound proxy, not deep-ensemble gold."""
-    from .validate import predict_volume_members
+    from core.inference import predict_volume_members
 
     pred, mean, members = predict_volume_members(model, vol_img, size, device)  # mean [D,C,H,W]; members [K,D,C,H,W]
     logc = np.log(mean.shape[1])
@@ -67,7 +67,7 @@ def main():
 
     from core.config import FLAGSHIP_RUN
     from core.data import store
-    from ..training.model import load_run
+    from core.model import load_run
     from core.preprocessing.preprocess import fit_square, SIZE
 
     ap = argparse.ArgumentParser(description=__doc__)
@@ -162,7 +162,7 @@ def main():
 
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
-    from ..labels import overlay_cmap
+    from core.labels import overlay_cmap
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
