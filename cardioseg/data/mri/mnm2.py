@@ -82,6 +82,8 @@ class Mnm2Adapter(DatasetAdapter):
             "group": info.get("DISEASE"),
             "vendor": info.get("VENDOR"), "scanner": info.get("SCANNER"),
             "field_T": to_float(info.get("FIELD")),
-            "centre": None, "age": None, "sex": None, "height": None, "weight": None,
-            "_source": {"all": "dataset_information.csv"},
+            # 3 Spanish hospitals; per-subject centre not published, but country is uniform.
+            "centre": None, "country": "Spain",
+            "age": None, "sex": None, "height": None, "weight": None,
+            "_source": {"all": "dataset_information.csv", "country": "paper (3 Spanish hospitals)"},
         }

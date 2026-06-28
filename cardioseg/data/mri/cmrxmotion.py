@@ -22,8 +22,10 @@ from cardioseg.data.mri.base import (
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
 
-# Single scanner across the challenge (Siemens 3T MAGNETOM); healthy volunteers (no pathology).
-VENDOR, FIELD_T = "Siemens", 3.0
+# Single scanner across the challenge: Siemens MAGNETOM Vida 3T, at Fudan University
+# (Zhangjiang International Brain Imaging Center, Shanghai); healthy volunteers (no pathology).
+VENDOR, FIELD_T, SCANNER = "Siemens", 3.0, "MAGNETOM Vida"
+CENTRE, COUNTRY = "Fudan (Shanghai)", "China"
 
 
 def _root(root: str | Path | None = None) -> Path:
@@ -92,8 +94,10 @@ class CmrxMotionAdapter(DatasetAdapter):
     def meta(self, case: Path) -> dict:
         """Acquisition + the motion-grade axis — AUTO from IQA.csv (single fixed scanner)."""
         return {
-            "group": None, "vendor": VENDOR, "scanner": "Siemens 3T", "field_T": FIELD_T,
-            "centre": None, "age": None, "sex": None, "height": None, "weight": None,
+            "group": None, "vendor": VENDOR, "scanner": SCANNER, "field_T": FIELD_T,
+            "centre": CENTRE, "country": COUNTRY,
+            "age": None, "sex": None, "height": None, "weight": None,
             "motion_grade": _grade(case),
-            "_source": {"vendor": "challenge", "motion_grade": "IQA.csv"},
+            "_source": {"vendor": "challenge", "scanner": "challenge", "country": "challenge",
+                        "motion_grade": "IQA.csv"},
         }

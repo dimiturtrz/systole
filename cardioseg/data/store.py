@@ -40,9 +40,9 @@ SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
 # the original scan dir (the scan's "filename"); `labelled` flags usable masks (M&Ms-1 + CMRxMotion
 # withhold some). `motion_grade` (CMRxMotion respiratory-motion severity 1-3) is the schema growing
 # to hold a genuinely new stratification axis — null on datasets that don't carry it.
-META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "pathology", "pathology_raw",
-               "field_T", "centre", "age", "age_band", "sex", "height", "weight", "bsa",
-               "motion_grade", "labelled"]
+META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner", "pathology",
+               "pathology_raw", "field_T", "centre", "country", "age", "age_band", "sex", "height",
+               "weight", "bsa", "motion_grade", "labelled"]
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None) -> str:
@@ -100,10 +100,11 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
     f = meta.get("field_T")
     return {
         "subject_id": case.name, "dataset": name, "file": file, "raw_path": str(case),
-        "vendor": _norm_vendor(meta.get("vendor")),
+        "vendor": _norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
         "pathology": harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
         "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
-        "centre": meta.get("centre"), "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
+        "centre": meta.get("centre"), "country": meta.get("country"),
+        "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
         "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
         "bsa": _bsa(meta.get("height"), meta.get("weight")),
         "motion_grade": meta.get("motion_grade"), "labelled": _is_labelled(arrays),
@@ -173,7 +174,11 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         df = pl.read_csv(out / "meta.csv", infer_schema_length=10000)
         df = df.with_columns((pl.lit(str(out / "data")) + "/" + pl.col("file")).alias("path"))
         frames.append(df)
-    return pl.concat(frames, how="vertical_relaxed")
+    cloud = pl.concat(frames, how="vertical_relaxed")
+    # continent is DERIVED from country (SSOT in data/geo) — queryable column, never hand-stored.
+    from cardioseg.data.geo import COUNTRY_CONTINENT
+    return cloud.with_columns(
+        pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 
 
 def load_arrays(path: str | Path) -> dict:

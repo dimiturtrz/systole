@@ -50,7 +50,8 @@ def collect(run: Path, device: str, meta_rows):
         ft = r.get("field_T")
         rec = {"patient": Path(r["path"]).stem,
                "pathology": r.get("pathology"), "vendor": r.get("vendor"),
-               "motion_grade": r.get("motion_grade"),
+               "scanner": r.get("scanner"), "country": r.get("country"),
+               "continent": r.get("continent"), "motion_grade": r.get("motion_grade"),
                "field": f"{ft}T" if ft not in (None, "") else None}
         masks = {}
         sd_acc = {cl: [] for cl in CLASSES}
@@ -266,7 +267,7 @@ def main():
 
     # --- stratified (only axes with >1 group present) ---
     strata = {}
-    for key in ("vendor", "pathology", "field", "motion_grade"):
+    for key in ("vendor", "scanner", "pathology", "field", "country", "continent", "motion_grade"):
         if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
             strata[key] = strata_table(rows, key)
             plot_strata(rows, key, out / f"strata_{key}.png", label)

@@ -65,7 +65,8 @@ def test_motion_grade_worst_of_ed_es(root):
 
 def test_meta_fixed_scanner_fields(root):
     m = cm.CmrxMotionAdapter().meta(cm.cmrx_cases()[0])
-    assert m["vendor"] == "Siemens" and m["field_T"] == 3.0 and m["scanner"] == "Siemens 3T"
+    assert m["vendor"] == "Siemens" and m["field_T"] == 3.0 and m["scanner"] == "MAGNETOM Vida"
+    assert m["country"] == "China" and m["centre"] == "Fudan (Shanghai)"
 
 
 def test_label_map_is_the_shared_mnm_flip():

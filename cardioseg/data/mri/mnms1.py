@@ -16,6 +16,17 @@ from cardioseg.data.mri.base import (
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
 
+# M&Ms-1 centre code -> (readable site name, country). From the challenge paper (Campello 2021).
+# Our labelled split carries centres 1-5 (Spain + Germany); 6 (McGill, Canada) is test-only.
+CENTRES = {
+    "1": ("Vall d'Hebron (Barcelona)", "Spain"),
+    "2": ("Sagrada Familia (Barcelona)", "Spain"),
+    "3": ("UKE Hamburg", "Germany"),
+    "4": ("Dexeus (Barcelona)", "Spain"),
+    "5": ("Creu Blanca (Barcelona)", "Spain"),
+    "6": ("McGill (Montreal)", "Canada"),
+}
+
 _SPLITS = ("Training/Labeled", "Validation", "Testing")
 
 
@@ -112,11 +123,13 @@ class Mnms1Adapter(DatasetAdapter):
     def meta(self, case: Path) -> dict:
         """Acquisition + demographics — AUTO from the CSV (richest of the three)."""
         r = mnms1_info().get(case.name, {})
+        name, country = CENTRES.get(str(r.get("Centre")).strip(), (r.get("Centre"), None))
         return {
             "group": r.get("Pathology"),
-            "vendor": r.get("VendorName") or r.get("Vendor"), "centre": r.get("Centre"),
+            "vendor": r.get("VendorName") or r.get("Vendor"),
+            "centre": name, "country": country,   # code -> readable site + country (paper map)
             "age": to_float(r.get("Age")), "sex": r.get("Sex"),
             "height": to_float(r.get("Height")), "weight": to_float(r.get("Weight")),
             "scanner": None, "field_T": None,   # not in CSV (paper tables)
-            "_source": {"all": "csv", "field_T": "paper(unfilled)"},
+            "_source": {"all": "csv", "centre+country": "paper centre map", "field_T": "paper(unfilled)"},
         }
