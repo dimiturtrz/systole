@@ -1,6 +1,6 @@
 """Processed-cache key: n4 params must enter the key so different N4 settings never collide,
 while the no-n4 key stays back-compatible (existing flagship cache resolves)."""
-from cardioseg.data.store import param_key
+from core.data.store import param_key
 from core.hparams import N4Cfg
 
 

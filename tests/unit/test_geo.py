@@ -1,7 +1,7 @@
 """Geographic provenance tests (equivalence classes): country->continent SSOT + the M&Ms-1
 centre-code map that turns the raw '1'-'5' codes into queryable country/site."""
-from cardioseg.data.geo import continent_of, COUNTRY_CONTINENT
-from cardioseg.data.mri.mnms1 import CENTRES
+from core.data.geo import continent_of, COUNTRY_CONTINENT
+from core.data.mri.mnms1 import CENTRES
 
 
 # --- continent_of: known / cross-continent / missing / unknown ---

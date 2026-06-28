@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cardioseg.data.mri.base import load_nifti
+from core.data.mri.base import load_nifti
 from cardioseg.evaluation.evaluate import hd95, dice as dice1
 from cardioseg.evaluation.measure import ejection_fraction
 

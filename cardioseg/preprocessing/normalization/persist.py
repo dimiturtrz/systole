@@ -14,7 +14,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from core.config import data_root, KNOWN_DATASETS
-from cardioseg.data.mri.registry import get_adapter
+from core.data.mri.registry import get_adapter
 
 _DATASETS = KNOWN_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"

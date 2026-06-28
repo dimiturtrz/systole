@@ -37,7 +37,7 @@ def ensemble_score(models, df, size, device):
     """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
     like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
     import numpy as np
-    from ..data import store
+    from core.data import store
     from core.preprocessing.preprocess import fit_square
     from ..labels import FOREGROUND, LV_CAV
     from .postprocess import largest_cc_per_class
@@ -69,7 +69,7 @@ def ensemble_score(models, df, size, device):
 
 def _eval_df(cfg, which):
     import polars as pl
-    from ..data import store, splits
+    from core.data import store, splits
     d = cfg.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -81,7 +81,7 @@ def _eval_df(cfg, which):
 
 def _headroom(models, df, size, device):
     """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
-    from ..data import store
+    from core.data import store
     from core.preprocessing.preprocess import fit_square
     from .uncertainty import tta_uncertainty
     ea, ee, ta, te = [], [], [], []

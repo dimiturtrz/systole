@@ -10,7 +10,7 @@ Labels: same flip as M&M-2 (raw 1=LV-cav) -> canonical via label_map.
 import os
 from pathlib import Path
 
-from cardioseg.data.mri.base import (
+from core.data.mri.base import (
     DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )
 

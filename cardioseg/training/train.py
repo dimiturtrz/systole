@@ -46,8 +46,8 @@ def train_seg(cfg: TrainCfg):
     from .model import build_unet, resolve_device
     from .dataset import datasets
     from .augment import augment_batch
-    from ..data import store, splits
-    from ..obs import setup, timed, progress
+    from core.data import store, splits
+    from core.obs import setup, timed, progress
     from core.hparams import to_json
 
     d = cfg.data

@@ -9,7 +9,7 @@ geometrically (see base.identify_lv_cavity). Scanner: Siemens Aera 1.5T / Trio T
 from pathlib import Path
 
 from core.config import data_root
-from cardioseg.data.mri.base import (
+from core.data.mri.base import (
     DatasetAdapter, Frame, PatientData, load_nifti, load_frames, identify_lv_cavity, to_float,
     LV_CAVITY, LV_MYO, RV_CAVITY,
 )

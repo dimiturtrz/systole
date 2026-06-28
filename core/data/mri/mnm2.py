@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from core.config import data_root
-from cardioseg.data.mri.base import (
+from core.data.mri.base import (
     DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
 )
 

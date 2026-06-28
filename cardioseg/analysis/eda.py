@@ -8,15 +8,15 @@ rather than trusting either source — which caught a flipped-label EF bug.
 
 Usage:
     export CARDIAC_DATA_ROOT=D:/data/raw/mri/acdc
-    python -m cardioseg.data.mri.eda                 # summarize N patients + viz
-    python -m cardioseg.data.mri.eda --patient patient001
+    python -m core.data.mri.eda                 # summarize N patients + viz
+    python -m core.data.mri.eda --patient patient001
 """
 import argparse
 from pathlib import Path
 
 import numpy as np
 
-from cardioseg.data.mri.acdc import (
+from core.data.mri.acdc import (
     DATA_ROOT, acdc_cases, identify_lv_cavity, load_ed_es,
 )
 

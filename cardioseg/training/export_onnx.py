@@ -18,7 +18,7 @@ import torch
 from core.config import FLAGSHIP_RUN
 from cardioseg.training.model import load_run
 from core.preprocessing.preprocess import fit_square, SIZE
-from cardioseg.data import store
+from core.data import store
 
 PARITY_MIN = 99.0  # % argmax agreement required to ship the INT8 model (else keep FP32)
 OPSET = 17         # ONNX opset for export

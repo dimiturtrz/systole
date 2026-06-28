@@ -66,7 +66,7 @@ def main():
     import polars as pl
 
     from core.config import FLAGSHIP_RUN
-    from ..data import store
+    from core.data import store
     from ..training.model import load_run
     from core.preprocessing.preprocess import fit_square, SIZE
 

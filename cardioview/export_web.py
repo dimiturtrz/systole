@@ -20,7 +20,7 @@ from skimage.measure import marching_cubes
 
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from cardioseg.training.dataset import split_patients
-from cardioseg.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
+from core.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
 from cardioseg.evaluation.measure import ejection_fraction
 from cardioseg.evaluation.validate import predict_volume
 from cardioseg.evaluation.postprocess import largest_cc_per_class
@@ -61,7 +61,7 @@ def heldout_set(model_name: str) -> set[str]:
     cfg_path = run / "config.json"
     if cfg_path.exists():
         from core.hparams import from_json
-        from cardioseg.data import store, splits
+        from core.data import store, splits
         dc = from_json(cfg_path).data
         meta = store.load(list(dc.sources))
         train, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,

@@ -27,8 +27,8 @@ import polars as pl
 
 from core.config import data_root
 from core.hparams import N4Cfg
-from cardioseg.data.mri.pathology import harmonize
-from cardioseg.data.mri.registry import get_adapter
+from core.data.mri.pathology import harmonize
+from core.data.mri.registry import get_adapter
 from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
@@ -132,7 +132,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
-        from cardioseg.obs import progress
+        from core.obs import progress
         import logging
         log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
@@ -176,7 +176,7 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         frames.append(df)
     cloud = pl.concat(frames, how="vertical_relaxed")
     # continent is DERIVED from country (SSOT in data/geo) — queryable column, never hand-stored.
-    from cardioseg.data.geo import COUNTRY_CONTINENT
+    from core.data.geo import COUNTRY_CONTINENT
     return cloud.with_columns(
         pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 
@@ -189,7 +189,7 @@ def load_arrays(path: str | Path) -> dict:
 
 if __name__ == "__main__":
     import argparse
-    from cardioseg.obs import setup
+    from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")
     ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")

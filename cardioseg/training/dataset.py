@@ -21,7 +21,7 @@ import numpy as np
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from cardioseg.data.store import load_arrays
+from core.data.store import load_arrays
 from core.types import Slice2D
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
@@ -57,7 +57,7 @@ class ACDCSliceDataset(Dataset):
         keep_empty: bool = False,
         augment: bool = False,
     ):
-        from cardioseg.obs import progress
+        from core.obs import progress
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.frames = frames

@@ -53,8 +53,8 @@ def _write_cases(rows, img_dir: Path, lbl_dir: Path, get_adapter) -> int:
 def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) -> Path:
     """Export the battery split to nnU-Net raw: Tr = train+val pool, Ts = acdc+canon held-out."""
     import polars as pl
-    from cardioseg.data import store, splits
-    from cardioseg.data.mri.registry import get_adapter
+    from core.data import store, splits
+    from core.data.mri.registry import get_adapter
     from core.hparams import DataCfg
 
     dc = DataCfg()                                           # the generalization criteria (Canon+GE test, ACDC val)

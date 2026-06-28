@@ -3,7 +3,7 @@
 `conda run` buffers child stdout, so progress printed to stdout is invisible until exit. Logging
 through a FileHandler writes straight from the process to disk — tail the file to watch live.
 
-    from cardioseg.obs import setup, timed, progress
+    from core.obs import setup, timed, progress
     log = setup("runs/foo/train.log")
     with timed(log, "load data"):
         ...

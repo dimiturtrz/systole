@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from cardioseg.training.export_onnx import export as build_onnx
-from cardioseg.data import store
+from core.data import store
 from common import MODELS, DEFAULT_MODEL
 
 OUT = Path("cardioview/web/public/models")
