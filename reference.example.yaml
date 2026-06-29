@@ -1,0 +1,42 @@
+# Reference store — SCHEMA + sources (committed). The real values live LOCAL at
+# <data>/reference/*.yaml (outside the repo, with the data). Copy this file's shape there and fill
+# it — ideally by DERIVING from processed/ (so a value traces back to a cohort), papers for the rest.
+#
+# This is "another kind of storage": data lives with data (<data>/reference/), source lives with
+# source (this schema + the loader core/reference.py + the paper citations below). The repo ships
+# only the schema/recipe — never the asserted medical facts.
+#
+# Each leaf value carries provenance:
+#   value         the number/range/string
+#   source        human cite (paper / DOI) or "computed"
+#   based_on      LINEAGE — which processed run + cohort it was derived from, or which paper table
+#   extracted_by  computed | paper | llm
+#   verified      bool — STRICT: verified:false is loaded but NEVER used (loader skips it)
+#
+# Loader: core.reference.Reference().get('normal_ranges', 'ef_normal')  -> value or default(=fallback)
+
+normal_ranges:
+  ef_normal:                       # left-ventricular ejection fraction, healthy
+    value: [55, 70]                # % — ILLUSTRATIVE placeholder, not a real figure
+    source: "e.g. Maceira 2006, normal CMR LV reference ranges"
+    based_on: "paper table (n healthy) — OR: computed from processed/<paramkey> NOR cohort"
+    extracted_by: paper
+    verified: false                # example is unverified -> loader will NOT use it until checked
+
+bsa_volume:
+  edv_per_bsa:                     # expected ED volume scaled by body-surface-area
+    value: null
+    source: "derive from processed/ regression (EDV ~ BSA on healthy) or a paper nomogram"
+    based_on: "computed from processed/<paramkey>, vendor/pathology cohort = ..."
+    extracted_by: computed
+    verified: false
+
+conventions:
+  # fixed project conventions (not measured) — e.g. label order, axis order. These CAN be verified:true
+  # since they're definitions, not extracted facts.
+  label_order:
+    value: {0: background, 1: RV, 2: LV-myo, 3: LV-cav}
+    source: "project canonical (core/labels.py)"
+    based_on: "core.labels — geometrically verified on real masks"
+    extracted_by: computed
+    verified: true
