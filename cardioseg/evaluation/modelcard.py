@@ -35,6 +35,30 @@ def _perf_table(r: dict) -> str:
     return "\n".join(rows)
 
 
+def _reference_section() -> list[str]:
+    """Surface the derived reference ranges (with cohort provenance) IF the local reference store is
+    present; omitted entirely when absent (graceful fallback — the card still generates on a fresh
+    clone with no <data>/reference/). Shows provenance regardless of verified, but only verified
+    values would actually be used by consumers."""
+    from core.reference import Reference
+    ref = Reference()
+    if not ref.present():
+        return []
+    rows = []
+    for key, label in (("ef_normal", "Normal LV EF"), ("edv_normal_ml", "Normal EDV"),
+                       ("esv_normal_ml", "Normal ESV")):
+        p = ref.provenance("normal_ranges", key)
+        if p and isinstance(p.get("value"), list):
+            unit = "%" if key == "ef_normal" else " mL"
+            rows.append(f"- {label}: **{p['value'][0]}–{p['value'][1]}{unit}** (p5–p95, n={p.get('n','?')}). "
+                        f"<sub>{p.get('based_on','')}</sub>")
+    if not rows:
+        return []
+    return ["", "## Reference ranges (derived from our GT, for context)",
+            "*From the local reference store (`<data>/reference/`, not committed); each traces to its "
+            "cohort. Clinical context only — the model is not evaluated against these.*", *rows]
+
+
 def generate(run_dir: str | Path) -> Path:
     run = Path(run_dir)
     cfg = json.loads((run / "config.json").read_text())
@@ -69,6 +93,7 @@ def generate(run_dir: str | Path) -> Path:
         t = res[test_key]
         parts += ["", "### Held-out test", _perf_table(t),
                   f"\nEF vs GT: **MAE {t.get('ef_mae', float('nan')):.1f}%** (n={len(t.get('ef_rows', []))})."]
+    parts += _reference_section()
     parts += [
         "",
         "## Intended use & limitations",
