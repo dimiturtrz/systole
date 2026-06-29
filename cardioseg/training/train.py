@@ -86,7 +86,15 @@ def train_seg(cfg: TrainCfg):
     dl = DataLoader(train_ds, batch_size=cfg.batch, shuffle=True, drop_last=True, num_workers=0, pin_memory=pin)
     val_dl = DataLoader(val_ds, batch_size=cfg.batch, num_workers=0, pin_memory=pin)
     model = build_unet(cfg.model).to(device)
-    loss_fn = build_loss(cfg.loss)
+    # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
+    # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
+    soft_sigma = cfg.aug.soft_label_sigma
+    if soft_sigma > 0:
+        from .losses import SoftDiceCE
+        from .augment import soften
+        loss_fn = SoftDiceCE()
+    else:
+        loss_fn = build_loss(cfg.loss)
     opt = torch.optim.Adam(model.parameters(), cfg.lr)
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
@@ -108,10 +116,11 @@ def train_seg(cfg: TrainCfg):
             y = y.to(device, non_blocking=pin)                # [B,H,W]
             if augment:
                 x, y = augment_batch(x, y, cfg.aug)            # GPU-batched, hyperparams from cfg.aug
-            y = y[:, None]                                     # -> [B,1,H,W]
+            # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
+            yt = soften(y, soft_sigma, cfg.model.out_channels) if soft_sigma > 0 else y[:, None]
             opt.zero_grad(set_to_none=True)
             with torch.autocast("cuda", enabled=pin):
-                loss = loss_fn(model(x), y)
+                loss = loss_fn(model(x), yt)
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()

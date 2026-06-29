@@ -38,6 +38,33 @@ from core.hparams import AugCfg
 _GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
 
 
+def _gaussian_kernel(sigma: float) -> torch.Tensor:
+    """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
+    r = max(1, int(math.ceil(3.0 * sigma)))
+    xs = torch.arange(-r, r + 1, dtype=torch.float32)
+    g = torch.exp(-(xs ** 2) / (2.0 * sigma * sigma))
+    g = g / g.sum()
+    return torch.outer(g, g)
+
+
+def soften(mask: torch.Tensor, sigma: float, n_classes: int) -> torch.Tensor:
+    """Hard integer mask [B, H, W] -> soft probabilistic target [B, C, H, W] (channels sum to 1).
+
+    One-hot, then per-class Gaussian blur (boundary-uncertainty width ≈ σ voxels), then renormalize
+    so each voxel's class probs sum to 1. Result is soft only at boundaries (blurred one-hots overlap
+    there) and stays ~hard in class interiors. σ is a principled width (~partial-volume scale), NOT a
+    knob tuned to EF. σ<=0 -> crisp one-hot (== hard target). The honest-target representation: a
+    boundary voxel is a mix, so its label is a distribution, not a 0/1."""
+    oh = F.one_hot(mask.long(), n_classes).permute(0, 3, 1, 2).float()   # [B, C, H, W]
+    if not sigma or sigma <= 0:
+        return oh
+    k = _gaussian_kernel(sigma).to(oh.device, oh.dtype)
+    pad = k.shape[-1] // 2
+    kk = k.view(1, 1, *k.shape).expand(n_classes, 1, *k.shape)
+    oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)
+    return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
+
+
 def augment_batch(
     img: torch.Tensor,
     mask: torch.Tensor,

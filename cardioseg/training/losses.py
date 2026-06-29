@@ -116,6 +116,30 @@ class DiceCEHER:
         return loss
 
 
+class SoftDiceCE:
+    """Dice+CE for SOFT (probabilistic) targets [B, C, H, W] (channels sum to 1) — for soft-label
+    training (boundary voxels are fractional). MONAI DiceCELoss can't be used: its CE term argmaxes
+    the target, collapsing the soft labels back to hard. This keeps them:
+      - soft Dice via MONAI DiceLoss(softmax=True, to_onehot_y=False) — already a soft-overlap loss
+      - soft CE = -(target * log_softmax(logits)).sum(classes).mean()  — cross-entropy to a soft dist
+    Reduces to the standard hard Dice+CE when the target is one-hot (sigma->0). fp32 under autocast
+    (log_softmax + the channel sum are fp16-unsafe)."""
+
+    def __init__(self, include_background: bool = True, lambda_dice: float = 1.0, lambda_ce: float = 1.0):
+        from monai.losses import DiceLoss
+        self.dice = DiceLoss(softmax=True, to_onehot_y=False, include_background=include_background)
+        self.ld, self.lce = lambda_dice, lambda_ce
+
+    def __call__(self, logits, target):
+        import torch
+        import torch.nn.functional as F
+        with torch.autocast(device_type=logits.device.type, enabled=False):
+            logits, target = logits.float(), target.float()
+            ce = -(target * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
+            d = self.dice(logits, target)
+        return self.ld * d + self.lce * ce
+
+
 def build_loss(cfg: LossCfg | None = None):
     """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
     an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
