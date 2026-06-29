@@ -6,8 +6,18 @@ math, not a model. Real-data behaviour is covered by tests/integration.
 import numpy as np
 
 from core.data.mri.acdc import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
-from core.measure import voxel_volume_ml, label_volume_ml, ejection_fraction
+from core.measure import voxel_volume_ml, label_volume_ml, ejection_fraction, expected_volume_ml
 from core.evaluate import dice, hausdorff
+
+
+def test_expected_volume_equals_count_when_binary():
+    """Expected volume on a 0/1 prob map == hard label volume (Σp = count); a fractional voxel
+    contributes its fraction (the late-collapse soft readout)."""
+    sp = (8.0, 1.5, 1.5)
+    prob = np.zeros((1, 4, 4), np.float32); prob[0, :2, :2] = 1.0    # 4 whole voxels
+    assert abs(expected_volume_ml(prob, sp) - 4 * voxel_volume_ml(sp)) < 1e-9
+    prob[0, 0, 2] = 0.5                                              # one half voxel
+    assert abs(expected_volume_ml(prob, sp) - 4.5 * voxel_volume_ml(sp)) < 1e-9
 
 
 def _enclosed_lv():

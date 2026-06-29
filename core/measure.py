@@ -25,6 +25,14 @@ def label_volume_ml(mask: Mask, label: int, spacing: Spacing) -> float:
     return int(np.sum(mask == label)) * voxel_volume_ml(spacing)
 
 
+def expected_volume_ml(prob: np.ndarray, spacing: Spacing) -> float:
+    """EXPECTED volume (mL) from a per-voxel probability map [D,H,W] of one class = Σ prob × voxel
+    volume — the 'collapse-never' soft readout. A boundary voxel at p=0.6 contributes 0.6 of a voxel
+    instead of 0 or 1, so sub-voxel boundary mass survives into the volume (only meaningful for a
+    model that outputs a real gradient, i.e. soft-label-trained + calibrated)."""
+    return float(np.asarray(prob).sum()) * voxel_volume_ml(spacing)
+
+
 def ejection_fraction(
     ed_mask: Mask, es_mask: Mask, spacing: Spacing, lv_label: int = LV_CAV
 ) -> tuple[float, float, float]:
