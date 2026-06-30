@@ -72,7 +72,7 @@ estimable; diversify when stripping is unreliable or discards signal.
 | factor | physical cause | augment (add) | normalize (strip) | current call | status |
 |---|---|---|---|---|---|
 | per-volume brightness/scale | acquisition gain, windowing | gamma/contrast (have) | z-score per volume (have) | both, crude | ✅ |
-| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **settled non-lever**: augment regressed *and* strip (N4) regressed → leave it (z-score only) | ✅ resolved |
+| coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **test-neutral on our sample** (augment + strip both regressed on a bias-mild test that lacks the axis); N4 **retained opt-in** for bias-heavy real-world data we can't measure — NOT "dead" | ◐ test-bound |
 | vendor intensity dist. | T1-weighting, flip angle, recon LUT | random gamma + histogram retarget (T1) | histogram standardization (Nyúl) = harmonization `qfz` | diversify (qfz parked: vendors level in-domain) | ⬜ aug side |
 | noise floor / distribution | magnitude op on complex signal | Rician noise (T1) — we use plain Gaussian | denoise / variance-stabilize | diversify (Rician) | ⬜ |
 | k-space artifacts | corrupted k-space, motion in acq | ghosting, spike (T1) | de-ghost / artifact reject | diversify (rare, hard to strip) | ⬜ |
@@ -98,11 +98,19 @@ which is the result:
 3. **Deep-ensembling buys nothing** on unseen vendors (Canon Dice +0.000, GE +0.006 — within noise),
    confirming low headroom.
 
-4. **The strip dual (N4) regressed too.** Normalizing the bias factor (N4, default params) made it
-   *worse*, EF most of all: ACDC EF 6.5→7.3%, Canon 11.9→15.0%, GE 11.3→13.5% (Dice ~flat, −0.006 on the
-   test vendors). So **both directions of the bias-field factor hurt** — augment *and* strip. The taxonomy's
-   "undecided: strip vs diversify" for bias-field is **resolved: neither** — leave it (z-score only). The
-   bias field simply isn't where the cross-vendor gap lives.
+4. **The strip dual (N4) regressed too — ON OUR TEST.** Normalizing the bias factor (N4, default
+   params) made it *worse*, EF most of all: ACDC EF 6.5→7.3%, Canon 11.9→15.0%, GE 11.3→13.5% (Dice
+   ~flat, −0.006 on the test vendors). Both directions of the bias-field factor hurt here — augment
+   *and* strip.
+   **BUT read this honestly (the finite-test caveat):** ACDC/M&Ms are relatively clean / vendor-
+   post-processed → mild bias field. Our held-out set (ACDC/Canon/GE) **does not contain the
+   bias-field axis**, so "N4 regressed" means *"our test doesn't reward N4,"* NOT *"N4 is useless."*
+   N4 is a physically-valid normalization (RF-coil / B1 inhomogeneity is a real artifact); on a
+   bias-heavy scanner in the wild — which the effectively-infinite real distribution surely contains
+   — it could be essential, and we **cannot measure that** with what we have. So the taxonomy entry is
+   **"strip vs diversify: test-neutral on our sample, N4 RETAINED as opt-in for bias-heavy real-world
+   data we can't represent"** — not "resolved: neither / dead." Off by default (`n4=True` to enable),
+   kept + documented precisely because finite-test-neutrality ≠ real-world-uselessness.
 
 **Conclusion:** the cross-vendor gap is **not reducible by augmentation, same-recipe ensembling, or bias
 normalization** — these experiments exhausted our current recipe. The real reducible lever is a
@@ -110,8 +118,11 @@ normalization** — these experiments exhausted our current recipe. The real red
 4.3% vs ours 11.9% / 11.3% — demonstrating the gap was largely model-class epistemic, not an
 irreducible aleatoric floor. (Aleatoric / inter-observer limits are never conclusively proven here —
 only bounded below by inter-observer LoA.) A same-recipe ensemble is structurally blind to this; the
-duality experiment (augment ↔ strip the same factor) is itself the result: both hurt → the factor is
-settled. Tracked: `bd cardiac-seg-{jp1,chm}`; runs logged in MLflow
+duality experiment (augment ↔ strip the same factor) is itself the result: both hurt *on this test*.
+Scope it honestly — our held-out set is bias-mild and finite; bias-field normalization (N4) stays a
+valid, retained opt-in for the bias-heavy acquisitions the real (effectively-infinite) distribution
+contains but our test can't. "Settled" = settled *for closing the cross-vendor gap on our data*, not
+"N4 is worthless." Tracked: `bd cardiac-seg-{jp1,chm}`; runs logged in MLflow
 (gen / aug_bias / n4 / seeds comparable on canonical axes).
 
 ## The diversify force — two distinct families: augmentation vs generation
