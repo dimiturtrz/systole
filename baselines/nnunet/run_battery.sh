@@ -22,7 +22,8 @@ echo "=== predict held-out Ts (unseen vendors: Canon + GE) ==="
 nnUNetv2_predict -i "$DS/imagesTs" -o "$PRED" -d 29 -c 2d -f 0 -tr nnUNetTrainer_50epochs
 
 echo "=== score (per battery axis) ==="
-cd /d/personal_projects/cardiac-seg
+cd "$(cd "$(dirname "$0")/../.." && pwd)"   # repo root, portable (git-bash /d, WSL /mnt/d, native linux)
+# SCORE_OUT overridable so cross-platform verification runs don't clobber the committed results.json.
 python -m baselines.nnunet.score --pred "$PRED" --gt "$DS/labelsTs" --manifest "$DS/ts_manifest.json" \
-    --out baselines/nnunet/results.json   # single source read by cardioseg/evaluation/results.py
+    --out "${SCORE_OUT:-baselines/nnunet/results.json}"   # single source read by cardioseg/evaluation/results.py
 echo "=== NNUNET BATTERY DONE ==="
