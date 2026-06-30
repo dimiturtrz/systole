@@ -1,10 +1,10 @@
-"""The training data engine (cardioseg.training.generator). Contract: Generator(GeneratorCfg) yields
+"""The training data engine (cardioseg.data.generator). Contract: Generator(GeneratorCfg) yields
 COLLAPSED (image, target) batches from resident real tensors — real / synth / mixed by cfg.synth, with
 priors, augment and soften already applied. The train loop only calls batch()."""
 import torch
 
 from core.hparams import GeneratorCfg, SynthCfg, AugCfg
-from cardioseg.training.generator import Generator
+from cardioseg.data.generator import Generator
 
 N = 4
 

@@ -7,7 +7,7 @@ from core.hparams import DataCfg
 
 
 def test_size_single_sourced():
-    from cardioseg.training.dataset import SIZE
+    from cardioseg.data.dataset import SIZE
     assert DEFAULT_SIZE == DataCfg().size == SIZE
 
 

@@ -1,10 +1,10 @@
-"""SynthSeg-style synthetic-from-labels generation (cardioseg.training.synth, bd cardiac-seg-bgc).
+"""SynthSeg-style synthetic-from-labels generation (cardioseg.data.synth, bd cardiac-seg-bgc).
 Contract: label mask -> z-scored image, painted per class. Realistic mode paints around measured real
 priors (blood bright / myo dark, the cue that transfers); deform invents anatomy; target = real labels."""
 import torch
 
 from core.hparams import SynthCfg
-from cardioseg.training.synth import synthesize_from_labels, measure_class_stats
+from cardioseg.data.synth import synthesize_from_labels, measure_class_stats
 
 N = 4  # canonical classes: 0 bg, 1 RV, 2 LV-myo, 3 LV-cav
 
@@ -78,7 +78,7 @@ def test_load_synth_priors_from_reference(tmp_path):
     """Priors round-trip through the reference store: a synth_priors.yaml -> (means,stds) tensors
     indexed by class (0=bg,1=RV,2=myo,3=cav); unverified entries are skipped (returns None)."""
     from core.reference import Reference
-    from cardioseg.training.priors import load_synth_priors
+    from cardioseg.data.priors import load_synth_priors
     (tmp_path / "synth_priors.yaml").write_text(
         "synth_priors:\n  intensity:\n"
         "    background: {value: [0.0, 0.7], source: computed, based_on: t, extracted_by: computed, verified: true}\n"
@@ -107,3 +107,26 @@ def test_partition_bg_structures_image_keeps_target():
     assert set(msk.unique().tolist()).issubset(set(range(N)))     # target = real labels only (bg=0)
     bg = (Y[0] == 0)
     assert img[0, 0][bg].unique().numel() > 1                     # bg painted with structure, not flat
+
+
+def test_pv_softens_boundaries():
+    """pv_sigma>0 blurs the class-MEAN map -> boundary voxels are mixes (intermediate values) instead
+    of hard per-class levels (the partial-volume physical upgrade)."""
+    priors = (torch.tensor([0.0, 1.0, -0.3, 0.8]), torch.zeros(4))   # std 0 -> flat per class
+    base = dict(synth_p=1.0, realistic=True, bg_mode="flat", deform=0.0, jitter=0.0,
+                std_scale=(0.0, 0.0), bias_strength=0.0, blur=(0.0, 0.0), noise=0.0)
+    torch.manual_seed(0)
+    hard, _ = synthesize_from_labels(_mask(1), SynthCfg(pv_sigma=0.0, **base), N, priors)
+    soft, _ = synthesize_from_labels(_mask(1), SynthCfg(pv_sigma=1.0, **base), N, priors)
+    assert hard[0, 0].unique().numel() == N          # hard edges: one level per class
+    assert soft[0, 0].unique().numel() > N           # PV mixing -> intermediate boundary values
+
+
+def test_kspace_lowpass_changes_and_keeps_shape():
+    """k-space truncation removes high frequencies -> output differs from no-PSF, same shape, finite."""
+    off = SynthCfg(synth_p=1.0, realistic=False, bg_mode="flat", kspace=0.0)
+    on = SynthCfg(synth_p=1.0, realistic=False, bg_mode="flat", kspace=0.5)
+    torch.manual_seed(0); a, _ = synthesize_from_labels(_mask(), off, N)
+    torch.manual_seed(0); b, _ = synthesize_from_labels(_mask(), on, N)
+    assert b.shape == a.shape and torch.isfinite(b).all()
+    assert not torch.allclose(a, b)

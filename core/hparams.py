@@ -95,6 +95,11 @@ class SynthCfg(BaseModel):
     std_scale: tuple[float, float] = (0.7, 1.4)     # multiply each class's real texture std
     mu: tuple[float, float] = (0.0, 1.0)            # legacy pure-random per-class mean (realistic=False)
     sigma: tuple[float, float] = (0.05, 0.25)       # legacy pure-random per-class texture std
+    pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map by this σ
+    #                                                (voxels) -> boundary voxels are tissue mixes (real
+    #                                                finite-voxel averaging), not hard label edges
+    kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (low-pass via
+    #                                                fft truncation = real sinc PSF + Gibbs). 0 = off
     bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative bias field, max +/- fraction
     blur: tuple[float, float] = (0.0, 1.0)          # random Gaussian blur σ (resolution variation)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)

@@ -47,8 +47,8 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     from .losses import build_loss
     from ..evaluation.validate import validate, summarize
     from core.model import build_unet, resolve_device
-    from .dataset import load_to_gpu
-    from .generator import Generator
+    from ..data.dataset import load_to_gpu
+    from ..data.generator import Generator
     from core.data import store, splits
     from core.obs import setup, timed, progress
     from core.hparams import to_json

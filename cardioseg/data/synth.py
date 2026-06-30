@@ -149,6 +149,12 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         sg = torch.rand(b, n_paint, device=dev) * (sg_hi - sg_lo) + sg_lo
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
+    # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
+    # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
+    if cfg.pv_sigma > 0:
+        kpv = _gaussian_kernel(cfg.pv_sigma).to(dev)
+        kpv = kpv.view(1, 1, *kpv.shape)
+        mu_map = F.conv2d(mu_map, kpv, padding=kpv.shape[-1] // 2)
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
 
     # --- procedural thorax background: replace the bg blob with structured surroundings (dark lungs,
@@ -171,6 +177,17 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         k = _gaussian_kernel(sigma).to(dev)
         k = k.view(1, 1, *k.shape)
         img = F.conv2d(img, k, padding=k.shape[-1] // 2)
+
+    # --- k-space PSF: real MRI resolution = finite k-space sampling. Low-pass by keeping the central
+    #     cfg.kspace fraction of frequencies (fft -> window -> ifft) = sinc PSF + slight Gibbs ringing,
+    #     more physical than a Gaussian blur. ---
+    if 0 < cfg.kspace < 1:
+        H, W = img.shape[-2:]
+        f = torch.fft.fftshift(torch.fft.fft2(img), dim=(-2, -1))
+        ch, cw = int(H * cfg.kspace / 2), int(W * cfg.kspace / 2)
+        win = torch.zeros_like(f.real)
+        win[..., H // 2 - ch:H // 2 + ch + 1, W // 2 - cw:W // 2 + cw + 1] = 1.0
+        img = torch.fft.ifft2(torch.fft.ifftshift(f * win, dim=(-2, -1))).real
 
     # --- Rician noise (MRI magnitude noise: sqrt of two independent Gaussian channels) ---
     if cfg.noise > 0:
