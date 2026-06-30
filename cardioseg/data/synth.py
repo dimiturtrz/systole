@@ -87,6 +87,10 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint]
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     sg = mu.abs() * cfg.texture                                              # within-class texture
+    if cfg.flow > 0:                                                         # flow: blood pools spread
+        from .mri_physics import blood_classes
+        for c in blood_classes(n_classes):
+            sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel

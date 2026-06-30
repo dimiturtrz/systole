@@ -80,6 +80,9 @@ class SynthCfg(BaseModel):
     #                                                = the dominant cross-vendor relaxation axis
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
     texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
+    flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
+    #                                                texture on blood classes so cav/RV aren't flat-bright
+    #                                                (real cine blood spreads from flow) — fidelity lever
     # --- background ---
     bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
     #                                                into bg_tiers tissue tiers (real lung/fat/muscle

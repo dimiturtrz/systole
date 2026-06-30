@@ -33,6 +33,12 @@ _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 _BG_LADDER = ("lung", "liver", "muscle", "fat")
 
 
+def blood_classes(n_classes: int) -> list[int]:
+    """Label indices whose tissue is blood (RV + LV cavities) — the pools that show flow signal
+    variation in cine, so they get the extra `flow` texture."""
+    return [c for c in range(n_classes) if _HEART.get(c) == "blood"]
+
+
 def bssfp_signal(T1: torch.Tensor, T2: torch.Tensor, PD: torch.Tensor,
                  TR: torch.Tensor, flip: torch.Tensor) -> torch.Tensor:
     """Balanced-SSFP steady-state on-resonance signal (Freeman–Hill). T1/T2/TR in ms, flip in radians;
