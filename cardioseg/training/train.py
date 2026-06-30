@@ -49,7 +49,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     from core.model import build_unet, resolve_device
     from .dataset import load_to_gpu
     from .augment import augment_batch
-    from .synth import synthesize_from_labels
+    from .synth import synthesize_from_labels, measure_class_stats
     from core.data import store, splits
     from core.obs import setup, timed, progress
     from core.hparams import to_json
@@ -93,6 +93,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
     augment = True
     synth_on = cfg.synth.synth_p > 0           # Tier-2 synthetic-from-labels mix (SynthSeg); 0 = off
+    # Realistic intensity priors: measure per-class mean/std from the REAL training slices once, so
+    # synth paints classes around their true distribution (blood bright, myo dark) instead of random.
+    synth_priors = None
+    if synth_on and cfg.synth.realistic:
+        synth_priors = tuple(t.to(device) for t in
+                             measure_class_stats(Xtr, Ytr, cfg.model.out_channels))
     nb = max(1, Xtr.shape[0] // cfg.batch)
     log.info("patients: %d train / %d val / %d test | slices: %d train / %d val (resident on %s, compute %s)",
              len(train_df), len(val_df), len(test_df), Xtr.shape[0], Xva.shape[0], data_device, device)
@@ -132,7 +138,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
                 # synth, the goal). cfg.deform>0 warps the labels too, so the synth target is the
                 # WARPED mask -> blend both x and y per sample. Paint BEFORE augment so affine geometry
                 # warps synth picture + mask together; result is z-scored like real input.
-                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels)
+                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels, synth_priors)
                 do = (torch.rand(x.shape[0], 1, 1, 1, device=device) < cfg.synth.synth_p).float()
                 x = do * xs + (1 - do) * x
                 y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)

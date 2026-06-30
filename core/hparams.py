@@ -73,12 +73,16 @@ class SynthCfg(BaseModel):
     synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
     deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
     #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
-    bg_regions: int = Field(8, ge=0)               # synthetic background sub-regions (fake thorax: lung/
-    #                                                rib/liver). 0 = flat bg. Cardiac labels are FOV-sparse
-    #                                                (heart-only); structured bg lets the net learn to
-    #                                                reject surrounding structure — needed for pure-synth.
-    mu: tuple[float, float] = (0.0, 1.0)            # per-class mean intensity sampled U[mu] (the contrast)
-    sigma: tuple[float, float] = (0.05, 0.25)       # per-class within-class texture std, sampled U[sigma]
+    # REALISTIC priors (the working recipe): paint each class around its REAL measured per-class mean/std
+    # (passed in from the training data), preserving the learnable ordering (blood bright, myo dark) that
+    # pure-U[0,1] random destroyed. jitter perturbs the class mean per sample (contrast augmentation
+    # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
+    # random (mu/sigma below), kept only for ablation.
+    realistic: bool = True
+    jitter: float = Field(0.4, ge=0)               # per-class mean perturbation std (contrast aug breadth)
+    std_scale: tuple[float, float] = (0.7, 1.4)     # multiply each class's real texture std
+    mu: tuple[float, float] = (0.0, 1.0)            # legacy pure-random per-class mean (realistic=False)
+    sigma: tuple[float, float] = (0.05, 0.25)       # legacy pure-random per-class texture std
     bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative bias field, max +/- fraction
     blur: tuple[float, float] = (0.0, 1.0)          # random Gaussian blur σ (resolution variation)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)

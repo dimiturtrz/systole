@@ -1,19 +1,23 @@
 """SynthSeg-style synthetic-image generation from labels (Tier 2, bd cardiac-seg-bgc).
 
 The *invent* force of domain generalization — the third sibling to `augment.py` (*diversify*: perturb
-real pixels) and `preprocessing/normalization/` (*strip*: remove vendor variance). Here we throw away
-the real intensities entirely and PAINT each label class with a freshly-sampled Gaussian, so every
-call produces a brand-new contrast. Train on a mix of these and the model can't latch onto any one
-scanner's appearance — it must segment by anatomy/shape -> contrast-AGNOSTIC, generalizes to unseen
-vendors (the cross-vendor lane). Anatomy is real (the ACDC mask); only the picture is invented.
+real pixels) and `preprocessing/normalization/` (*strip*: remove vendor variance). Throw away the real
+intensities and PAINT each label class from a sampled Gaussian, so every call is a new contrast +
+(with deform) new anatomy. Train on these and the net must segment by shape/structure, not one
+scanner's appearance -> generalizes across vendors. Anatomy seeds from the ACDC mask; the picture is
+invented.
 
-Pattern: SynthSeg (Billot et al. 2023, Med Image Analysis). Pipeline per call: per-label GMM paint ->
-smooth bias field -> random blur (resolution variation) -> Rician noise -> z-score (match the real
-preprocessed input distribution). Geometry (flip/rotate/scale of BOTH image+mask) is `augment.py`'s
-job and runs after, so this module keeps the mask untouched and does intensity only.
+Pattern: SynthSeg (Billot 2023) but with the cardiac-critical fix — cardiac labels are FOV-sparse
+(heart-only), and pure-random U[0,1] per-class intensities (the brain recipe) DESTROY the one learnable
+cue: blood pools are bright, myocardium dark. A net trained on randomized contrast learns synth-only
+structure and fails to transfer (measured: pure-random pure-synth -> 0.24-0.32 cross-vendor Dice vs
+0.86 real). The fix (DRIFTS-style per-label intensity clustering): sample each class around its REAL
+measured per-class mean/std (`measure_class_stats`), with bounded jitter — realistic ordering kept,
+magnitude varied for robustness. So the images actually look like cardiac MRI.
 
-GPU-batched, per-sample, vectorized — same idioms as `augment.py` (no python loop, torch global RNG;
-seed via torch.manual_seed for repro). Config = the injected SynthCfg.
+Pipeline per call: nonlinear label deform -> per-label Gaussian paint around real priors -> smooth bias
+field -> random blur -> Rician noise -> z-score. Geometry (flip/rotate/scale) is `augment.py`'s job,
+runs after. GPU-batched, vectorized; torch global RNG (seed for repro). Config = injected SynthCfg.
 """
 from __future__ import annotations
 
@@ -25,10 +29,26 @@ from core.hparams import SynthCfg
 from .augment import _gaussian_kernel
 
 
+def measure_class_stats(X: torch.Tensor, Y: torch.Tensor,
+                        n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-class (mean, std) of the REAL z-scored images — the realistic intensity priors that make
+    synth look like MRI. X [B,1,H,W], Y [B,H,W]. A class absent from the sample falls back to (0, 1).
+    Returned tensors live on X's device."""
+    flat_x, flat_y = X[:, 0].reshape(-1), Y.reshape(-1)
+    means = torch.zeros(n_classes, device=X.device)
+    stds = torch.ones(n_classes, device=X.device)
+    for c in range(n_classes):
+        v = flat_x[flat_y == c]
+        if v.numel() > 10:
+            means[c] = v.mean()
+            stds[c] = v.std().clamp_min(1e-3)
+    return means, stds
+
+
 def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
     """Smooth random displacement field as a grid_sample grid [B,H,W,2]. Coarse 5x5 control points
     (U[-amp,amp]) bicubic-upsampled to full res -> low-frequency elastic warp, added to the identity
-    grid. amp is in normalized [-1,1] coords (so 0.15 ≈ 15% of half-FOV max local shift)."""
+    grid. amp is in normalized [-1,1] coords (0.15 ≈ 15% of half-FOV max local shift)."""
     ctrl = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
     disp = F.interpolate(ctrl, size=(h, w), mode="bicubic", align_corners=False)   # [B,2,H,W]
     ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), (b, 1, h, w),
@@ -36,16 +56,16 @@ def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
     return ident + disp.permute(0, 2, 3, 1)
 
 
-def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg,
-                           n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
+def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
+                           priors: tuple[torch.Tensor, torch.Tensor] | None = None
+                           ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
-    mask [B,H,W] long (canonical labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
-    With cfg.deform>0 the labels are first warped by a smooth random nonlinear field (invents NEW
-    anatomy — the full-SynthSeg regime that makes 100%-synth training viable; the returned mask is the
-    warped one, so the target stays aligned). Then each class gets a per-sample mean (U[cfg.mu]) and
-    texture std (U[cfg.sigma]) -> a fresh random contrast every call. Background (label 0) is painted
-    too, so the net sees a full image, not a masked one.
+    mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
+    cfg.deform>0 warps the labels first (new anatomy; returned mask is the warped one so the target
+    stays aligned). With cfg.realistic + `priors`=(means,stds) from measure_class_stats, each class is
+    painted around its REAL mean/std (jittered) — the recipe that transfers. Else legacy pure-random
+    U[cfg.mu]/U[cfg.sigma] (ablation only). Background (label 0) is painted too -> full image.
     """
     b = mask.shape[0]
     dev = mask.device
@@ -54,26 +74,19 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg,
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
+    oh = F.one_hot(mask, n_classes).permute(0, 3, 1, 2).float()             # [B,C,H,W]
 
-    # Build the PAINT label map: real heart labels, plus — for the FOV-sparse cardiac case — the
-    # background blob split into pseudo-tissue regions (fake thorax) so it's painted with structure,
-    # not flat noise. The returned TARGET mask keeps real labels (bg=0); these pseudo-labels only shape
-    # the image, teaching the net to reject varied surroundings. Quantize a smooth random field into
-    # cfg.bg_regions bins over the background voxels.
-    paint, n_paint = mask, n_classes
-    if cfg.bg_regions > 0:
-        low = torch.rand(b, 1, 6, 6, device=dev)
-        fld = F.interpolate(low, size=mask.shape[-2:], mode="bicubic", align_corners=False)[:, 0]
-        bins = (fld.clamp(0, 1) * cfg.bg_regions).long().clamp(max=cfg.bg_regions - 1)   # [B,H,W]
-        paint = torch.where(mask == 0, n_classes + bins, mask)
-        n_paint = n_classes + cfg.bg_regions
-    oh = F.one_hot(paint, n_paint).permute(0, 3, 1, 2).float()              # [B,n_paint,H,W]
-
-    # --- per-label GMM paint: each (sample, class) gets a random mean + texture std ---
-    mu_lo, mu_hi = cfg.mu
-    sg_lo, sg_hi = cfg.sigma
-    mu = torch.rand(b, n_paint, device=dev) * (mu_hi - mu_lo) + mu_lo        # [B,n_paint]
-    sg = torch.rand(b, n_paint, device=dev) * (sg_hi - sg_lo) + sg_lo
+    # --- per-label Gaussian paint ---
+    if cfg.realistic and priors is not None:
+        pmean, pstd = priors                                                # [C] real measured priors
+        mu = pmean[None, :] + cfg.jitter * torch.randn(b, n_classes, device=dev)   # ordering kept, jittered
+        ss_lo, ss_hi = cfg.std_scale
+        sg = pstd[None, :] * (torch.rand(b, n_classes, device=dev) * (ss_hi - ss_lo) + ss_lo)
+    else:                                                                    # legacy pure-random (ablation)
+        mu_lo, mu_hi = cfg.mu
+        sg_lo, sg_hi = cfg.sigma
+        mu = torch.rand(b, n_classes, device=dev) * (mu_hi - mu_lo) + mu_lo
+        sg = torch.rand(b, n_classes, device=dev) * (sg_hi - sg_lo) + sg_lo
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
