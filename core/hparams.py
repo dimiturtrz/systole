@@ -71,6 +71,8 @@ class SynthCfg(BaseModel):
     Ref research/deep_dives/2026-06-24_mri-sim-libs-eval.md (SynthSeg, Billot 2023)."""
     model_config = _VALIDATE
     synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
+    deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
+    #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
     mu: tuple[float, float] = (0.0, 1.0)            # per-class mean intensity sampled U[mu] (the contrast)
     sigma: tuple[float, float] = (0.05, 0.25)       # per-class within-class texture std, sampled U[sigma]
     bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative bias field, max +/- fraction

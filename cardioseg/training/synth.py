@@ -25,17 +25,36 @@ from core.hparams import SynthCfg
 from .augment import _gaussian_kernel
 
 
-def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int) -> torch.Tensor:
-    """Generate a synthetic z-scored image from an integer label mask.
+def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
+    """Smooth random displacement field as a grid_sample grid [B,H,W,2]. Coarse 5x5 control points
+    (U[-amp,amp]) bicubic-upsampled to full res -> low-frequency elastic warp, added to the identity
+    grid. amp is in normalized [-1,1] coords (so 0.15 ≈ 15% of half-FOV max local shift)."""
+    ctrl = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
+    disp = F.interpolate(ctrl, size=(h, w), mode="bicubic", align_corners=False)   # [B,2,H,W]
+    ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), (b, 1, h, w),
+                          align_corners=False)                                      # [B,H,W,2]
+    return ident + disp.permute(0, 2, 3, 1)
 
-    mask [B,H,W] long (canonical labels 0..n_classes-1) -> img [B,1,H,W] float, z-scored per sample.
-    Each class gets its own per-sample mean (U[cfg.mu]) and texture std (U[cfg.sigma]) -> a fresh
-    random contrast every call. Background (label 0) is painted too (it's tissue/air with its own
-    invented intensity), so the net sees a full image, not a masked one.
+
+def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg,
+                           n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Generate a synthetic z-scored image (and its label map) from an integer label mask.
+
+    mask [B,H,W] long (canonical labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
+    With cfg.deform>0 the labels are first warped by a smooth random nonlinear field (invents NEW
+    anatomy — the full-SynthSeg regime that makes 100%-synth training viable; the returned mask is the
+    warped one, so the target stays aligned). Then each class gets a per-sample mean (U[cfg.mu]) and
+    texture std (U[cfg.sigma]) -> a fresh random contrast every call. Background (label 0) is painted
+    too, so the net sees a full image, not a masked one.
     """
     b = mask.shape[0]
     dev = mask.device
-    oh = F.one_hot(mask.long(), n_classes).permute(0, 3, 1, 2).float()      # [B,C,H,W]
+    mask = mask.long()
+    if cfg.deform > 0:
+        grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
+        mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
+                             padding_mode="border", align_corners=False)[:, 0].long()
+    oh = F.one_hot(mask, n_classes).permute(0, 3, 1, 2).float()             # [B,C,H,W]
 
     # --- per-label GMM paint: each (sample, class) gets a random mean + texture std ---
     mu_lo, mu_hi = cfg.mu
@@ -70,4 +89,4 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int) ->
     # --- z-score per sample (match the real preprocessed input distribution) ---
     m = img.mean((1, 2, 3), keepdim=True)
     s = img.std((1, 2, 3), keepdim=True).clamp_min(1e-6)
-    return (img - m) / s
+    return (img - m) / s, mask

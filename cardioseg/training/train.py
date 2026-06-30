@@ -128,12 +128,14 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
             x = Xtr[idx].to(device, non_blocking=pin)            # [B,1,H,W] f32
             y = Ytr[idx].to(device, non_blocking=pin).long()     # [B,H,W]
             if synth_on:
-                # invent a contrast from the labels for a per-sample fraction; mask y unchanged
-                # (anatomy real). Paint BEFORE augment so geometry warps the synth picture + mask
-                # together and the result is still z-scored like real input.
+                # invent image+anatomy from the labels for a per-sample fraction (synth_p=1 -> pure
+                # synth, the goal). cfg.deform>0 warps the labels too, so the synth target is the
+                # WARPED mask -> blend both x and y per sample. Paint BEFORE augment so affine geometry
+                # warps synth picture + mask together; result is z-scored like real input.
+                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels)
                 do = (torch.rand(x.shape[0], 1, 1, 1, device=device) < cfg.synth.synth_p).float()
-                xs = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels)
                 x = do * xs + (1 - do) * x
+                y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)
             if augment:
                 x, y = augment_batch(x, y, cfg.aug)            # GPU-batched, hyperparams from cfg.aug
             # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
