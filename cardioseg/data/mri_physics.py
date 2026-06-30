@@ -41,12 +41,22 @@ def blood_classes(n_classes: int) -> list[int]:
 
 def bssfp_signal(T1: torch.Tensor, T2: torch.Tensor, PD: torch.Tensor,
                  TR: torch.Tensor, flip: torch.Tensor) -> torch.Tensor:
-    """Balanced-SSFP steady-state on-resonance signal (Freeman–Hill). T1/T2/TR in ms, flip in radians;
-    broadcasting tensors. S = PD·sinα·(1−E1) / (1−(E1−E2)cosα − E1·E2), E1=exp(−TR/T1), E2=exp(−TR/T2)."""
+    """Balanced-SSFP steady-state ON-RESONANCE signal (Freeman–Hill). T1/T2/TR in ms, flip in radians;
+    broadcasting tensors. S = PD·sinα·(1−E1) / (1−(E1−E2)cosα − E1·E2), E1=exp(−TR/T1), E2=exp(−TR/T2).
+    The passband (max) value; off-resonance banding multiplies this — see `banding`."""
     e1 = torch.exp(-TR / T1)
     e2 = torch.exp(-TR / T2)
     s, c = torch.sin(flip), torch.cos(flip)
     return PD * s * (1.0 - e1) / (1.0 - (e1 - e2) * c - e1 * e2)
+
+
+def banding(T2: torch.Tensor, TR: torch.Tensor, dphi) -> torch.Tensor:
+    """bSSFP off-resonance banding factor in (0, 1], normalized to 1 at the passband (dphi=0). dphi =
+    off-resonance precession per TR (rad, = 2π·Δf·TR). ratio = (1−E2) / |1−E2·e^{iφ}|
+    = (1−E2)/√(1−2E2cosφ+E2²): =1 at φ=0, dips toward φ=±π, and the dip is DEEPER for long-T2 tissue
+    (E2→1) — so blood bands hard, short-T2 myocardium barely. Multiplies the on-resonance signal."""
+    e2 = torch.exp(-TR / T2)
+    return (1.0 - e2) / torch.sqrt(1.0 - 2.0 * e2 * torch.cos(dphi) + e2 ** 2).clamp_min(1e-6)
 
 
 def _params(name: str, field: float) -> tuple[float, float, float]:

@@ -76,6 +76,9 @@ class SynthCfg(BaseModel):
     # --- bSSFP sequence sweep = the physical cross-vendor contrast diversity ---
     tr_ms: tuple[float, float] = (2.8, 4.0)         # repetition time sweep (ms) — cine range
     flip_deg: tuple[float, float] = (35.0, 70.0)     # flip-angle sweep (deg)
+    b0_hz: float = Field(0.0, ge=0)                 # off-resonance B0 field amplitude (Hz): smooth Δf
+    #                                                field -> bSSFP BANDING (lowers+spreads long-T2 blood,
+    #                                                the cav-too-bright fidelity fix). 0 = on-resonance
     fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
     #                                                = the dominant cross-vendor relaxation axis
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)

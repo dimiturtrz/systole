@@ -92,6 +92,16 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         for c in blood_classes(n_classes):
             sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
+    # off-resonance bSSFP banding: a smooth Δf (B0) field -> per-pixel signal drop near dphi=±π,
+    # strongest for long-T2 blood -> lowers+spreads the over-bright cavity (the cav-fidelity fix).
+    # Applied as the signal RATIO band(φ)/band(0) so per-class jitter/flow in mu_map are preserved.
+    if cfg.b0_hz > 0:
+        from .mri_physics import banding
+        t2m = (oh * t2[:, :, None, None]).sum(1, keepdim=True)               # per-pixel T2
+        low = torch.rand(b, 1, 4, 4, device=dev) * 2 - 1
+        df = cfg.b0_hz * F.interpolate(low, size=mask.shape[-2:], mode="bilinear", align_corners=False)
+        phi = 2 * math.pi * df * (tr[:, :, None, None] / 1000.0)             # off-resonance per TR (rad)
+        mu_map = mu_map * banding(t2m, tr[:, :, None, None], phi)
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
     # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.

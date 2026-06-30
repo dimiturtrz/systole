@@ -108,3 +108,14 @@ def test_seed_deterministic():
     torch.manual_seed(7); a, ma = synthesize_from_labels(m, cfg, N)
     torch.manual_seed(7); b, mb = synthesize_from_labels(m, cfg, N)
     assert torch.equal(a, b) and torch.equal(ma, mb)
+
+
+def test_banding_dips_at_pi_deeper_for_blood():
+    """Banding factor: 1 at the passband (dphi=0), dips toward dphi=π, and the dip is DEEPER for
+    long-T2 blood than short-T2 myocardium (the physical reason blood bands hardest)."""
+    from cardioseg.data.mri_physics import banding
+    t, tr = torch.tensor, torch.tensor([3.0])
+    blood_t2 = t([TISSUE["blood"][1.5][1]]); myo_t2 = t([TISSUE["myocardium"][1.5][1]])
+    assert torch.allclose(banding(blood_t2, tr, t([0.0])), torch.ones(1), atol=1e-3)   # passband = 1
+    assert banding(blood_t2, tr, t([math.pi])) < 1.0                                    # band dip
+    assert banding(blood_t2, tr, t([math.pi])) < banding(myo_t2, tr, t([math.pi]))      # blood bands deeper
