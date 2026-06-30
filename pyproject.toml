@@ -15,24 +15,37 @@ dependencies = [
     "pydantic>=2",  # validated hyperparameter configs (cardioseg/hparams.py)
     "omegaconf",   # paths.yaml config loader (cardioseg/config.py)
     "monai>=1.5",
-    # torch >=2.7 is required for NVIDIA Blackwell (sm_120, e.g. RTX 5090).
-    # Install the CUDA build from the PyTorch index, NOT plain PyPI (which is CPU):
-    #   pip install torch --index-url https://download.pytorch.org/whl/cu128
-    # Verified working here: torch 2.10.0+cu130 on an RTX 5090.
+    # torch >=2.7 required for NVIDIA Blackwell (sm_120, RTX 5090). The CUDA build comes from the
+    # PyTorch index (see [tool.uv.sources] below), NOT plain PyPI (which is CPU). Verified: 2.10+cu130.
     "torch>=2.7",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
-n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True). NB HD-DT GPU loss needs cucim = Linux-only.
-export = ["onnxruntime"]     # ONNX export + parity check (cardioseg/training/export_onnx.py)
+n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True).
+export = ["onnxruntime"]     # ONNX export + parity check (core/export_onnx.py)
 viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
 track = ["mlflow"]           # optional experiment tracking (cardioseg/tracking.py); guarded, local backend
+# GPU lane (LINUX-only by marker — cucim/cupy ship no Windows wheels). On Windows these silently
+# resolve to nothing; the code falls back to scipy/CPU via a single capability gate. Install on
+# linux with `uv sync --extra gpu`.
+gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
 all = ["SimpleITK", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
+# cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only
+# packages pinned via [tool.uv.sources] draw from this index.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
 
 [build-system]
 requires = ["setuptools>=68"]

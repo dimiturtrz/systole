@@ -52,13 +52,22 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
+**uv** is the env+dep manager (one `pyproject.toml` + committed `uv.lock`, both platforms). torch's
+CUDA wheel comes from the PyTorch index pinned in `[tool.uv.sources]` — uv resolves it automatically,
+no manual index step.
+
 ```bash
-pip install -e ".[all]"      # core + extras (n4/export/viz/nnunet/dev). pyproject = source of truth.
-# torch FIRST from CUDA index (plain PyPI is CPU): pip install torch --index-url https://download.pytorch.org/whl/cu128
-conda activate pytorch_training_env          # the working env here
-export PYTHONPATH=/d/personal_projects/cardiac-seg   # scripts run as modules from repo root
-pytest                                        # testpaths = tests/ (unit + integration)
+uv sync --all-extras     # create/refresh .venv from pyproject + uv.lock (torch+cu130 incl.)
+uv run pytest            # runs in .venv; editable install -> no PYTHONPATH needed
+uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via `uv run`
 ```
+
+- **Linux GPU lane:** `uv sync --all-extras` on linux also pulls the `gpu` extra (cupy/cucim, linux-
+  only by marker); on Windows those silently skip and the code falls back to CPU. Same command both OSes.
+- **WSL:** repo lives on `/mnt/d`, so point uv's env off the shared tree to avoid clobbering the Windows
+  `.venv`: `UV_PROJECT_ENVIRONMENT=$HOME/venvs/cardioseg uv sync --all-extras`, then `uv run …`.
+- Legacy conda env `pytorch_training_env` still works as a fallback (`conda run -n … python …`), but uv
+  is the source of truth. NB the old `conda run` stdout-swallow / multiline-`-c` quirks don't apply to `uv run`.
 
 ## Architecture Overview
 
