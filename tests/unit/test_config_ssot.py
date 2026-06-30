@@ -28,6 +28,19 @@ def test_flagship_is_registry_ref():
     assert callable(flagship_model) and callable(flagship_dir)
 
 
+def test_windows_path_on_posix_fails_loud(monkeypatch):
+    """Leak guard: a Windows drive path ('D:/…') on POSIX must RAISE, not silently create repo/D:/…
+    (that leaked dataset meta.csv into git once). On Windows the same path is a valid absolute root."""
+    import core.config as cfg
+    import pytest
+    monkeypatch.setenv("CARDIAC_DATA", "D:/data/volumetric/mri")
+    monkeypatch.setattr(cfg.os, "name", "posix")
+    with pytest.raises(RuntimeError, match="POSIX"):
+        cfg._root()
+    monkeypatch.setattr(cfg.os, "name", "nt")
+    assert cfg._root() == "D:/data/volumetric/mri"     # valid absolute root on Windows
+
+
 def test_cmrxmotion_held_out_by_default():
     """cmrxmotion is single-vendor Siemens — if it's a known source but NOT held out, it would
     silently pollute Siemens train. Guard the invariant: wired AND held out by dataset."""

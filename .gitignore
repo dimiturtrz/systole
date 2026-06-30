@@ -44,3 +44,7 @@ mlartifacts/
 .mlflow_cache/
 .staging/
 *.egg-info/
+
+# guard: a Windows drive path (D:/...) used on POSIX is treated as relative -> creates repo/D:/ (data-leak landmine)
+D:/
+[A-Za-z]:/

@@ -9,6 +9,7 @@ datasets in); `<data>/processed/` is the preprocess cache (auto-created). Copy
 paths.example.yaml -> paths.yaml and set the one path. Env CARDIAC_DATA overrides the file.
 """
 import os
+import re
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -21,8 +22,18 @@ _FALLBACK_ROOT = "data"   # repo-relative (gitignored) if nothing configured
 
 
 def _root() -> str:
-    """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback."""
-    return os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT
+    """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback.
+
+    GUARD: a Windows drive path ('D:/…') on a POSIX OS is treated as RELATIVE, so any mkdir under it
+    silently creates `repo/D:/…` — a data-leak landmine (this happened, then got committed). Fail loud
+    instead: on POSIX, set CARDIAC_DATA to the mounted path (e.g. /mnt/d/…)."""
+    r = str(os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT)
+    if os.name != "nt" and re.match(r"^[A-Za-z]:[\\/]", r):
+        raise RuntimeError(
+            f"data root {r!r} is a Windows path but this is a POSIX OS — it would be treated as "
+            f"relative and create a repo-local 'D:/' dir (data leak). Set CARDIAC_DATA to the mounted "
+            f"path, e.g. CARDIAC_DATA=/mnt/d/{r[3:].replace(chr(92), '/')}")
+    return r
 
 
 def data_root(kind: str = "raw") -> str:
