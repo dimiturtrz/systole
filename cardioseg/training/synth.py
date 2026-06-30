@@ -45,6 +45,41 @@ def measure_class_stats(X: torch.Tensor, Y: torch.Tensor,
     return means, stds
 
 
+def _ellipse(gy, gx, cy, cx, ry, rx, soft=0.04):
+    """Soft ellipse membership in [0,1] over a coordinate grid. cy/cx/ry/rx are [B,1,1] (per-sample),
+    gy/gx are [1,H,W] in normalized [-1,1] coords. Sigmoid edge of width ~soft."""
+    d = ((gy - cy) / ry) ** 2 + ((gx - cx) / rx) ** 2
+    return torch.sigmoid((1.0 - d) / soft)
+
+
+def _procedural_thorax(b: int, h: int, w: int, dev) -> torch.Tensor:
+    """Randomized synthetic thorax background [B,1,H,W] (z-ish scale): body ellipse (mid intensity) with
+    a brighter fat/muscle rim, two dark lung fields flanking the centre, a spine blob, and smooth
+    low-frequency texture. NOT photorealistic — it supplies the STRUCTURES the segmenter confuses the
+    heart (esp. thin RV) with: dark lung next door, bright chest wall. All intensities/positions sampled
+    per-sample so contrast stays vendor-agnostic. Heart is painted on top by the caller."""
+    gy = torch.linspace(-1, 1, h, device=dev).view(1, h, 1)
+    gx = torch.linspace(-1, 1, w, device=dev).view(1, 1, w)
+    r = lambda lo, hi: (torch.rand(b, 1, 1, device=dev) * (hi - lo) + lo)        # per-sample U[lo,hi]
+
+    air = r(-1.3, -0.7)                                                          # dark outside the body
+    body_i, fat_i, lung_i = r(-0.2, 0.3), r(0.7, 1.4), r(-1.4, -0.9)
+    body = _ellipse(gy, gx, r(-0.1, 0.1), r(-0.1, 0.1), r(0.75, 0.95), r(0.8, 1.0))
+    inner = _ellipse(gy, gx, r(-0.1, 0.1), r(-0.1, 0.1), r(0.6, 0.78), r(0.62, 0.82))
+    img = air + (body_i - air) * body + (fat_i - body_i) * (body - inner)        # fat rim = body minus inner
+    # two dark lung fields flanking the centre (heart sits between them)
+    for sx in (-1.0, 1.0):
+        lung = _ellipse(gy, gx, r(-0.15, 0.15), sx * r(0.3, 0.5), r(0.3, 0.5), r(0.18, 0.32)) * inner
+        img = img + (lung_i - img) * lung
+    # spine: small bright blob low-centre
+    spine = _ellipse(gy, gx, r(0.55, 0.75), r(-0.08, 0.08), r(0.08, 0.14), r(0.08, 0.14))
+    img = img + (r(0.5, 1.2) - img) * spine
+    # smooth low-frequency texture
+    low = torch.rand(b, 1, 5, 5, device=dev) * 2 - 1
+    img = img + 0.15 * F.interpolate(low, size=(h, w), mode="bicubic", align_corners=False)[:, 0]
+    return img.unsqueeze(1)                                                      # [B,1,H,W]
+
+
 def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
     """Smooth random displacement field as a grid_sample grid [B,H,W,2]. Coarse 5x5 control points
     (U[-amp,amp]) bicubic-upsampled to full res -> low-frequency elastic warp, added to the identity
@@ -92,6 +127,12 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
+
+    # --- procedural thorax background: replace the bg blob with structured surroundings (dark lungs,
+    #     fat rim, spine) the net confuses the heart with. Heart classes keep their paint. ---
+    if cfg.bg_mode == "thorax" and not hybrid:
+        thorax = _procedural_thorax(b, *mask.shape[-2:], dev)
+        img = torch.where((mask > 0)[:, None], img, thorax)
 
     # --- smooth multiplicative bias field (coarse 4x4 -> bilinear upsample; the N4 dual) ---
     if cfg.bias_strength > 0:

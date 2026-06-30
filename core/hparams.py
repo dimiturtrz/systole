@@ -79,6 +79,10 @@ class SynthCfg(BaseModel):
     # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
     # random (mu/sigma below), kept only for ablation.
     realistic: bool = True
+    bg_mode: str = "flat"                           # "flat" = single-Gaussian bg | "thorax" = procedural
+    #                                                thorax (body ellipse + dark lungs + fat rim + spine),
+    #                                                randomized — the structures the net confuses RV with.
+    #                                                Aims to close the pure-synth background wall (0.39->?).
     keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: composite the synth heart onto the
     #                                                REAL background (isolates whether bg realism is the
     #                                                wall for pure-synth). Forces deform off (heart must
