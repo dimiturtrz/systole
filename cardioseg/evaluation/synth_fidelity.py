@@ -41,13 +41,23 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
     ym = Y.reshape(-1).cpu()
-    dist = {}
+    # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
+    # SHAPE = W1 of the mean-centered distributions (genuine signal-model mismatch). Tells whether the
+    # gap is fixable by matching composition (location) or needs better blood physics (shape).
+    dist, loc, shape = {}, {}, {}
     for c in range(n_classes):
         m = ym == c
-        dist[_NAMES[c]] = round(wasserstein1d(rx[m], sx[m], q), 3)
+        r, s = rx[m], sx[m]
+        dist[_NAMES[c]] = round(wasserstein1d(r, s, q), 3)
+        if r.numel() and s.numel():
+            loc[_NAMES[c]] = round(abs(float(r.mean()) - float(s.mean())), 3)
+            shape[_NAMES[c]] = round(wasserstein1d(r - r.mean(), s - s.mean(), q), 3)
+        else:
+            loc[_NAMES[c]] = shape[_NAMES[c]] = float("nan")
     vals = [v for v in dist.values() if v == v]                  # drop NaN (absent classes)
     worst = max(dist, key=lambda k: (dist[k] if dist[k] == dist[k] else -1))
-    return {"per_class_w1": dist, "mean_w1": round(sum(vals) / len(vals), 3) if vals else float("nan"),
+    return {"per_class_w1": dist, "location": loc, "shape": shape,
+            "mean_w1": round(sum(vals) / len(vals), 3) if vals else float("nan"),
             "worst_class": worst}
 
 
