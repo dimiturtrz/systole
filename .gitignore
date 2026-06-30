@@ -41,3 +41,4 @@ applications/
 mlruns/
 mlflow.db
 mlartifacts/
+.mlflow_cache/
