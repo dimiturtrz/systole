@@ -61,6 +61,23 @@ class AugCfg(BaseModel):
     soft_label_sigma: float = Field(1.0, ge=0)
 
 
+class SynthCfg(BaseModel):
+    """SynthSeg-style synthetic-image generation from labels (Tier 2, bd cardiac-seg-bgc). Each call,
+    discard real intensities and paint every label class with a FRESHLY-sampled Gaussian -> a brand-new
+    contrast every time -> a contrast-AGNOSTIC model (generalize to any scanner instead of mimicking
+    one). Distinct from AugCfg (perturb real pixels): synth INVENTS the picture, anatomy/mask stays
+    real. Geometry is AugCfg's job (synth keeps the mask aligned), so this is per-label intensity
+    generation + a light corruption chain only. synth_p=0 -> off (default = pure real-image training).
+    Ref research/deep_dives/2026-06-24_mri-sim-libs-eval.md (SynthSeg, Billot 2023)."""
+    model_config = _VALIDATE
+    synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
+    mu: tuple[float, float] = (0.0, 1.0)            # per-class mean intensity sampled U[mu] (the contrast)
+    sigma: tuple[float, float] = (0.05, 0.25)       # per-class within-class texture std, sampled U[sigma]
+    bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative bias field, max +/- fraction
+    blur: tuple[float, float] = (0.0, 1.0)          # random Gaussian blur σ (resolution variation)
+    noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
+
+
 class LossCfg(BaseModel):
     """Segmentation loss. dice_ce = MONAI Dice+CE (region baseline). dice_ce_tversky adds an FP-penalty
     (beta>alpha discourages over-seg). dice_ce_her adds a pure-GPU erosion-Hausdorff boundary term.
@@ -118,6 +135,7 @@ class TrainCfg(BaseModel):
     data: DataCfg = Field(default_factory=DataCfg)
     model: ModelCfg = Field(default_factory=ModelCfg)
     aug: AugCfg = Field(default_factory=AugCfg)
+    synth: SynthCfg = Field(default_factory=SynthCfg)
     loss: LossCfg = Field(default_factory=LossCfg)
     epochs: int = Field(128, ge=1)                 # ceiling; early stopping ends sooner
     batch: int = Field(64, ge=1)

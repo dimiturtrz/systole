@@ -49,6 +49,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     from core.model import build_unet, resolve_device
     from .dataset import load_to_gpu
     from .augment import augment_batch
+    from .synth import synthesize_from_labels
     from core.data import store, splits
     from core.obs import setup, timed, progress
     from core.hparams import to_json
@@ -91,6 +92,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
         Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
     augment = True
+    synth_on = cfg.synth.synth_p > 0           # Tier-2 synthetic-from-labels mix (SynthSeg); 0 = off
     nb = max(1, Xtr.shape[0] // cfg.batch)
     log.info("patients: %d train / %d val / %d test | slices: %d train / %d val (resident on %s, compute %s)",
              len(train_df), len(val_df), len(test_df), Xtr.shape[0], Xva.shape[0], data_device, device)
@@ -125,6 +127,13 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
             # .to(device) is a no-op when residency=gpu (already there); the host->device copy when cpu
             x = Xtr[idx].to(device, non_blocking=pin)            # [B,1,H,W] f32
             y = Ytr[idx].to(device, non_blocking=pin).long()     # [B,H,W]
+            if synth_on:
+                # invent a contrast from the labels for a per-sample fraction; mask y unchanged
+                # (anatomy real). Paint BEFORE augment so geometry warps the synth picture + mask
+                # together and the result is still z-scored like real input.
+                do = (torch.rand(x.shape[0], 1, 1, 1, device=device) < cfg.synth.synth_p).float()
+                xs = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels)
+                x = do * xs + (1 - do) * x
             if augment:
                 x, y = augment_batch(x, y, cfg.aug)            # GPU-batched, hyperparams from cfg.aug
             # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
