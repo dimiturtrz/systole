@@ -57,14 +57,14 @@ EF vs GT: **MAE 4.3%**, bias +0.9%, 95% LoA [−11.7, +13.5] (n=69).
 <!-- results:cardcompare -->
 | unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
-| Canon mean Dice | 0.866 | 0.839 |
-| GE mean Dice | 0.878 | 0.839 |
-| Canon / GE EF MAE | **2.6 / 4.3%** | 11.9 / 11.3% |
+| Canon mean Dice | 0.866 | 0.836 |
+| GE mean Dice | 0.878 | 0.838 |
+| Canon / GE EF MAE | **2.6 / 4.3%** | 12.1 / 11.5% |
 <!-- /results:cardcompare -->
 
-Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.839) and
-GE (0.878 vs 0.839), even at this floor setting. **EF gap is dramatic** — nnU-Net Canon 2.6% vs
-cardioseg 11.9%; GE 4.3% vs 11.3%. The EF gap is model-class epistemic (reducible by a stronger
+Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.836) and
+GE (0.878 vs 0.838), even at this floor setting. **EF gap is dramatic** — nnU-Net Canon 2.6% vs
+cardioseg 12.1%; GE 4.3% vs 11.5%. The EF gap is model-class epistemic (reducible by a stronger
 model): a stronger segmenter substantially closes it. cardioseg trades that for ONNX portability at
 ~57× fewer parameters.
 

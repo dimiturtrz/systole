@@ -125,9 +125,9 @@ aug + early stopping + largest-CC + TTA. On the **ACDC val** axis:
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 2.1 | 0.58 |
-| LV myocardium | 0.86 | 2.1 | 0.56 |
-| RV cavity | 0.88 | 7.0 | 0.90 |
+| LV cavity | 0.92 | 3.0 | 0.55 |
+| LV myocardium | 0.86 | 3.0 | 0.55 |
+| RV cavity | 0.88 | 6.0 | 0.83 |
 | **mean** | **0.88** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`). Published in-distribution ACDC is
@@ -142,13 +142,13 @@ challenge splits aren't inherited):
 | held-out axis | role | n | mean Dice | EF MAE |
 |---|---|---|---|---|
 | **ACDC** — centre / protocol shift | val | 150 | 0.88 | 6.5% |
-| **Canon** — unseen vendor | test | 9 | 0.84 | 11.9% |
-| **GE** — unseen vendor | test | 69 | 0.84 | 11.3% |
+| **Canon** — unseen vendor | test | 9 | 0.84 | 12.1% |
+| **GE** — unseen vendor | test | 69 | 0.84 | 11.5% |
 <!-- /results:axis -->
 
 Canon **n=9** (M&Ms-1 withholds GT for most of Testing: 320 on disk, 213 labelled, Canon 50 → 9
-usable) and GE **n=69** are both **unseen-vendor** test sets, scored independently. Both return Dice
-**0.839** and EF MAE **~11–12%** — independent agreement at n=78 total makes this a robust
+usable) and GE **n=69** are both **unseen-vendor** test sets, scored independently. They return Dice
+**Canon 0.836 / GE 0.838** and EF MAE **~11–12%** — independent agreement at n=78 total makes this a robust
 unseen-vendor signal (not a fluke of one thin split). Pooling M&Ms-1 into training (vs 360 subjects
 alone) lifted the ACDC val axis (mean ~0.87 → 0.88 — extra vendor diversity paid off).
 
@@ -186,11 +186,11 @@ with different cavity sizes — a fixed volume error moves EF more when the cavi
 <!-- results:strata -->
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.90 | 1.8% | -0.4% |
-| ischemic (MINF) | 31% | 0.88 | 4.4% | -3.2% |
-| rv_congenital | 57% | 0.88 | 7.1% | -6.5% |
-| normal (NOR) | 62% | 0.89 | 6.3% | -6.0% |
-| **hypertrophic (HCM)** | 70% | 0.86 | 13.0% | -12.1% |
+| dilated (DCM) | 20% | 0.89 | 1.8% | -0.1% |
+| ischemic (MINF) | 31% | 0.88 | 3.9% | -3.3% |
+| rv_congenital | 57% | 0.88 | 6.6% | -6.5% |
+| normal (NOR) | 62% | 0.90 | 6.3% | -6.1% |
+| **hypertrophic (HCM)** | 70% | 0.86 | 13.8% | -13.6% |
 <!-- /results:strata -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`).</sub>
 

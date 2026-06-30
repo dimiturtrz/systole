@@ -58,9 +58,9 @@ as val; Canon+GE as unseen-vendor test), **scored by `cardioseg.evaluation`** �
 <!-- results:nnucompare -->
 | segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.839 | 0.852 | 0.797 | 0.869 | 11.3% | deployable / ONNX |
+| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.838 | 0.847 | 0.796 | 0.871 | 11.5% | deployable / ONNX |
 | **nnU-Net** (50 ep, 1 fold) | **0.878** | **0.914** | **0.842** | **0.877** | **4.3%** | baseline / not deployed |
-| Δ (nnU-Net − ours) | +3.9 | +6.2 | +4.5 | +0.8 | -7.0 | |
+| Δ (nnU-Net − ours) | +4.0 | +6.7 | +4.6 | +0.6 | -7.2 | |
 <!-- /results:nnucompare -->
 
 <sub>All Dice/HD95 pool ED+ES (both phases) — same yardstick both rows.</sub>
@@ -77,8 +77,8 @@ FLOPs**, for ~3–4 Dice points less on unseen vendors. That's the deployable tr
 
 So **0.878 (GE) / 0.866 (Canon) is nnU-Net's floor here**; the full 1000-epoch × 5-fold + TTA recipe
 would pull further ahead. Even at this floor it leads by **~3–4 Dice points** on unseen-vendor Canon
-(0.866 vs 0.839) and GE (0.878 vs 0.839). **EF gap is large and model-class epistemic**: nnU-Net Canon
-2.6% vs ours 11.9%; GE 4.3% vs 11.3% — a stronger model class substantially closes the cross-vendor
+(0.866 vs 0.836) and GE (0.878 vs 0.838). **EF gap is large and model-class epistemic**: nnU-Net Canon
+2.6% vs ours 12.1%; GE 4.3% vs 11.5% — a stronger model class substantially closes the cross-vendor
 EF gap, demonstrating it was reducible. We report the floor honestly and didn't chase the ceiling —
 it's a lot more compute for a model we wouldn't deploy anyway (92 M, no clean ONNX). The baseline's
 job is *"I can operate + score SOTA through my own pipeline,"* **not** *"I matched it."*

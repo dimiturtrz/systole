@@ -41,7 +41,7 @@ EF is the number a clinician acts on, so it's the result that matters. On **ACDC
 (val, centre/protocol shift), the model with heavy augmentation + early stopping + largest-CC +
 TTA: **MAE 6.5%**, bias **−5.6%** (systematic underprediction), 95% LoA [−20.1, +8.9]. The
 chambers are right; absolute volumes drift as calibration shifts across centres. On the two
-**unseen-vendor test sets** (Canon n=9, GE n=69), EF MAE is ~11–12%: Canon 11.9%, GE 11.3% —
+**unseen-vendor test sets** (Canon n=9, GE n=69), EF MAE is ~11–12%: Canon 12.1%, GE 11.5% —
 a larger cross-vendor gap that reflects the harder OOD shift.
 
 ![EF Bland–Altman — flagship on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
@@ -77,14 +77,14 @@ Paths from here, roughly in effort order:
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
 ### Segmentation — ours vs SOTA
-**A 1.6 M-param model: ~3–4 Dice points under nnU-Net's floor on unseen vendors (Canon 0.839 vs 0.866, GE 0.839 vs 0.878), at ~57× fewer parameters — and it exports to run in the browser. EF gap is model-class epistemic: nnU-Net Canon 2.6% / GE 4.3% vs ours 11.9% / 11.3% — a stronger model class substantially closes it; ours trades that for ONNX portability.**
+**A 1.6 M-param model: ~3–4 Dice points under nnU-Net's floor on unseen vendors (Canon 0.836 vs 0.866, GE 0.838 vs 0.878), at ~57× fewer parameters — and it exports to run in the browser. EF gap is model-class epistemic: nnU-Net Canon 2.6% / GE 4.3% vs ours 12.1% / 11.5% — a stronger model class substantially closes it; ours trades that for ONNX portability.**
 
 Per-structure, unseen-vendor Canon+GE (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 <!-- results:compare -->
 | model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |
 |---|---|---|---|---|---|---|
-| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.84 | 11.9% | 0.84 | 11.3% |
+| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.84 | 12.1% | 0.84 | 11.5% |
 | nnU-Net (SOTA baseline) | 92 M | 19 G | 0.87 | **2.6%** | 0.88 | **4.3%** |
 <!-- /results:compare -->
 <sub>numbers auto-filled from `cardioseg/RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit the table above.</sub>
@@ -92,12 +92,15 @@ Per-structure, unseen-vendor Canon+GE (ED+ES), our deployable model vs the nnU-N
 <sub>params + FLOPs measured (fvcore, single forward; nnU-Net at its 256×320 patch — inference adds tiling + TTA on top).</sub>
 
 **How we train:** a 2D U-Net on Siemens+Philips (495 subjects) — heavy GPU augmentation + early stopping +
-largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. **The alternative,** nnU-Net
+largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. The flagship trains with **soft
+(diffuse) boundary labels** — boundary voxels are partial-volume mixes, so the target is a distribution,
+not a hard 0/1 — which leaves Dice/EF unchanged but improves calibration (ECE 0.093 → 0.081 on ACDC val;
+`research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md`). **The alternative,** nnU-Net
 (self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
 scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
 clean-export). On unseen-vendor Canon+GE (same split, same eval), nnU-Net leads by **~3–4 Dice points**
-(Canon 0.866 vs 0.839, GE 0.878 vs 0.839). **EF gap is large and model-class epistemic**: nnU-Net Canon
-2.6% vs ours 11.9%; GE 4.3% vs 11.3% — demonstrating the cross-vendor EF gap was reducible by a
+(Canon 0.866 vs 0.836, GE 0.878 vs 0.838). **EF gap is large and model-class epistemic**: nnU-Net Canon
+2.6% vs ours 12.1%; GE 4.3% vs 11.5% — demonstrating the cross-vendor EF gap was reducible by a
 stronger model class. cardioseg trades that for ONNX portability at **~57× fewer parameters and ~23×
 fewer FLOPs**; nnU-Net's sliding-window pipeline doesn't clean-export.
 

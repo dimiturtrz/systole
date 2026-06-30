@@ -54,9 +54,11 @@ class AugCfg(BaseModel):
     bias_p: float = Field(0.0, ge=0, le=1)         # prob of a smooth bias-field modulation
     bias_strength: float = Field(0.3, ge=0)        # max +/- fractional field deviation across the FOV
     # Soft-label training: Gaussian-blur the one-hot target by this σ (voxels) so boundaries are
-    # probabilistic (honest partial-volume targets). 0 = off (crisp one-hot = current hard labels).
-    # Selects the SoftDiceCE loss when >0. NOT fit to EF — a uniform boundary-uncertainty prior.
-    soft_label_sigma: float = Field(0.0, ge=0)
+    # probabilistic (honest partial-volume targets). 0 = off (crisp one-hot = hard labels). Selects
+    # the SoftDiceCE loss when >0. NOT fit to EF — a uniform boundary-uncertainty prior. DEFAULT 1.0:
+    # soft labels are the standard recipe (better calibrated, ECE -13%, equal Dice/EF — see
+    # research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md).
+    soft_label_sigma: float = Field(1.0, ge=0)
 
 
 class LossCfg(BaseModel):
