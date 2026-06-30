@@ -171,7 +171,10 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         out = dataset_dir(name, inplane, n4, n4_params)
         if not (out / "meta.csv").exists():
             build(name, inplane, n4, n4_params=n4_params, workers=workers)
-        df = pl.read_csv(out / "meta.csv", infer_schema_length=10000)
+        # Pin `labelled` to Boolean — don't rely on polars schema inference (newer polars reads the
+        # "true"/"false" column as String, breaking the `pl.col('labelled')` filter cross-platform).
+        df = pl.read_csv(out / "meta.csv", infer_schema_length=10000,
+                         schema_overrides={"labelled": pl.Boolean})
         df = df.with_columns((pl.lit(str(out / "data")) + "/" + pl.col("file")).alias("path"))
         frames.append(df)
     cloud = pl.concat(frames, how="vertical_relaxed")
