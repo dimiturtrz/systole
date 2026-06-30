@@ -25,6 +25,7 @@ import polars as pl
 from scipy.stats import gaussian_kde
 
 from core.model import load_run, resolve_device
+from core.registry import resolve
 from core.preprocessing.preprocess import fit_square, SIZE
 from core.data import store, splits
 from core.inference import predict_volume
@@ -232,13 +233,13 @@ def plot_strata(rows, key, out: Path, label: str):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/seg", help="run dir with model.pth")
+    ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
     ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
                     help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
-    run = Path(a.run)
+    run = resolve(a.run)
     device = resolve_device()
 
     # eval set = a criteria filter over the consolidated store (no named splits)

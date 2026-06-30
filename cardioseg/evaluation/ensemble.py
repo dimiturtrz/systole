@@ -104,6 +104,7 @@ def _headroom(models, df, size, device):
 def main():
     from ..training.dataset import SIZE
     from core.model import load_run, resolve_device
+    from core.registry import resolve
     from ..tracking import start
 
     ap = argparse.ArgumentParser(description=__doc__)
@@ -111,7 +112,7 @@ def main():
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
     a = ap.parse_args()
     device = resolve_device()
-    loaded = [load_run(r, device) for r in a.runs]
+    loaded = [load_run(resolve(r), device) for r in a.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
     trk = start("cardioseg", f"ensemble-{len(models)}seed",

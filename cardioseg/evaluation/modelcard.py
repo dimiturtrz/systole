@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from core.labels import CLASS_NAMES
+from core.registry import resolve
 
 _ORDER = tuple(reversed(CLASS_NAMES))  # display order: LV-cav, LV-myo, RV
 
@@ -119,7 +120,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
     a = ap.parse_args()
-    print("wrote", generate(a.run))
+    print("wrote", generate(resolve(a.run)))
 
 
 if __name__ == "__main__":

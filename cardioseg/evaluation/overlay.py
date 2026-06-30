@@ -15,7 +15,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
-from core.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_REF
+from core.registry import resolve
 from core.hparams import from_json
 from core.model import build_unet
 from core.preprocessing.preprocess import fit_square
@@ -61,11 +62,11 @@ def _case(model, path, size, device):
 def main():
     import torch
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_RUN)
+    ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
     a = ap.parse_args()
 
-    run = Path(a.run)
+    run = resolve(a.run)
     cfg = from_json(run / "config.json")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_unet(cfg.model).to(device)

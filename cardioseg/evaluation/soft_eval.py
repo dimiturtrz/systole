@@ -19,6 +19,7 @@ import numpy as np
 import polars as pl
 
 from core.data import store, splits
+from core.registry import resolve
 from core.hparams import from_json
 from core.inference import predict_volume_probs
 from core.labels import LV_CAV
@@ -76,7 +77,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
     a = ap.parse_args()
-    arr, e = evaluate(Path(a.run))
+    arr, e = evaluate(resolve(a.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
     print(f"\n=== {a.run}  (n={len(arr)}) ===")
     print(f"ECE: {e:.4f}")

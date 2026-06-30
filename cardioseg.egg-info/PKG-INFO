@@ -21,6 +21,7 @@ Requires-Dist: pytest; extra == "dev"
 Provides-Extra: n4
 Requires-Dist: SimpleITK; extra == "n4"
 Provides-Extra: export
+Requires-Dist: onnx; extra == "export"
 Requires-Dist: onnxruntime; extra == "export"
 Provides-Extra: viz
 Requires-Dist: pyvista; extra == "viz"
@@ -28,15 +29,20 @@ Provides-Extra: nnunet
 Requires-Dist: nnunetv2>=2.5; extra == "nnunet"
 Provides-Extra: track
 Requires-Dist: mlflow; extra == "track"
+Requires-Dist: psutil; extra == "track"
+Requires-Dist: pynvml; extra == "track"
 Provides-Extra: gpu
 Requires-Dist: cupy-cuda13x; sys_platform == "linux" and extra == "gpu"
 Requires-Dist: cucim-cu13; sys_platform == "linux" and extra == "gpu"
 Provides-Extra: all
 Requires-Dist: SimpleITK; extra == "all"
+Requires-Dist: onnx; extra == "all"
 Requires-Dist: onnxruntime; extra == "all"
 Requires-Dist: pyvista; extra == "all"
 Requires-Dist: nnunetv2>=2.5; extra == "all"
 Requires-Dist: mlflow; extra == "all"
+Requires-Dist: psutil; extra == "all"
+Requires-Dist: pynvml; extra == "all"
 Requires-Dist: pytest; extra == "all"
 Dynamic: license-file
 
@@ -198,21 +204,22 @@ discovered by name, and the per-dataset label conventions are remapped to canoni
 
 ## Quickstart (order of operations)
 ```bash
-# 1. install (torch CUDA build FIRST — plain PyPI is CPU-only):
-pip install torch --index-url https://download.pytorch.org/whl/cu128   # >=2.7 (Blackwell/RTX 5090)
-pip install -e .                       # core; extras as needed: .[n4,export,viz,nnunet,dev] or .[all]
+# 1. install — uv resolves the torch CUDA wheel automatically (pinned in [tool.uv.sources]):
+uv sync --all-extras                   # creates .venv from pyproject + uv.lock; prefix commands with `uv run`
 # 2. point at the data (one path) + drop register-gated downloads under <data>/raw/<dataset>/:
 cp paths.example.yaml paths.yaml       # set: data: /abs/path/to/cardiac-data
 # 3. consolidate raw -> the homogeneous store (processed/<ds>/<paramkey>/{data,meta.csv}); first run only:
-python -m cardioseg.data.store         # auto-runs on first train too; this just prints the cloud summary
+uv run python -m core.data.store  # auto-runs on first train too; this just prints the cloud summary
 # 4. train (split = DataCfg criteria; default holds out ACDC + Canon). Full config -> runs/<run>/config.json:
-python -m cardioseg.training.train --out runs/gen
+uv run python -m cardioseg.training.train --out runs/gen
 # 5. evaluate / export:
-python -m cardioseg.evaluation.distribution --run runs/gen --eval acdc   # + --eval canon; plots + strata
-python -m cardioseg.training.export_onnx --run runs/gen                  # needs .[export]
+uv run python -m cardioseg.evaluation.distribution --run runs/gen --eval acdc   # + --eval canon; plots + strata
+uv run python -m cardioseg.training.export_onnx --run runs/gen
 ```
-A run is reproducible from its `config.json` (the split criteria + all hyperparams are serialized).
-nnU-Net baseline is separate: `pip install -e .[nnunet]`, then `baselines/nnunet/` (convert → `run_battery.sh`).
+A run is reproducible from its `config.json` (the split criteria + all hyperparams are serialized) and
+the env from `uv.lock`. Cross-platform: same `uv sync` on Windows + Linux; the linux-only GPU extra
+(cupy/cucim) installs on Linux, skips on Windows (code falls back to CPU).
+nnU-Net baseline is separate (`baselines/nnunet/`, convert → `run_battery.sh`); `nnunetv2` is in `--all-extras`.
 
 ## Domain shift & normalization
 The reason a model trained on one scanner fails on another is **domain shift** — specifically
@@ -246,8 +253,8 @@ strip-vs-diversify registry, per-dataset coverage, and the build pipeline →
 
 ## Tests
 ```bash
-pip install -e .
-python -m pytest tests/ -q     # unit + ACDC integration (integration skips without data)
+uv sync --all-extras
+uv run pytest tests/ -q        # unit + ACDC integration (integration skips without data)
 ```
 Two layers, wide base to thin top (full rationale in [tests/README.md](tests/README.md)):
 - **Unit — equivalence-class.** Partition each input space by behaviour; test one representative

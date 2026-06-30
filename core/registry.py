@@ -52,8 +52,12 @@ def _run_id_for(ref: str) -> str:
 
 def resolve(ref: str = PRODUCTION) -> Path:
     """Download the model version's artifacts to a cache dir and return it (a dir with model.pth +
-    config.json + …, ready for core.model.load_run). ref = alias | version | run-id."""
+    config.json + …, ready for core.model.load_run). ref = alias | version | run-id — OR an existing
+    dir (returned as-is, so callers can pass a path too)."""
     import mlflow
+    p = Path(ref)
+    if (p / "model.pth").exists():                     # already a dir (back-compat / explicit path)
+        return p
     _mlflow()
     rid = _run_id_for(ref)
     dst = _CACHE / rid

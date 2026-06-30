@@ -82,11 +82,12 @@ def main():
     from core.data import store, splits
     from core.hparams import from_json
     from core.model import load_run
+    from core.registry import resolve
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="runs/gen")
+    ap.add_argument("--run", default=FLAGSHIP_REF)
     a = ap.parse_args()
-    run = Path(a.run)
+    run = resolve(a.run)
     model, cfg, device = load_run(run)
     d = cfg.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))

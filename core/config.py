@@ -30,15 +30,23 @@ def data_root(kind: str = "raw") -> str:
     return str(Path(_root()) / kind)
 
 
-# The shipped flagship run dir (repo-relative): trained on the pooled multi-vendor cloud
-# (M&M-2 + M&Ms-1), held out ACDC + Canon. SINGLE SOURCE for "which run is flagship" —
-# bump here only; all eval/export/viewer defaults reference it. See ROADMAP.
-FLAGSHIP_RUN = "runs/gen"
+# The flagship is the `production`-aliased version in the mlflow model registry (core.registry) —
+# the SINGLE source for "which model is flagship". Re-point by moving the alias, not editing a path.
+# All eval/export/viewer defaults reference this ref. See ROADMAP.
+FLAGSHIP_REF = "production"
+
+
+def flagship_dir() -> str:
+    """Local dir of the flagship's resolved artifacts (model.pth + config.json + …), downloaded from
+    the registry on demand. Use this where a run dir was expected. Lazy import — keep config light."""
+    from core.registry import resolve
+    return str(resolve(FLAGSHIP_REF))
 
 
 def flagship_model() -> str:
-    """Path to the flagship trained weights: `<FLAGSHIP_RUN>/model.pth`."""
-    return f"{FLAGSHIP_RUN}/model.pth"
+    """Path to the flagship trained weights (resolved from the registry)."""
+    from pathlib import Path
+    return str(Path(flagship_dir()) / "model.pth")
 
 
 # --- pipeline constants (single source; config-default + module-constant readers reference these) ---

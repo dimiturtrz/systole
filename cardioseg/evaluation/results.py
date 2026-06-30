@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from core.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_REF
+from core.registry import resolve
 from core.data import store, splits
 from core.hparams import from_json
 from core.model import resolve_device
@@ -81,24 +82,28 @@ def build(run: Path) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_RUN)
+    ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
     a = ap.parse_args()
-    res = build(Path(a.run))
+    res = build(resolve(a.run))
     Path(a.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
     print(f"wrote {a.out}: " + " · ".join(
         f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
-    # log the CANONICAL per-axis numbers into the run's mlflow entry (resumes the train run)
-    from cardioseg.tracking import track_run
-    trk = track_run("cardioseg", Path(a.run).name, run_dir=Path(a.run))
-    for ax, v in f.items():
-        trk.metric(f"{ax}_dice_mean", v["dice"]["mean"])
-        trk.metric(f"{ax}_ef_mae", v["ef_mae"])
-        trk.metric(f"{ax}_ef_bias", v["ef_bias"])
-    trk.artifact(a.out)
-    trk.end()
+    # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
+    try:
+        import mlflow
+        from core.registry import _run_id_for, _DB_URI
+        mlflow.set_tracking_uri(_DB_URI)
+        with mlflow.start_run(run_id=_run_id_for(a.run)):
+            for ax, v in f.items():
+                mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
+                mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
+                mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
+            mlflow.log_artifact(a.out)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

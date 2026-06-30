@@ -23,15 +23,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest"]
 n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True).
-export = ["onnxruntime"]     # ONNX export + parity check (core/export_onnx.py)
+export = ["onnx", "onnxruntime"]   # ONNX export (torch.onnx needs `onnx`) + parity check (core/export_onnx.py)
 viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
-track = ["mlflow"]           # optional experiment tracking (cardioseg/tracking.py); guarded, local backend
+track = ["mlflow", "psutil", "pynvml"]   # experiment tracking + registry (the model store); psutil+pynvml for system (GPU/CPU/mem) metrics — without them mlflow start_run hard-fails when system-metrics logging is enabled
 # GPU lane (LINUX-only by marker — cucim/cupy ship no Windows wheels). On Windows these silently
 # resolve to nothing; the code falls back to scipy/CPU via a single capability gate. Install on
 # linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["SimpleITK", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "pytest"]
+all = ["SimpleITK", "onnx", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "psutil", "pynvml", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -65,16 +65,17 @@ def main():
     import matplotlib.pyplot as plt
     import polars as pl
 
-    from core.config import FLAGSHIP_RUN
+    from core.config import FLAGSHIP_REF
     from core.data import store
     from core.model import load_run
+    from core.registry import resolve
     from core.preprocessing.preprocess import fit_square, SIZE
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_RUN)
+    ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
     a = ap.parse_args()
-    run = Path(a.run)
+    run = resolve(a.run)
     model, _, device = load_run(run)
 
     if a.eval == "canon":

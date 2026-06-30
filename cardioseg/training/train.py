@@ -38,8 +38,10 @@ def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
 
-def train_seg(cfg: TrainCfg):
-    """Train from one TrainCfg. Returns (model, results). Serializes config.json + metrics.json."""
+def train_seg(cfg: TrainCfg, alias: str | None = None):
+    """Train from one TrainCfg. Returns (model, results). Builds artifacts in a gitignored staging
+    dir, then registers the complete set (model.pth + config + metrics + onnx + card) to the mlflow
+    model registry — the sole model store. `alias='production'` makes this run the flagship."""
     import numpy as np
     import torch
     from .losses import build_loss
@@ -52,7 +54,10 @@ def train_seg(cfg: TrainCfg):
     from core.hparams import to_json
 
     d = cfg.data
-    out = Path(cfg.out_dir or "runs/seg")
+    # staging dir (gitignored) — artifacts build here, then get registered to mlflow (the store).
+    # NOT a permanent runs/ dir; cfg.out_dir still works for an explicit local copy.
+    out = Path(cfg.out_dir or ".staging/run")
+    out.mkdir(parents=True, exist_ok=True)
     log = setup(out / "train.log")
     to_json(cfg, out / "config.json")          # full provenance, written up front
 
@@ -166,22 +171,8 @@ def train_seg(cfg: TrainCfg):
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     log.info("saved model + config + metrics -> %s/", out)
 
-    trk.summary(results)                                    # final per-axis dice/EF
-    for f in ("config.json", "metrics.json", "train.log"):
-        trk.artifact(out / f)
-    trk.artifact(out / "plots")
-    from core.config import FLAGSHIP_RUN                        # register a model version (catalog)
-    from ..tracking import MODEL_NAME
-    flag = out.name == Path(FLAGSHIP_RUN).name
-    split = "+".join(d.test_vendors) or "legacy"
-    trk.tag("kind", "flagship" if flag else "candidate")
-    trk.log_model(model, MODEL_NAME, alias="production" if flag else None,
-                  description=f"{out.name} · split={split} · seed={cfg.seed}",
-                  version_tags={"run": out.name, "split": split, "seed": cfg.seed})
-    trk.end()
-
-    # auto-finalize: per-run model card + ONNX export. Both guarded — a missing optional dep or a
-    # hiccup logs and moves on, never fails a finished training run.
+    trk.summary(results)                                    # final per-axis dice/EF (metrics in the run)
+    # build the rest of the artifacts into staging (card + onnx) BEFORE registering the complete set.
     try:
         from ..evaluation.modelcard import generate
         generate(out)
@@ -195,6 +186,22 @@ def train_seg(cfg: TrainCfg):
         log.info("ONNX export skipped (pip install .[export] for onnxruntime)")
     except Exception as e:
         log.warning("ONNX export skipped: %s", e)
+
+    # register the COMPLETE artifact set (model.pth + config + metrics + onnx + card) to the mlflow
+    # registry — the sole model store. alias='production' makes this the flagship.
+    try:
+        import mlflow
+        from core.registry import save_model, MODEL_NAME
+        rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
+        split = "+".join(d.test_vendors) or "legacy"
+        kind = "flagship" if alias == "production" else "candidate"
+        save_model(out, run_name=out.name, run_id=rid, alias=alias,
+                   description=f"{out.name} · split={split} · seed={cfg.seed}",
+                   tags={"kind": kind, "split": split, "seed": cfg.seed})
+        log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
+    except Exception as e:
+        log.warning("registry save skipped: %s", e)
+    trk.end()
     return model, results
 
 
@@ -209,6 +216,8 @@ if __name__ == "__main__":
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
+    ap.add_argument("--alias", default=None,
+                    help="registry alias to set (e.g. 'production' to make this run the flagship)")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides",
                     help="deep cfg overrides, e.g. data.test_vendors=('GE',) aug.gamma_p=0.5")
     a = ap.parse_args()
@@ -222,4 +231,4 @@ if __name__ == "__main__":
     if a.out:
         cfg.out_dir = a.out
     apply_overrides(cfg, a.overrides)
-    train_seg(cfg)
+    train_seg(cfg, alias=a.alias)

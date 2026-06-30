@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from core.config import FLAGSHIP_RUN
+from core.config import FLAGSHIP_REF
 from core.model import load_run
 from core.preprocessing.preprocess import fit_square, SIZE
 from core.data import store
@@ -80,7 +80,7 @@ def export(run: Path, verify_dir: Path, quantize: bool = True,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_RUN, help="run dir holding model.pth")
+    ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
     ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     ap.add_argument("--opset", type=int, default=OPSET, help=f"ONNX opset (default {OPSET})")
@@ -88,7 +88,7 @@ def main() -> None:
                     help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
     a = ap.parse_args()
     verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
-    export(Path(a.run), verify, a.quantize, opset=a.opset, parity_min=a.parity_min)
+    export(resolve(a.run), verify, a.quantize, opset=a.opset, parity_min=a.parity_min)
 
 
 if __name__ == "__main__":

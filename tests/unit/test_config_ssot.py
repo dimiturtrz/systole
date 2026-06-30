@@ -1,7 +1,7 @@
 """SSOT guard: the single-sourced constants must stay equal to every consumer that reads them.
 If someone re-hardcodes a value, one of these fails (that's the point)."""
 from core.config import (
-    DEFAULT_SIZE, DEFAULT_INPLANE, KNOWN_DATASETS, FLAGSHIP_RUN, flagship_model,
+    DEFAULT_SIZE, DEFAULT_INPLANE, KNOWN_DATASETS, FLAGSHIP_REF, flagship_model, flagship_dir,
 )
 from core.hparams import DataCfg
 
@@ -21,8 +21,11 @@ def test_dataset_vocab_single_sourced():
     assert KNOWN_DATASETS == DataCfg().sources == _DATASETS
 
 
-def test_flagship_model_path():
-    assert flagship_model() == f"{FLAGSHIP_RUN}/model.pth"
+def test_flagship_is_registry_ref():
+    """Flagship resolves from the mlflow registry (production alias), not a hardcoded dir. Don't
+    invoke resolve here (that hits mlflow) — just guard the ref + that the helpers are callable."""
+    assert FLAGSHIP_REF == "production"
+    assert callable(flagship_model) and callable(flagship_dir)
 
 
 def test_cmrxmotion_held_out_by_default():

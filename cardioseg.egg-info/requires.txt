@@ -12,16 +12,20 @@ torch>=2.7
 
 [all]
 SimpleITK
+onnx
 onnxruntime
 pyvista
 nnunetv2>=2.5
 mlflow
+psutil
+pynvml
 pytest
 
 [dev]
 pytest
 
 [export]
+onnx
 onnxruntime
 
 [gpu]
@@ -38,6 +42,8 @@ nnunetv2>=2.5
 
 [track]
 mlflow
+psutil
+pynvml
 
 [viz]
 pyvista

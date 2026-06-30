@@ -42,6 +42,7 @@ core/model.py
 core/obs.py
 core/postprocess.py
 core/reference.py
+core/registry.py
 core/types.py
 core/data/__init__.py
 core/data/geo.py
