@@ -12,9 +12,10 @@ def test_defaults_valid():
     cfg = TrainCfg()
     # split: TEST = unseen vendors (Canon+GE) + cmrxmotion (motion set), VAL = ACDC (held-out
     # centre), TRAIN = the rest
-    assert cfg.data.test_vendors == ("Canon", "GE") and cfg.data.val_datasets == ("acdc",)
-    assert cfg.data.test_datasets == ("cmrxmotion",) and cfg.loss.kind == "dice_ce"
-    assert 0 <= cfg.aug.gamma_p <= 1
+    g = cfg.generator
+    assert g.data.test_vendors == ("Canon", "GE") and g.data.val_datasets == ("acdc",)
+    assert g.data.test_datasets == ("cmrxmotion",) and cfg.loss.kind == "dice_ce"
+    assert 0 <= g.aug.gamma_p <= 1
 
 
 def test_json_roundtrip(tmp_path):
@@ -50,13 +51,13 @@ def test_reject_bad_spatial_dims():
 
 # --- apply_overrides: valid applies (incl tuple), invalid rejected at assignment ---
 def test_override_valid_scalar_and_tuple():
-    cfg = apply_overrides(TrainCfg(), ["aug.gamma_p=0.5", "data.test_vendors=('GE',)"])
-    assert cfg.aug.gamma_p == 0.5 and cfg.data.test_vendors == ("GE",)
+    cfg = apply_overrides(TrainCfg(), ["generator.aug.gamma_p=0.5", "generator.data.test_vendors=('GE',)"])
+    assert cfg.generator.aug.gamma_p == 0.5 and cfg.generator.data.test_vendors == ("GE",)
 
 
 def test_override_out_of_bounds_rejected():
     with pytest.raises(ValidationError):
-        apply_overrides(TrainCfg(), ["aug.gamma_p=5"])   # validate_assignment fires
+        apply_overrides(TrainCfg(), ["generator.aug.gamma_p=5"])   # validate_assignment fires
 
 
 # --- _coerce on Optional[str] fields (currently-None): "none"-literal -> None, else string ---
@@ -73,9 +74,16 @@ def test_override_optional_string_preserved():
 # --- N4Cfg: nested in DataCfg, recorded in config.json, bounds enforced ---
 def test_n4cfg_in_config_roundtrip(tmp_path):
     cfg = TrainCfg()
-    assert "n4_params" in cfg.model_dump()["data"]       # recorded even when n4=False
+    assert "n4_params" in cfg.model_dump()["generator"]["data"]   # recorded even when n4=False
     p = tmp_path / "c.json"; to_json(cfg, p)
     assert from_json(p) == cfg
+
+
+def test_flat_config_backcompat():
+    """Pre-refactor config.json had data/aug/synth at the top level; the TrainCfg before-validator
+    lifts them under `generator` so registered models / cached configs still load."""
+    cfg = TrainCfg.model_validate({"data": {"test_vendors": ("GE",)}, "aug": {"gamma_p": 0.5}})
+    assert cfg.generator.data.test_vendors == ("GE",) and cfg.generator.aug.gamma_p == 0.5
 
 
 def test_n4cfg_reject_bad_shrink():

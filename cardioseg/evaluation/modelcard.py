@@ -64,7 +64,7 @@ def generate(run_dir: str | Path) -> Path:
     run = Path(run_dir)
     cfg = json.loads((run / "config.json").read_text())
     m = json.loads((run / "metrics.json").read_text())
-    res, d, mdl, ls = m["results"], cfg["data"], cfg["model"], cfg["loss"]
+    res, d, mdl, ls = m["results"], (cfg.get("generator") or cfg)["data"], cfg["model"], cfg["loss"]
 
     parts = [
         f"# Model Card — cardioseg run `{run.name}`",

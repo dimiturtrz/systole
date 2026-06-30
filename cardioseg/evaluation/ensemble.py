@@ -70,7 +70,7 @@ def ensemble_score(models, df, size, device):
 def _eval_df(cfg, which):
     import polars as pl
     from core.data import store, splits
-    d = cfg.data
+    d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                      val_datasets=d.val_datasets, val_vendors=d.val_vendors)

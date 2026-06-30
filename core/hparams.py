@@ -18,7 +18,7 @@ import ast
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
 
@@ -79,13 +79,14 @@ class SynthCfg(BaseModel):
     # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
     # random (mu/sigma below), kept only for ablation.
     realistic: bool = True
-    bg_mode: str = "flat"                           # "flat" single-Gaussian bg | "partition" = split the
+    bg_mode: str = "partition"                      # "flat" single-Gaussian bg | "partition" = split the
     #                                                bg by REAL per-slice intensity into bg_tiers tissue
     #                                                tiers (real lung/fat/muscle SHAPES), painted from
     #                                                per-tier priors+jitter. Real shapes (not procedural
     #                                                geometry) avoid the overfit shortcut. ("thorax" =
     #                                                old procedural attempt, deprecated — overfit, 0.16.)
-    bg_tiers: int = Field(4, ge=2)                  # intensity tiers the background is partitioned into
+    bg_tiers: int = Field(6, ge=2)                  # intensity tiers the bg is partitioned into (tuned:
+    #                                                K6/jitter0.4 = 0.660 pure-synth; less jitter hurts)
     keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: composite the synth heart onto the
     #                                                REAL background (isolates whether bg realism is the
     #                                                wall for pure-synth). Forces deform off (heart must
@@ -150,13 +151,35 @@ class DataCfg(BaseModel):
     size: int = Field(DEFAULT_SIZE, ge=32)
 
 
-class TrainCfg(BaseModel):
-    """The whole run. model_dump() -> config.json = full provenance."""
+class GeneratorCfg(BaseModel):
+    """The data-engine config: everything that makes a training BATCH (vs the model that consumes it).
+    Composes the data/split (`data`), real-pixel perturbation (`aug`), and synthetic-from-labels
+    generation (`synth`). Drives the Generator. Swapping the data side of a run = editing this subtree;
+    a future GAN generator slots in behind the same seam."""
     model_config = _VALIDATE
     data: DataCfg = Field(default_factory=DataCfg)
-    model: ModelCfg = Field(default_factory=ModelCfg)
     aug: AugCfg = Field(default_factory=AugCfg)
     synth: SynthCfg = Field(default_factory=SynthCfg)
+
+
+class TrainCfg(BaseModel):
+    """The whole run = master config. Two halves mirroring the runtime objects: `generator` (data
+    engine) + `model`/`loss` (consumer), plus run params. model_dump() -> config.json = full
+    provenance; one TrainCfg fully describes a run."""
+    model_config = _VALIDATE
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_flat(cls, v):
+        """Back-compat: old config.json had data/aug/synth at the top level; lift them under
+        `generator` so pre-refactor runs (registered models, cached configs) still load."""
+        if isinstance(v, dict) and "generator" not in v and any(k in v for k in ("data", "aug", "synth")):
+            v = dict(v)
+            v["generator"] = {k: v.pop(k) for k in ("data", "aug", "synth") if k in v}
+        return v
+
+    generator: GeneratorCfg = Field(default_factory=GeneratorCfg)
+    model: ModelCfg = Field(default_factory=ModelCfg)
     loss: LossCfg = Field(default_factory=LossCfg)
     epochs: int = Field(128, ge=1)                 # ceiling; early stopping ends sooner
     batch: int = Field(64, ge=1)

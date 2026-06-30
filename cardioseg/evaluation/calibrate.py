@@ -90,7 +90,7 @@ def main():
     a = ap.parse_args()
     run = resolve(a.run)
     model, cfg, device = load_run(run)
-    d = cfg.data
+    d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                      val_datasets=d.val_datasets, val_vendors=d.val_vendors)

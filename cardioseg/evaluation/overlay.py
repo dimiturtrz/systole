@@ -71,9 +71,9 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_unet(cfg.model).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
-    size = cfg.data.size
+    size = cfg.generator.data.size
 
-    meta = store.load(["acdc"], inplane=cfg.data.inplane, n4=cfg.data.n4)
+    meta = store.load(["acdc"], inplane=cfg.generator.data.inplane, n4=cfg.generator.data.n4)
     acdc = meta.filter((meta["dataset"] == "acdc") & meta["labelled"])
     paths = splits.paths(acdc)
 

@@ -1,7 +1,7 @@
 """Train a 2D U-Net from a TrainCfg (core.hparams) — one typed config in, model+metrics out.
 
     python -m cardioseg.training.train --out runs/gen         # default split: hold out ACDC + Canon
-    python -m cardioseg.training.train --set data.test_vendors=('GE',) aug.gamma_p=0.5
+    python -m cardioseg.training.train --set generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5
 
 The split is criteria over the data cloud (DataCfg.test_datasets / test_vendors); held-out test =
 rows matching those, never seen in train/val. The full config is serialized to runs/<run>/config.json
@@ -48,13 +48,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     from ..evaluation.validate import validate, summarize
     from core.model import build_unet, resolve_device
     from .dataset import load_to_gpu
-    from .augment import augment_batch
-    from .synth import synthesize_from_labels, measure_class_stats
+    from .generator import Generator
     from core.data import store, splits
     from core.obs import setup, timed, progress
     from core.hparams import to_json
 
-    d = cfg.data
+    d = cfg.generator.data
     # staging dir (gitignored) — artifacts build here, then get registered to mlflow (the store).
     # NOT a permanent runs/ dir; cfg.out_dir still works for an explicit local copy.
     out = Path(cfg.out_dir or ".staging/run")
@@ -91,24 +90,17 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     with timed(log, f"preload slices (residency={cfg.residency}->{data_device}, {len(train_df)}+{len(val_df)} subj)"):
         Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
-    augment = True
-    synth_on = cfg.synth.synth_p > 0           # Tier-2 synthetic-from-labels mix (SynthSeg); 0 = off
-    # Realistic intensity priors: measure per-class mean/std from the REAL training slices once, so
-    # synth paints classes around their true distribution (blood bright, myo dark) instead of random.
-    synth_priors = None
-    if synth_on and cfg.synth.realistic:
-        synth_priors = tuple(t.to(device) for t in
-                             measure_class_stats(Xtr, Ytr, cfg.model.out_channels))
+    # the data engine: yields collapsed batches (real / synth / mixed by cfg.generator.synth)
+    gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device)
     nb = max(1, Xtr.shape[0] // cfg.batch)
     log.info("patients: %d train / %d val / %d test | slices: %d train / %d val (resident on %s, compute %s)",
              len(train_df), len(val_df), len(test_df), Xtr.shape[0], Xva.shape[0], data_device, device)
     model = build_unet(cfg.model).to(device)
     # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
     # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
-    soft_sigma = cfg.aug.soft_label_sigma
+    soft_sigma = cfg.generator.aug.soft_label_sigma
     if soft_sigma > 0:
         from .losses import SoftDiceCE
-        from .augment import soften
         loss_fn = SoftDiceCE()
     else:
         loss_fn = build_loss(cfg.loss)
@@ -130,23 +122,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
         perm = torch.randperm(Xtr.shape[0], device=Xtr.device)   # shuffle on the data's device
         for bi in progress(range(nb), f"epoch {ep}", total=nb):
             idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
-            # .to(device) is a no-op when residency=gpu (already there); the host->device copy when cpu
-            x = Xtr[idx].to(device, non_blocking=pin)            # [B,1,H,W] f32
-            y = Ytr[idx].to(device, non_blocking=pin).long()     # [B,H,W]
-            if synth_on:
-                # invent image+anatomy from the labels for a per-sample fraction (synth_p=1 -> pure
-                # synth, the goal). cfg.deform>0 warps the labels too, so the synth target is the
-                # WARPED mask -> blend both x and y per sample. Paint BEFORE augment so affine geometry
-                # warps synth picture + mask together; result is z-scored like real input.
-                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels, synth_priors,
-                                                real_img=x)
-                do = (torch.rand(x.shape[0], 1, 1, 1, device=device) < cfg.synth.synth_p).float()
-                x = do * xs + (1 - do) * x
-                y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)
-            if augment:
-                x, y = augment_batch(x, y, cfg.aug)            # GPU-batched, hyperparams from cfg.aug
-            # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
-            yt = soften(y, soft_sigma, cfg.model.out_channels) if soft_sigma > 0 else y[:, None]
+            x, yt = gen.batch(idx, pin)                         # collapsed batch (real/synth/mixed)
             opt.zero_grad(set_to_none=True)
             with torch.autocast("cuda", enabled=pin):
                 loss = loss_fn(model(x), yt)
@@ -228,7 +204,7 @@ if __name__ == "__main__":
 
     # Defaults = the generalization split (hold out ACDC + Canon). Change the split via the criteria
     # on DataCfg with --set, e.g. legacy train M&M-2 -> test ACDC:
-    #   --set data.sources=('mnm2','acdc') data.test_datasets=('acdc',) data.test_vendors=()
+    #   --set generator.data.sources=('mnm2','acdc') generator.data.test_datasets=('acdc',) generator.data.test_vendors=()
     ap = argparse.ArgumentParser(description="train a 2D U-Net from a TrainCfg (split = DataCfg criteria)")
     ap.add_argument("--epochs", type=int); ap.add_argument("--batch", type=int)
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
@@ -237,7 +213,7 @@ if __name__ == "__main__":
     ap.add_argument("--alias", default=None,
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides",
-                    help="deep cfg overrides, e.g. data.test_vendors=('GE',) aug.gamma_p=0.5")
+                    help="deep cfg overrides, e.g. generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5")
     a = ap.parse_args()
 
     cfg = TrainCfg()
@@ -245,7 +221,7 @@ if __name__ == "__main__":
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))
     if a.n4:
-        cfg.data.n4 = True
+        cfg.generator.data.n4 = True
     if a.out:
         cfg.out_dir = a.out
     apply_overrides(cfg, a.overrides)

@@ -4,9 +4,9 @@ A split isn't a named thing — it's the data cloud filtered on criteria. Hold o
 `test_datasets` (whole dataset) or `test_vendors` (by vendor) as test; train/val = the rest, labelled.
 The criteria live on DataCfg (serialized to config.json), so a run self-documents what it held out.
 
-    meta = store.load(cfg.data.sources)
-    train, val, test = make_split(meta, cfg.data.test_datasets, cfg.data.test_vendors,
-                                  cfg.data.val_frac, cfg.seed)
+    meta = store.load(cfg.generator.data.sources)
+    train, val, test = make_split(meta, cfg.generator.data.test_datasets, cfg.generator.data.test_vendors,
+                                  cfg.generator.data.val_frac, cfg.seed)
 
 Change the criteria → change the split. No registry, no name, no flag.
 """
