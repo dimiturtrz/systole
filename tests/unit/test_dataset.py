@@ -47,3 +47,34 @@ def test_split_is_deterministic():
     a = [c.name for c in split_patients(cases, seed=0)[1]]
     b = [c.name for c in split_patients(cases, seed=0)[1]]
     assert a == b
+
+
+# --- load_to_gpu: VRAM-resident loader (GPU-resident training) ---
+def _fake_npz(tmp_path):
+    import numpy as np
+    p = tmp_path / "subj.npz"
+    D, H, W = 3, 40, 50
+    img = np.random.rand(D, H, W).astype(np.float32)
+    gt = np.zeros((D, H, W), np.uint8); gt[:, 12:22, 12:22] = 1   # non-empty heart per slice
+    np.savez(p, ed_img=img, ed_gt=gt, es_img=img, es_gt=gt,
+             spacing=np.array([10.0, 1.5, 1.5], np.float32), group="NOR")
+    return str(p)
+
+
+def test_load_to_gpu_shapes_dtype_device(tmp_path):
+    import pytest
+    torch = pytest.importorskip("torch")
+    from cardioseg.training.dataset import load_to_gpu
+    imgs, msks = load_to_gpu([_fake_npz(tmp_path)], size=64, device="cpu")
+    assert imgs.shape[1:] == (1, 64, 64) and imgs.dtype == torch.float32   # [N,1,size,size] f32
+    assert msks.shape[1:] == (64, 64) and msks.dtype == torch.uint8        # [N,size,size] u8 (VRAM-lean)
+    assert imgs.shape[0] == msks.shape[0] == 6                              # 3 slices x ED+ES
+    assert imgs.device.type == "cpu"                                       # residency device honored
+
+
+def test_load_to_gpu_empty_paths():
+    import pytest
+    pytest.importorskip("torch")
+    from cardioseg.training.dataset import load_to_gpu
+    imgs, msks = load_to_gpu([], size=64, device="cpu")
+    assert imgs.shape == (0, 1, 64, 64) and msks.shape == (0, 64, 64)
