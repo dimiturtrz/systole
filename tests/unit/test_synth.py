@@ -27,11 +27,24 @@ def test_shape_and_zscore():
 def test_painted_per_class():
     """No deform/texture/bias/blur/noise -> each class is a single constant intensity; distinct classes
     get distinct values (the image is generated FROM the labels)."""
-    cfg = SynthCfg(synth_p=1.0, deform=0.0, sigma=(0.0, 0.0), bias_strength=0.0, blur=(0.0, 0.0), noise=0.0)
+    cfg = SynthCfg(synth_p=1.0, deform=0.0, bg_regions=0, sigma=(0.0, 0.0), bias_strength=0.0,
+                   blur=(0.0, 0.0), noise=0.0)
     torch.manual_seed(0)
     img, _ = synthesize_from_labels(_mask(), cfg, N)
     vals = torch.unique(img[0])
     assert len(vals) == N                          # one constant per class, all distinct
+
+
+def test_bg_regions_structure_image_not_target():
+    """Structured background paints the bg blob as multiple pseudo-tissue regions (fake thorax) ->
+    more distinct intensities in the image than there are real classes, BUT the returned target mask
+    keeps only the real labels (bg stays 0). Teaches the net to reject surroundings."""
+    cfg = SynthCfg(synth_p=1.0, deform=0.0, bg_regions=6, sigma=(0.0, 0.0), bias_strength=0.0,
+                   blur=(0.0, 0.0), noise=0.0)
+    torch.manual_seed(0)
+    img, msk = synthesize_from_labels(_mask(), cfg, N)
+    assert len(torch.unique(img[0])) > N                       # bg split into extra intensities
+    assert set(msk.unique().tolist()).issubset(set(range(N)))  # target still only real labels
 
 
 def test_contrast_varies_per_call():

@@ -54,13 +54,26 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg,
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
-    oh = F.one_hot(mask, n_classes).permute(0, 3, 1, 2).float()             # [B,C,H,W]
+
+    # Build the PAINT label map: real heart labels, plus — for the FOV-sparse cardiac case — the
+    # background blob split into pseudo-tissue regions (fake thorax) so it's painted with structure,
+    # not flat noise. The returned TARGET mask keeps real labels (bg=0); these pseudo-labels only shape
+    # the image, teaching the net to reject varied surroundings. Quantize a smooth random field into
+    # cfg.bg_regions bins over the background voxels.
+    paint, n_paint = mask, n_classes
+    if cfg.bg_regions > 0:
+        low = torch.rand(b, 1, 6, 6, device=dev)
+        fld = F.interpolate(low, size=mask.shape[-2:], mode="bicubic", align_corners=False)[:, 0]
+        bins = (fld.clamp(0, 1) * cfg.bg_regions).long().clamp(max=cfg.bg_regions - 1)   # [B,H,W]
+        paint = torch.where(mask == 0, n_classes + bins, mask)
+        n_paint = n_classes + cfg.bg_regions
+    oh = F.one_hot(paint, n_paint).permute(0, 3, 1, 2).float()              # [B,n_paint,H,W]
 
     # --- per-label GMM paint: each (sample, class) gets a random mean + texture std ---
     mu_lo, mu_hi = cfg.mu
     sg_lo, sg_hi = cfg.sigma
-    mu = torch.rand(b, n_classes, device=dev) * (mu_hi - mu_lo) + mu_lo      # [B,C]
-    sg = torch.rand(b, n_classes, device=dev) * (sg_hi - sg_lo) + sg_lo
+    mu = torch.rand(b, n_paint, device=dev) * (mu_hi - mu_lo) + mu_lo        # [B,n_paint]
+    sg = torch.rand(b, n_paint, device=dev) * (sg_hi - sg_lo) + sg_lo
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
