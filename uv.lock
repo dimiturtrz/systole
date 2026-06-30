@@ -334,6 +334,23 @@ wheels = [
 ]
 
 [[package]]
+name = "captum"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "packaging" },
+    { name = "torch" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f7/9e/f31758e20c3d2b42b05420936b75f663e7aeae9ba63b84aee5cad1b044a3/captum-0.9.0.tar.gz", hash = "sha256:e4868e22b68224f1a5355d2b7966803c021cf9fe5d893f51f587b4002a666b54", size = 363381, upload-time = "2026-04-17T06:11:39.577Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/75/c99571fee171bb9d34d3e1df5fdb16d57e2c4c15339eb220e6e6e4539f1c/captum-0.9.0-py3-none-any.whl", hash = "sha256:cda38e1d42c37591d71560bb2f5813ac4cae8d8543afac45279c7efd5945997e", size = 455196, upload-time = "2026-04-17T06:11:38.229Z" },
+]
+
+[[package]]
 name = "cardioseg"
 version = "0.1.0"
 source = { editable = "." }
@@ -355,6 +372,7 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "captum" },
     { name = "mlflow" },
     { name = "nnunetv2" },
     { name = "onnx" },
@@ -367,6 +385,9 @@ all = [
 ]
 dev = [
     { name = "pytest" },
+]
+diag = [
+    { name = "captum" },
 ]
 export = [
     { name = "onnx" },
@@ -393,6 +414,8 @@ viz = [
 
 [package.metadata]
 requires-dist = [
+    { name = "captum", marker = "extra == 'all'" },
+    { name = "captum", marker = "extra == 'diag'" },
     { name = "cucim-cu13", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "cupy-cuda13x", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "matplotlib" },
@@ -425,7 +448,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "tqdm" },
 ]
-provides-extras = ["dev", "n4", "export", "viz", "nnunet", "track", "gpu", "all"]
+provides-extras = ["dev", "n4", "export", "viz", "nnunet", "track", "diag", "gpu", "all"]
 
 [[package]]
 name = "certifi"

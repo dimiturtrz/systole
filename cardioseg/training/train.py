@@ -173,6 +173,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
         log.info("wrote %s/MODEL_CARD.md", out)
     except Exception as e:
         log.warning("model card skipped: %s", e)
+    try:                                                   # attribution diagnostic (confusion + saliency)
+        from ..evaluation.attribution import run_attribution
+        s = run_attribution(model, Xva, Yva, cfg.model.out_channels, device, out)
+        log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
+    except Exception as e:
+        log.warning("attribution skipped: %s", e)
     try:
         from core.export_onnx import export
         export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
