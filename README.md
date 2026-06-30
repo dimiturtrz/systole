@@ -204,6 +204,30 @@ images from labels — SynthSeg / Bloch sim, a separate concern). **Full taxonom
 strip-vs-diversify registry, per-dataset coverage, and the build pipeline →
 [cardioseg/preprocessing/normalization/](cardioseg/preprocessing/normalization/README.md).**
 
+### Synthetic training data — can a model learn from images it invents?
+A SynthSeg-style experiment: train the segmenter on images **generated from the labels** — discard
+every real pixel, paint each anatomical class from sampled intensities — and ask whether it still
+segments *real* unseen-vendor MRI. The point is a **contrast-agnostic** model: it never sees a scanner,
+so it can't overfit one.
+
+Naive randomized synth collapses. The engineering is *why*, and fixing it by **diagnosis, not guessing**
+(train-loss curves + per-class intensity stats + rendered images at each step). Cross-vendor mean Dice
+(held-out Canon/GE + cmrxmotion, n=147; real-trained baseline **0.864**):
+
+| training data | real px? | mean Dice | what it isolated |
+|---|---|---|---|
+| 100% synth, random per-class contrast | none | 0.32 | random intensities destroy the blood-bright/myo-dark cue |
+| + realistic priors (measured per-class) | none | 0.39 | heart contrast fixed → background is the wall |
+| synth heart on **real** background *(diagnostic)* | bg only | 0.77 | proves the background blocks transfer, not the heart |
+| + background from real-intensity partition | **none** | **0.66** | bg gets real tissue *shapes* → pure-synth viable |
+
+A U-Net trained on **zero real pixels** segments unseen-vendor cardiac MRI at **0.66 Dice** — short of
+the 0.86 real-trained model, but a working demonstration that label-only contrast-agnostic training
+transfers. As *augmentation* (synth mixed with real) it's Dice-neutral here. Honest read: the method
+works; the remaining gap is the synthetic background's realism, and the next lever is a learned (GAN)
+generator. The data engine lives behind one `Generator`/`GeneratorCfg` seam (`training/synth.py`,
+`training/generator.py`); the per-class intensity priors are provenance-tracked reference data.
+
 ## Tests
 ```bash
 uv sync --all-extras
