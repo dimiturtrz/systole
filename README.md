@@ -111,7 +111,9 @@ not *"I matched its ceiling."*
 
 **Diversity buys robustness:** train it the *other* way — single-centre ACDC, tested across vendors —
 and it collapses to **0.70** mean (RV 0.85 → 0.59); the multi-vendor model holds. Per-direction table +
-surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**.
+surface metrics (HD95 / ASSD) → **[cardioseg/](cardioseg/)**. (A harder version of this test — training
+on *purely synthetic* images, zero real pixels — is in
+[Domain shift & normalization](#domain-shift--normalization) below.)
 
 ## Honest limits — the clinical-grade gap
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
@@ -259,7 +261,10 @@ evaluation discipline carry over from prior ML work; the clinical specifics I le
   Ventricular Segmentation in Cardiac MRI*, 2023.
 - **nnU-Net** — Isensee et al., *nnU-Net: a self-configuring method for deep learning-based
   biomedical image segmentation*, Nature Methods 2021.
-- **MRI simulators** (for planned synthetic-acquisition augmentation — see [ROADMAP](ROADMAP.md)):
+- **SynthSeg** — Billot et al., *SynthSeg: domain randomisation for segmentation of brain scans of any
+  contrast and resolution*, Medical Image Analysis 2023. (Basis for the synthetic-training experiment.)
+- **MRI simulators** (synthetic generation is built — see *Synthetic training data* above; the Bloch-sim
+  physics path remains planned, [ROADMAP](ROADMAP.md)):
   **KomaMRI** (Julia, GPU Bloch), **JEMRIS** (C++, full Bloch), **MRiLab** (MATLAB/GPU).
 
 ## License
