@@ -101,7 +101,7 @@ def main():
 
     ap = argparse.ArgumentParser(description=__doc__)
     # Default to the data-namespaced raw dir (<data>/nnunet/raw) derived from cardioseg's path
-    # config — never the D:/data root, and machine-independent (no hardcoded absolute path).
+    # config — never the data root, and machine-independent (no hardcoded absolute path).
     ap.add_argument("--out", default=None, help="nnU-Net raw root (default: <data>/nnunet/raw)")
     ap.add_argument("--id", type=int, default=29, help="nnU-Net dataset id")
     ap.add_argument("--n-patients", type=int, default=0, help="0 = all (debug cap)")

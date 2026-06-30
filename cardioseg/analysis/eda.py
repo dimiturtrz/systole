@@ -7,7 +7,7 @@ encoding was INFERRED. This decides it on real bytes and disambiguates LV vs RV
 rather than trusting either source — which caught a flipped-label EF bug.
 
 Usage:
-    export CARDIAC_DATA_ROOT=D:/data/raw/mri/acdc
+    export CARDIAC_DATA_ROOT=<data>/raw/mri/acdc
     python -m core.data.mri.eda                 # summarize N patients + viz
     python -m core.data.mri.eda --patient patient001
 """

@@ -1,6 +1,6 @@
 // End-to-end smoke for the IMPORT path: upload a real .nii.gz, run in-browser ONNX
 // segmentation, assert the chambers render. Needs a local scan (NOT committed):
-//   SCAN=/d/data/raw/mri/acdc/training/patient073/patient073_frame01.nii.gz npm run smoke:import
+//   SCAN=<data>/raw/mri/acdc/training/patient073/patient073_frame01.nii.gz npm run smoke:import
 import puppeteer from 'puppeteer';
 import { PNG } from 'pngjs';
 import { existsSync } from 'node:fs';

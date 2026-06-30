@@ -45,6 +45,8 @@ mlartifacts/
 .staging/
 *.egg-info/
 
-# guard: a Windows drive path (D:/...) used on POSIX is treated as relative -> creates repo/D:/ (data-leak landmine)
+# Belt-and-suspenders for the Windows-path-on-POSIX leak (real fix = core.paths.resolve_data_root,
+# which raises before any such dir is created). These catch the ASCII-':' form; the NTFS-reserved
+# form uses U+F03A so it won't match here — the resolver is what actually prevents it.
 D:/
-[A-Za-z]:/
+data/volumetric/

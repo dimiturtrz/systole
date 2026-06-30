@@ -7,8 +7,8 @@ that's the whole architecture in one script.
 
     python -m baselines.nnunet.score \
         --pred <nnunet_output_dir> \
-        --gt   D:/data/volumetric/mri/nnunet/raw/Dataset029_BATTERY/labelsTs \
-        --manifest D:/data/volumetric/mri/nnunet/raw/Dataset029_BATTERY/ts_manifest.json
+        --gt   <data>/nnunet/raw/Dataset029_BATTERY/labelsTs \
+        --manifest <data>/nnunet/raw/Dataset029_BATTERY/ts_manifest.json
 
 Case files are named <dataset>_<subject>_<ED|ES>.nii.gz (from convert.py), so EF pairs ED/ES.
 With --manifest, also reports the battery's two axes separately (acdc centre-shift vs canon vendor).

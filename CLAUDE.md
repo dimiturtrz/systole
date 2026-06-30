@@ -64,11 +64,10 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
 
 - **Linux GPU lane:** `uv sync --all-extras` on linux also pulls the `gpu` extra (cupy/cucim, linux-
   only by marker); on Windows those silently skip and the code falls back to CPU. Same command both OSes.
-- **WSL:** repo lives on `/mnt/d`, so (a) point uv's env off the shared tree to avoid clobbering the
-  Windows `.venv`: `UV_PROJECT_ENVIRONMENT=$HOME/venvs/cardioseg uv sync --all-extras`; and (b) override
-  the data root, since `paths.yaml` holds a Windows path (`D:/…`) invalid on linux:
-  `CARDIAC_DATA=/mnt/d/<...>/mri`. Full WSL run:
-  `cd /mnt/d/personal_projects/cardiac-seg && CARDIAC_DATA=/mnt/d/data/volumetric/mri UV_PROJECT_ENVIRONMENT=$HOME/venvs/cardioseg uv run python -m …`
+- **WSL:** point uv's env off the shared `/mnt`-mounted tree to avoid clobbering the Windows `.venv`:
+  `UV_PROJECT_ENVIRONMENT=$HOME/venvs/cardioseg uv sync --all-extras`, then `uv run …`. The data root
+  needs NO override — `core.paths.resolve_data_root` auto-translates a Windows drive root to its `/mnt`
+  mount under WSL (and raises, never goes relative, on non-WSL POSIX where it can't translate).
 - Legacy conda env `pytorch_training_env` still works as a fallback (`conda run -n … python …`), but uv
   is the source of truth. NB the old `conda run` stdout-swallow / multiline-`-c` quirks don't apply to `uv run`.
 

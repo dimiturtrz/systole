@@ -47,7 +47,7 @@ Community convention:
 
 ## Getting it
 Register at **Creatis / humanheart-project**. Data stays **outside the repo** (licensing
-+ size); point the loader via `CARDIAC_DATA_ROOT` (e.g. `D:/data/volumetric/mri/acdc`).
++ size); point the loader via `CARDIAC_DATA_ROOT` (e.g. `<data>/acdc`).
 Fallback if blocked: MSD `Task02_Heart` (LA-only, **no EF** — breaks the EF story).
 
 ## SOTA to benchmark against
