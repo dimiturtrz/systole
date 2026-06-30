@@ -4,7 +4,7 @@
 # Source-only — pulled files live out-of-repo (gitignored data dir). Run in the cardioseg env:
 #   bash cardioseg/normalization/fetch_sources.sh
 set -e
-DATA=$(python -c "from cardioseg.config import data_root; print(data_root('raw'))")
+DATA=$(python -c "from core.config import data_root; print(data_root('raw'))")
 echo "data root: $DATA"
 
 pull() {  # pull <dataset> <url> <outfile>

@@ -58,7 +58,7 @@ inventory). **Splits are queries over it** (`data/splits.py`): roles aren't bake
 pull **all** data and make our **own** splits — challenge splits aren't inherited.
 
 ```bash
-python -m cardioseg.data.store                 # consolidate all + print the cloud summary
+python -m core.data.store                 # consolidate all + print the cloud summary
 python -m cardioseg.training.train             # train; default split holds out ACDC + Canon (criteria)
 ```
 

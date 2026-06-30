@@ -161,7 +161,7 @@ uv sync --all-extras                   # creates .venv from pyproject + uv.lock;
 # 2. point at the data (one path) + drop register-gated downloads under <data>/raw/<dataset>/:
 cp paths.example.yaml paths.yaml       # set: data: /abs/path/to/cardiac-data
 # 3. consolidate raw -> the homogeneous store (processed/<ds>/<paramkey>/{data,meta.csv}); first run only:
-uv run python -m cardioseg.data.store  # auto-runs on first train too; this just prints the cloud summary
+uv run python -m core.data.store  # auto-runs on first train too; this just prints the cloud summary
 # 4. train (split = DataCfg criteria; default holds out ACDC + Canon). Full config -> runs/<run>/config.json:
 uv run python -m cardioseg.training.train --out runs/gen
 # 5. evaluate / export:

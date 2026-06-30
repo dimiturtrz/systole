@@ -41,7 +41,7 @@ bash baselines/nnunet/run_battery.sh
 #       --out baselines/nnunet/results.json   # single source read by cardioseg/evaluation/results.py
 ```
 Data + `raw/preprocessed/results/pred` all live **outside the repo**, namespaced under
-`<data>/nnunet/` (derived from `paths.yaml` / `CARDIAC_DATA` via `cardioseg.config`) — nothing
+`<data>/nnunet/` (derived from `paths.yaml` / `CARDIAC_DATA` via `core.config`) — nothing
 heavy gets committed, and nnU-Net's dirs default into the namespace, never the data root.
 
 ## Published ceiling (context, before we even run it)

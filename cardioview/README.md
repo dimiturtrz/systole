@@ -23,7 +23,7 @@ uv sync --all-extras
 cp paths.example.yaml paths.yaml      # edit data.raw -> .../acdc; M&M-2 sits beside it
 
 # 3. train the flagship (see cardioseg/README) -> runs/gen/model.pth
-#    = cardioseg.config.FLAGSHIP_RUN: pooled M&M-2 + M&Ms-1, ACDC + Canon held out.
+#    = core.config.FLAGSHIP_RUN: pooled M&M-2 + M&Ms-1, ACDC + Canon held out.
 
 # 4. bake the web assets (the viewer follows the model via the manifest). Hearts come from
 #    paths.yaml (cardioview.hearts) — ACDC patients the flagship never trained on.
