@@ -6,7 +6,7 @@ in-plane), so we resample to isotropic with SciPy before raycasting, else the he
 looks crushed and the slices read as steps.
 
 Usage:
-    conda run -n pytorch_training_env python cardioview/render_volume.py \
+    uv run python cardioview/render_volume.py \
         --patient patient001 --phase ED --out cardioview/out/patient001_ED.png
     ... --interactive        # open a window instead of a screenshot
 """

@@ -4,7 +4,7 @@ Two rows — a clean case and the worst-EF HCM case (the honest failure) — eac
 ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact shipped inference path
 (validate.predict_volume + largest-CC), so the picture matches the reported numbers.
 
-    conda run -n pytorch_training_env python -m cardioseg.evaluation.overlay --run runs/gen
+    uv run python -m cardioseg.evaluation.overlay --run runs/gen
 """
 import argparse
 from pathlib import Path

@@ -7,7 +7,7 @@ dim translucent intensity raycast. Ejection fraction (pred and GT) is computed f
 LV-cavity volumes at ED vs ES and shown in the title.
 
 Usage:
-    PYTHONPATH=. conda run -n pytorch_training_env python cardioview/render_overlay.py \
+    uv run python cardioview/render_overlay.py \
         --patient patient001 --phase ED --source pred
     ... --source gt    # ground-truth masks instead of the model
     ... --interactive  # rotatable window

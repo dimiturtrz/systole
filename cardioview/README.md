@@ -16,7 +16,7 @@ the pipeline. Two ways in:
 ### A — canned demo hearts (full pipeline)
 ```bash
 # 1. deps (from repo root) — installs cardioseg + cardioview Python deps
-pip install -e .
+uv sync --all-extras
 
 # 2. data: register for M&M-2 (training, https://www.ub.edu/mnms-2/) + ACDC (the canned hearts,
 #    https://www.creatis.insa-lyon.fr/Challenge/acdc/); point paths.yaml at them
@@ -44,7 +44,7 @@ let you drop in your own model and scans (segmented in-browser). See [web/README
 
 > Requirements per project: **mri-sim** is the simplest (just `npm install && npm run dev`,
 > no data/model); **cardioview** needs a trained model + ACDC patients for the canned hearts
-> (above); **cardioseg** is the pipeline (`pip install -e .` + M&M-2/ACDC).
+> (above); **cardioseg** is the pipeline (`uv sync --all-extras` + M&M-2/ACDC).
 
 ## Python tools (offline)
 - `export_web.py` — segment ED/ES (or every 4D frame, `--mode animate`) → chamber `.glb` + EF manifest

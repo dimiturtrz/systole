@@ -1,7 +1,8 @@
 """Observability: file+console logging and a timing context manager, for hunting bottlenecks.
 
-`conda run` buffers child stdout, so progress printed to stdout is invisible until exit. Logging
-through a FileHandler writes straight from the process to disk — tail the file to watch live.
+Subprocess wrappers (uv run, conda run, CI capture) often buffer child stdout, so progress printed
+to stdout is invisible until exit. Logging through a FileHandler writes straight from the process to
+disk — tail the file to watch live.
 
     from core.obs import setup, timed, progress
     log = setup("runs/foo/train.log")

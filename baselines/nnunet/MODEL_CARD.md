@@ -81,8 +81,8 @@ model): a stronger segmenter substantially closes it. cardioseg trades that for 
 
 ## Reproduce
 ```bash
-pip install -e .[nnunet]
+uv sync --all-extras
 python -m baselines.nnunet.convert --id 29            # build Dataset029_BATTERY from the store
-conda run -n <env> bash baselines/nnunet/run_battery.sh   # preprocess -> train -> predict -> score
+uv run bash baselines/nnunet/run_battery.sh   # preprocess -> train -> predict -> score
 ```
 Numbers above: `Dataset029_BATTERY`, fold 0, `nnUNetTrainer_50epochs`, scored via `score.py --manifest`.

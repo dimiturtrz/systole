@@ -22,7 +22,7 @@ bites. RV blue · LV-myo green · LV-cav red.*
 
 ## Setup
 ```bash
-pip install -e .                  # from repo root (installs cardioseg)
+uv sync --all-extras                  # from repo root (installs cardioseg)
 # torch CUDA build (CPU wheel won't train); Blackwell/RTX 5090 needs torch>=2.7:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 ```

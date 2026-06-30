@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # nnU-Net battery baseline: preprocess -> train (50ep/fold0) -> predict -> per-axis score.
-# Run inside the cardioseg env:  conda run -n pytorch_training_env bash baselines/nnunet/run_battery.sh
+# Run inside the cardioseg env:  uv run bash baselines/nnunet/run_battery.sh
 # (convert first: python -m baselines.nnunet.convert --id 29)
 set -e
 
