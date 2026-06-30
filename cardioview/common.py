@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core.config import data_root, flagship_model
+from core.config import data_root, FLAGSHIP_REF
 from core.preprocessing.preprocess import fit_square
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
@@ -19,16 +19,16 @@ CHAMBERS = {
     1: ("RV cavity", "#5b8def"),
 }
 SIZE = 256  # square grid the 2D model runs on
-# gen = the shipped flagship (core.config.FLAGSHIP_RUN): pooled multi-vendor cloud
-# (M&M-2 + M&Ms-1), held out ACDC + Canon — its numbers are the ones the docs report.
-# mnm2/acdc/acdc_aug = older single-/cross-dataset runs, kept for comparison.
-MODELS = {
-    "gen": flagship_model(),
-    "mnm2": "runs/mnm2_to_acdc/model.pth",
-    "acdc_aug": "runs/acdc_aug/model.pth",
-    "acdc": "runs/acdc/model.pth",
-}
+# Models are mlflow registry refs (alias|version|run-id) — the flagship is the `production` alias
+# (the pooled multi-vendor soft-label model). Add more refs here to compare in the viewer.
+MODELS = {"gen": FLAGSHIP_REF}
 DEFAULT_MODEL = "gen"  # single source for the viewer/export default
+
+
+def model_dir(ref: str):
+    """Resolve a registry ref to its local artifact dir (model.pth + config.json + …)."""
+    from core.registry import resolve
+    return resolve(ref)
 
 
 def patient_dir(patient: str, root: str | None = None) -> Path:
@@ -45,12 +45,12 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
     raise FileNotFoundError(f"{patient} not found (not a dir, nor under {base}/training|testing)")
 
 
-def load_model(weights: str, device):
-    """Load the trained U-Net for a run (architecture from the run's config.json, so it can't
-    mismatch a default). `weights` is the run's model.pth; its parent dir is the run."""
+def load_model(ref: str, device):
+    """Load the trained U-Net for a registry ref (arch from its config.json, so it can't mismatch a
+    default). `ref` = an mlflow registry ref (alias|version|run-id) resolved to its artifact dir."""
     from core.model import load_run
 
-    model, _, _ = load_run(Path(weights).parent, device)
+    model, _, _ = load_run(model_dir(ref), device)
     return model
 
 

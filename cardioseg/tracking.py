@@ -152,78 +152,9 @@ def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None 
         return _Noop()
 
 
-def backfill(experiment: str = "cardioseg"):
-    """One-shot: log existing runs/<name>/{config,metrics}.json as runs, so the UI has history.
-    Skips runs already tracked (have .mlflow_run_id). `python -m cardioseg.tracking`."""
-    import json
-    runs_dir = _ROOT / "runs"
-    n = 0
-    for mj in sorted(runs_dir.glob("*/metrics.json")):
-        rd = mj.parent
-        if (rd / ".mlflow_run_id").exists():
-            continue
-        m = json.loads(mj.read_text())
-        trk = track_run(experiment, rd.name, run_dir=rd, params=m.get("config", {}))
-        trk.summary(m.get("results", {}))               # val/test train-time numbers
-        for f in ("config.json", "metrics.json"):
-            trk.artifact(rd / f)
-        trk.end()
-        print(f"backfilled {rd.name}")
-        n += 1
-    print(f"backfilled {n} run(s)")
+MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line (registry lives in core.registry)
 
 
-MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line
-
-
-def run_kind(name: str, is_flagship: bool, same_split: bool) -> str:
-    """Classify a run for tagging/grouping."""
-    if is_flagship: return "flagship"
-    if name.startswith("seed"): return "seed"
-    if "aug" in name or "bias" in name: return "ablation"
-    return "candidate" if same_split else "xdataset"
-
-
-def recurate(experiment: str = "cardioseg", old: str = "cardioseg-unet"):
-    """Curate the registry: drop the lumped `old` model; tag every run (kind/split); register ONLY
-    deployable candidates (runs whose split matches the flagship's) as versions of MODEL_NAME with
-    readable descriptions + version tags; flagship gets the 'production' alias. Old experiments stay
-    tracked runs, not registry versions. runs/ + FLAGSHIP_RUN remain the resolver."""
-    from .training.model import load_run
-    from core.config import FLAGSHIP_RUN
-    from core.hparams import from_json
-    mlflow = _mlflow()
-    if mlflow is None:
-        print("mlflow off"); return
-    mlflow.set_tracking_uri(_DB_URI)
-    c = mlflow.tracking.MlflowClient()
-    try: c.delete_registered_model(old)                 # drop the polluted catalog
-    except Exception: pass
-
-    flagname = Path(FLAGSHIP_RUN).name
-    fcfg = from_json(Path(FLAGSHIP_RUN) / "config.json").data
-    fsplit = (tuple(fcfg.test_vendors), tuple(fcfg.val_datasets))
-    for pth in sorted((_ROOT / "runs").glob("*/model.pth")):
-        rd = pth.parent
-        cp = rd / "config.json"
-        cfg = from_json(cp).data if cp.exists() else None
-        same = bool(cfg) and (tuple(cfg.test_vendors), tuple(cfg.val_datasets)) == fsplit
-        split = "+".join(cfg.test_vendors) if cfg else "legacy"
-        kind = run_kind(rd.name, rd.name == flagname, same)
-        trk = track_run(experiment, rd.name, run_dir=rd, tags={"kind": kind, "split": split})
-        if same:                                        # deployable candidate -> register a version
-            model, _, _ = load_run(rd, "cpu")
-            trk.log_model(model, MODEL_NAME, alias=("production" if rd.name == flagname else None),
-                          description=f"{rd.name} · split={split} · {kind}",
-                          version_tags={"run": rd.name, "split": split, "kind": kind})
-        trk.end()
-        print(f"{rd.name:14} kind={kind:10} {'REGISTERED' if same else 'run-only'}")
-    print(f"-> registry '{MODEL_NAME}': candidates only; production -> {flagname}")
-
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser(description="MLflow utilities (Phase 1).")
-    ap.add_argument("--recurate", action="store_true", help="curate registry + tag runs (kind/split)")
-    a = ap.parse_args()
-    recurate() if a.recurate else backfill()
+# Model registration + resolution live in core.registry (the model store). train.py registers via
+# core.registry.save_model; this module is now metrics/params/system-metrics tracking only. The old
+# runs/-based backfill + recurate utilities were removed with runs/ (model store = the mlflow registry).

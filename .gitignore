@@ -43,3 +43,4 @@ mlflow.db
 mlartifacts/
 .mlflow_cache/
 .staging/
+*.egg-info/

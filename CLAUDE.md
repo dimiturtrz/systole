@@ -82,7 +82,10 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
 - `cardioseg/` — training + eval *orchestration* on top of core: the pipeline ACDC/M&M-2/M&Ms-1/CMRxMotion
   → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav) → consolidated store → 2D MONAI U-Net → EF
   → evaluate. Holds `training/`, `evaluation/` (validate/distribution/ensemble/calibrate/…),
-  `preprocessing/normalization/` (dataset-metadata tooling). Flagship run = `runs/gen`.
+  `preprocessing/normalization/` (dataset-metadata tooling). **Models live in the mlflow registry**
+  (`core.registry`, NOT a `runs/` dir): a model = a run's artifacts (model.pth+config+onnx+card) under
+  `cardioseg-2dunet` with aliases; flagship = the `production` alias. `resolve(ref)` (alias|version|
+  run-id) downloads to a cache dir for the dir-consumers. Train registers via `--alias production`.
 - `cardioview/` — browser viewer (TS+Vite+vtk.js): beating 3D hearts + in-browser ONNX segmentation.
   Depends only on `core` (never on cardioseg).
 - `mri-sim/` — TS MRI acquisition visualizer (deprioritized).

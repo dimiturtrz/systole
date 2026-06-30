@@ -162,11 +162,12 @@ uv sync --all-extras                   # creates .venv from pyproject + uv.lock;
 cp paths.example.yaml paths.yaml       # set: data: /abs/path/to/cardiac-data
 # 3. consolidate raw -> the homogeneous store (processed/<ds>/<paramkey>/{data,meta.csv}); first run only:
 uv run python -m core.data.store  # auto-runs on first train too; this just prints the cloud summary
-# 4. train (split = DataCfg criteria; default holds out ACDC + Canon). Full config -> runs/<run>/config.json:
-uv run python -m cardioseg.training.train --out runs/gen
-# 5. evaluate / export:
-uv run python -m cardioseg.evaluation.distribution --run runs/gen --eval acdc   # + --eval canon; plots + strata
-uv run python -m cardioseg.training.export_onnx --run runs/gen
+# 4. train (split = DataCfg criteria; default holds out ACDC + Canon). Artifacts (weights + config +
+#    metrics + onnx + card) register into the mlflow model registry — the model store:
+uv run python -m cardioseg.training.train --alias production   # --alias production = make it the flagship
+# 5. evaluate / export — --run takes a registry ref (alias | version | run-id), default = production:
+uv run python -m cardioseg.evaluation.distribution --run production --eval acdc   # + --eval canon; plots + strata
+uv run python -m core.export_onnx --run production
 ```
 A run is reproducible from its `config.json` (the split criteria + all hyperparams are serialized) and
 the env from `uv.lock`. Cross-platform: same `uv sync` on Windows + Linux; the linux-only GPU extra

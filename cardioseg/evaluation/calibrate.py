@@ -83,6 +83,7 @@ def main():
     from core.hparams import from_json
     from core.model import load_run
     from core.registry import resolve
+    from core.config import FLAGSHIP_REF
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)

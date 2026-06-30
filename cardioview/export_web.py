@@ -24,7 +24,7 @@ from core.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
 from core.measure import ejection_fraction
 from core.inference import predict_volume
 from core.postprocess import largest_cc_per_class
-from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, patient_dir, masks as build_masks, square_stack
+from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, model_dir, patient_dir, masks as build_masks, square_stack
 from geometry import keep_largest, bbox_slices, nearest_index
 
 OUT = Path("cardioview/web/public/data")
@@ -57,7 +57,7 @@ def heldout_set(model_name: str) -> set[str]:
     """Subject IDs the model did NOT train on — derived from the run's saved config
     (the flagship holds out ALL ACDC, not an 80/20 val slice). Falls back to the legacy
     80/20 ACDC val split for older runs without a config.json."""
-    run = Path(MODELS[model_name]).parent
+    run = model_dir(MODELS[model_name])
     cfg_path = run / "config.json"
     if cfg_path.exists():
         from core.hparams import from_json

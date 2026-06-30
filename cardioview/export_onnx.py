@@ -14,7 +14,7 @@ from pathlib import Path
 
 from core.export_onnx import export as build_onnx
 from core.data import store
-from common import MODELS, DEFAULT_MODEL
+from common import MODELS, DEFAULT_MODEL, model_dir
 
 OUT = Path("cardioview/web/public/models")
 
@@ -26,7 +26,7 @@ def main() -> None:
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()
 
-    run = Path(MODELS[a.model]).parent  # runs/<name>/model.pth -> runs/<name>
+    run = model_dir(MODELS[a.model])  # registry ref -> resolved artifact dir
     # parity check needs a CONSOLIDATED-STORE npz (not a raw patient dir) — same source as
     # core.export_onnx's own default.
     verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]

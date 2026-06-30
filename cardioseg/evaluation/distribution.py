@@ -26,6 +26,7 @@ from scipy.stats import gaussian_kde
 
 from core.model import load_run, resolve_device
 from core.registry import resolve
+from core.config import FLAGSHIP_REF
 from core.preprocessing.preprocess import fit_square, SIZE
 from core.data import store, splits
 from core.inference import predict_volume
