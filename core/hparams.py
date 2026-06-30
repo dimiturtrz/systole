@@ -62,46 +62,36 @@ class AugCfg(BaseModel):
 
 
 class SynthCfg(BaseModel):
-    """SynthSeg-style synthetic-image generation from labels (Tier 2, bd cardiac-seg-bgc). Each call,
-    discard real intensities and paint every label class with a FRESHLY-sampled Gaussian -> a brand-new
-    contrast every time -> a contrast-AGNOSTIC model (generalize to any scanner instead of mimicking
-    one). Distinct from AugCfg (perturb real pixels): synth INVENTS the picture, anatomy/mask stays
-    real. Geometry is AugCfg's job (synth keeps the mask aligned), so this is per-label intensity
-    generation + a light corruption chain only. synth_p=0 -> off (default = pure real-image training).
-    Ref research/deep_dives/2026-06-24_mri-sim-libs-eval.md (SynthSeg, Billot 2023)."""
+    """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
+    Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
+    (core.data.mri_physics) under per-sample swept sequence params (TR/flip/field) -> a physically-
+    plausible, vendor-randomized contrast every call -> a contrast-AGNOSTIC model. ONE paint path (no
+    stats/random branches): contrast is physical, not fitted. Anatomy is the real mask (deform invents
+    more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
+    (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
     model_config = _VALIDATE
     synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
     deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
     #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
-    # REALISTIC priors (the working recipe): paint each class around its REAL measured per-class mean/std
-    # (passed in from the training data), preserving the learnable ordering (blood bright, myo dark) that
-    # pure-U[0,1] random destroyed. jitter perturbs the class mean per sample (contrast augmentation
-    # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
-    # random (mu/sigma below), kept only for ablation.
-    realistic: bool = True
-    bg_mode: str = "partition"                      # "flat" single-Gaussian bg | "partition" = split the
-    #                                                bg by REAL per-slice intensity into bg_tiers tissue
-    #                                                tiers (real lung/fat/muscle SHAPES), painted from
-    #                                                per-tier priors+jitter. Real shapes (not procedural
-    #                                                geometry) avoid the overfit shortcut. ("thorax" =
-    #                                                old procedural attempt, deprecated — overfit, 0.16.)
-    bg_tiers: int = Field(6, ge=2)                  # intensity tiers the bg is partitioned into (tuned:
-    #                                                K6/jitter0.4 = 0.660 pure-synth; less jitter hurts)
-    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: composite the synth heart onto the
-    #                                                REAL background (isolates whether bg realism is the
-    #                                                wall for pure-synth). Forces deform off (heart must
-    #                                                align with the real bg's heart hole). Not pure-synth.
-    jitter: float = Field(0.4, ge=0)               # per-class mean perturbation std (contrast aug breadth)
-    std_scale: tuple[float, float] = (0.7, 1.4)     # multiply each class's real texture std
-    mu: tuple[float, float] = (0.0, 1.0)            # legacy pure-random per-class mean (realistic=False)
-    sigma: tuple[float, float] = (0.05, 0.25)       # legacy pure-random per-class texture std
-    pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map by this σ
-    #                                                (voxels) -> boundary voxels are tissue mixes (real
-    #                                                finite-voxel averaging), not hard label edges
-    kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (low-pass via
-    #                                                fft truncation = real sinc PSF + Gibbs). 0 = off
-    bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative bias field, max +/- fraction
-    blur: tuple[float, float] = (0.0, 1.0)          # random Gaussian blur σ (resolution variation)
+    # --- bSSFP sequence sweep = the physical cross-vendor contrast diversity ---
+    tr_ms: tuple[float, float] = (2.8, 4.0)         # repetition time sweep (ms) — cine range
+    flip_deg: tuple[float, float] = (35.0, 70.0)     # flip-angle sweep (deg)
+    fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
+    #                                                = the dominant cross-vendor relaxation axis
+    jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
+    texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
+    # --- background ---
+    bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
+    #                                                into bg_tiers tissue tiers (real lung/fat/muscle
+    #                                                SHAPES, painted by tissue); "flat" = single bg tissue
+    bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
+    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: paste synth heart onto REAL bg
+    #                                                (isolates bg realism; forces deform off). Not pure-synth.
+    # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
+    pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
+    kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
+    bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative B1/coil bias field, +/- fraction
+    blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
 
 

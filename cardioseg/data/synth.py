@@ -1,23 +1,22 @@
-"""SynthSeg-style synthetic-image generation from labels (Tier 2, bd cardiac-seg-bgc).
+"""Physics-based synthetic-image generation from labels (bd cardiac-seg-bgc / 276).
 
-The *invent* force of domain generalization — the third sibling to `augment.py` (*diversify*: perturb
-real pixels) and `preprocessing/normalization/` (*strip*: remove vendor variance). Throw away the real
-intensities and PAINT each label class from a sampled Gaussian, so every call is a new contrast +
-(with deform) new anatomy. Train on these and the net must segment by shape/structure, not one
-scanner's appearance -> generalizes across vendors. Anatomy seeds from the ACDC mask; the picture is
-invented.
+The *invent* force of domain generalization — sibling to `augment.py` (*diversify*: perturb real
+pixels) and `preprocessing/normalization/` (*strip*: remove vendor variance). Throw away the real
+intensities and PAINT each label class by its tissue's bSSFP SIGNAL (core.data.mri_physics) under
+per-sample swept sequence params (TR/flip) and FIELD strength (1.5T/3T). Contrast is PHYSICAL, not
+fitted; sweeping the sequence/field sweeps it along the real cross-vendor manifold. Train on these and
+the net must segment by shape/structure, not one scanner's appearance.
 
-Pattern: SynthSeg (Billot 2023) but with the cardiac-critical fix — cardiac labels are FOV-sparse
-(heart-only), and pure-random U[0,1] per-class intensities (the brain recipe) DESTROY the one learnable
-cue: blood pools are bright, myocardium dark. A net trained on randomized contrast learns synth-only
-structure and fails to transfer (measured: pure-random pure-synth -> 0.24-0.32 cross-vendor Dice vs
-0.86 real). The fix (DRIFTS-style per-label intensity clustering): sample each class around its REAL
-measured per-class mean/std (`measure_class_stats`), with bounded jitter — realistic ordering kept,
-magnitude varied for robustness. So the images actually look like cardiac MRI.
+Why physical (not statistical): scanner differences ARE physical (sequence, field). The earlier
+statistical recipe (paint around measured per-class means) wins this specific test by ~0.04 Dice, but
+partly by riding a flow artifact (RV≠cav intensity); physics is the correct, general model — chosen on
+principle, not the metric (see bd 276).
 
-Pipeline per call: nonlinear label deform -> per-label Gaussian paint around real priors -> smooth bias
-field -> random blur -> Rician noise -> z-score. Geometry (flip/rotate/scale) is `augment.py`'s job,
-runs after. GPU-batched, vectorized; torch global RNG (seed for repro). Config = injected SynthCfg.
+Cardiac labels are FOV-sparse (heart-only); the background is split by REAL per-slice intensity into
+tissue tiers (real SHAPES), painted by tissue too -> whole-FOV physical synth. Pipeline per call:
+deform -> bg partition -> bSSFP paint -> partial-volume -> bias -> blur -> k-space PSF -> Rician noise
+-> z-score. Geometry (flip/rotate/scale) is `augment.py`'s job, after. GPU-batched, vectorized; torch
+global RNG (seed for repro). Config = injected SynthCfg.
 """
 from __future__ import annotations
 
@@ -27,57 +26,6 @@ import torch.nn.functional as F
 from core.hparams import SynthCfg
 
 from .augment import _gaussian_kernel
-
-
-def measure_class_stats(X: torch.Tensor, Y: torch.Tensor,
-                        n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """Per-class (mean, std) of the REAL z-scored images — the realistic intensity priors that make
-    synth look like MRI. X [B,1,H,W], Y [B,H,W]. A class absent from the sample falls back to (0, 1).
-    Returned tensors live on X's device."""
-    flat_x, flat_y = X[:, 0].reshape(-1), Y.reshape(-1)
-    means = torch.zeros(n_classes, device=X.device)
-    stds = torch.ones(n_classes, device=X.device)
-    for c in range(n_classes):
-        v = flat_x[flat_y == c]
-        if v.numel() > 10:
-            means[c] = v.mean()
-            stds[c] = v.std().clamp_min(1e-3)
-    return means, stds
-
-
-def _ellipse(gy, gx, cy, cx, ry, rx, soft=0.04):
-    """Soft ellipse membership in [0,1] over a coordinate grid. cy/cx/ry/rx are [B,1,1] (per-sample),
-    gy/gx are [1,H,W] in normalized [-1,1] coords. Sigmoid edge of width ~soft."""
-    d = ((gy - cy) / ry) ** 2 + ((gx - cx) / rx) ** 2
-    return torch.sigmoid((1.0 - d) / soft)
-
-
-def _procedural_thorax(b: int, h: int, w: int, dev) -> torch.Tensor:
-    """Randomized synthetic thorax background [B,1,H,W] (z-ish scale): body ellipse (mid intensity) with
-    a brighter fat/muscle rim, two dark lung fields flanking the centre, a spine blob, and smooth
-    low-frequency texture. NOT photorealistic — it supplies the STRUCTURES the segmenter confuses the
-    heart (esp. thin RV) with: dark lung next door, bright chest wall. All intensities/positions sampled
-    per-sample so contrast stays vendor-agnostic. Heart is painted on top by the caller."""
-    gy = torch.linspace(-1, 1, h, device=dev).view(1, h, 1)
-    gx = torch.linspace(-1, 1, w, device=dev).view(1, 1, w)
-    r = lambda lo, hi: (torch.rand(b, 1, 1, device=dev) * (hi - lo) + lo)        # per-sample U[lo,hi]
-
-    air = r(-1.3, -0.7)                                                          # dark outside the body
-    body_i, fat_i, lung_i = r(-0.2, 0.3), r(0.7, 1.4), r(-1.4, -0.9)
-    body = _ellipse(gy, gx, r(-0.1, 0.1), r(-0.1, 0.1), r(0.75, 0.95), r(0.8, 1.0))
-    inner = _ellipse(gy, gx, r(-0.1, 0.1), r(-0.1, 0.1), r(0.6, 0.78), r(0.62, 0.82))
-    img = air + (body_i - air) * body + (fat_i - body_i) * (body - inner)        # fat rim = body minus inner
-    # two dark lung fields flanking the centre (heart sits between them)
-    for sx in (-1.0, 1.0):
-        lung = _ellipse(gy, gx, r(-0.15, 0.15), sx * r(0.3, 0.5), r(0.3, 0.5), r(0.18, 0.32)) * inner
-        img = img + (lung_i - img) * lung
-    # spine: small bright blob low-centre
-    spine = _ellipse(gy, gx, r(0.55, 0.75), r(-0.08, 0.08), r(0.08, 0.14), r(0.08, 0.14))
-    img = img + (r(0.5, 1.2) - img) * spine
-    # smooth low-frequency texture
-    low = torch.rand(b, 1, 5, 5, device=dev) * 2 - 1
-    img = img + 0.15 * F.interpolate(low, size=(h, w), mode="bicubic", align_corners=False)[:, 0]
-    return img.unsqueeze(1)                                                      # [B,1,H,W]
 
 
 def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
@@ -92,17 +40,20 @@ def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
-                           priors: tuple[torch.Tensor, torch.Tensor] | None = None,
                            real_img: torch.Tensor | None = None
                            ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
     mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
     cfg.deform>0 warps the labels first (new anatomy; returned mask is the warped one so the target
-    stays aligned). With cfg.realistic + `priors`=(means,stds) from measure_class_stats, each class is
-    painted around its REAL mean/std (jittered) — the recipe that transfers. Else legacy pure-random
-    U[cfg.mu]/U[cfg.sigma] (ablation only). Background (label 0) is painted too -> full image.
+    stays aligned). Each class is painted by the bSSFP SIGNAL of its tissue (mri_physics) under
+    per-sample swept TR/flip/field -> physical, vendor-randomized contrast. With bg_mode='partition'
+    the background is split by REAL per-slice intensity into tissue tiers (real SHAPES) and painted by
+    tissue too -> whole-FOV physical synth. `real_img` supplies those bg shapes (and the hybrid bg).
     """
+    import math
+    from .mri_physics import bssfp_signal, tissue_params
+
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
@@ -111,11 +62,8 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
-    # --- extend the label map to the whole FOV when partitioning the background ---
-    # Heart-only labels leave the bg as one flat blob (the pure-synth wall). Split it by REAL per-slice
-    # intensity into bg_tiers tissue tiers (dark lung -> bright fat) -> the bg gets REAL anatomical
-    # shapes (lungs land where they are), painted from per-tier priors. n_paint = heart + bg tiers.
-    pmean, pstd = priors if priors is not None else (None, None)
+    # --- extend the label map to the whole FOV: split the bg by REAL per-slice intensity into bg_tiers
+    #     tissue tiers (lungs/fat land where they really are = real SHAPES), each painted by tissue. ---
     n_paint = n_classes
     ext = mask
     if cfg.bg_mode == "partition" and real_img is not None and not hybrid:
@@ -124,29 +72,21 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         tier = torch.bucketize(real_img[:, 0].contiguous(), thr)            # [B,H,W] in 0..K-1
         ext = torch.where(mask == 0, n_classes + tier, mask)               # bg -> n_classes+tier
         n_paint = n_classes + K
-        # per-tier priors from the REAL bg intensity (shape from partition, appearance from these stats)
-        bg_mean = torch.zeros(K, device=dev)
-        bg_std = torch.full((K,), 0.5, device=dev)
-        rv = real_img[:, 0]
-        for k in range(K):
-            v = rv[(mask == 0) & (tier == k)]
-            if v.numel() > 10:
-                bg_mean[k] = v.mean()
-                bg_std[k] = v.std().clamp_min(1e-3)
-        if pmean is not None:
-            pmean = torch.cat([pmean, bg_mean]); pstd = torch.cat([pstd, bg_std])
     oh = F.one_hot(ext, n_paint).permute(0, 3, 1, 2).float()                # [B,n_paint,H,W]
 
-    # --- per-label Gaussian paint ---
-    if cfg.realistic and pmean is not None:
-        mu = pmean[None, :] + cfg.jitter * torch.randn(b, n_paint, device=dev)     # ordering kept, jittered
-        ss_lo, ss_hi = cfg.std_scale
-        sg = pstd[None, :] * (torch.rand(b, n_paint, device=dev) * (ss_hi - ss_lo) + ss_lo)
-    else:                                                                    # legacy pure-random (ablation)
-        mu_lo, mu_hi = cfg.mu
-        sg_lo, sg_hi = cfg.sigma
-        mu = torch.rand(b, n_paint, device=dev) * (mu_hi - mu_lo) + mu_lo
-        sg = torch.rand(b, n_paint, device=dev) * (sg_hi - sg_lo) + sg_lo
+    # --- physical paint: each class' intensity = balanced-SSFP signal from its tissue T1/T2/PD under
+    #     per-sample swept sequence params (TR, flip) and FIELD strength (1.5T/3T = cross-vendor axis). ---
+    # tissue params per available field -> [n_fields, n_paint]; pick one field per sample
+    params = [tissue_params(n_classes, n_paint - n_classes, float(f), dev) for f in cfg.fields]
+    t1s = torch.stack([p[0] for p in params]); t2s = torch.stack([p[1] for p in params])
+    pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
+    fi = torch.randint(len(cfg.fields), (b,), device=dev)                    # per-sample field index
+    t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
+    tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
+    fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
+    mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint]
+    mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
+    sg = mu.abs() * cfg.texture                                              # within-class texture
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
@@ -156,12 +96,6 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         kpv = kpv.view(1, 1, *kpv.shape)
         mu_map = F.conv2d(mu_map, kpv, padding=kpv.shape[-1] // 2)
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
-
-    # --- procedural thorax background: replace the bg blob with structured surroundings (dark lungs,
-    #     fat rim, spine) the net confuses the heart with. Heart classes keep their paint. ---
-    if cfg.bg_mode == "thorax" and not hybrid:
-        thorax = _procedural_thorax(b, *mask.shape[-2:], dev)
-        img = torch.where((mask > 0)[:, None], img, thorax)
 
     # --- smooth multiplicative bias field (coarse 4x4 -> bilinear upsample; the N4 dual) ---
     if cfg.bias_strength > 0:

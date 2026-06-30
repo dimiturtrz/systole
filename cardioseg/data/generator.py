@@ -19,8 +19,7 @@ import torch
 from core.hparams import GeneratorCfg
 
 from .augment import augment_batch, soften
-from .synth import synthesize_from_labels, measure_class_stats
-from .priors import load_synth_priors
+from .synth import synthesize_from_labels
 
 
 class Generator:
@@ -37,13 +36,8 @@ class Generator:
         self.device = device
         self.synth_on = cfg.synth.synth_p > 0
         self.soft_sigma = cfg.aug.soft_label_sigma
-        # Realistic intensity priors (blood bright, myo dark) — the cue that makes synth transferable.
-        # Prefer the provenance-tracked reference store (<data>/reference/synth_priors.yaml); fall back
-        # to measuring on the fly from the real slices if it's absent (same numbers, no provenance).
-        self.priors = None
-        if self.synth_on and cfg.synth.realistic:
-            self.priors = (load_synth_priors(n_classes, device)
-                           or tuple(t.to(device) for t in measure_class_stats(X, Y, n_classes)))
+        # Contrast is physical (bSSFP from tissue params, core.data.mri_physics) — no measured priors
+        # needed. The background partition pulls its SHAPES from the real slice (real_img) at batch time.
 
     def batch(self, idx: torch.Tensor, pin: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         """Collapsed batch for the given resident indices. Order: index real -> per-sample synth replace
@@ -54,7 +48,7 @@ class Generator:
             # invent image+anatomy from labels for a per-sample fraction (synth_p=1 -> pure synth). With
             # bg partition the synth target is the warped mask -> blend both x and y per sample. Paint
             # BEFORE augment so affine geometry warps synth picture + mask together.
-            xs, ys = synthesize_from_labels(y, self.cfg.synth, self.n_classes, self.priors, real_img=x)
+            xs, ys = synthesize_from_labels(y, self.cfg.synth, self.n_classes, real_img=x)
             do = (torch.rand(x.shape[0], 1, 1, 1, device=self.device) < self.cfg.synth.synth_p).float()
             x = do * xs + (1 - do) * x
             y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)

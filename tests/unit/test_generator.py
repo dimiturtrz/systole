@@ -34,16 +34,16 @@ def test_batch_shapes_and_soft_target():
     assert torch.allclose(yt.sum(1), torch.ones(4, 16, 16), atol=1e-4)   # soft probs sum to 1
 
 
-def test_synth_off_measures_no_priors():
-    """synth_p=0 -> generator does no synth, holds no priors (pure real passthrough + aug)."""
+def test_synth_off_is_pure_real():
+    """synth_p=0 -> generator does no synth (pure real passthrough + aug)."""
     gen, _, _ = _gen(0.0)
-    assert gen.synth_on is False and gen.priors is None
+    assert gen.synth_on is False
 
 
-def test_synth_on_builds_priors_and_runs():
-    """synth_p=1 -> priors measured from the real set (reference absent here), batch produces synth."""
+def test_synth_on_runs():
+    """synth_p=1 -> physical (bSSFP) synth batch, right shapes (no priors needed)."""
     gen, _, _ = _gen(1.0)
-    assert gen.synth_on is True and gen.priors is not None
+    assert gen.synth_on is True
     x, yt = gen.batch(torch.arange(4))
     assert x.shape == (4, 1, 16, 16) and yt.shape == (4, N, 16, 16)
 
