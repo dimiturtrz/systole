@@ -138,7 +138,8 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
                 # synth, the goal). cfg.deform>0 warps the labels too, so the synth target is the
                 # WARPED mask -> blend both x and y per sample. Paint BEFORE augment so affine geometry
                 # warps synth picture + mask together; result is z-scored like real input.
-                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels, synth_priors)
+                xs, ys = synthesize_from_labels(y, cfg.synth, cfg.model.out_channels, synth_priors,
+                                                real_img=x)
                 do = (torch.rand(x.shape[0], 1, 1, 1, device=device) < cfg.synth.synth_p).float()
                 x = do * xs + (1 - do) * x
                 y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)

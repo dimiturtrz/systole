@@ -79,6 +79,10 @@ class SynthCfg(BaseModel):
     # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
     # random (mu/sigma below), kept only for ablation.
     realistic: bool = True
+    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: composite the synth heart onto the
+    #                                                REAL background (isolates whether bg realism is the
+    #                                                wall for pure-synth). Forces deform off (heart must
+    #                                                align with the real bg's heart hole). Not pure-synth.
     jitter: float = Field(0.4, ge=0)               # per-class mean perturbation std (contrast aug breadth)
     std_scale: tuple[float, float] = (0.7, 1.4)     # multiply each class's real texture std
     mu: tuple[float, float] = (0.0, 1.0)            # legacy pure-random per-class mean (realistic=False)

@@ -57,7 +57,8 @@ def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
-                           priors: tuple[torch.Tensor, torch.Tensor] | None = None
+                           priors: tuple[torch.Tensor, torch.Tensor] | None = None,
+                           real_img: torch.Tensor | None = None
                            ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
@@ -70,7 +71,8 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
-    if cfg.deform > 0:
+    hybrid = cfg.keep_real_bg and real_img is not None
+    if cfg.deform > 0 and not hybrid:                # hybrid: keep heart aligned with real bg's hole
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
@@ -111,6 +113,12 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         re = img + cfg.noise * torch.randn_like(img)
         im = cfg.noise * torch.randn_like(img)
         img = torch.sqrt(re * re + im * im)
+
+    # --- hybrid diagnostic: paste the synth heart onto the REAL background (heart voxels = synth,
+    #     everything else = real). Isolates whether bg realism is the wall for pure-synth. ---
+    if hybrid:
+        fg = (mask > 0)[:, None]
+        img = torch.where(fg, img, real_img)
 
     # --- z-score per sample (match the real preprocessed input distribution) ---
     m = img.mean((1, 2, 3), keepdim=True)
