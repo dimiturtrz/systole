@@ -91,3 +91,19 @@ def test_load_synth_priors_from_reference(tmp_path):
     assert torch.allclose(stds, torch.tensor([0.7, 0.3, 0.2, 0.4]), atol=1e-5)
     # blood (RV, cav) brighter than myo — the ordering that makes synth transferable
     assert means[1] > means[2] and means[3] > means[2]
+
+
+def test_partition_bg_structures_image_keeps_target():
+    """bg_mode='partition' splits the background by REAL per-slice intensity into tiers -> the image's
+    bg gets structure (>1 level), but the returned TARGET keeps only real labels (bg stays 0). This is
+    the fix that took pure-synth 0.39 -> 0.66."""
+    Y = _mask()
+    real = torch.randn(2, 1, 8, 8)                       # varied bg intensity -> tiers differ
+    priors = (torch.tensor([0.0, 1.0, -0.3, 0.8]), torch.tensor([0.3, 0.2, 0.2, 0.3]))
+    cfg = SynthCfg(synth_p=1.0, realistic=True, bg_mode="partition", bg_tiers=4, deform=0.0,
+                   jitter=0.0, std_scale=(0.0, 0.0), bias_strength=0.0, blur=(0.0, 0.0), noise=0.0)
+    torch.manual_seed(0)
+    img, msk = synthesize_from_labels(Y, cfg, N, priors, real_img=real)
+    assert set(msk.unique().tolist()).issubset(set(range(N)))     # target = real labels only (bg=0)
+    bg = (Y[0] == 0)
+    assert img[0, 0][bg].unique().numel() > 1                     # bg painted with structure, not flat
