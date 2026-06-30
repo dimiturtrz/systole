@@ -72,3 +72,22 @@ def test_seed_deterministic():
     torch.manual_seed(7); a, ma = synthesize_from_labels(m, cfg, N)
     torch.manual_seed(7); b, mb = synthesize_from_labels(m, cfg, N)
     assert torch.equal(a, b) and torch.equal(ma, mb)
+
+
+def test_load_synth_priors_from_reference(tmp_path):
+    """Priors round-trip through the reference store: a synth_priors.yaml -> (means,stds) tensors
+    indexed by class (0=bg,1=RV,2=myo,3=cav); unverified entries are skipped (returns None)."""
+    from core.reference import Reference
+    from cardioseg.training.priors import load_synth_priors
+    (tmp_path / "synth_priors.yaml").write_text(
+        "synth_priors:\n  intensity:\n"
+        "    background: {value: [0.0, 0.7], source: computed, based_on: t, extracted_by: computed, verified: true}\n"
+        "    RV:      {value: [1.0, 0.3], source: computed, based_on: t, extracted_by: computed, verified: true}\n"
+        "    LV-myo:  {value: [-0.3, 0.2], source: computed, based_on: t, extracted_by: computed, verified: true}\n"
+        "    LV-cav:  {value: [0.8, 0.4], source: computed, based_on: t, extracted_by: computed, verified: true}\n")
+    ref = Reference(root=tmp_path)
+    means, stds = load_synth_priors(N, "cpu", ref=ref)
+    assert torch.allclose(means, torch.tensor([0.0, 1.0, -0.3, 0.8]), atol=1e-5)
+    assert torch.allclose(stds, torch.tensor([0.7, 0.3, 0.2, 0.4]), atol=1e-5)
+    # blood (RV, cav) brighter than myo — the ordering that makes synth transferable
+    assert means[1] > means[2] and means[3] > means[2]

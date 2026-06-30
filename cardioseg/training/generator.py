@@ -20,6 +20,7 @@ from core.hparams import GeneratorCfg
 
 from .augment import augment_batch, soften
 from .synth import synthesize_from_labels, measure_class_stats
+from .priors import load_synth_priors
 
 
 class Generator:
@@ -36,11 +37,13 @@ class Generator:
         self.device = device
         self.synth_on = cfg.synth.synth_p > 0
         self.soft_sigma = cfg.aug.soft_label_sigma
-        # Realistic intensity priors: per-class mean/std measured ONCE from the real slices, so synth
-        # paints classes around their true distribution (blood bright, myo dark) instead of random.
+        # Realistic intensity priors (blood bright, myo dark) — the cue that makes synth transferable.
+        # Prefer the provenance-tracked reference store (<data>/reference/synth_priors.yaml); fall back
+        # to measuring on the fly from the real slices if it's absent (same numbers, no provenance).
         self.priors = None
         if self.synth_on and cfg.synth.realistic:
-            self.priors = tuple(t.to(device) for t in measure_class_stats(X, Y, n_classes))
+            self.priors = (load_synth_priors(n_classes, device)
+                           or tuple(t.to(device) for t in measure_class_stats(X, Y, n_classes)))
 
     def batch(self, idx: torch.Tensor, pin: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         """Collapsed batch for the given resident indices. Order: index real -> per-sample synth replace
