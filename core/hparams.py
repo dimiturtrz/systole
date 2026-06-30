@@ -128,6 +128,12 @@ class TrainCfg(BaseModel):
     n_patients: int = Field(0, ge=0)               # debug cap (0 = all)
     device: Optional[str] = None
     out_dir: Optional[str] = None
+    # Where the preloaded slice tensors live during training — the speed/capacity tradeoff
+    # (disk < ram < vram capacity; on-demand < cpu < gpu speed). "gpu": resident in VRAM, epochs are
+    # pure-GPU (fastest; capped by VRAM — the cardiac set is ~3GB, fits easily). "cpu": resident in
+    # RAM, batches copied to the GPU per step (for sets too big for VRAM). The loop is identical —
+    # it does .to(device) either way (a no-op when already on GPU).
+    residency: Literal["gpu", "cpu"] = "gpu"
 
 
 def _coerce(val: str, cur):

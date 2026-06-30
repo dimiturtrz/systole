@@ -17,8 +17,9 @@ from core.labels import FOREGROUND
 from ..tracking import track_run
 
 
-def _val_dice(model, val_dl, device) -> float:
-    """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal."""
+def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
+    """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
+    Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
     import torch
     import numpy as np
 
@@ -26,8 +27,9 @@ def _val_dice(model, val_dl, device) -> float:
     denom = {c: 0.0 for c in FOREGROUND}
     model.eval()
     with torch.no_grad():
-        for x, y in val_dl:
-            x, y = x.to(device), y.to(device)
+        for i in range(0, Ximg.shape[0], batch):
+            x = Ximg[i:i + batch].to(device)
+            y = Ymsk[i:i + batch].to(device).long()
             pred = model(x).argmax(1)
             for c in FOREGROUND:
                 p, g = pred == c, y == c
@@ -40,11 +42,10 @@ def train_seg(cfg: TrainCfg):
     """Train from one TrainCfg. Returns (model, results). Serializes config.json + metrics.json."""
     import numpy as np
     import torch
-    from torch.utils.data import DataLoader
     from .losses import build_loss
     from ..evaluation.validate import validate, summarize
     from core.model import build_unet, resolve_device
-    from .dataset import datasets
+    from .dataset import load_to_gpu
     from .augment import augment_batch
     from core.data import store, splits
     from core.obs import setup, timed, progress
@@ -73,18 +74,21 @@ def train_seg(cfg: TrainCfg):
         train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
         test_df = test_df.head(cfg.n_patients)
 
-    with timed(log, f"build slice datasets ({len(train_df)}+{len(val_df)} subjects)"):
-        train_ds, val_ds = datasets(splits.paths(train_df), splits.paths(val_df), d.size)
-    log.info("patients: %d train / %d val / %d test | slices: %d train / %d val",
-             len(train_df), len(val_df), len(test_df), len(train_ds), len(val_ds))
-
-    # Dataset is fully in RAM + augmentation is GPU-batched, so DataLoader workers=0: on Windows
-    # num_workers>0 PICKLES the whole in-RAM dataset to every worker (huge stall, GPU starves).
-    # cfg.workers parallelizes store CONSOLIDATION (ThreadPool), not this loop.
+    # Preload ALL slices into device memory (VRAM): after this, the epoch loop is pure GPU — index a
+    # permutation, augment, train; zero per-epoch CPU/disk/host↔device copy. The slice set fits the
+    # card (~3 GB at 256px). No DataLoader/workers (which on Windows pickle the whole RAM dataset per
+    # worker and starve the GPU). Prefer fast all-GPU epochs over disk-streamed ones.
     pin = device == "cuda"
-    augment = train_ds.augment
-    dl = DataLoader(train_ds, batch_size=cfg.batch, shuffle=True, drop_last=True, num_workers=0, pin_memory=pin)
-    val_dl = DataLoader(val_ds, batch_size=cfg.batch, num_workers=0, pin_memory=pin)
+    # residency = where the preloaded tensors live (gpu=VRAM-resident / cpu=RAM, copied per batch).
+    # gpu only makes sense with a cuda device; fall back to cpu residency otherwise.
+    data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
+    with timed(log, f"preload slices (residency={cfg.residency}->{data_device}, {len(train_df)}+{len(val_df)} subj)"):
+        Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+        Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
+    augment = True
+    nb = max(1, Xtr.shape[0] // cfg.batch)
+    log.info("patients: %d train / %d val / %d test | slices: %d train / %d val (resident on %s, compute %s)",
+             len(train_df), len(val_df), len(test_df), Xtr.shape[0], Xva.shape[0], data_device, device)
     model = build_unet(cfg.model).to(device)
     # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
     # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
@@ -99,8 +103,7 @@ def train_seg(cfg: TrainCfg):
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
-    best_dice, best_state, bad = -1.0, None, 0
-    nb = len(dl)
+    best_dice, best_state, bad = -1.0, None, 0   # nb (batches/epoch) computed above from the resident set
     trk = track_run("cardioseg", out.name, run_dir=out,
                     params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)},
                     tags={"split": "+".join(d.test_vendors) or "legacy", "seed": cfg.seed})
@@ -111,9 +114,12 @@ def train_seg(cfg: TrainCfg):
         if hasattr(loss_fn, "epoch"):
             loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
         tot = 0.0
-        for x, y in progress(dl, f"epoch {ep}", total=nb):
-            x = x.to(device, non_blocking=pin)
-            y = y.to(device, non_blocking=pin)                # [B,H,W]
+        perm = torch.randperm(Xtr.shape[0], device=Xtr.device)   # shuffle on the data's device
+        for bi in progress(range(nb), f"epoch {ep}", total=nb):
+            idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
+            # .to(device) is a no-op when residency=gpu (already there); the host->device copy when cpu
+            x = Xtr[idx].to(device, non_blocking=pin)            # [B,1,H,W] f32
+            y = Ytr[idx].to(device, non_blocking=pin).long()     # [B,H,W]
             if augment:
                 x, y = augment_batch(x, y, cfg.aug)            # GPU-batched, hyperparams from cfg.aug
             # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
@@ -125,7 +131,7 @@ def train_seg(cfg: TrainCfg):
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
-        vd = _val_dice(model, val_dl, device)                  # fast batched slice-Dice (no TTA)
+        vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
         improved = vd > best_dice + 1e-4
         if improved:
             best_dice, bad = vd, 0

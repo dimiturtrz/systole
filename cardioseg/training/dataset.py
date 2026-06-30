@@ -77,6 +77,25 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
+def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",
+                frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False):
+    """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
+
+    The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training
+    loop indexes these tensors on the GPU each epoch — zero per-epoch CPU / disk / host↔device copy
+    (everything after setup runs on the GPU). The cardiac slice set fits VRAM easily (~3 GB at 256px
+    on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
+    (CI / no-GPU) — same index-batched loop, just on CPU."""
+    import torch
+    ds = ACDCSliceDataset(npz_paths, size=size, frames=frames, keep_empty=keep_empty)
+    if not ds.items:
+        z = torch.zeros((0, size, size))
+        return z[:, None].to(device), z.to(torch.uint8).to(device)
+    imgs = np.stack([fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
+    msks = np.stack([fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
+    return torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
+
+
 def datasets(train_paths: list[str], val_paths: list[str], size: int = SIZE
              ) -> tuple[ACDCSliceDataset, ACDCSliceDataset]:
     """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
