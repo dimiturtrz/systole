@@ -9,11 +9,23 @@ source "$(dirname "$0")/env.sh"
 DS="$nnUNet_raw/Dataset029_BATTERY"
 PRED="$NN/pred/Dataset029"
 
-echo "=== clean stale preprocessed/results (else a prior split's splits_final.json/data leaks) ==="
-rm -rf "$nnUNet_preprocessed/Dataset029_BATTERY" "$nnUNet_results/Dataset029_BATTERY" "$PRED"
-
-echo "=== plan + preprocess ==="
-nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity
+PREP="$nnUNet_preprocessed/Dataset029_BATTERY"
+# Always re-train + re-predict fresh (the actual baseline work). But PREPROCESS only when the split
+# changed — it's I/O-heavy (~12min on a 9p/WSL mount) and pointless to redo for identical data.
+rm -rf "$nnUNet_results/Dataset029_BATTERY" "$PRED"
+# Fingerprint the raw dataset (case lists + dataset.json). This is what makes skipping SAFE: a
+# different split -> different cases -> mismatch -> rebuild, so a prior split's splits_final.json
+# can't leak (the original reason this wiped unconditionally). Force with FORCE_PREPROCESS=1.
+FP="$PREP/.battery_fingerprint"
+NEWFP=$( (cat "$DS/dataset.json"; ls "$DS/imagesTr" "$DS/imagesTs" | sort) | sha1sum | cut -d' ' -f1 )
+if [ "${FORCE_PREPROCESS:-0}" != "1" ] && [ -f "$FP" ] && [ "$(cat "$FP" 2>/dev/null)" = "$NEWFP" ]; then
+    echo "=== preprocessed cache matches this split (fingerprint $NEWFP) — skip plan+preprocess ==="
+else
+    echo "=== split changed/absent -> clean + plan + preprocess ==="
+    rm -rf "$PREP"
+    nnUNetv2_plan_and_preprocess -d 29 --verify_dataset_integrity
+    echo "$NEWFP" > "$FP"
+fi
 
 echo "=== train (2d, fold 0, 50 epochs) ==="
 nnUNetv2_train 29 2d 0 -tr nnUNetTrainer_50epochs
