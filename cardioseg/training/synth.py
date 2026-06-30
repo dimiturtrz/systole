@@ -111,19 +111,42 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
-    oh = F.one_hot(mask, n_classes).permute(0, 3, 1, 2).float()             # [B,C,H,W]
+    # --- extend the label map to the whole FOV when partitioning the background ---
+    # Heart-only labels leave the bg as one flat blob (the pure-synth wall). Split it by REAL per-slice
+    # intensity into bg_tiers tissue tiers (dark lung -> bright fat) -> the bg gets REAL anatomical
+    # shapes (lungs land where they are), painted from per-tier priors. n_paint = heart + bg tiers.
+    pmean, pstd = priors if priors is not None else (None, None)
+    n_paint = n_classes
+    ext = mask
+    if cfg.bg_mode == "partition" and real_img is not None and not hybrid:
+        K = cfg.bg_tiers
+        thr = torch.linspace(-1.0, 1.0, K - 1, device=dev)                  # K-1 thresholds -> K bins
+        tier = torch.bucketize(real_img[:, 0].contiguous(), thr)            # [B,H,W] in 0..K-1
+        ext = torch.where(mask == 0, n_classes + tier, mask)               # bg -> n_classes+tier
+        n_paint = n_classes + K
+        # per-tier priors from the REAL bg intensity (shape from partition, appearance from these stats)
+        bg_mean = torch.zeros(K, device=dev)
+        bg_std = torch.full((K,), 0.5, device=dev)
+        rv = real_img[:, 0]
+        for k in range(K):
+            v = rv[(mask == 0) & (tier == k)]
+            if v.numel() > 10:
+                bg_mean[k] = v.mean()
+                bg_std[k] = v.std().clamp_min(1e-3)
+        if pmean is not None:
+            pmean = torch.cat([pmean, bg_mean]); pstd = torch.cat([pstd, bg_std])
+    oh = F.one_hot(ext, n_paint).permute(0, 3, 1, 2).float()                # [B,n_paint,H,W]
 
     # --- per-label Gaussian paint ---
-    if cfg.realistic and priors is not None:
-        pmean, pstd = priors                                                # [C] real measured priors
-        mu = pmean[None, :] + cfg.jitter * torch.randn(b, n_classes, device=dev)   # ordering kept, jittered
+    if cfg.realistic and pmean is not None:
+        mu = pmean[None, :] + cfg.jitter * torch.randn(b, n_paint, device=dev)     # ordering kept, jittered
         ss_lo, ss_hi = cfg.std_scale
-        sg = pstd[None, :] * (torch.rand(b, n_classes, device=dev) * (ss_hi - ss_lo) + ss_lo)
+        sg = pstd[None, :] * (torch.rand(b, n_paint, device=dev) * (ss_hi - ss_lo) + ss_lo)
     else:                                                                    # legacy pure-random (ablation)
         mu_lo, mu_hi = cfg.mu
         sg_lo, sg_hi = cfg.sigma
-        mu = torch.rand(b, n_classes, device=dev) * (mu_hi - mu_lo) + mu_lo
-        sg = torch.rand(b, n_classes, device=dev) * (sg_hi - sg_lo) + sg_lo
+        mu = torch.rand(b, n_paint, device=dev) * (mu_hi - mu_lo) + mu_lo
+        sg = torch.rand(b, n_paint, device=dev) * (sg_hi - sg_lo) + sg_lo
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture

@@ -79,10 +79,13 @@ class SynthCfg(BaseModel):
     # breadth, z-units); std_scale scales the real within-class texture. realistic=False -> legacy pure
     # random (mu/sigma below), kept only for ablation.
     realistic: bool = True
-    bg_mode: str = "flat"                           # "flat" = single-Gaussian bg | "thorax" = procedural
-    #                                                thorax (body ellipse + dark lungs + fat rim + spine),
-    #                                                randomized — the structures the net confuses RV with.
-    #                                                Aims to close the pure-synth background wall (0.39->?).
+    bg_mode: str = "flat"                           # "flat" single-Gaussian bg | "partition" = split the
+    #                                                bg by REAL per-slice intensity into bg_tiers tissue
+    #                                                tiers (real lung/fat/muscle SHAPES), painted from
+    #                                                per-tier priors+jitter. Real shapes (not procedural
+    #                                                geometry) avoid the overfit shortcut. ("thorax" =
+    #                                                old procedural attempt, deprecated — overfit, 0.16.)
+    bg_tiers: int = Field(4, ge=2)                  # intensity tiers the background is partitioned into
     keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: composite the synth heart onto the
     #                                                REAL background (isolates whether bg realism is the
     #                                                wall for pure-synth). Forces deform off (heart must
