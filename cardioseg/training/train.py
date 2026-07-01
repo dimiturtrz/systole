@@ -89,15 +89,21 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
     with timed(log, f"preload slices (residency={cfg.residency}->{data_device}, {len(train_df)}+{len(val_df)} subj)"):
         if d.anatomy_pool:
-            # TRAIN on synthetic anatomy (Rodero SSM label maps) — zero real data; val/test stay REAL.
+            # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
             import torch as _t
             from core.data.dynamic.anatomy import load_pool
             pool = load_pool(d.anatomy_pool)
-            Ytr = _t.as_tensor(pool, dtype=_t.long, device=data_device)               # [N,H,W] labels
-            Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)     # unused (flat bg, synth_p=1)
+            Ytr = _t.as_tensor(pool, dtype=_t.long, device=data_device)               # [N,H,W] Rodero labels
             cfg.generator.synth.synth_p = 1.0
-            cfg.generator.synth.bg_mode = "flat"                                      # no real image to partition
-            log.info("ANATOMY POOL: %d synth-anatomy slices (train); real val/test held out", Ytr.shape[0])
+            if cfg.generator.synth.bg_mode == "flat":
+                Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device) # ZERO-REAL goalpost (flat bg)
+                log.info("ANATOMY POOL: %d Rodero slices, FLAT bg (zero real data)", Ytr.shape[0])
+            else:
+                # DIAGNOSTIC: Rodero heart on REAL bg shapes (partition) — isolates the anatomy axis from
+                # the bg wall. Pairs each Rodero mask with a random real train image as the bg source.
+                Xr, _ = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                Xtr = Xr[_t.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
+                log.info("ANATOMY POOL: %d Rodero slices on REAL bg (partition, anatomy-axis diagnostic)", Ytr.shape[0])
         else:
             Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
