@@ -68,11 +68,18 @@ class SynthCfg(BaseModel):
     #                                                (mri_physics.derive_acquisition) = intra-machine spread.
     #                                                TR/flip are physics-derived per field now, not the
     #                                                cfg.tr_ms/flip_deg ranges (those = legacy non-derived path).
-    inflow: float = Field(0.0, ge=0, le=1)         # entry-slice INFLOW enhancement: blend blood-pool signal
-    #                                                toward the fresh fully-relaxed value PD*sin(flip) (fresh
-    #                                                unsaturated spins entering the 2D slice each TR) -> the
-    #                                                physical reason cine blood > bSSFP steady-state. f_fresh;
-    #                                                0 = off. Physics-derived replacement for blood_scale (276).
+    inflow: bool = False                           # entry-slice INFLOW enhancement (PHYSICAL, no magic
+    #                                                fraction): per sample f_fresh = min(1, v*TR/thk) from
+    #                                                blood velocity v + slice thickness thk + the derived TR,
+    #                                                then blend blood toward fresh PD*sin(flip) (unsaturated
+    #                                                spins entering the slice) -> the physical reason cine
+    #                                                blood > bSSFP steady-state. Replaces blood_scale/the 0.15
+    #                                                scalar; f emerges from physiology (mean~0.15, distributed).
+    blood_v_cms: tuple[float, float] = (5.0, 90.0) # through-plane blood velocity (cm/s), PHYSIOLOGICAL:
+    #                                                mid-cavity ~5-30, basal/valve-plane E-wave ~80-90
+    #                                                (PMC9843884). The physical input to inflow, sampled per
+    #                                                slice (position-varying) — the source of f's spread.
+    slice_mm: tuple[float, float] = (6.0, 8.0)     # cine slice thickness (mm), SCMR standardized 6-8mm
     derive_acq: bool = False                       # TR/flip from physics (derive_acquisition +
     #                                                derive_flip_range, sampled across the SAR-bounded band)
     #                                                instead of the cfg.tr_ms/flip_deg ranges. OPT-IN: the
@@ -169,11 +176,14 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
-    if cfg.inflow > 0:                            # entry-slice inflow: blend blood toward fresh PD*sin(flip)
-        from .mri_physics import blood_classes    # (fresh unsaturated spins) -> physically brighter cine blood
+    if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
+        from .mri_physics import blood_classes    # from physiological v/thk + derived TR (no magic fraction)
+        v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
+        thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
+        f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
         s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
         for c in blood_classes(n_classes):
-            mu[:, c] = (1 - cfg.inflow) * mu[:, c] + cfg.inflow * s_fresh[:, c]
+            mu[:, c] = (1 - f[:, 0]) * mu[:, c] + f[:, 0] * s_fresh[:, c]     # blend blood toward fresh
     if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
         from .mri_physics import blood_classes
         for c in blood_classes(n_classes):
