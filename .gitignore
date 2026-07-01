@@ -14,6 +14,7 @@ __pycache__/
 *.pth
 .venv/
 runs/
+runs_*.log          # stray training logs written beside runs/ (never in the repo)
 
 # Beads / Dolt files (added by bd init)
 .dolt/

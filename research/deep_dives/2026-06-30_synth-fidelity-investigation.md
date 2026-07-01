@@ -119,3 +119,18 @@ Caveats: single seed (Δ0.05 > the ~0.04 noise band but not yet replicated); 1.6
 (level-match, physics gives the shape); 0.701 still < 0.77 hybrid / 0.86 real — narrowed, not closed.
 Next: seed-replicate; test blood_scale as *augmentation* (synth_p=0.5) — the flagship-relevant path
 (uncalibrated synth-aug was neutral at 0.852 vs 0.864; calibrated may flip it positive).
+
+### Replication + augmentation (2026-07-01)
+- **Pure-synth REPLICATES.** Seed 1: 0.604 → 0.679 (Δ+0.075, RV +0.145); seed 0 was 0.649 → 0.701
+  (Δ+0.052). Two-seed mean **0.627 → 0.690 (+0.063)**, RV the biggest gainer both times. The
+  single-seed caveat is retired — blood_scale=1.6 is a real pure-synth transfer gain.
+- **Augmentation is marginal.** synth_p=0.5: bs1.0 0.845 → bs1.6 0.850 (Δ+0.005, RV +0.022). Does
+  NOT beat the 0.864 real-only baseline. Why: with 50% real in the batch, the real images already
+  supply the correct blood level, so calibrating the synth half adds little. **Calibration matters
+  only when synth is the sole signal.** → blood_scale stays OFF by default (no flagship gain); it is
+  the recommended setting for *pure*-synth training, not augmentation.
+- **Net:** the pure-synth ceiling is genuinely raised (~0.66 → ~0.69, RV shortcut substantially
+  fixed) by one measured scalar — but the gap to real (0.86) / hybrid (0.77) is narrowed, not closed.
+  The differentiated result (physics-based synthetic *training*, cross-vendor, ceiling moved by a
+  fidelity-found calibration) stands; the learned-generator route is no longer the only lever, though
+  it remains the path to fully close the residual.

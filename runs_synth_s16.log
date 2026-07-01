@@ -1,495 +1,0 @@
-D:\personal_projects\cardiac-seg\.venv\Lib\site-packages\torch\cuda\__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
-  import pynvml  # type: ignore[import]
-15:51:30 INFO cardioseg | device=cuda torch=2.12.1+cu130 seed=0 | held out: datasets=['cmrxmotion'] vendors=['Canon', 'GE']
-15:51:30 INFO cardioseg | START store.load + split
-15:51:30 INFO cardioseg | DONE  store.load + split (0.02s)
-15:51:30 INFO cardioseg | START preload slices (residency=gpu->cuda, 495+150 subj)
-load val npz:   0%|          | 0/495 [00:00<?, ?it/s]load val npz:  64%|██████▍   | 318/495 [00:05<00:02, 63.51it/s]load val npz: 100%|██████████| 495/495 [00:08<00:00, 60.40it/s]
-load val npz:   0%|          | 0/150 [00:00<?, ?it/s]load val npz: 100%|██████████| 150/150 [00:02<00:00, 57.65it/s]
-15:51:44 INFO cardioseg | DONE  preload slices (residency=gpu->cuda, 495+150 subj) (14.19s)
-15:51:44 INFO cardioseg | patients: 495 train / 150 val / 147 test | slices: 8307 train / 2842 val (resident on cuda, compute cuda)
-2026/07/01 15:51:51 INFO mlflow.system_metrics.system_metrics_monitor: Started monitoring system metrics.
-2026/07/01 15:51:52 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 0:   0%|          | 0/129 [00:00<?, ?it/s]epoch 0:   1%|          | 1/129 [00:05<11:06,  5.21s/it]epoch 0: 100%|██████████| 129/129 [00:08<00:00, 14.48it/s]
-2026/07/01 15:52:02 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-15:52:02 INFO cardioseg | epoch  0  train_loss 1.2840  val_dice 0.2268 *  (10.5s, 12.2 batch/s)
-epoch 1:   0%|          | 0/129 [00:00<?, ?it/s]epoch 1: 100%|██████████| 129/129 [00:03<00:00, 36.89it/s]
-15:52:06 INFO cardioseg | epoch  1  train_loss 0.7184  val_dice 0.4179 *  (3.8s, 33.6 batch/s)
-epoch 2:   0%|          | 0/129 [00:00<?, ?it/s]epoch 2: 100%|██████████| 129/129 [00:03<00:00, 36.04it/s]
-15:52:10 INFO cardioseg | epoch  2  train_loss 0.5285  val_dice 0.5806 *  (3.9s, 32.8 batch/s)
-epoch 3:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:52:12 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 3: 100%|██████████| 129/129 [00:03<00:00, 36.24it/s]
-15:52:14 INFO cardioseg | epoch  3  train_loss 0.4100  val_dice 0.6390 *  (3.9s, 33.0 batch/s)
-epoch 4:   0%|          | 0/129 [00:00<?, ?it/s]epoch 4: 100%|██████████| 129/129 [00:03<00:00, 34.56it/s]
-15:52:18 INFO cardioseg | epoch  4  train_loss 0.3608  val_dice 0.6482 *  (4.1s, 31.4 batch/s)
-epoch 5:   0%|          | 0/129 [00:00<?, ?it/s]epoch 5: 100%|██████████| 129/129 [00:03<00:00, 37.07it/s]
-2026/07/01 15:52:22 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-15:52:22 INFO cardioseg | epoch  5  train_loss 0.3307  val_dice 0.6146  (3.8s, 33.8 batch/s)
-epoch 6:   0%|          | 0/129 [00:00<?, ?it/s]epoch 6: 100%|██████████| 129/129 [00:03<00:00, 37.31it/s]
-15:52:26 INFO cardioseg | epoch  6  train_loss 0.3150  val_dice 0.6000  (3.8s, 33.9 batch/s)
-epoch 7:   0%|          | 0/129 [00:00<?, ?it/s]epoch 7: 100%|██████████| 129/129 [00:03<00:00, 37.73it/s]
-15:52:30 INFO cardioseg | epoch  7  train_loss 0.3025  val_dice 0.6303  (3.8s, 34.3 batch/s)
-epoch 8:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:52:32 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 8: 100%|██████████| 129/129 [00:03<00:00, 37.22it/s]
-15:52:33 INFO cardioseg | epoch  8  train_loss 0.2959  val_dice 0.6815 *  (3.8s, 33.9 batch/s)
-epoch 9:   0%|          | 0/129 [00:00<?, ?it/s]epoch 9: 100%|██████████| 129/129 [00:03<00:00, 37.17it/s]
-15:52:37 INFO cardioseg | epoch  9  train_loss 0.2877  val_dice 0.7116 *  (3.8s, 33.9 batch/s)
-epoch 10:   0%|          | 0/129 [00:00<?, ?it/s]epoch 10: 100%|██████████| 129/129 [00:03<00:00, 37.69it/s]
-15:52:41 INFO cardioseg | epoch 10  train_loss 0.2811  val_dice 0.6524  (3.8s, 34.3 batch/s)
-epoch 11:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:52:42 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 11: 100%|██████████| 129/129 [00:03<00:00, 37.10it/s]
-15:52:45 INFO cardioseg | epoch 11  train_loss 0.2795  val_dice 0.6386  (3.8s, 33.8 batch/s)
-epoch 12:   0%|          | 0/129 [00:00<?, ?it/s]epoch 12: 100%|██████████| 129/129 [00:03<00:00, 38.17it/s]
-15:52:49 INFO cardioseg | epoch 12  train_loss 0.2722  val_dice 0.6745  (3.7s, 34.7 batch/s)
-epoch 13:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:52:52 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 13: 100%|██████████| 129/129 [00:03<00:00, 36.62it/s]
-15:52:53 INFO cardioseg | epoch 13  train_loss 0.2720  val_dice 0.6935  (3.9s, 33.4 batch/s)
-epoch 14:   0%|          | 0/129 [00:00<?, ?it/s]epoch 14: 100%|██████████| 129/129 [00:03<00:00, 36.74it/s]
-15:52:56 INFO cardioseg | epoch 14  train_loss 0.2656  val_dice 0.6433  (3.9s, 33.5 batch/s)
-epoch 15:   0%|          | 0/129 [00:00<?, ?it/s]epoch 15: 100%|██████████| 129/129 [00:03<00:00, 36.64it/s]
-15:53:00 INFO cardioseg | epoch 15  train_loss 0.2654  val_dice 0.6563  (3.9s, 33.5 batch/s)
-epoch 16:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:02 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 16: 100%|██████████| 129/129 [00:03<00:00, 37.61it/s]
-15:53:04 INFO cardioseg | epoch 16  train_loss 0.2628  val_dice 0.6970  (3.8s, 34.4 batch/s)
-epoch 17:   0%|          | 0/129 [00:00<?, ?it/s]epoch 17: 100%|██████████| 129/129 [00:03<00:00, 37.92it/s]
-15:53:08 INFO cardioseg | epoch 17  train_loss 0.2596  val_dice 0.7150 *  (3.8s, 34.4 batch/s)
-epoch 18:   0%|          | 0/129 [00:00<?, ?it/s]epoch 18: 100%|██████████| 129/129 [00:03<00:00, 38.18it/s]
-15:53:12 INFO cardioseg | epoch 18  train_loss 0.2584  val_dice 0.6826  (3.7s, 34.7 batch/s)
-epoch 19:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:12 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 19: 100%|██████████| 129/129 [00:03<00:00, 37.27it/s]
-15:53:16 INFO cardioseg | epoch 19  train_loss 0.2566  val_dice 0.6701  (3.8s, 34.0 batch/s)
-epoch 20:   0%|          | 0/129 [00:00<?, ?it/s]epoch 20: 100%|██████████| 129/129 [00:03<00:00, 38.15it/s]
-15:53:19 INFO cardioseg | epoch 20  train_loss 0.2560  val_dice 0.5752  (3.7s, 34.7 batch/s)
-epoch 21:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:22 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 21: 100%|██████████| 129/129 [00:03<00:00, 36.52it/s]
-15:53:23 INFO cardioseg | epoch 21  train_loss 0.2536  val_dice 0.6958  (3.9s, 33.3 batch/s)
-epoch 22:   0%|          | 0/129 [00:00<?, ?it/s]epoch 22: 100%|██████████| 129/129 [00:03<00:00, 36.47it/s]
-15:53:27 INFO cardioseg | epoch 22  train_loss 0.2530  val_dice 0.6900  (3.9s, 33.2 batch/s)
-epoch 23:   0%|          | 0/129 [00:00<?, ?it/s]epoch 23: 100%|██████████| 129/129 [00:03<00:00, 36.62it/s]
-15:53:31 INFO cardioseg | epoch 23  train_loss 0.2515  val_dice 0.6786  (3.9s, 33.4 batch/s)
-epoch 24:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:32 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 24: 100%|██████████| 129/129 [00:03<00:00, 36.83it/s]
-15:53:35 INFO cardioseg | epoch 24  train_loss 0.2493  val_dice 0.6374  (3.8s, 33.6 batch/s)
-epoch 25:   0%|          | 0/129 [00:00<?, ?it/s]epoch 25: 100%|██████████| 129/129 [00:03<00:00, 36.66it/s]
-15:53:39 INFO cardioseg | epoch 25  train_loss 0.2510  val_dice 0.6411  (3.9s, 33.4 batch/s)
-epoch 26:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:42 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 26: 100%|██████████| 129/129 [00:03<00:00, 36.91it/s]
-15:53:43 INFO cardioseg | epoch 26  train_loss 0.2484  val_dice 0.6717  (3.8s, 33.7 batch/s)
-epoch 27:   0%|          | 0/129 [00:00<?, ?it/s]epoch 27: 100%|██████████| 129/129 [00:03<00:00, 36.68it/s]
-15:53:47 INFO cardioseg | epoch 27  train_loss 0.2478  val_dice 0.6850  (3.9s, 33.4 batch/s)
-epoch 28:   0%|          | 0/129 [00:00<?, ?it/s]epoch 28: 100%|██████████| 129/129 [00:03<00:00, 36.70it/s]
-15:53:51 INFO cardioseg | epoch 28  train_loss 0.2458  val_dice 0.6250  (3.9s, 33.5 batch/s)
-epoch 29:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:53:52 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 29: 100%|██████████| 129/129 [00:03<00:00, 36.33it/s]
-15:53:55 INFO cardioseg | epoch 29  train_loss 0.2466  val_dice 0.6829  (3.9s, 33.1 batch/s)
-epoch 30:   0%|          | 0/129 [00:00<?, ?it/s]epoch 30: 100%|██████████| 129/129 [00:03<00:00, 36.71it/s]
-15:53:58 INFO cardioseg | epoch 30  train_loss 0.2428  val_dice 0.6819  (3.9s, 33.5 batch/s)
-epoch 31:   0%|          | 0/129 [00:00<?, ?it/s]epoch 31: 100%|██████████| 129/129 [00:03<00:00, 36.81it/s]
-2026/07/01 15:54:02 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-15:54:02 INFO cardioseg | epoch 31  train_loss 0.2433  val_dice 0.7271 *  (3.9s, 33.4 batch/s)
-epoch 32:   0%|          | 0/129 [00:00<?, ?it/s]epoch 32: 100%|██████████| 129/129 [00:03<00:00, 36.78it/s]
-15:54:06 INFO cardioseg | epoch 32  train_loss 0.2426  val_dice 0.6913  (3.8s, 33.6 batch/s)
-epoch 33:   0%|          | 0/129 [00:00<?, ?it/s]epoch 33: 100%|██████████| 129/129 [00:03<00:00, 36.68it/s]
-15:54:10 INFO cardioseg | epoch 33  train_loss 0.2409  val_dice 0.6695  (3.9s, 33.5 batch/s)
-epoch 34:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:54:12 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 34: 100%|██████████| 129/129 [00:03<00:00, 36.82it/s]
-15:54:14 INFO cardioseg | epoch 34  train_loss 0.2410  val_dice 0.6824  (3.8s, 33.6 batch/s)
-epoch 35:   0%|          | 0/129 [00:00<?, ?it/s]epoch 35: 100%|██████████| 129/129 [00:03<00:00, 36.58it/s]
-15:54:18 INFO cardioseg | epoch 35  train_loss 0.2397  val_dice 0.6852  (3.9s, 33.3 batch/s)
-epoch 36:   0%|          | 0/129 [00:00<?, ?it/s]epoch 36: 100%|██████████| 129/129 [00:03<00:00, 36.62it/s]
-15:54:22 INFO cardioseg | epoch 36  train_loss 0.2371  val_dice 0.6814  (3.9s, 33.3 batch/s)
-epoch 37:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:54:22 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 37: 100%|██████████| 129/129 [00:03<00:00, 36.42it/s]
-15:54:26 INFO cardioseg | epoch 37  train_loss 0.2403  val_dice 0.6444  (3.9s, 33.3 batch/s)
-epoch 38:   0%|          | 0/129 [00:00<?, ?it/s]epoch 38: 100%|██████████| 129/129 [00:03<00:00, 36.44it/s]
-15:54:30 INFO cardioseg | epoch 38  train_loss 0.2392  val_dice 0.6941  (3.9s, 33.3 batch/s)
-epoch 39:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:54:32 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 39: 100%|██████████| 129/129 [00:03<00:00, 36.57it/s]
-15:54:33 INFO cardioseg | epoch 39  train_loss 0.2366  val_dice 0.6817  (3.9s, 33.3 batch/s)
-epoch 40:   0%|          | 0/129 [00:00<?, ?it/s]epoch 40: 100%|██████████| 129/129 [00:03<00:00, 37.26it/s]
-15:54:37 INFO cardioseg | epoch 40  train_loss 0.2369  val_dice 0.6854  (3.8s, 33.9 batch/s)
-epoch 41:   0%|          | 0/129 [00:00<?, ?it/s]epoch 41: 100%|██████████| 129/129 [00:03<00:00, 37.38it/s]
-15:54:41 INFO cardioseg | epoch 41  train_loss 0.2350  val_dice 0.6769  (3.8s, 34.0 batch/s)
-epoch 42:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:54:42 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 42: 100%|██████████| 129/129 [00:03<00:00, 37.37it/s]
-15:54:45 INFO cardioseg | epoch 42  train_loss 0.2351  val_dice 0.6086  (3.8s, 34.1 batch/s)
-epoch 43:   0%|          | 0/129 [00:00<?, ?it/s]epoch 43: 100%|██████████| 129/129 [00:03<00:00, 37.33it/s]
-15:54:49 INFO cardioseg | epoch 43  train_loss 0.2360  val_dice 0.6705  (3.8s, 34.0 batch/s)
-epoch 44:   0%|          | 0/129 [00:00<?, ?it/s]epoch 44: 100%|██████████| 129/129 [00:03<00:00, 37.32it/s]
-2026/07/01 15:54:52 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-15:54:53 INFO cardioseg | epoch 44  train_loss 0.2369  val_dice 0.6798  (3.8s, 33.9 batch/s)
-epoch 45:   0%|          | 0/129 [00:00<?, ?it/s]epoch 45: 100%|██████████| 129/129 [00:03<00:00, 37.55it/s]
-15:54:57 INFO cardioseg | epoch 45  train_loss 0.2322  val_dice 0.6710  (3.8s, 34.2 batch/s)
-epoch 46:   0%|          | 0/129 [00:00<?, ?it/s]epoch 46: 100%|██████████| 129/129 [00:03<00:00, 37.60it/s]
-15:55:00 INFO cardioseg | epoch 46  train_loss 0.2328  val_dice 0.6992  (3.8s, 34.3 batch/s)
-epoch 47:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:55:03 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 47: 100%|██████████| 129/129 [00:03<00:00, 37.29it/s]
-15:55:04 INFO cardioseg | epoch 47  train_loss 0.2346  val_dice 0.6964  (3.8s, 34.0 batch/s)
-epoch 48:   0%|          | 0/129 [00:00<?, ?it/s]epoch 48: 100%|██████████| 129/129 [00:03<00:00, 37.43it/s]
-15:55:08 INFO cardioseg | epoch 48  train_loss 0.2302  val_dice 0.6928  (3.8s, 34.1 batch/s)
-epoch 49:   0%|          | 0/129 [00:00<?, ?it/s]epoch 49: 100%|██████████| 129/129 [00:03<00:00, 37.61it/s]
-15:55:12 INFO cardioseg | epoch 49  train_loss 0.2311  val_dice 0.6791  (3.8s, 34.3 batch/s)
-epoch 50:   0%|          | 0/129 [00:00<?, ?it/s]2026/07/01 15:55:13 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-epoch 50: 100%|██████████| 129/129 [00:03<00:00, 37.68it/s]
-15:55:16 INFO cardioseg | epoch 50  train_loss 0.2342  val_dice 0.6483  (3.8s, 34.3 batch/s)
-epoch 51:   0%|          | 0/129 [00:00<?, ?it/s]epoch 51: 100%|██████████| 129/129 [00:03<00:00, 38.53it/s]
-15:55:19 INFO cardioseg | epoch 51  train_loss 0.2316  val_dice 0.6922  (3.7s, 35.1 batch/s)
-15:55:19 INFO cardioseg | early stop @ epoch 51 (no val gain for 20); best val_dice 0.7271
-15:55:19 INFO cardioseg | ===== VALIDATION =====
-2026/07/01 15:55:23 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:55:33 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:55:43 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:55:53 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:56:03 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:56:13 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:56:23 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:56:33 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-
-=== VAL Dice (per class, pooled over slices) ===
-  RV      (label 1): 0.702
-  LV-myo  (label 2): 0.715
-  LV-cav  (label 3): 0.822
-  mean: 0.746
-
-=== VAL boundary (median over volumes, mm) ===
-  RV      HD95 10.86  ASSD  2.67
-  LV-myo  HD95  6.36  ASSD  1.25
-  LV-cav  HD95  6.09  ASSD  1.03
-
-=== VAL EF: GT vs predicted ===
-  patient001  DCM    GT  23.0%  pred  22.5%  |d|  0.5
-  patient002  DCM    GT  28.9%  pred  31.2%  |d|  2.3
-  patient003  DCM    GT  13.2%  pred  12.8%  |d|  0.3
-  patient004  DCM    GT  13.1%  pred  14.6%  |d|  1.5
-  patient005  DCM    GT  22.3%  pred  31.8%  |d|  9.5
-  patient006  DCM    GT  14.2%  pred  18.0%  |d|  3.8
-  patient007  DCM    GT  10.2%  pred  10.2%  |d|  0.0
-  patient008  DCM    GT  17.4%  pred  12.4%  |d|  5.0
-  patient009  DCM    GT  15.2%  pred  15.6%  |d|  0.4
-  patient010  DCM    GT  11.0%  pred  12.5%  |d|  1.6
-  patient011  DCM    GT  12.1%  pred  13.9%  |d|  1.8
-  patient012  DCM    GT  24.3%  pred  23.1%  |d|  1.2
-  patient013  DCM    GT  30.9%  pred  29.7%  |d|  1.1
-  patient014  DCM    GT  14.0%  pred  12.2%  |d|  1.8
-  patient015  DCM    GT  25.6%  pred  33.2%  |d|  7.6
-  patient016  DCM    GT  10.3%  pred  10.1%  |d|  0.2
-  patient017  DCM    GT  13.5%  pred  10.4%  |d|  3.1
-  patient018  DCM    GT  22.7%  pred  24.7%  |d|  2.0
-  patient019  DCM    GT  27.2%  pred  28.9%  |d|  1.7
-  patient020  DCM    GT  17.5%  pred   8.6%  |d|  8.9
-  patient021  HCM    GT  67.5%  pred  53.0%  |d| 14.6
-  patient022  HCM    GT  64.7%  pred  32.4%  |d| 32.3
-  patient023  HCM    GT  69.5%  pred -53.5%  |d| 123.0
-  patient024  HCM    GT  70.4%  pred  30.8%  |d| 39.6
-  patient025  HCM    GT  62.6%  pred  34.3%  |d| 28.4
-  patient026  HCM    GT  50.8%  pred  -1.7%  |d| 52.5
-  patient027  HCM    GT  70.1%  pred  48.3%  |d| 21.8
-  patient028  HCM    GT  68.7%  pred -74.7%  |d| 143.4
-  patient029  HCM    GT  82.0%  pred -27.2%  |d| 109.2
-  patient030  HCM    GT  76.8%  pred -32.8%  |d| 109.6
-  patient031  HCM    GT  73.4%  pred  51.7%  |d| 21.7
-  patient032  HCM    GT  79.3%  pred  67.0%  |d| 12.3
-  patient033  HCM    GT  73.2%  pred  41.9%  |d| 31.2
-  patient034  HCM    GT  77.2%  pred -74.0%  |d| 151.2
-  patient035  HCM    GT  66.6%  pred  44.0%  |d| 22.6
-  patient036  HCM    GT  60.4%  pred  62.9%  |d|  2.5
-  patient037  HCM    GT  64.7%  pred -88.4%  |d| 153.2
-  patient038  HCM    GT  52.9%  pred  32.3%  |d| 20.6
-  patient039  HCM    GT  71.6%  pred -12.8%  |d| 84.4
-  patient040  HCM    GT  50.9%  pred  22.1%  |d| 28.8
-  patient041  MINF   GT  36.3%  pred -16.6%  |d| 52.9
-  patient042  MINF   GT  33.6%  pred  32.6%  |d|  1.0
-  patient043  MINF   GT  33.3%  pred  26.1%  |d|  7.1
-  patient044  MINF   GT  38.4%  pred  36.6%  |d|  1.8
-  patient045  MINF   GT  30.1%  pred  25.4%  |d|  4.7
-  patient046  MINF   GT  41.5%  pred  44.8%  |d|  3.3
-  patient047  MINF   GT  16.6%  pred   9.2%  |d|  7.4
-  patient048  MINF   GT  32.2%  pred  22.4%  |d|  9.8
-  patient049  MINF   GT  20.4%  pred  27.8%  |d|  7.4
-  patient050  MINF   GT  16.5%  pred  30.0%  |d| 13.5
-  patient051  MINF   GT  43.8%  pred  38.7%  |d|  5.1
-  patient052  MINF   GT  34.2%  pred  32.3%  |d|  2.0
-  patient053  MINF   GT  25.3%  pred  29.6%  |d|  4.3
-  patient054  MINF   GT  25.6%  pred  26.0%  |d|  0.4
-  patient055  MINF   GT  28.5%  pred  17.0%  |d| 11.6
-  patient056  MINF   GT  37.3%  pred  40.1%  |d|  2.8
-  patient057  MINF   GT  24.4%  pred  12.1%  |d| 12.2
-  patient058  MINF   GT  25.4%  pred  34.6%  |d|  9.2
-  patient059  MINF   GT  41.3%  pred  35.8%  |d|  5.5
-  patient060  MINF   GT  35.7%  pred  28.5%  |d|  7.2
-  patient061  NOR    GT  62.7%  pred  45.0%  |d| 17.7
-  patient062  NOR    GT  57.3%  pred  54.8%  |d|  2.4
-  patient063  NOR    GT  73.3%  pred  10.2%  |d| 63.1
-  patient064  NOR    GT  55.8%  pred  42.4%  |d| 13.4
-  patient065  NOR    GT  65.7%  pred  56.3%  |d|  9.4
-  patient066  NOR    GT  64.7%  pred  53.6%  |d| 11.2
-  patient067  NOR    GT  60.1%  pred  58.1%  |d|  2.1
-  patient068  NOR    GT  60.7%  pred  62.1%  |d|  1.5
-  patient069  NOR    GT  56.1%  pred  57.0%  |d|  1.0
-  patient070  NOR    GT  63.4%  pred  52.7%  |d| 10.7
-  patient071  NOR    GT  54.7%  pred  54.8%  |d|  0.1
-  patient072  NOR    GT  53.5%  pred  43.6%  |d|  9.9
-  patient073  NOR    GT  63.4%  pred  29.7%  |d| 33.8
-  patient074  NOR    GT  58.2%  pred  48.9%  |d|  9.3
-  patient075  NOR    GT  51.7%  pred  48.6%  |d|  3.1
-  patient076  NOR    GT  58.3%  pred  48.9%  |d|  9.4
-  patient077  NOR    GT  66.5%  pred  39.3%  |d| 27.3
-  patient078  NOR    GT  63.1%  pred  24.2%  |d| 38.9
-  patient079  NOR    GT  57.2%  pred  30.6%  |d| 26.6
-  patient080  NOR    GT  62.1%  pred  55.6%  |d|  6.5
-  patient081  RV     GT  55.5%  pred  48.6%  |d|  6.9
-  patient082  RV     GT  55.0%  pred  37.6%  |d| 17.5
-  patient083  RV     GT  52.8%  pred  54.2%  |d|  1.4
-  patient084  RV     GT  60.8%  pred  69.5%  |d|  8.7
-  patient085  RV     GT  60.0%  pred  69.3%  |d|  9.3
-  patient086  RV     GT  62.7%  pred   9.2%  |d| 53.5
-  patient087  RV     GT  46.8%  pred  18.4%  |d| 28.4
-  patient088  RV     GT  48.4%  pred  36.8%  |d| 11.6
-  patient089  RV     GT  63.7%  pred  59.7%  |d|  4.1
-  patient090  RV     GT  45.2%  pred  60.3%  |d| 15.0
-  patient091  RV     GT  56.0%  pred  55.8%  |d|  0.2
-  patient092  RV     GT  60.9%  pred  90.0%  |d| 29.1
-  patient093  RV     GT  57.7%  pred  43.4%  |d| 14.3
-  patient094  RV     GT  43.2%  pred  62.6%  |d| 19.4
-  patient095  RV     GT  54.2%  pred  58.9%  |d|  4.8
-  patient096  RV     GT  50.4%  pred  54.9%  |d|  4.5
-  patient097  RV     GT  59.3%  pred  60.6%  |d|  1.3
-  patient098  RV     GT  56.3%  pred  11.4%  |d| 44.9
-  patient099  RV     GT  47.7%  pred  40.8%  |d|  6.9
-  patient100  RV     GT  58.1%  pred  56.6%  |d|  1.5
-  patient101  DCM    GT  29.8%  pred  33.4%  |d|  3.7
-  patient102  NOR    GT  70.6%  pred  47.2%  |d| 23.4
-  patient103  MINF   GT  26.2%  pred  29.4%  |d|  3.2
-  patient104  HCM    GT  84.3%  pred   7.3%  |d| 77.0
-  patient105  HCM    GT  80.4%  pred  40.3%  |d| 40.0
-  patient106  DCM    GT   7.5%  pred  10.3%  |d|  2.8
-  patient107  NOR    GT  60.8%  pred  51.2%  |d|  9.6
-  patient108  HCM    GT  85.1%  pred  78.8%  |d|  6.3
-  patient109  RV     GT  51.9%  pred  64.4%  |d| 12.5
-  patient110  NOR    GT  66.1%  pred  52.5%  |d| 13.6
-  patient111  HCM    GT  70.1%  pred   7.5%  |d| 62.7
-  patient112  MINF   GT  45.1%  pred  34.5%  |d| 10.6
-  patient113  DCM    GT  16.6%  pred  17.4%  |d|  0.7
-  patient114  HCM    GT  69.5%  pred -50.8%  |d| 120.2
-  patient115  MINF   GT  36.9%  pred  36.6%  |d|  0.3
-  patient116  HCM    GT  62.6%  pred  34.0%  |d| 28.6
-  patient117  DCM    GT  27.7%  pred  20.2%  |d|  7.5
-  patient118  MINF   GT  26.6%  pred  17.0%  |d|  9.7
-  patient119  RV     GT  62.4%  pred  57.7%  |d|  4.8
-  patient120  MINF   GT  34.9%  pred  42.9%  |d|  8.0
-  patient121  RV     GT  65.8%  pred  56.1%  |d|  9.7
-  patient122  DCM    GT  29.7%  pred  13.4%  |d| 16.4
-  patient123  NOR    GT  72.9%  pred  61.1%  |d| 11.7
-  patient124  RV     GT  58.3%  pred  41.8%  |d| 16.5
-  patient125  NOR    GT  63.1%  pred  55.9%  |d|  7.2
-  patient126  RV     GT  55.2%  pred  64.8%  |d|  9.6
-  patient127  RV     GT  54.4%  pred  56.1%  |d|  1.7
-  patient128  NOR    GT  62.0%  pred  44.0%  |d| 18.0
-  patient129  RV     GT  56.2%  pred  50.2%  |d|  6.0
-  patient130  NOR    GT  60.4%  pred  58.9%  |d|  1.5
-  patient131  DCM    GT  12.9%  pred  12.6%  |d|  0.3
-  patient132  DCM    GT  13.4%  pred  13.5%  |d|  0.1
-  patient133  DCM    GT  14.5%  pred  12.9%  |d|  1.6
-  patient134  HCM    GT  63.0%  pred  44.9%  |d| 18.1
-  patient135  MINF   GT  19.9%  pred  17.8%  |d|  2.1
-  patient136  DCM    GT  30.2%  pred  30.8%  |d|  0.5
-  patient137  MINF   GT  39.8%  pred  22.7%  |d| 17.0
-  patient138  HCM    GT  69.5%  pred   3.3%  |d| 66.2
-  patient139  NOR    GT  63.3%  pred  47.7%  |d| 15.6
-  patient140  RV     GT  55.9%  pred  50.1%  |d|  5.8
-  patient141  RV     GT  67.6%  pred  50.0%  |d| 17.6
-  patient142  HCM    GT  81.9%  pred  43.2%  |d| 38.7
-  patient143  MINF   GT  25.4%  pred  26.6%  |d|  1.2
-  patient144  NOR    GT  70.6%  pred  58.4%  |d| 12.2
-  patient145  MINF   GT  19.5%  pred  19.6%  |d|  0.1
-  patient146  HCM    GT  81.5%  pred -25.5%  |d| 107.0
-  patient147  RV     GT  72.4%  pred  62.1%  |d| 10.2
-  patient148  MINF   GT  30.4%  pred  31.3%  |d|  0.9
-  patient149  DCM    GT  41.8%  pred  37.9%  |d|  3.8
-  patient150  NOR    GT  75.3%  pred  34.5%  |d| 40.8
-  EF MAE = 19.4%  (n=150)
-15:56:40 INFO cardioseg | ===== HELD-OUT TEST: datasets=['cmrxmotion'] vendors=['Canon', 'GE'] (n=147) =====
-2026/07/01 15:56:43 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:56:53 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:03 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:13 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:23 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:34 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:44 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-2026/07/01 15:57:54 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-
-=== VAL Dice (per class, pooled over slices) ===
-  RV      (label 1): 0.681
-  LV-myo  (label 2): 0.665
-  LV-cav  (label 3): 0.757
-  mean: 0.701
-
-=== VAL boundary (median over volumes, mm) ===
-  RV      HD95 11.69  ASSD  3.07
-  LV-myo  HD95 10.20  ASSD  2.12
-  LV-cav  HD95 10.23  ASSD  2.69
-
-=== VAL EF: GT vs predicted ===
-  001         NOR    GT  64.3%  pred  49.2%  |d| 15.0
-  002         NOR    GT  67.7%  pred  39.6%  |d| 28.1
-  003         NOR    GT  66.5%  pred  54.0%  |d| 12.5
-  004         NOR    GT  59.0%  pred  36.0%  |d| 23.1
-  005         NOR    GT  56.7%  pred  26.9%  |d| 29.8
-  006         NOR    GT  61.4%  pred  45.8%  |d| 15.7
-  007         NOR    GT  59.9%  pred  58.2%  |d|  1.7
-  008         NOR    GT  62.0%  pred  74.1%  |d| 12.1
-  009         NOR    GT  57.9%  pred  48.3%  |d|  9.5
-  010         NOR    GT  63.1%  pred  20.4%  |d| 42.7
-  011         NOR    GT  61.6%  pred  51.4%  |d| 10.2
-  012         NOR    GT  53.6%  pred  38.9%  |d| 14.7
-  013         NOR    GT  64.1%  pred   5.8%  |d| 58.2
-  070         LV     GT  34.5%  pred  14.3%  |d| 20.2
-  101         ARR    GT   6.6%  pred  12.4%  |d|  5.8
-  102         ARR    GT  62.6%  pred  -3.2%  |d| 65.8
-  103         ARR    GT  20.4%  pred  24.1%  |d|  3.8
-  104         ARR    GT   9.4%  pred   4.8%  |d|  4.6
-  105         ARR    GT  50.7%  pred   0.9%  |d| 49.8
-  106         ARR    GT  72.5%  pred  54.6%  |d| 17.9
-  107         ARR    GT  47.0%  pred  29.9%  |d| 17.1
-  108         ARR    GT  50.2%  pred  34.0%  |d| 16.3
-  109         ARR    GT  57.9%  pred  57.2%  |d|  0.6
-  141         CIA    GT  66.4%  pred  39.5%  |d| 26.8
-  142         CIA    GT  54.0%  pred  20.9%  |d| 33.1
-  145         CIA    GT  53.6%  pred  51.2%  |d|  2.4
-  171         HCM    GT  61.5%  pred  56.5%  |d|  5.0
-  176         ARR    GT  56.9%  pred   4.9%  |d| 52.0
-  177         ARR    GT  48.2%  pred  39.9%  |d|  8.2
-  186         CIA    GT  71.1%  pred  37.0%  |d| 34.1
-  187         CIA    GT  71.5%  pred  19.2%  |d| 52.3
-  191         RV     GT  54.1%  pred  20.0%  |d| 34.1
-  192         RV     GT  53.6%  pred  13.0%  |d| 40.6
-  196         TRI    GT  64.1%  pred  36.8%  |d| 27.4
-  206         NOR    GT  56.0%  pred  73.5%  |d| 17.4
-  207         NOR    GT  61.7%  pred  44.0%  |d| 17.7
-  208         NOR    GT  52.2%  pred  13.6%  |d| 38.6
-  209         NOR    GT  48.1%  pred  53.1%  |d|  5.0
-  210         NOR    GT  60.6%  pred  42.1%  |d| 18.5
-  256         HCM    GT  56.6%  pred  23.4%  |d| 33.2
-  270         HCM    GT  61.4%  pred  57.6%  |d|  3.8
-  289         ARR    GT  32.3%  pred  33.9%  |d|  1.5
-  302         CIA    GT  60.5%  pred  60.0%  |d|  0.5
-  303         CIA    GT  59.1%  pred  41.2%  |d| 17.9
-  304         CIA    GT  57.3%  pred  59.4%  |d|  2.0
-  317         RV     GT  63.2%  pred  22.4%  |d| 40.8
-  318         RV     GT  68.3%  pred  -4.8%  |d| 73.0
-  319         RV     GT  54.4%  pred  17.9%  |d| 36.5
-  323         RV     GT  27.7%  pred  18.1%  |d|  9.7
-  324         RV     GT  50.0%  pred  34.1%  |d| 15.9
-  325         RV     GT  68.3%  pred  60.1%  |d|  8.1
-  326         RV     GT  62.3%  pred  36.6%  |d| 25.7
-  336         TRI    GT  20.5%  pred   3.5%  |d| 17.1
-  A9F3T5      HHD    GT  66.0%  pred  61.2%  |d|  4.9
-  C8J7L5      HCM    GT  81.8%  pred  69.6%  |d| 12.2
-  D1S5T8      NOR    GT  41.0%  pred  39.7%  |d|  1.3
-  D5G3W8      Other  GT  69.1%  pred  39.2%  |d| 29.9
-  D6N7Q8      HHD    GT  66.4%  pred  54.1%  |d| 12.3
-  D7M8P9      NOR    GT  66.3%  pred  36.5%  |d| 29.8
-  D7T3V8      HHD    GT  61.2%  pred  19.5%  |d| 41.7
-  E3F2U7      HHD    GT  67.4%  pred  25.9%  |d| 41.6
-  F6J9L9      NOR    GT  61.3%  pred  46.5%  |d| 14.8
-  H6P7T1      ARV    GT  55.7%  pred  41.4%  |d| 14.3
-  I4L4V7      NOR    GT  47.8%  pred  32.3%  |d| 15.5
-  J6M5O2      HCM    GT  63.4%  pred -16.6%  |d| 80.0
-  K3R0Y7      HCM    GT  69.8%  pred  63.7%  |d|  6.1
-  K5M7V5      DCM    GT  28.5%  pred  21.7%  |d|  6.8
-  N2O7U5      HCM    GT  68.4%  pred  19.3%  |d| 49.0
-  O7Q7U3      HCM    GT  75.0%  pred  31.4%  |d| 43.6
-  P8V0Y7      HCM    GT  66.7%  pred  33.9%  |d| 32.7
-  E7L0N6      NOR    GT  66.6%  pred  59.6%  |d|  7.0
-  F5I1Z8      HHD    GT  57.9%  pred  50.8%  |d|  7.1
-  H2M9S1      NOR    GT  65.2%  pred  63.8%  |d|  1.4
-  I4R8V6      NOR    GT  54.3%  pred  48.6%  |d|  5.7
-  I8Z0Z6      HHD    GT  62.7%  pred  48.9%  |d| 13.8
-  M6M9N1      HCM    GT  62.8%  pred  57.2%  |d|  5.6
-  Q5V8W3      HHD    GT  50.1%  pred  25.3%  |d| 24.8
-  R1R6Y8      IHD    GT  41.7%  pred  43.0%  |d|  1.4
-  P001-1      None   GT  63.2%  pred  58.5%  |d|  4.7
-  P001-2      None   GT  60.6%  pred  58.5%  |d|  2.1
-  P001-3      None   GT  56.6%  pred  49.3%  |d|  7.4
-  P001-4      None   GT  58.8%  pred  62.6%  |d|  3.8
-  P002-1      None   GT  58.8%  pred  61.4%  |d|  2.6
-  P002-2      None   GT  62.9%  pred  65.4%  |d|  2.5
-  P002-3      None   GT  55.4%  pred  69.5%  |d| 14.0
-  P002-4      None   GT  57.5%  pred  74.2%  |d| 16.7
-  P003-1      None   GT  55.2%  pred  52.1%  |d|  3.1
-  P003-2      None   GT  50.7%  pred  61.2%  |d| 10.4
-  P003-3      None   GT  57.2%  pred  49.3%  |d|  7.9
-  P003-4      None   GT  50.4%  pred  46.3%  |d|  4.1
-  P004-1      None   GT  63.8%  pred  50.7%  |d| 13.2
-  P004-2      None   GT  64.2%  pred  45.8%  |d| 18.4
-  P004-3      None   GT  64.9%  pred  55.9%  |d|  9.0
-  P005-1      None   GT  56.2%  pred  72.4%  |d| 16.2
-  P005-2      None   GT  58.4%  pred  76.9%  |d| 18.5
-  P005-4      None   GT   4.5%  pred  47.1%  |d| 42.6
-  P006-1      None   GT  51.8%  pred  53.8%  |d|  2.0
-  P006-2      None   GT  59.5%  pred  43.5%  |d| 16.0
-  P006-3      None   GT  60.4%  pred  45.4%  |d| 15.0
-  P006-4      None   GT  48.5%  pred  47.1%  |d|  1.4
-  P007-1      None   GT  47.6%  pred  63.5%  |d| 15.9
-  P007-2      None   GT  44.9%  pred  64.5%  |d| 19.6
-  P007-3      None   GT  50.2%  pred  62.8%  |d| 12.6
-  P007-4      None   GT  46.7%  pred  46.7%  |d|  0.0
-  P008-1      None   GT  61.6%  pred  56.9%  |d|  4.6
-  P008-2      None   GT  60.4%  pred  57.0%  |d|  3.4
-  P008-3      None   GT  64.7%  pred  59.7%  |d|  5.0
-  P008-4      None   GT  54.7%  pred  51.2%  |d|  3.6
-  P009-1      None   GT  50.6%  pred  55.5%  |d|  4.9
-  P009-2      None   GT  51.0%  pred  48.6%  |d|  2.4
-  P009-3      None   GT  62.5%  pred  35.6%  |d| 27.0
-  P009-4      None   GT  48.6%  pred  26.0%  |d| 22.6
-  P010-1      None   GT  66.1%  pred  53.8%  |d| 12.3
-  P010-2      None   GT  67.5%  pred  50.2%  |d| 17.3
-  P010-3      None   GT  61.5%  pred  46.6%  |d| 14.9
-  P010-4      None   GT  71.1%  pred  49.2%  |d| 21.9
-  P011-1      None   GT  43.9%  pred  59.3%  |d| 15.3
-  P012-1      None   GT  72.2%  pred  52.6%  |d| 19.6
-  P012-2      None   GT  59.7%  pred  38.9%  |d| 20.8
-  P012-3      None   GT  70.8%  pred  45.3%  |d| 25.4
-  P012-4      None   GT  60.0%  pred  49.1%  |d| 10.9
-  P013-1      None   GT  57.8%  pred  25.7%  |d| 32.1
-  P013-2      None   GT  53.3%  pred  41.1%  |d| 12.2
-  P014-1      None   GT  49.1%  pred  42.0%  |d|  7.1
-  P014-2      None   GT  44.2%  pred  40.4%  |d|  3.8
-  P014-3      None   GT  57.3%  pred  38.7%  |d| 18.6
-  P015-1      None   GT  51.0%  pred  52.8%  |d|  1.8
-  P015-2      None   GT  55.5%  pred  58.7%  |d|  3.2
-  P015-3      None   GT  53.5%  pred  41.6%  |d| 12.0
-  P015-4      None   GT  58.0%  pred  40.5%  |d| 17.5
-  P016-1      None   GT  65.5%  pred  47.3%  |d| 18.2
-  P016-2      None   GT  57.3%  pred  54.0%  |d|  3.3
-  P016-3      None   GT  56.2%  pred  49.1%  |d|  7.1
-  P016-4      None   GT  61.7%  pred  50.7%  |d| 11.0
-  P017-1      None   GT  64.4%  pred  55.3%  |d|  9.1
-  P017-2      None   GT  65.4%  pred  57.0%  |d|  8.4
-  P017-3      None   GT  67.3%  pred  60.7%  |d|  6.6
-  P018-1      None   GT  62.8%  pred  69.3%  |d|  6.5
-  P018-2      None   GT  70.1%  pred  75.2%  |d|  5.0
-  P018-3      None   GT  71.0%  pred  76.0%  |d|  5.0
-  P019-1      None   GT  57.9%  pred  47.1%  |d| 10.8
-  P019-3      None   GT  53.2%  pred  50.4%  |d|  2.8
-  P019-4      None   GT  54.5%  pred  45.9%  |d|  8.6
-  P020-1      None   GT  67.8%  pred  63.3%  |d|  4.5
-  P020-2      None   GT  56.8%  pred  60.1%  |d|  3.4
-  P020-3      None   GT  63.6%  pred  54.7%  |d|  8.9
-  P020-4      None   GT  67.4%  pred  62.4%  |d|  5.0
-  EF MAE = 16.5%  (n=147)
-15:58:03 INFO cardioseg | saved model + config + metrics -> runs\synth_s16/
-15:58:03 INFO cardioseg | wrote runs\synth_s16/MODEL_CARD.md
-2026/07/01 15:58:04 WARNING mlflow.system_metrics.metrics.gpu_monitor: Encountered error Not Supported when trying to collect GPU power usage metrics.
-D:\personal_projects\cardiac-seg\.venv\Lib\site-packages\captum\attr\_core\saliency.py:129: UserWarning: Input Tensor 0 did not already require gradients, required_grads has been set automatically.
-  gradient_mask = apply_gradient_requirements(inputs_tuple)
-15:58:07 INFO cardioseg | attribution: recall={'bg': 0.995, 'RV': 0.598, 'LV-myo': 0.789, 'LV-cav': 0.754} saliency=True -> synth_s16/attribution.png
-D:\personal_projects\cardiac-seg\.venv\Lib\site-packages\torch\onnx\_internal\torchscript_exporter\symbolic_opset9.py:2821: UserWarning: ONNX export mode is set to TrainingMode.EVAL, but operator 'instance_norm' is set to train=True. Exporting with train=True.
-  symbolic_helper.check_training_mode(use_input_stats, "instance_norm")
-WARNING:root:Please consider to run pre-processing before quantization. Refer to example: https://github.com/microsoft/onnxruntime-inference-examples/blob/main/quantization/image_classification/cpu/ReadMe.md 
-exported runs\synth_s16\model.onnx  6.6 MB  parity 100.000%
-quantized runs\synth_s16\model.int8.onnx  2.5 MB  parity 99.962%
--> model.onnx is INT8 (parity 99.96% >= 99.0%)
-15:58:09 INFO cardioseg | registered to mlflow registry 'cardioseg-2dunet'
-2026/07/01 15:58:09 INFO mlflow.system_metrics.system_metrics_monitor: Stopping system metrics monitoring...
-2026/07/01 15:58:09 INFO mlflow.system_metrics.system_metrics_monitor: Successfully terminated system metrics monitoring!
