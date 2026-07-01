@@ -92,3 +92,25 @@ def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"
     if "stl" in formats:
         export_stl(mask, spacing, out, subject, iso)
     return out
+
+
+def _main():
+    """Export chamber meshes for one consolidated subject npz. Location layering: default is
+    <data>/meshes/ (config — the paths.yaml data root); --out overrides per invocation (argv)."""
+    import argparse
+    ap = argparse.ArgumentParser(description="Export chamber meshes (GLB + STL) from a subject npz.")
+    ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
+    ap.add_argument("--frame", default="ed", choices=["ed", "es"])
+    ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
+    ap.add_argument("--out", default=None, help="output root (default: <data>/meshes/ from paths.yaml)")
+    ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
+    a = ap.parse_args()
+    z = np.load(a.npz, allow_pickle=True)
+    mask, spacing = z[f"{a.frame}_gt"], tuple(float(s) for s in z["spacing"])
+    subject = a.subject or Path(a.npz).stem
+    out = export_meshes(mask, spacing, subject, tuple(a.formats), root=a.out)
+    print(f"wrote {a.formats} for {subject} -> {out}")
+
+
+if __name__ == "__main__":
+    _main()
