@@ -8,3 +8,7 @@
 #
 # Env CARDIAC_DATA overrides this file (handy for CI).
 data: /path/to/cardiac-data
+
+# Optional per-kind overrides — any data kind (raw/processed/reference/meshes/…) can be redirected off
+# the data root. Default is <data>/<kind>; set a key to point it elsewhere (e.g. exports on scratch):
+#   meshes: /big/scratch/meshes      # chamber-mesh exports (GLB/STL); default <data>/meshes/

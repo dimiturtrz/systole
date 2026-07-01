@@ -36,7 +36,14 @@ def _root() -> str:
 
 
 def data_root(kind: str = "raw") -> str:
-    """Absolute root for 'raw' (inputs) or 'processed' (cache): `<data>/<kind>`."""
+    """Absolute root for a data kind ('raw' inputs, 'processed' cache, 'reference', 'meshes', …).
+    Default `<data>/<kind>`, but a top-level `paths.yaml` key named `kind` overrides it — so e.g.
+    `meshes: /big/scratch/meshes` in paths.yaml redirects exports off the data root (still OS-adapted,
+    still never silently relative)."""
+    override = OmegaConf.select(_cfg, kind)
+    if override:
+        from core.paths import resolve_data_root
+        return resolve_data_root(str(override))
     return str(Path(_root()) / kind)
 
 
