@@ -57,3 +57,19 @@ diversity via TR/flip/field sweeps), with this fidelity gap characterized, not h
 - **Learned generator (GAN/diffusion, bd ap6)** — the only route to full-FOV real-matching appearance.
 - Pure-synth caps ~0.62–0.66 with physics; the **diagnostic loop + the localized root cause** is the
   durable result.
+
+## Update — augmentation + the calibration path (2026-07-01)
+- **Synth-as-augmentation (physics, synth_p=0.5): 0.852 vs 0.864 baseline** — neutral/slightly below.
+  Uncalibrated synth doesn't help as augmentation either. **Both pure-synth and augmentation are gated
+  on the same root cause** (uncalibrated physics contrast → composition off).
+- **Hybrid physics-heart + data-bg: FAILED** (cav loc 0.9→1.76) — **scale incompatibility**: bSSFP is
+  arbitrary signal units, real-bg stats are z-units; reconciling = data-anchoring the heart = stats.
+  So it's all-physics or all-stats, not a naive hybrid.
+- **The pure-synth fix (insight): the units are valid but UNCALIBRATED.** Generic acquisition params →
+  contrast matches no real vendor. Calibrate to per-vendor/field acquisition (TR/flip/field) as a
+  **normalization axis in reference data** (`reference/acquisition.yaml`; we already parse vendor+field).
+  Stays all-physics (one scale). Synth should also **emit metadata** (the sampled vendor/acquisition) so
+  it flows the same normalization path as real + enables per-vendor fidelity. First brick landed:
+  `mri_physics.acquisition_for(vendor, ref)` (typical per-vendor cine bSSFP, reference-overridable, tested).
+  Remaining (`bd ulw`): synth samples the real vendor/field distribution → acquisition_for → paint +
+  emit meta → measure per-vendor fidelity + pure-synth transfer.

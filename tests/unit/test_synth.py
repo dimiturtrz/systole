@@ -119,3 +119,19 @@ def test_banding_dips_at_pi_deeper_for_blood():
     assert torch.allclose(banding(blood_t2, tr, t([0.0])), torch.ones(1), atol=1e-3)   # passband = 1
     assert banding(blood_t2, tr, t([math.pi])) < 1.0                                    # band dip
     assert banding(blood_t2, tr, t([math.pi])) < banding(myo_t2, tr, t([math.pi]))      # blood bands deeper
+
+
+def test_acquisition_for_vendor_and_reference_override(tmp_path):
+    """Per-vendor cine bSSFP params (the calibration axis): typical constant per vendor, generic
+    default for unknown, reference/acquisition.yaml overrides when present."""
+    from cardioseg.data.mri_physics import acquisition_for, _ACQ_DEFAULT
+    assert acquisition_for("Siemens") == (3.0, 52.0)
+    assert acquisition_for("GE") == (3.4, 45.0)
+    assert acquisition_for("Nonesuch") == _ACQ_DEFAULT          # unknown -> generic default
+    from core.reference import Reference
+    (tmp_path / "acquisition.yaml").write_text(
+        "acquisition:\n  Siemens:\n"
+        "    tr_ms: {value: 2.9, source: study, based_on: x, extracted_by: paper, verified: true}\n"
+        "    flip_deg: {value: 60, source: study, based_on: x, extracted_by: paper, verified: true}\n")
+    tr, fl = acquisition_for("Siemens", ref=Reference(root=tmp_path))
+    assert (tr, fl) == (2.9, 60.0)                              # reference overrides the constant

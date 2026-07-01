@@ -33,6 +33,30 @@ _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 _BG_LADDER = ("lung", "liver", "muscle", "fat")
 
 
+# Typical cine bSSFP SAX acquisition per vendor: (TR ms, flip deg). Approximate vendor protocols
+# (Siemens TrueFISP / Philips bFFE / GE FIESTA / Canon TrueSSFP) — the calibration axis. Overridable
+# from reference/acquisition.yaml (measured/study values) so synth contrast matches the real scanner.
+_ACQ: dict[str, tuple[float, float]] = {
+    "Siemens": (3.0, 52.0),
+    "Philips": (3.0, 45.0),
+    "GE":      (3.4, 45.0),
+    "Canon":   (3.2, 50.0),
+}
+_ACQ_DEFAULT = (3.1, 48.0)
+
+
+def acquisition_for(vendor: str | None, ref=None) -> tuple[float, float]:
+    """(TR ms, flip deg) for a vendor's typical cine bSSFP — the acquisition to calibrate synth contrast
+    to. Prefers reference/acquisition.yaml (ref.get('acquisition', vendor, 'tr_ms'/'flip_deg')); else the
+    typical per-vendor constant; else the generic default. `ref` = a core.reference.Reference (optional)."""
+    tr = fl = None
+    if ref is not None and vendor is not None:
+        tr = ref.get("acquisition", vendor, "tr_ms")
+        fl = ref.get("acquisition", vendor, "flip_deg")
+    d = _ACQ.get(vendor or "", _ACQ_DEFAULT)
+    return (float(tr) if tr is not None else d[0], float(fl) if fl is not None else d[1])
+
+
 def blood_classes(n_classes: int) -> list[int]:
     """Label indices whose tissue is blood (RV + LV cavities) — the pools that show flow signal
     variation in cine, so they get the extra `flow` texture."""
