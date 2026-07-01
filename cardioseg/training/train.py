@@ -71,7 +71,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     # split = criteria over the consolidated store (builds processed/<ds>/ if missing)
     with timed(log, "store.load + split"):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
-                          workers=cfg.workers)
+                          workers=cfg.workers, nyul=d.nyul)
         train_df, val_df, test_df = splits.make_split(
             meta, d.test_datasets, d.test_vendors, d.val_frac, cfg.seed,
             val_datasets=d.val_datasets, val_vendors=d.val_vendors)

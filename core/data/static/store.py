@@ -87,8 +87,48 @@ def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cf
 
 
 def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
-                n4_params: N4Cfg | None = None) -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params)
+                n4_params: N4Cfg | None = None, nyul: bool = False) -> Path:
+    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params, nyul)
+
+
+def _nyul_ref_path() -> Path:
+    from core.data.static.reference import reference_dir
+    return reference_dir() / "nyul.yaml"
+
+
+def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_INPLANE,
+                      per_dataset: int = 40) -> "np.ndarray":
+    """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
+    it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks are
+    stable). The standard is a normalization axis -> reference data, fit once, applied in preprocess."""
+    from core.preprocessing.preprocess import resample_inplane
+    from core.preprocessing.nyul import image_landmarks, fit_standard, LANDMARKS
+    from omegaconf import OmegaConf
+    names = SOURCE_DATASETS if names is None else names
+    rows = []
+    for name in names:
+        adapter = get_adapter(name)
+        for case in adapter.cases()[:per_dataset]:
+            d = adapter.load_ed_es(case)
+            if "ED" not in d:
+                continue
+            img, _ = resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
+            rows.append(image_landmarks(img))
+    std = fit_standard(np.stack(rows))
+    p = _nyul_ref_path(); p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("# Nyúl standard landmark scale (harmonization qfz) — fit by store.fit_nyul_standard\n"
+                 + OmegaConf.to_yaml(OmegaConf.create({"nyul": {"standard": {
+                     "value": [round(float(v), 5) for v in std], "landmarks": list(LANDMARKS),
+                     "source": "computed", "based_on": f"resampled ED, {names}, per<={per_dataset}, n={len(rows)}",
+                     "extracted_by": "computed", "verified": True}}})))
+    return std
+
+
+def load_nyul_standard() -> "np.ndarray | None":
+    """The fitted Nyúl standard from reference/nyul.yaml, or None if absent (then nyul can't run)."""
+    from core.data.static.reference import Reference
+    v = Reference().get("nyul", "standard")
+    return np.asarray(v, dtype=np.float64) if v is not None else None
 
 
 def _bsa(height, weight):
@@ -143,13 +183,15 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
 
 
 def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
-          n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False) -> Path:
+          n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False,
+          nyul: bool = False, nyul_standard=None) -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
 
     Process-if-missing: skips subjects already written; re-emits meta.csv each call. Parallel
-    (ThreadPool — resample/N4 release the GIL). Returns the processed dir.
+    (ThreadPool — resample/N4 release the GIL). `nyul`+`nyul_standard` apply Nyúl harmonization
+    (qfz) to a separate _nyul cache. Returns the processed dir.
     """
-    out = dataset_dir(name, inplane, n4, n4_params)
+    out = dataset_dir(name, inplane, n4, n4_params, nyul)
     data_dir = out / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     adapter = get_adapter(name)
@@ -158,7 +200,8 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
     def _one(case: Path):
         arrays = preprocess_case(case, target_inplane=inplane, loader=adapter.load_ed_es,
-                                 n4=n4, n4_params=n4_params)
+                                 n4=n4, n4_params=n4_params,
+                                 nyul_standard=nyul_standard if nyul else None)
         npz = {k: v for k, v in arrays.items() if k != "patient"}
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
@@ -193,15 +236,22 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
 
 def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
-         n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None) -> pl.DataFrame:
+         n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None,
+         nyul: bool = False) -> pl.DataFrame:
     """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
-    (the data cloud, for these params). Adds an absolute `path` column to each npz. names=None -> all."""
+    (the data cloud, for these params). Adds an absolute `path` column to each npz. names=None -> all.
+    nyul=True harmonizes to the cohort standard (reference/nyul.yaml; fit it first with
+    `python -m core.data.static.store --fit-nyul`)."""
     names = SOURCE_DATASETS if names is None else ([names] if isinstance(names, str) else list(names))
+    std = load_nyul_standard() if nyul else None
+    if nyul and std is None:
+        raise RuntimeError("nyul=True but no reference/nyul.yaml — fit it first: "
+                           "python -m core.data.static.store --fit-nyul")
     frames = []
     for name in names:
-        out = dataset_dir(name, inplane, n4, n4_params)
+        out = dataset_dir(name, inplane, n4, n4_params, nyul)
         if not (out / "meta.csv").exists():
-            build(name, inplane, n4, n4_params=n4_params, workers=workers)
+            build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul, nyul_standard=std)
         # Pin `labelled` to Boolean — don't rely on polars schema inference (newer polars reads the
         # "true"/"false" column as String, breaking the `pl.col('labelled')` filter cross-platform).
         df = pl.read_csv(out / "meta.csv", infer_schema_length=10000,
@@ -229,8 +279,15 @@ if __name__ == "__main__":
     ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
     ap.add_argument("--inplane", type=float, default=TARGET_INPLANE)
     ap.add_argument("--n4", action="store_true")
+    ap.add_argument("--nyul", action="store_true", help="harmonize to the Nyúl standard (fit it first)")
+    ap.add_argument("--fit-nyul", action="store_true", dest="fit_nyul",
+                    help="fit the Nyúl standard from the cohort -> reference/nyul.yaml, then exit")
     args = ap.parse_args()
-    df = load(args.names, inplane=args.inplane, n4=args.n4)
+    if args.fit_nyul:
+        std = fit_nyul_standard(args.names, inplane=args.inplane)
+        print(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
+        raise SystemExit
+    df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
     print(f"\n=== data cloud: {len(df)} subjects ===")
     print(df.group_by("dataset").agg(pl.len().alias("n"),
           pl.col("labelled").sum().alias("labelled")).sort("dataset"))
