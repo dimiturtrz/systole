@@ -98,15 +98,22 @@ class SynthCfg(BaseModel):
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
 
 
-def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
-    """Smooth random displacement field as a grid_sample grid [B,H,W,2]. Coarse 5x5 control points
-    (U[-amp,amp]) bicubic-upsampled to full res -> low-frequency elastic warp, added to the identity
-    grid. amp is in normalized [-1,1] coords (0.15 ≈ 15% of half-FOV max local shift)."""
-    ctrl = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
-    disp = F.interpolate(ctrl, size=(h, w), mode="bicubic", align_corners=False)   # [B,2,H,W]
+def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> torch.Tensor:
+    """DIFFEOMORPHIC (topology-preserving) elastic warp as a grid_sample grid [B,H,W,2]. A coarse 5x5
+    velocity field (U[-amp,amp], bicubic-upsampled) is INTEGRATED by scaling-and-squaring so the map
+    stays invertible — it can't fold/tear the anatomy. The old `ident + disp` (non-integrated) folds at
+    amplitude: measured pure-synth collapse 0.673 -> 0.13 (deform 0.4) -> 0.04 (0.6). Integration
+    (SynthSeg/VoxelMorph) fixes that. amp = velocity magnitude in normalized [-1,1] coords."""
+    v = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
+    v = F.interpolate(v, size=(h, w), mode="bicubic", align_corners=False)          # [B,2,H,W] velocity
     ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), (b, 1, h, w),
                           align_corners=False)                                      # [B,H,W,2]
-    return ident + disp.permute(0, 2, 3, 1)
+    d = (v / (2 ** steps)).permute(0, 2, 3, 1)                                      # [B,H,W,2] small displ
+    for _ in range(steps):                                 # scaling-and-squaring: phi = phi ∘ phi
+        sampled = F.grid_sample(d.permute(0, 3, 1, 2), ident + d, mode="bilinear",
+                                padding_mode="border", align_corners=False)
+        d = d + sampled.permute(0, 2, 3, 1)                # d <- d + d(x + d(x))
+    return ident + d
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
