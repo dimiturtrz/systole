@@ -2,7 +2,7 @@
 cohort, then any image maps onto it -> different-scanner intensity distributions align (strip vendor
 variance) while tissue ordering is preserved (piecewise-linear, monotonic)."""
 import numpy as np
-from cardioseg.preprocessing.normalization.nyul import (
+from core.preprocessing.nyul import (
     image_landmarks, fit_standard, transform, LANDMARKS)
 
 

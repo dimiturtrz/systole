@@ -65,15 +65,16 @@ def resample_inplane(
 
 def preprocess_case(
     patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE,
-    n4: bool = False, n4_params=None,
+    n4: bool = False, n4_params=None, nyul_standard=None,
 ) -> dict:
-    """Load + resample + (N4) + z-score one subject's ED/ES. PURE (no disk I/O).
+    """Load + resample + (N4) + (Nyúl) + z-score one subject's ED/ES. PURE (no disk I/O).
 
     Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.
     `loader` (required) is the dataset adapter's load_ed_es (labels already canonical) — injected so
-    this kernel never imports the data layer. `n4` runs N4 bias-field
-    correction (resample -> N4 -> z-score) with `n4_params` (an N4Cfg; defaults if None), physical +
-    per-scan. The store (data/store.py) writes the result to disk; this just computes it.
+    this kernel never imports the data layer. `n4` runs N4 bias-field correction (resample -> N4 ->
+    z-score) with `n4_params`. `nyul_standard` (a fitted standard landmark vector, or None) applies
+    Nyúl histogram standardization BEFORE z-score — harmonization to a cohort standard (qfz). The store
+    (data/store.py) writes the result to disk; this just computes it.
     """
     patient_dir = Path(patient_dir)
     d = loader(patient_dir)
@@ -89,6 +90,9 @@ def preprocess_case(
             from core.preprocessing.n4 import N4Cfg, n4_bias
             p = n4_params or N4Cfg()
             img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
+        if nyul_standard is not None:
+            from core.preprocessing.nyul import transform as nyul_transform
+            img = nyul_transform(img, np.asarray(nyul_standard))
         out[f"{tag.lower()}_img"] = zscore(img)
         out[f"{tag.lower()}_gt"] = gt
         new_sp = isp

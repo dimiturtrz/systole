@@ -52,6 +52,9 @@ class DataCfg(BaseModel):
     inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
     n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
+    nyul: bool = False                                # Nyúl histogram standardization (harmonization,
+    #                                                qfz): map the intensity distribution to a cohort-fit
+    #                                                standard before z-score. The standard = reference data.
     val_frac: float = Field(0.2, gt=0, lt=1)
     size: int = Field(DEFAULT_SIZE, ge=32)
 
@@ -69,13 +72,17 @@ META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner",
                "weight", "bsa", "motion_grade", "labelled"]
 
 
-def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None) -> str:
+def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,
+              nyul: bool = False) -> str:
     """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
-    too, so different N4 settings never collide on one cache dir."""
+    too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
+    cache is separate from the plain one)."""
     key = f"inplane{str(inplane).replace('.', 'p')}"
     if n4:
         p = n4_params or N4Cfg()
         key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
+    if nyul:
+        key += "_nyul"
     return key
 
 
