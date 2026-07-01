@@ -22,6 +22,11 @@ class ModelCfg(BaseModel):
     dropout: float = Field(0.0, ge=0, le=1)        # 0 by default: dropout 0.1/0.2 regressed EF ~2pp on this
     #                                                already-regularized small net (heavy aug + early stop), no
     #                                                Dice gain — boundary/volume precision is dropout-fragile. See bp4.
+    norm: str = "instance"                         # feature normalization: 'instance' (default; MONAI's,
+    #                                                per-instance -> self-harmonizes contrast/scale, OOD-robust),
+    #                                                'batch' (train running stats, NOT per-instance), 'none'
+    #                                                (no self-norm). Ablation knob for the harmonization test
+    #                                                (bd h8k: does input harmonization matter without instance-norm?).
 
 
 def build_unet(cfg: ModelCfg | None = None):
@@ -36,6 +41,7 @@ def build_unet(cfg: ModelCfg | None = None):
         strides=tuple(cfg.strides),
         num_res_units=cfg.res_units,
         dropout=cfg.dropout,          # enables MC-dropout uncertainty at inference (iq7)
+        norm=(None if cfg.norm == "none" else cfg.norm),   # 'instance' (default) | 'batch' | 'none' (ablation)
     )
 
 
