@@ -6,7 +6,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("monai")
 
-from cardioseg.data.augment import soften
+from core.data.dynamic.augment import soften
 from cardioseg.training.losses import SoftDiceCE, build_loss
 
 

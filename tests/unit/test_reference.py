@@ -3,7 +3,7 @@ contract. The point of this store is that missing/unverified knowledge silently 
 per-scan path — so the fallback cases ARE the value."""
 from pathlib import Path
 
-from core.reference import Reference, _range_entry
+from core.data.static.reference import Reference, _range_entry
 
 
 # --- _range_entry: derived stats leaf (p5/p95/mean/n) + provenance, drops nan/None ---

@@ -5,7 +5,7 @@ without the (gated, out-of-repo) dataset still passes.
 import numpy as np
 import pytest
 
-from core.data.mri.acdc import (
+from core.data.static.mri.acdc import (
     acdc_cases, load_ed_es, identify_lv_cavity, LV_CAVITY,
 )
 from core.measure import ejection_fraction

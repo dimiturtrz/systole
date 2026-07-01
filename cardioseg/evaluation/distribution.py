@@ -28,7 +28,7 @@ from core.model import load_run, resolve_device
 from core.registry import resolve
 from core.config import FLAGSHIP_REF
 from core.preprocessing.preprocess import fit_square, SIZE
-from core.data import store, splits
+from core.data.static import store, splits
 from core.inference import predict_volume
 from core.measure import ejection_fraction, LOA_Z
 from core.evaluate import surface_distances, surface_metrics, dice, CLASSES

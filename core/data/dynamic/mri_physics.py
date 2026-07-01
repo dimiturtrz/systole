@@ -48,7 +48,7 @@ _ACQ_DEFAULT = (3.1, 48.0)
 def acquisition_for(vendor: str | None, ref=None) -> tuple[float, float]:
     """(TR ms, flip deg) for a vendor's typical cine bSSFP — the acquisition to calibrate synth contrast
     to. Prefers reference/acquisition.yaml (ref.get('acquisition', vendor, 'tr_ms'/'flip_deg')); else the
-    typical per-vendor constant; else the generic default. `ref` = a core.reference.Reference (optional)."""
+    typical per-vendor constant; else the generic default. `ref` = a core.data.static.reference.Reference (optional)."""
     tr = fl = None
     if ref is not None and vendor is not None:
         tr = ref.get("acquisition", vendor, "tr_ms")

@@ -34,7 +34,7 @@ def validate(
     from core.postprocess import largest_cc_per_class
     from core.evaluate import surface_distances, surface_metrics
     from core.preprocessing.preprocess import fit_square
-    from core.data.store import load_arrays
+    from core.data.static.store import load_arrays
 
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}

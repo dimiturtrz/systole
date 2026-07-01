@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from scipy.ndimage import zoom
 
-from core.data.mri.acdc import load_ed_es
+from core.data.static.mri.acdc import load_ed_es
 from common import patient_dir  # noqa: F401  (re-exported; used here and by render_overlay)
 from geometry import bbox_slices
 

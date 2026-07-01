@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core.data.mri.base import load_nifti
+from core.data.static.mri.base import load_nifti
 from core.evaluate import hd95, dice as dice1
 from core.measure import ejection_fraction
 

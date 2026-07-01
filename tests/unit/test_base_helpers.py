@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from core.data.mri.base import (
+from core.data.static.mri.base import (
     to_float, apply_label_map, load_csv_info, load_nifti, load_frames, MNM_LABEL_MAP,
 )
 

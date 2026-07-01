@@ -3,11 +3,11 @@ If someone re-hardcodes a value, one of these fails (that's the point)."""
 from core.config import (
     DEFAULT_SIZE, DEFAULT_INPLANE, KNOWN_DATASETS, FLAGSHIP_REF, flagship_model, flagship_dir,
 )
-from core.hparams import DataCfg
+from core.data.static.store import DataCfg
 
 
 def test_size_single_sourced():
-    from cardioseg.data.dataset import SIZE
+    from core.data.dynamic.dataset import SIZE
     assert DEFAULT_SIZE == DataCfg().size == SIZE
 
 

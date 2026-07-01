@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from core.labels import CLASSES
+from core.data.static.labels import CLASSES
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
@@ -101,8 +101,8 @@ def _main():
     from core.registry import resolve
     from core.model import load_run
     from core.hparams import TrainCfg
-    from core.data import store, splits
-    from cardioseg.data.dataset import load_to_gpu
+    from core.data.static import store, splits
+    from core.data.dynamic.dataset import load_to_gpu
     from core.config import FLAGSHIP_REF
     from core.obs import setup
 

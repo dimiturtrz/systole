@@ -17,7 +17,7 @@ import polars as pl
 
 from core.config import FLAGSHIP_REF
 from core.registry import resolve
-from core.data import store, splits
+from core.data.static import store, splits
 from core.hparams import from_json
 from core.model import resolve_device
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table

@@ -66,7 +66,7 @@ def main():
     import polars as pl
 
     from core.config import FLAGSHIP_REF
-    from core.data import store
+    from core.data.static import store
     from core.model import load_run
     from core.registry import resolve
     from core.preprocessing.preprocess import fit_square, SIZE
@@ -163,7 +163,7 @@ def main():
 
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
-    from core.labels import overlay_cmap
+    from core.data.static.labels import overlay_cmap
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

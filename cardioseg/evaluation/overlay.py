@@ -20,8 +20,8 @@ from core.registry import resolve
 from core.hparams import from_json
 from core.model import build_unet
 from core.preprocessing.preprocess import fit_square
-from core.data import store, splits
-from core.data.store import load_arrays
+from core.data.static import store, splits
+from core.data.static.store import load_arrays
 from core.inference import predict_volume
 from core.postprocess import largest_cc_per_class
 from core.measure import ejection_fraction

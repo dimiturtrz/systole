@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from core.export_onnx import export as build_onnx
-from core.data import store
+from core.data.static import store
 from common import MODELS, DEFAULT_MODEL, model_dir
 
 OUT = Path("cardioview/web/public/models")

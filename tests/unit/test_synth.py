@@ -1,13 +1,13 @@
-"""Physics-based synthetic-from-labels generation (cardioseg.data.synth + mri_physics, bd 276).
+"""Physics-based synthetic-from-labels generation (core.data.dynamic.synth + mri_physics, bd 276).
 ONE paint path: bSSFP signal from tissue T1/T2/PD under swept TR/flip/field. Contract: label mask ->
 z-scored image painted by tissue physics; deform invents anatomy; partition gives bg real shapes;
 target = real labels."""
 import math
 import torch
 
-from core.hparams import SynthCfg
-from cardioseg.data.synth import synthesize_from_labels
-from cardioseg.data.mri_physics import bssfp_signal, tissue_params, TISSUE
+from core.data.dynamic.synth import SynthCfg
+from core.data.dynamic.synth import synthesize_from_labels
+from core.data.dynamic.mri_physics import bssfp_signal, tissue_params, TISSUE
 
 N = 4  # canonical classes: 0 bg, 1 RV, 2 LV-myo, 3 LV-cav
 
@@ -113,7 +113,7 @@ def test_seed_deterministic():
 def test_banding_dips_at_pi_deeper_for_blood():
     """Banding factor: 1 at the passband (dphi=0), dips toward dphi=π, and the dip is DEEPER for
     long-T2 blood than short-T2 myocardium (the physical reason blood bands hardest)."""
-    from cardioseg.data.mri_physics import banding
+    from core.data.dynamic.mri_physics import banding
     t, tr = torch.tensor, torch.tensor([3.0])
     blood_t2 = t([TISSUE["blood"][1.5][1]]); myo_t2 = t([TISSUE["myocardium"][1.5][1]])
     assert torch.allclose(banding(blood_t2, tr, t([0.0])), torch.ones(1), atol=1e-3)   # passband = 1
@@ -124,11 +124,11 @@ def test_banding_dips_at_pi_deeper_for_blood():
 def test_acquisition_for_vendor_and_reference_override(tmp_path):
     """Per-vendor cine bSSFP params (the calibration axis): typical constant per vendor, generic
     default for unknown, reference/acquisition.yaml overrides when present."""
-    from cardioseg.data.mri_physics import acquisition_for, _ACQ_DEFAULT
+    from core.data.dynamic.mri_physics import acquisition_for, _ACQ_DEFAULT
     assert acquisition_for("Siemens") == (3.0, 52.0)
     assert acquisition_for("GE") == (3.4, 45.0)
     assert acquisition_for("Nonesuch") == _ACQ_DEFAULT          # unknown -> generic default
-    from core.reference import Reference
+    from core.data.static.reference import Reference
     (tmp_path / "acquisition.yaml").write_text(
         "acquisition:\n  Siemens:\n"
         "    tr_ms: {value: 2.9, source: study, based_on: x, extracted_by: paper, verified: true}\n"

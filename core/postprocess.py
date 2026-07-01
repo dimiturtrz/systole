@@ -9,7 +9,7 @@ import numpy as np
 from scipy.ndimage import label as _cc_label
 
 from core.types import Mask
-from core.labels import FOREGROUND
+from core.data.static.labels import FOREGROUND
 
 
 def _gpu_cc():

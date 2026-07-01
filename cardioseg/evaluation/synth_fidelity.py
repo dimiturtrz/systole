@@ -16,7 +16,7 @@ from pathlib import Path
 
 import torch
 
-from core.labels import CLASSES
+from core.data.static.labels import CLASSES
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
@@ -37,7 +37,7 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
     """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
     SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
     (z-units) + the mean and worst class — the break localized."""
-    from cardioseg.data.synth import synthesize_from_labels
+    from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
     ym = Y.reshape(-1).cpu()
@@ -64,8 +64,8 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
 def _main():
     import argparse
     from core.hparams import TrainCfg
-    from core.data import store, splits
-    from cardioseg.data.dataset import load_to_gpu
+    from core.data.static import store, splits
+    from core.data.dynamic.dataset import load_to_gpu
     from core.model import resolve_device
     from core.obs import setup
 

@@ -21,7 +21,7 @@ def _gather(model, paths, size, device, per_vol=4000, seed=0):
     """Foreground (logits[N,C], labels[N]) over the given subjects (single forward, no TTA),
     subsampled to ~per_vol voxels/volume — plenty for a 1-param fit + ECE, bounded memory."""
     import torch
-    from core.data import store
+    from core.data.static import store
     from core.preprocessing.preprocess import fit_square
 
     rng = np.random.RandomState(seed)
@@ -79,7 +79,7 @@ def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
 def main():
     import torch
     import polars as pl
-    from core.data import store, splits
+    from core.data.static import store, splits
     from core.hparams import from_json
     from core.model import load_run
     from core.registry import resolve

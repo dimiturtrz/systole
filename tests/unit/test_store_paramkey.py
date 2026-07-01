@@ -2,9 +2,9 @@
 while the no-n4 key stays back-compatible (existing flagship cache resolves)."""
 import polars as pl
 
-from core.data import store
-from core.data.store import param_key
-from core.hparams import N4Cfg
+from core.data.static import store
+from core.data.static.store import param_key
+from core.preprocessing.n4 import N4Cfg
 
 
 def test_load_coerces_labelled_to_boolean(tmp_path, monkeypatch):

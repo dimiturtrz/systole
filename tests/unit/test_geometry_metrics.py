@@ -5,7 +5,7 @@ math, not a model. Real-data behaviour is covered by tests/integration.
 """
 import numpy as np
 
-from core.data.mri.acdc import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
+from core.data.static.mri.acdc import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
 from core.measure import voxel_volume_ml, label_volume_ml, ejection_fraction, expected_volume_ml
 from core.evaluate import dice, hausdorff
 

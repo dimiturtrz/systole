@@ -15,11 +15,24 @@ different SynthCfg — and a future learned (GAN) generator slots in behind the 
 from __future__ import annotations
 
 import torch
+from pydantic import BaseModel, Field
 
-from core.hparams import GeneratorCfg
+from core.config import _VALIDATE
+from core.data.static.store import DataCfg
 
-from .augment import augment_batch, soften
-from .synth import synthesize_from_labels
+from .augment import AugCfg, augment_batch, soften
+from .synth import SynthCfg, synthesize_from_labels
+
+
+class GeneratorCfg(BaseModel):
+    """The data-engine config: everything that makes a training BATCH (vs the model that consumes it).
+    Composes the data/split (`data`), real-pixel perturbation (`aug`), and synthetic-from-labels
+    generation (`synth`). Drives the Generator. Swapping the data side of a run = editing this subtree;
+    a future GAN generator slots in behind the same seam."""
+    model_config = _VALIDATE
+    data: DataCfg = Field(default_factory=DataCfg)
+    aug: AugCfg = Field(default_factory=AugCfg)
+    synth: SynthCfg = Field(default_factory=SynthCfg)
 
 
 class Generator:
@@ -36,7 +49,7 @@ class Generator:
         self.device = device
         self.synth_on = cfg.synth.synth_p > 0
         self.soft_sigma = cfg.aug.soft_label_sigma
-        # Contrast is physical (bSSFP from tissue params, core.data.mri_physics) — no measured priors
+        # Contrast is physical (bSSFP from tissue params, core.data.static.mri_physics) — no measured priors
         # needed. The background partition pulls its SHAPES from the real slice (real_img) at batch time.
 
     def batch(self, idx: torch.Tensor, pin: bool = False) -> tuple[torch.Tensor, torch.Tensor]:

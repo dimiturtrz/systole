@@ -86,8 +86,7 @@ def preprocess_case(
         img, isp = resample_inplane(d[tag]["img"], sp, target_inplane, is_mask=False)
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
-            from core.preprocessing.n4 import n4_bias
-            from core.hparams import N4Cfg
+            from core.preprocessing.n4 import N4Cfg, n4_bias
             p = n4_params or N4Cfg()
             img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
         out[f"{tag.lower()}_img"] = zscore(img)

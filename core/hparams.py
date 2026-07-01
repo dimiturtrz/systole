@@ -18,87 +18,22 @@ import ast
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
+from core.config import _VALIDATE
+from core.model import ModelCfg
+from core.preprocessing.n4 import N4Cfg
+from core.data.static.store import DataCfg
+from core.data.dynamic.augment import AugCfg
+from core.data.dynamic.synth import SynthCfg
+from core.data.dynamic.generator import GeneratorCfg
 
-_VALIDATE = ConfigDict(validate_assignment=True)   # setattr (used by --set) re-validates the field
-
-
-class ModelCfg(BaseModel):
-    """U-Net shape (MONAI). Injected into build_unet."""
-    model_config = _VALIDATE
-    spatial_dims: Literal[2, 3] = 2
-    in_channels: int = Field(1, ge=1)
-    out_channels: int = Field(4, ge=2)             # bg / RV / LV-myo / LV-cav
-    channels: tuple[int, ...] = (16, 32, 64, 128, 256)
-    strides: tuple[int, ...] = (2, 2, 2, 2)
-    res_units: int = Field(2, ge=0)
-    dropout: float = Field(0.0, ge=0, le=1)        # 0 by default: dropout 0.1/0.2 regressed EF ~2pp on this
-    #                                                already-regularized small net (heavy aug + early stop), no
-    #                                                Dice gain — boundary/volume precision is dropout-fragile. See bp4.
-
-
-class AugCfg(BaseModel):
-    """GPU-batched augmentation. Geometric widths conservative; intensity widths broad to span the
-    cross-vendor contrast gap. Injected into augment_batch."""
-    model_config = _VALIDATE
-    rot_deg: float = Field(20.0, ge=0)
-    scale: tuple[float, float] = (0.85, 1.15)
-    gamma: tuple[float, float] = (0.7, 1.5)
-    gamma_p: float = Field(0.3, ge=0, le=1)
-    blur_p: float = Field(0.2, ge=0, le=1)
-    contrast: tuple[float, float] = (0.8, 1.2)
-    noise: float = Field(0.08, ge=0)
-    # MRI-physics aug (Tier 1, scan bucket). bias_p=0 -> off (default = old behavior).
-    bias_p: float = Field(0.0, ge=0, le=1)         # prob of a smooth bias-field modulation
-    bias_strength: float = Field(0.3, ge=0)        # max +/- fractional field deviation across the FOV
-    # Soft-label training: Gaussian-blur the one-hot target by this σ (voxels) so boundaries are
-    # probabilistic (honest partial-volume targets). 0 = off (crisp one-hot = hard labels). Selects
-    # the SoftDiceCE loss when >0. NOT fit to EF — a uniform boundary-uncertainty prior. DEFAULT 1.0:
-    # soft labels are the standard recipe (better calibrated, ECE -13%, equal Dice/EF — see
-    # research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md).
-    soft_label_sigma: float = Field(1.0, ge=0)
-
-
-class SynthCfg(BaseModel):
-    """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
-    Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
-    (core.data.mri_physics) under per-sample swept sequence params (TR/flip/field) -> a physically-
-    plausible, vendor-randomized contrast every call -> a contrast-AGNOSTIC model. ONE paint path (no
-    stats/random branches): contrast is physical, not fitted. Anatomy is the real mask (deform invents
-    more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
-    (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
-    model_config = _VALIDATE
-    synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
-    deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
-    #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
-    # --- bSSFP sequence sweep = the physical cross-vendor contrast diversity ---
-    tr_ms: tuple[float, float] = (2.8, 4.0)         # repetition time sweep (ms) — cine range
-    flip_deg: tuple[float, float] = (35.0, 70.0)     # flip-angle sweep (deg)
-    b0_hz: float = Field(0.0, ge=0)                 # off-resonance B0 field amplitude (Hz): smooth Δf
-    #                                                field -> bSSFP BANDING (lowers+spreads long-T2 blood,
-    #                                                the cav-too-bright fidelity fix). 0 = on-resonance
-    fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
-    #                                                = the dominant cross-vendor relaxation axis
-    jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
-    texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
-    flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
-    #                                                texture on blood classes so cav/RV aren't flat-bright
-    #                                                (real cine blood spreads from flow) — fidelity lever
-    # --- background ---
-    bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
-    #                                                into bg_tiers tissue tiers (real lung/fat/muscle
-    #                                                SHAPES, painted by tissue); "flat" = single bg tissue
-    bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
-    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: paste synth heart onto REAL bg
-    #                                                (isolates bg realism; forces deform off). Not pure-synth.
-    # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
-    pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
-    kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
-    bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative B1/coil bias field, +/- fraction
-    blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
-    noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
+# Config classes now live with the class they configure (ModelCfg→core.model, AugCfg→augment,
+# SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator). Re-exported here
+# so `from core.hparams import ModelCfg` etc. still resolves. LossCfg + TrainCfg stay the composition
+# root: LossCfg's builder is in cardioseg (core can't import it), TrainCfg is the whole-run root.
+__all__ = ["ModelCfg", "AugCfg", "SynthCfg", "N4Cfg", "DataCfg", "GeneratorCfg", "LossCfg",
+           "TrainCfg", "apply_overrides", "to_json", "from_json"]
 
 
 class LossCfg(BaseModel):
@@ -118,49 +53,6 @@ class LossCfg(BaseModel):
     hd_weight: float = Field(0.01, ge=0)
     hd_warmup: int = Field(15, ge=0)
     hd_ramp: int = Field(5, ge=1)
-
-
-class N4Cfg(BaseModel):
-    """N4 bias-field correction params (the SimpleITK path, preprocessing/normalization/n4.py).
-    Serialized inside DataCfg so a run with n4=True fully records what it ran (+ keys its cache)."""
-    model_config = _VALIDATE
-    shrink: int = Field(4, ge=1)               # downsample factor for the field fit (speed)
-    iters: tuple[int, ...] = (50, 50, 50)      # per-level fitting iterations
-    fwhm: float = Field(0.15, gt=0)            # bias-field FWHM
-
-
-class DataCfg(BaseModel):
-    """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
-    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor); train/val =
-    the rest, labelled. The criteria ARE the split — serialized to config.json. Defaults = the
-    generalization split (ACDC centre-shift + Canon unseen-vendor)."""
-    model_config = _VALIDATE
-    sources: tuple[str, ...] = KNOWN_DATASETS
-    # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
-    # cmrxmotion as a whole (single-vendor Siemens motion-robustness set — must be held out by
-    # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
-    # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
-    # at test. TRAIN = the rest (Siemens + Philips).
-    test_datasets: tuple[str, ...] = ("cmrxmotion",)
-    test_vendors: tuple[str, ...] = ("Canon", "GE")
-    val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
-    val_vendors: tuple[str, ...] = ()
-    inplane: float = Field(DEFAULT_INPLANE, gt=0)
-    n4: bool = False
-    n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
-    val_frac: float = Field(0.2, gt=0, lt=1)
-    size: int = Field(DEFAULT_SIZE, ge=32)
-
-
-class GeneratorCfg(BaseModel):
-    """The data-engine config: everything that makes a training BATCH (vs the model that consumes it).
-    Composes the data/split (`data`), real-pixel perturbation (`aug`), and synthetic-from-labels
-    generation (`synth`). Drives the Generator. Swapping the data side of a run = editing this subtree;
-    a future GAN generator slots in behind the same seam."""
-    model_config = _VALIDATE
-    data: DataCfg = Field(default_factory=DataCfg)
-    aug: AugCfg = Field(default_factory=AugCfg)
-    synth: SynthCfg = Field(default_factory=SynthCfg)
 
 
 class TrainCfg(BaseModel):

@@ -2,7 +2,7 @@
 
 The *invent* force of domain generalization — sibling to `augment.py` (*diversify*: perturb real
 pixels) and `preprocessing/normalization/` (*strip*: remove vendor variance). Throw away the real
-intensities and PAINT each label class by its tissue's bSSFP SIGNAL (core.data.mri_physics) under
+intensities and PAINT each label class by its tissue's bSSFP SIGNAL (core.data.static.mri_physics) under
 per-sample swept sequence params (TR/flip) and FIELD strength (1.5T/3T). Contrast is PHYSICAL, not
 fitted; sweeping the sequence/field sweeps it along the real cross-vendor manifold. Train on these and
 the net must segment by shape/structure, not one scanner's appearance.
@@ -22,10 +22,51 @@ from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
+from pydantic import BaseModel, Field
 
-from core.hparams import SynthCfg
+from core.config import _VALIDATE
 
 from .augment import _gaussian_kernel
+
+
+class SynthCfg(BaseModel):
+    """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
+    Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
+    (core.data.dynamic.mri_physics) under per-sample swept sequence params (TR/flip/field) -> a physically-
+    plausible, vendor-randomized contrast every call -> a contrast-AGNOSTIC model. ONE paint path (no
+    stats/random branches): contrast is physical, not fitted. Anatomy is the real mask (deform invents
+    more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
+    (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
+    model_config = _VALIDATE
+    synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
+    deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
+    #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
+    # --- bSSFP sequence sweep = the physical cross-vendor contrast diversity ---
+    tr_ms: tuple[float, float] = (2.8, 4.0)         # repetition time sweep (ms) — cine range
+    flip_deg: tuple[float, float] = (35.0, 70.0)     # flip-angle sweep (deg)
+    b0_hz: float = Field(0.0, ge=0)                 # off-resonance B0 field amplitude (Hz): smooth Δf
+    #                                                field -> bSSFP BANDING (lowers+spreads long-T2 blood,
+    #                                                the cav-too-bright fidelity fix). 0 = on-resonance
+    fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
+    #                                                = the dominant cross-vendor relaxation axis
+    jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
+    texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
+    flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
+    #                                                texture on blood classes so cav/RV aren't flat-bright
+    #                                                (real cine blood spreads from flow) — fidelity lever
+    # --- background ---
+    bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
+    #                                                into bg_tiers tissue tiers (real lung/fat/muscle
+    #                                                SHAPES, painted by tissue); "flat" = single bg tissue
+    bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
+    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: paste synth heart onto REAL bg
+    #                                                (isolates bg realism; forces deform off). Not pure-synth.
+    # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
+    pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
+    kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
+    bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative B1/coil bias field, +/- fraction
+    blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
+    noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
 
 
 def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:

@@ -19,8 +19,8 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
-from core.data.splits import split_patients
-from core.data.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
+from core.data.static.splits import split_patients
+from core.data.static.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
 from core.measure import ejection_fraction
 from core.inference import predict_volume
 from core.postprocess import largest_cc_per_class
@@ -61,7 +61,7 @@ def heldout_set(model_name: str) -> set[str]:
     cfg_path = run / "config.json"
     if cfg_path.exists():
         from core.hparams import from_json
-        from core.data import store, splits
+        from core.data.static import store, splits
         dc = from_json(cfg_path).data
         meta = store.load(list(dc.sources))
         train, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,

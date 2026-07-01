@@ -56,15 +56,15 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     import pyvista as pv
     import torch
 
-    from core.data.mri.acdc import load_ed_es
+    from core.data.static.mri.acdc import load_ed_es
     case = preprocess_case(patient_dir(patient), loader=load_ed_es)
     spacing = tuple(float(s) for s in case["spacing"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = None if source == "gt" else load_model(MODELS[model_name], device)
     split_tag = ""
     if source == "pred":  # honesty: was this patient in the model's training set?
-        from core.data.mri.acdc import acdc_cases
-        from core.data.splits import split_patients
+        from core.data.static.mri.acdc import acdc_cases
+        from core.data.static.splits import split_patients
         _, val = split_patients(list(acdc_cases()), 0.2, 0)
         held = patient in {c.name for c in val}
         split_tag = "  held-out" if held else "  TRAIN-seen"

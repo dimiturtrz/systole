@@ -24,12 +24,36 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from pydantic import BaseModel, Field
 
-from core.config import data_root
-from core.hparams import N4Cfg
-from core.data.mri.pathology import harmonize
-from core.data.mri.registry import get_adapter
+from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, _VALIDATE, data_root
+from core.preprocessing.n4 import N4Cfg
+from core.data.static.mri.pathology import harmonize
+from core.data.static.mri.registry import get_adapter
 from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
+
+
+class DataCfg(BaseModel):
+    """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
+    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor); train/val =
+    the rest, labelled. The criteria ARE the split — serialized to config.json. Defaults = the
+    generalization split (ACDC centre-shift + Canon unseen-vendor)."""
+    model_config = _VALIDATE
+    sources: tuple[str, ...] = KNOWN_DATASETS
+    # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
+    # cmrxmotion as a whole (single-vendor Siemens motion-robustness set — must be held out by
+    # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
+    # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
+    # at test. TRAIN = the rest (Siemens + Philips).
+    test_datasets: tuple[str, ...] = ("cmrxmotion",)
+    test_vendors: tuple[str, ...] = ("Canon", "GE")
+    val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
+    val_vendors: tuple[str, ...] = ()
+    inplane: float = Field(DEFAULT_INPLANE, gt=0)
+    n4: bool = False
+    n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
+    val_frac: float = Field(0.2, gt=0, lt=1)
+    size: int = Field(DEFAULT_SIZE, ge=32)
 
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
 # adapter registry: "canon" is a registered adapter but it's a vendor SLICE of mnms1 (a split query,
@@ -179,7 +203,7 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         frames.append(df)
     cloud = pl.concat(frames, how="vertical_relaxed")
     # continent is DERIVED from country (SSOT in data/geo) — queryable column, never hand-stored.
-    from core.data.geo import COUNTRY_CONTINENT
+    from core.data.static.geo import COUNTRY_CONTINENT
     return cloud.with_columns(
         pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 

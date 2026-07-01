@@ -11,8 +11,19 @@ spatial (fixes *where* the brightness drifts); intensity-norm is global (fixes t
 from __future__ import annotations
 
 import numpy as np
+from pydantic import BaseModel, Field
 
+from core.config import _VALIDATE
 from core.types import Spacing, Volume
+
+
+class N4Cfg(BaseModel):
+    """N4 bias-field correction params (the SimpleITK path, preprocessing/normalization/n4.py).
+    Serialized inside DataCfg so a run with n4=True fully records what it ran (+ keys its cache)."""
+    model_config = _VALIDATE
+    shrink: int = Field(4, ge=1)               # downsample factor for the field fit (speed)
+    iters: tuple[int, ...] = (50, 50, 50)      # per-level fitting iterations
+    fwhm: float = Field(0.15, gt=0)            # bias-field FWHM
 
 
 def n4_bias(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,

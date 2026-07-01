@@ -1,10 +1,27 @@
 """MONAI U-Net factory (2D or 3D) + run loading. Shape comes from an injected ModelCfg
-(core.hparams); load_run rebuilds it from a run's saved config so the architecture
-always matches the weights."""
+(defined here, next to build_unet); load_run rebuilds it from a run's saved config so the
+architecture always matches the weights."""
 
 from pathlib import Path
+from typing import Literal
 
-from core.hparams import ModelCfg
+from pydantic import BaseModel, Field
+
+from core.config import _VALIDATE
+
+
+class ModelCfg(BaseModel):
+    """U-Net shape (MONAI). Injected into build_unet."""
+    model_config = _VALIDATE
+    spatial_dims: Literal[2, 3] = 2
+    in_channels: int = Field(1, ge=1)
+    out_channels: int = Field(4, ge=2)             # bg / RV / LV-myo / LV-cav
+    channels: tuple[int, ...] = (16, 32, 64, 128, 256)
+    strides: tuple[int, ...] = (2, 2, 2, 2)
+    res_units: int = Field(2, ge=0)
+    dropout: float = Field(0.0, ge=0, le=1)        # 0 by default: dropout 0.1/0.2 regressed EF ~2pp on this
+    #                                                already-regularized small net (heavy aug + early stop), no
+    #                                                Dice gain — boundary/volume precision is dropout-fragile. See bp4.
 
 
 def build_unet(cfg: ModelCfg | None = None):

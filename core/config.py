@@ -12,6 +12,12 @@ import os
 from pathlib import Path
 
 from omegaconf import OmegaConf
+from pydantic import ConfigDict
+
+# Shared pydantic config used by every dispersed cfg (ModelCfg/AugCfg/…): setattr (used by the
+# `--set` overrides) re-validates the field. Lives here — a leaf module both core.hparams and the
+# per-class config homes import without cycling.
+_VALIDATE = ConfigDict(validate_assignment=True)
 
 _REPO = Path(__file__).resolve().parents[1]
 _PATHS_FILE = Path(os.environ.get("CARDIAC_PATHS", _REPO / "paths.yaml"))

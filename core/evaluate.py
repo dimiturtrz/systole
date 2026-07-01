@@ -9,7 +9,7 @@ shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 import numpy as np
 
 from core.types import Mask, Spacing
-from core.labels import CLASSES, FOREGROUND  # re-exported here for back-compat callers
+from core.data.static.labels import CLASSES, FOREGROUND  # re-exported here for back-compat callers
 
 try:
     from scipy.ndimage import distance_transform_edt, binary_erosion

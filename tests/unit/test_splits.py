@@ -1,7 +1,7 @@
 """make_split: test/val held-out-by-criteria vs random val fraction."""
 import polars as pl
 
-from core.data.splits import make_split
+from core.data.static.splits import make_split
 
 
 def _meta():

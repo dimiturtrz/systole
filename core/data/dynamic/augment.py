@@ -32,8 +32,31 @@ import math
 
 import torch
 import torch.nn.functional as F
+from pydantic import BaseModel, Field
 
-from core.hparams import AugCfg
+from core.config import _VALIDATE
+
+
+class AugCfg(BaseModel):
+    """GPU-batched augmentation. Geometric widths conservative; intensity widths broad to span the
+    cross-vendor contrast gap. Injected into augment_batch."""
+    model_config = _VALIDATE
+    rot_deg: float = Field(20.0, ge=0)
+    scale: tuple[float, float] = (0.85, 1.15)
+    gamma: tuple[float, float] = (0.7, 1.5)
+    gamma_p: float = Field(0.3, ge=0, le=1)
+    blur_p: float = Field(0.2, ge=0, le=1)
+    contrast: tuple[float, float] = (0.8, 1.2)
+    noise: float = Field(0.08, ge=0)
+    # MRI-physics aug (Tier 1, scan bucket). bias_p=0 -> off (default = old behavior).
+    bias_p: float = Field(0.0, ge=0, le=1)         # prob of a smooth bias-field modulation
+    bias_strength: float = Field(0.3, ge=0)        # max +/- fractional field deviation across the FOV
+    # Soft-label training: Gaussian-blur the one-hot target by this σ (voxels) so boundaries are
+    # probabilistic (honest partial-volume targets). 0 = off (crisp one-hot = hard labels). Selects
+    # the SoftDiceCE loss when >0. NOT fit to EF — a uniform boundary-uncertainty prior. DEFAULT 1.0:
+    # soft labels are the standard recipe (better calibrated, ECE -13%, equal Dice/EF — see
+    # research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md).
+    soft_label_sigma: float = Field(1.0, ge=0)
 
 _GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
 

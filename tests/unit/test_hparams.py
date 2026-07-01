@@ -4,7 +4,8 @@ are the value (cardiac-seg-8y9)."""
 import pytest
 from pydantic import ValidationError
 
-from core.hparams import TrainCfg, AugCfg, apply_overrides, to_json, from_json
+from core.hparams import TrainCfg, apply_overrides, to_json, from_json
+from core.data.dynamic.augment import AugCfg
 
 
 # --- accept: valid defaults + roundtrip ---
@@ -32,7 +33,7 @@ def test_reject_out_of_range_prob():
 
 
 def test_reject_val_frac_ge_1():
-    from core.hparams import DataCfg
+    from core.data.static.store import DataCfg
     with pytest.raises(ValidationError):
         DataCfg(val_frac=1.0)                # val_frac in (0,1)
 
@@ -44,7 +45,7 @@ def test_reject_bad_loss_kind():
 
 
 def test_reject_bad_spatial_dims():
-    from core.hparams import ModelCfg
+    from core.model import ModelCfg
     with pytest.raises(ValidationError):
         ModelCfg(spatial_dims=5)             # Literal[2,3]
 
@@ -87,6 +88,6 @@ def test_flat_config_backcompat():
 
 
 def test_n4cfg_reject_bad_shrink():
-    from core.hparams import N4Cfg
+    from core.preprocessing.n4 import N4Cfg
     with pytest.raises(ValidationError):
         N4Cfg(shrink=0)                                  # shrink >= 1

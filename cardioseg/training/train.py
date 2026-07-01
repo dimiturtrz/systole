@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from core.hparams import TrainCfg
-from core.labels import FOREGROUND
+from core.data.static.labels import FOREGROUND
 from ..tracking import track_run
 
 
@@ -49,7 +49,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     from core.model import build_unet, resolve_device
     from ..data.dataset import load_to_gpu
     from ..data.generator import Generator
-    from core.data import store, splits
+    from core.data.static import store, splits
     from core.obs import setup, timed, progress
     from core.hparams import to_json
 

@@ -73,11 +73,22 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
 
 ## Architecture Overview
 
-- `core/` — the shared, modality-agnostic kernel: `types`, `config`, `hparams`, `obs`, `labels`,
+- `core/` — the shared kernel: `types`, `config`, `hparams`, `obs`,
   `model` (build_unet/load_run), `inference` (predict_volume + TTA), `evaluate`/`measure`/`postprocess`
-  (Dice/HD95/EF/largest-CC), `export_onnx`, `preprocessing/` (resample/N4/z-score/fit_square),
-  `data/` (store, splits, geo, mri/* adapters + registry). **Dependency rule: core imports NEITHER
-  cardioseg NOR cardioview.** (bd cardiac-seg-t8p)
+  (Dice/HD95/EF/largest-CC), `export_onnx`, `preprocessing/` (resample/N4/z-score/fit_square).
+  `data/` now splits in two: **`data/static/`** (store, splits, geo, `labels`, `reference`, `mri/*`
+  adapters + registry — the read-side of the data cloud) and **`data/dynamic/`** (dataset, augment,
+  synth, mri_physics, generator = the training data ENGINE, moved here from `cardioseg/data/`).
+  **Dependency rule: core imports NEITHER cardioseg NOR cardioview** (still true) — but note
+  `data/dynamic` holds MRI-specific batch generation, so the old "modality-agnostic" phrasing is
+  loosened by owner decision: core is the shared kernel, not strictly modality-neutral. (bd cardiac-seg-t8p)
+- **Config classes live with the class they configure** (before-init pydantic dataclasses): `ModelCfg`
+  in `core/model.py`, `N4Cfg` in `core/preprocessing/n4.py`, `DataCfg` in `core/data/static/store.py`,
+  `AugCfg`/`SynthCfg`/`GeneratorCfg` in `core/data/dynamic/{augment,synth,generator}.py`. `TrainCfg`
+  (composition root) + `LossCfg` (its builder is in cardioseg, which core can't import) stay in
+  `core/hparams.py`, which imports the dispersed cfgs to assemble `TrainCfg` and re-exports them all
+  for back-compat. Shared `_VALIDATE = ConfigDict(validate_assignment=True)` lives in `core/config.py`
+  (a leaf both hparams and the cfg homes import without cycling).
 - `cardioseg/` — training + eval *orchestration* on top of core: the pipeline ACDC/M&M-2/M&Ms-1/CMRxMotion
   → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav) → consolidated store → 2D MONAI U-Net → EF
   → evaluate. Holds `training/`, `evaluation/` (validate/distribution/ensemble/calibrate/…),
