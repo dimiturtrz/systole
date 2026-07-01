@@ -20,37 +20,71 @@ import numpy as np
 from core.data.static.labels import LV_CAV  # 3
 from core.config import DEFAULT_SIZE, DEFAULT_INPLANE
 
-LV_ID, RV_ID = 1, 2                    # Rodero cell_data['ID']: LV / RV myocardium (rest dropped)
+LV_ID, RV_ID = 1, 2                    # cell tag: LV / RV myocardium (rest = atria/vessels, dropped)
 _SENTINEL = -5.0                       # universal-coord sentinel guard (real values in [-1..1]; atria=-10)
 
 
-def _sax_align(mesh):
-    """Rotate the mesh so the LV long axis (apex->base, from the Z apico-basal coord) points +z, so
-    plain axial slices of the voxelized volume are short-axis. Returns the rotated pyvista mesh."""
-    pts = np.asarray(mesh.points)
-    Z = np.asarray(mesh.point_data["Z.dat"])
-    valid = (Z >= 0.0) & (Z <= 1.0)                       # ventricular points only (atria = -10 sentinel)
-    apex = pts[valid & (Z < 0.15)].mean(0)
-    base = pts[valid & (Z > 0.85)].mean(0)
-    axis = base - apex
+def _tag_name(mesh) -> str:
+    """The per-cell region-tag array. Two Rodero packagings: real-patient cohort (4590294) tags it
+    'ID' + ships 'Z.dat' universal coords; the 1000 SSM-sampled cohort (4506930) tags it 'elemTag'
+    with NO point data. Same 1..24 scheme (1=LV, 2=RV myo)."""
+    for k in ("ID", "elemTag"):
+        if k in mesh.cell_data:
+            return k
+    raise KeyError(f"no region-tag cell array (looked for ID/elemTag); have {list(mesh.cell_data)}")
+
+
+def _rot_to_z(axis: np.ndarray) -> np.ndarray:
+    """Rodrigues rotation matrix taking unit `axis` -> +z."""
     axis = axis / (np.linalg.norm(axis) + 1e-9)
     z = np.array([0.0, 0.0, 1.0])
     v = np.cross(axis, z); s = np.linalg.norm(v); c = float(np.dot(axis, z))
-    if s < 1e-6:                                          # already aligned
-        R = np.eye(3)
+    if s < 1e-6:
+        return np.eye(3)
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))
+
+
+def _sax_align(mesh):
+    """Rotate the mesh so the LV long axis (apex->base) points +z, so plain axial slices of the
+    voxelized volume are short-axis. Uses the 'Z.dat' apico-basal coord when present (real cohort);
+    else derives the axis geometrically (PCA long-axis of the LV myocardium, oriented apex->base by
+    the atria/vessel centroid) — the 1000 SSM cohort ships no universal coords."""
+    pts = np.asarray(mesh.points)
+    tn = _tag_name(mesh)
+    if "Z.dat" in mesh.point_data:
+        Z = np.asarray(mesh.point_data["Z.dat"])
+        valid = (Z >= 0.0) & (Z <= 1.0)                   # ventricular points only (atria = -10 sentinel)
+        apex = pts[valid & (Z < 0.15)].mean(0)
+        base = pts[valid & (Z > 0.85)].mean(0)
+        axis = base - apex
+        R = _rot_to_z(axis)
+        origin = apex
     else:
-        vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-        R = np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))   # Rodrigues
+        tags = np.asarray(mesh.cell_data[tn])
+        lvpts = np.asarray(mesh.threshold([LV_ID, LV_ID], scalars=tn).points)
+        c = lvpts.mean(0)
+        _, _, vt = np.linalg.svd(lvpts - c, full_matrices=False)
+        axis = vt[0]                                       # LV long axis = 1st principal component
+        hi = int(tags.max())
+        if hi > RV_ID:                                     # orient toward base (atria/vessels = tag>2)
+            basec = np.asarray(mesh.threshold([RV_ID + 1, hi], scalars=tn).points).mean(0)
+            if np.dot(basec - c, axis) < 0:
+                axis = -axis
+        proj = (lvpts - c) @ axis
+        apex = c + axis * proj.min()                       # apex = far LV tip opposite the base
+        R = _rot_to_z(axis)
+        origin = apex
     out = mesh.copy()
-    out.points = (pts - apex) @ R.T
+    out.points = (pts - origin) @ R.T
     return out
 
 
-def _wall_mask(mesh, region_id: int, grid) -> np.ndarray:
+def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
     """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
     grid points that lie in the myocardium)."""
     import pyvista as pv
-    sub = mesh.threshold([region_id, region_id], scalars="ID")
+    sub = mesh.threshold([region_id, region_id], scalars=tag)
     surf = sub.extract_surface().triangulate()
     sel = grid.select_enclosed_points(surf, tolerance=0.0, check_surface=False)
     return np.asarray(sel["SelectedPoints"]).astype(bool)
@@ -63,13 +97,14 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0) -> n
     import pyvista as pv
     from scipy.ndimage import binary_fill_holes, binary_closing, binary_dilation, label as cc_label
     m = _sax_align(mesh)
+    tn = _tag_name(m)
     x0, x1, y0, y1, z0, z1 = m.bounds
     nx = int(np.ceil((x1 - x0) / inplane)); ny = int(np.ceil((y1 - y0) / inplane))
     nz = int(np.ceil((z1 - z0) / slice_mm))
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=(inplane, inplane, slice_mm),
                         origin=(x0, y0, z0))
-    lv = _wall_mask(m, LV_ID, grid).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
-    rv = _wall_mask(m, RV_ID, grid).reshape(nz, ny, nx)
+    lv = _wall_mask(m, LV_ID, grid, tn).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
+    rv = _wall_mask(m, RV_ID, grid, tn).reshape(nz, ny, nx)
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
         lw, rw = lv[k], rv[k]
@@ -121,7 +156,7 @@ def load(path: str | Path):
     """Read a Rodero VTK mesh (pyvista); sets 'ID' active for thresholding."""
     import pyvista as pv
     m = pv.read(str(path))
-    m.set_active_scalars("ID", preference="cell")
+    m.set_active_scalars(_tag_name(m), preference="cell")
     return m
 
 
