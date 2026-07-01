@@ -168,3 +168,22 @@ is not generated relative to the machine — the 2.3× vendor spread cannot be r
 3. **Validate external / untuned** — confirm on a vendor/dataset not used to find the fix (Canon, or an
    M&Ms split we didn't tune fidelity on). Guards against test-fitting the calibration.
 New reusable tool: `analysis/synth_fidelity.by_vendor` + `--by-vendor` CLI.
+
+### Measured per-vendor real blood level — the calibration target (2026-07-01)
+`reference.build_real_levels` (`--real-levels`) derives per-vendor per-class real intensity (z-units)
+from the store images → `<data>/reference/real_levels.yaml` (computed, verified=true). Real LV-cav /
+RV level:
+
+| vendor | real LV-cav | real RV |
+|---|---|---|
+| Siemens | +1.39 | +1.26 |
+| GE | +1.83 | +1.76 |
+| Canon | +1.87 | +1.87 |
+| Philips | +2.17 | +1.99 |
+
+Spread 1.39→2.17 (0.78z). Synth at blood_scale=1.0 sits ~+1.33 → matches Siemens, far below the
+others — the vendor-dependent gap, quantified as an absolute target (incl. Canon, the unseen test
+vendor the fidelity tool couldn't reach). The generator's machine-conditioned blood level should aim
+at these per-vendor. **Caveat:** per-image z-score conflates acquisition contrast with dataset
+FOV/composition (Philips=M&Ms, Siemens=ACDC+M&Ms), so this is a valid match-target but a confounded
+pure-physics measurement — the literature TR/flip (web research, in flight) disentangles it.
