@@ -61,6 +61,36 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
             "worst_class": worst}
 
 
+def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
+              min_slices: int = 200, max_slices: int = 1200) -> dict:
+    """Per-vendor synth-vs-real distance — does the blood-level (location) gap differ by SCANNER?
+    Groups the (labelled) real cases by vendor, paints synth from each vendor's masks, measures the
+    per-class W1 / location / shape for each. A vendor-dependent blood location gap says the fix must
+    be machine-conditioned (per-vendor inflow), not one global scalar; a flat gap says a single term
+    is enough. Thin vendors (< min_slices) are skipped (W1 noisy on tiny samples); large vendors are
+    random-subsampled to max_slices (W1 is sample-size-agnostic, and it bounds GPU memory + makes
+    vendors comparable). Reuses `synth_real_distance` per subset — the pure metric stays the source."""
+    import polars as pl
+    import torch
+    from core.data.dynamic.dataset import load_to_gpu
+    from core.data.static import splits
+    out = {}
+    for v in sorted(meta.get_column("vendor").unique().to_list()):
+        sub = meta.filter(pl.col("vendor") == v)
+        X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
+        n = int(X.shape[0])
+        if n < min_slices:
+            out[v] = {"skipped": f"{n} slices < {min_slices}"}
+            continue
+        if n > max_slices:
+            g = torch.Generator().manual_seed(0)
+            idx = torch.randperm(n, generator=g)[:max_slices]
+            X, Y = X[idx], Y[idx]
+        out[v] = {"n_slices": n, "n_used": int(X.shape[0]),
+                  **synth_real_distance(X, Y, cfg, n_classes, device, q)}
+    return out
+
+
 def _main():
     import argparse
     from core.hparams import TrainCfg
@@ -71,18 +101,25 @@ def _main():
 
     ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real distribution distance.")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides", help="synth cfg overrides, e.g. synth.bg_tiers=8")
+    ap.add_argument("--by-vendor", action="store_true", help="break the distance down per scanner vendor "
+                    "(is the blood-level gap machine-dependent?) over all labelled cases")
     a = ap.parse_args()
     setup()
     from core.hparams import apply_overrides
+    import polars as pl
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0
     device = resolve_device(None)
     d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4)
-    _, va, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
-    X, Y = load_to_gpu(splits.paths(va), d.size, "cpu")
-    s = synth_real_distance(X, Y, cfg.generator.synth, cfg.model.out_channels, device)
+    if a.by_vendor:
+        s = by_vendor(meta.filter(pl.col("labelled")), cfg.generator.synth,
+                      cfg.model.out_channels, device, d.size)
+    else:
+        _, va, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
+        X, Y = load_to_gpu(splits.paths(va), d.size, "cpu")
+        s = synth_real_distance(X, Y, cfg.generator.synth, cfg.model.out_channels, device)
     print(json.dumps(s, indent=2))
 
 

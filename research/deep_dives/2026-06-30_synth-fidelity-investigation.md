@@ -134,3 +134,37 @@ Next: seed-replicate; test blood_scale as *augmentation* (synth_p=0.5) — the f
   The differentiated result (physics-based synthetic *training*, cross-vendor, ceiling moved by a
   fidelity-found calibration) stands; the learned-generator route is no longer the only lever, though
   it remains the path to fully close the residual.
+
+### Why blood_scale=1.6 is a hack, and the principled replacement (2026-07-01)
+The scalar was fit to the *average* fidelity gap. Two measurements show that's wrong:
+
+**(1) The blood-level gap is strongly VENDOR-dependent** (`synth_fidelity.by_vendor`, blood_scale=1.0,
+painted from real masks, ≤1200 slices/vendor):
+
+| vendor | LV-cav location | RV location | mean W1 | cav shape |
+|---|---|---|---|---|
+| Siemens | 0.77 | 0.41 | 0.49 | 0.10 |
+| GE | 1.25 | 0.91 | 0.72 | 0.09 |
+| Philips | 1.79 | 1.25 | 0.91 | 0.21 |
+| Canon | (155 labelled slices — skipped) | | | |
+
+A **2.3× spread** (0.77→1.79), pure LOCATION; **shape is small + vendor-invariant** everywhere — so the
+physics *contrast* is right, only the blood *level* is wrong, by a machine-dependent amount. RV and
+LV-cav (both blood) move together per vendor → one per-vendor blood factor fixes both pools. A global
+1.6 under-corrects Philips, over-corrects Siemens.
+
+**(2) The generator isn't machine-conditioned at all.** Audit: `acquisition_for(vendor)` (the per-vendor
+cine TR/flip table) is **never called in the paint**. TR/flip are sampled from GLOBAL ranges
+(`cfg.tr_ms`, `cfg.flip_deg`); the sampled vendor is a **cosmetic tag** (metadata only). So contrast
+is not generated relative to the machine — the 2.3× vendor spread cannot be reproduced.
+
+**Principled program (replaces the scalar):**
+1. **Wire `acquisition_for` into the paint** — vendor → its TR/flip (± jitter for intra-vendor spread),
+   not a global range. Makes contrast genuinely machine-respective ("generator correct wrt its knobs").
+2. **Add inflow enhancement** — bSSFP eq is steady-state; cine blood is partly fresh (unsaturated)
+   inflow → brighter than steady-state. Model it sequence-conditioned (TR-dependent fresh fraction),
+   swept from a physiological range — a physics parameter, per-vendor by construction, **not fit to our
+   test**. This is what the vendor-dependent location gap is: un-modeled inflow, TR-driven → vendor-driven.
+3. **Validate external / untuned** — confirm on a vendor/dataset not used to find the fix (Canon, or an
+   M&Ms split we didn't tune fidelity on). Guards against test-fitting the calibration.
+New reusable tool: `analysis/synth_fidelity.by_vendor` + `--by-vendor` CLI.
