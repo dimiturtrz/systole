@@ -121,20 +121,25 @@ def test_banding_dips_at_pi_deeper_for_blood():
     assert banding(blood_t2, tr, t([math.pi])) < banding(myo_t2, tr, t([math.pi]))      # blood bands deeper
 
 
-def test_acquisition_for_vendor_and_reference_override(tmp_path):
-    """Per-vendor cine bSSFP params (the calibration axis): typical constant per vendor, generic
-    default for unknown, reference/acquisition.yaml overrides when present."""
+def test_acquisition_for_machine_join_and_reference_override(tmp_path):
+    """Machine dimension join (vendor, field) -> (TR, TE, flip): committed paper prior per machine,
+    field-driven flip (SAR axis), generic default for unknown, reference/acquisition.yaml (field-split
+    flip) overrides only when verified."""
     from core.data.dynamic.mri_physics import acquisition_for, _ACQ_DEFAULT
-    assert acquisition_for("Siemens") == (3.0, 52.0)
-    assert acquisition_for("GE") == (3.4, 45.0)
-    assert acquisition_for("Nonesuch") == _ACQ_DEFAULT          # unknown -> generic default
+    assert acquisition_for("Siemens", 1.5) == (3.0, 1.3, 70.0)
+    assert acquisition_for("Siemens", 3.0) == (3.0, 1.3, 40.0)  # flip drops at 3T (SAR cap)
+    assert acquisition_for("GE", 1.5) == (3.5, 1.5, 55.0)
+    assert acquisition_for("Siemens", 2.8) == (3.0, 1.3, 40.0)  # field snaps to nearest tabulated (3T)
+    assert acquisition_for("Nonesuch", 1.5) == _ACQ_DEFAULT     # unknown machine -> generic default
     from core.data.static.reference import Reference
     (tmp_path / "acquisition.yaml").write_text(
         "acquisition:\n  Siemens:\n"
         "    tr_ms: {value: 2.9, source: study, based_on: x, extracted_by: paper, verified: true}\n"
-        "    flip_deg: {value: 60, source: study, based_on: x, extracted_by: paper, verified: true}\n")
-    tr, fl = acquisition_for("Siemens", ref=Reference(root=tmp_path))
-    assert (tr, fl) == (2.9, 60.0)                              # reference overrides the constant
+        "    flip_deg_1p5t: {value: 62, source: study, based_on: x, extracted_by: paper, verified: true}\n")
+    tr, te, fl = acquisition_for("Siemens", 1.5, ref=Reference(root=tmp_path))
+    assert (tr, fl) == (2.9, 62.0)                              # verified reference overrides the prior
+    # unverified leaves are skipped -> fall back to the committed prior (te not in the file -> prior 1.3)
+    assert te == 1.3
 
 
 def test_return_meta_emits_provenance():

@@ -37,28 +37,42 @@ _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 _BG_LADDER = ("lung", "liver", "muscle", "fat")
 
 
-# Typical cine bSSFP SAX acquisition per vendor: (TR ms, flip deg). Approximate vendor protocols
-# (Siemens TrueFISP / Philips bFFE / GE FIESTA / Canon TrueSSFP) — the calibration axis. Overridable
-# from reference/acquisition.yaml (measured/study values) so synth contrast matches the real scanner.
-_ACQ: dict[str, tuple[float, float]] = {
-    "Siemens": (3.0, 52.0),
-    "Philips": (3.0, 45.0),
-    "GE":      (3.4, 45.0),
-    "Canon":   (3.2, 50.0),
+# --- machine dimension: (vendor, field_T) -> cine bSSFP acquisition (TR ms, TE ms, flip deg) ---
+# Committed PAPER priors (the irreducible non-derivable part: our data has no DICOM/CSV sequence
+# timing). Physics: TR/TE are near cross-vendor-invariant (~3/1.3 ms, gradient-limited); FLIP is the
+# SAR- and FIELD-driven axis (~70-80 @1.5T, ~40-50 @3T). Per-model granularity NOT warranted (no
+# published per-model cine tables). Cites: SAR flip caps PubMed 26509846; 1.5T flip 28429574; 3T
+# PMC6570530. deep-dive 2026-07-01_mri-vendor-acquisition-params (bd ex1 / 276).
+# NORMALIZED: this is the machine dimension keyed by (vendor, field); subjects hold that pair as the FK
+# (store meta vendor/field_T) and JOIN here via acquisition_for — attributes live once, never copied per
+# subject. reference/acquisition.yaml is the built artifact of this table + the slot for verified
+# (e.g. DICOM-mined) overrides.
+_ACQ: dict[tuple[str, float], tuple[float, float, float]] = {
+    ("Siemens", 1.5): (3.0, 1.3, 70.0), ("Siemens", 3.0): (3.0, 1.3, 40.0),
+    ("Philips", 1.5): (3.0, 1.3, 60.0), ("Philips", 3.0): (3.0, 1.3, 45.0),
+    ("GE",      1.5): (3.5, 1.5, 55.0), ("GE",      3.0): (3.5, 1.5, 40.0),
+    ("Canon",   1.5): (3.2, 1.4, 55.0), ("Canon",   3.0): (3.2, 1.4, 40.0),  # Canon: extrapolated, low conf
 }
-_ACQ_DEFAULT = (3.1, 48.0)
+_ACQ_DEFAULT = (3.1, 1.3, 60.0)
+_FIELDS = (1.5, 3.0)
 
 
-def acquisition_for(vendor: str | None, ref=None) -> tuple[float, float]:
-    """(TR ms, flip deg) for a vendor's typical cine bSSFP — the acquisition to calibrate synth contrast
-    to. Prefers reference/acquisition.yaml (ref.get('acquisition', vendor, 'tr_ms'/'flip_deg')); else the
-    typical per-vendor constant; else the generic default. `ref` = a core.data.static.reference.Reference (optional)."""
-    tr = fl = None
+def acquisition_for(vendor: str | None, field: float = 1.5, ref=None) -> tuple[float, float, float]:
+    """(TR ms, TE ms, flip deg) for a machine = (vendor, field) cine bSSFP — the JOIN into the machine
+    dimension. `field` snaps to the nearest tabulated strength (flip is field-driven). Prefers the
+    reference/ artifact (verified overrides, e.g. DICOM-mined: tr_ms/te_ms + flip_deg_1p5t/flip_deg_3t),
+    else the committed paper prior, else the generic default. `ref` = a
+    core.data.static.reference.Reference (optional)."""
+    f = min(_FIELDS, key=lambda x: abs(x - float(field))) if field else 1.5
+    d = _ACQ.get((vendor or "", f), _ACQ_DEFAULT)
+    tr = te = fl = None
     if ref is not None and vendor is not None:
         tr = ref.get("acquisition", vendor, "tr_ms")
-        fl = ref.get("acquisition", vendor, "flip_deg")
-    d = _ACQ.get(vendor or "", _ACQ_DEFAULT)
-    return (float(tr) if tr is not None else d[0], float(fl) if fl is not None else d[1])
+        te = ref.get("acquisition", vendor, "te_ms")
+        fl = ref.get("acquisition", vendor, "flip_deg_1p5t" if f == 1.5 else "flip_deg_3t")
+    return (float(tr) if tr is not None else d[0],
+            float(te) if te is not None else d[1],
+            float(fl) if fl is not None else d[2])
 
 
 def blood_classes(n_classes: int) -> list[int]:
