@@ -174,7 +174,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     except Exception as e:
         log.warning("model card skipped: %s", e)
     try:                                                   # attribution diagnostic (confusion + saliency)
-        from ..evaluation.attribution import run_attribution
+        from core.data.analysis.attribution import run_attribution
         s = run_attribution(model, Xva, Yva, cfg.model.out_channels, device, out)
         log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
     except Exception as e:

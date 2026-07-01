@@ -1,9 +1,9 @@
-"""Attribution diagnostic (cardioseg.evaluation.attribution). The load-bearing, model-free piece is
+"""Attribution diagnostic (core.data.analysis.attribution). The load-bearing, model-free piece is
 the class-confusion matrix — it surfaces directional mistakes (e.g. foreground predicted as bg) that a
 mean-Dice number hides. Saliency needs captum + a model (smoke-tested at train time, not here)."""
 import torch
 
-from cardioseg.evaluation.attribution import class_confusion
+from core.data.analysis.attribution import class_confusion
 
 
 def test_confusion_row_normalized_per_gt_class():
