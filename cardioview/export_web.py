@@ -13,10 +13,8 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-import pyvista as pv
 import torch
 from scipy.ndimage import zoom
-from skimage.measure import marching_cubes
 
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from core.data.static.splits import split_patients
@@ -24,33 +22,14 @@ from core.data.static.mri.acdc import acdc_cases, parse_info_cfg, load_ed_es
 from core.measure import ejection_fraction
 from core.inference import predict_volume
 from core.postprocess import largest_cc_per_class
+from core.config import data_root
+from core.mesh import export_glb                    # reusable chamber-mesh tool (bd 7c9.1)
 from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, model_dir, patient_dir, masks as build_masks, square_stack
 from geometry import keep_largest, bbox_slices, nearest_index
 
-OUT = Path("cardioview/web/public/data")
-DECIMATE = 0.7  # fraction of triangles to drop — smaller files, faster web
-MESH_MM = 2.5   # surface resample step; coarser than voxels -> far fewer triangles, still smooth
-
-
-def chamber_surface(mask_anis: np.ndarray, label: int, spacing, iso: float):
-    """Smooth chamber surface: largest-CC binary, linear-resampled to isotropic (no
-    z-staircase), marching cubes, Taubin-smoothed, decimated. In (x,y,z) world mm."""
-    binary = keep_largest(mask_anis == label)
-    if binary.sum() < 8:
-        return None
-    soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)
-    if soft.max() < 0.5:
-        return None
-    # Pad a zero border so chambers touching the (truncated) stack edges get capped — else
-    # marching cubes leaves the base/apex open and the cavity looks hollow.
-    soft = np.pad(soft, 1, mode="constant")
-    verts, faces, _, _ = marching_cubes(soft, level=0.5, spacing=(iso, iso, iso))
-    verts = verts[:, [2, 1, 0]]  # (z,y,x) -> (x,y,z)
-    fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
-    mesh = pv.PolyData(verts, fp).smooth_taubin(n_iter=24, pass_band=0.05)
-    if DECIMATE:
-        mesh = mesh.decimate(DECIMATE)
-    return mesh.compute_normals(auto_orient_normals=True, split_vertices=False)
+# Web assets live OUT of the repo, under the data root (<data>/meshes/cardioview/) — never committed.
+# The viewer is served from here (vite base / copy step, bd follow-up), not from cardioview/web/public.
+OUT = Path(data_root("meshes")) / "cardioview"
 
 
 def heldout_set(model_name: str) -> set[str]:
@@ -82,15 +61,6 @@ def shared_crop(masks: dict, spacing, margin_mm: float = 12.0):
     return {t: m[crop] for t, m in masks.items()}, float(min(spacing))
 
 
-def export_glb(mask_anis: np.ndarray, spacing, path: Path) -> None:
-    pl = pv.Plotter(off_screen=True)
-    for label, (_name, color) in CHAMBERS.items():
-        mesh = chamber_surface(mask_anis, label, spacing, MESH_MM)
-        if mesh is not None:
-            pl.add_mesh(mesh, color=color, opacity=1.0 if label != 2 else 0.55, smooth_shading=True)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pl.export_gltf(str(path))
-    pl.close()
 
 
 def volumes(masks: dict, spacing) -> dict:
