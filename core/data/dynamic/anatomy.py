@@ -160,27 +160,49 @@ def load(path: str | Path):
     return m
 
 
+def _pool_worker(args) -> list[np.ndarray]:
+    """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
+    process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
+    mp, inplane, size, min_fg, scale_reps, mseed = args
+    from core.preprocessing.preprocess import fit_square
+    rng = np.random.default_rng(mseed)
+    out = []
+    try:
+        vol = voxelize(load(mp), inplane=inplane)
+    except Exception:                                    # a malformed mesh shouldn't kill the whole build
+        return out
+    for _ in range(max(1, scale_reps)):
+        tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
+        sv = _scale_to_target(vol, tgt)
+        for k in range(sv.shape[0]):
+            if int((sv[k] > 0).sum()) >= min_fg:
+                out.append(fit_square(sv[k], size, 0).astype(np.uint8))
+    return out
+
+
 def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
                inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
-               seed: int = 0) -> tuple[Path, tuple]:
+               seed: int = 0, workers: int = 0) -> tuple[Path, tuple]:
     """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
     -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
     ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
     apex/base slices dropped. Each mesh is globally rescaled to a target max-bbox side sampled from the
     real ACDC size distribution (REAL_SIZE_PX); `scale_reps` emits that many independent scale draws per
-    mesh (cheap scale-diversity multiplier on top of the ~20-mesh cohort)."""
-    from core.preprocessing.preprocess import fit_square
-    rng = np.random.default_rng(seed)
+    mesh. Meshes are voxelized in PARALLEL (`workers` processes; 0 -> cpu-2, the bottleneck is the
+    per-mesh select_enclosed_points on ~2M-cell tets) — embarrassingly parallel, deterministic."""
+    import os
+    from concurrent.futures import ProcessPoolExecutor
     meshes = sorted(Path(mesh_dir).rglob("*.vtk"))
-    slices = []
-    for mp in meshes:
-        vol = voxelize(load(mp), inplane=inplane)
-        for _ in range(max(1, scale_reps)):
-            tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
-            sv = _scale_to_target(vol, tgt)
-            for k in range(sv.shape[0]):
-                if int((sv[k] > 0).sum()) >= min_fg:
-                    slices.append(fit_square(sv[k], size, 0).astype(np.uint8))
+    nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+    jobs = [(str(mp), inplane, size, min_fg, scale_reps, seed + i) for i, mp in enumerate(meshes)]
+    slices: list[np.ndarray] = []
+    if nw == 1 or len(jobs) <= 1:
+        for j in jobs:
+            slices.extend(_pool_worker(j))
+    else:
+        with ProcessPoolExecutor(max_workers=nw) as ex:
+            for part in ex.map(_pool_worker, jobs, chunksize=1):
+                slices.extend(part)
     arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
