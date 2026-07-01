@@ -61,6 +61,11 @@ class SynthCfg(BaseModel):
     flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
     #                                                texture on blood classes so cav/RV aren't flat-bright
     #                                                (real cine blood spreads from flow) — fidelity lever
+    blood_scale: float = Field(1.0, ge=0)          # multiplicative scale on blood-pool MEAN (not std).
+    #                                                1.0 = off. MEASURED: synth cav is DIMMER than real in
+    #                                                z-units (attenuating grows the gap), so this is a
+    #                                                fidelity probe on the LV-cav/RV location gap, not an
+    #                                                assumed flow-loss attenuation. (bd 276)
     # --- background ---
     bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
     #                                                into bg_tiers tissue tiers (real lung/fat/muscle
@@ -138,6 +143,10 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint]
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
+    if cfg.blood_scale != 1.0:                    # blood-pool mean scale (fidelity probe on cav location)
+        from .mri_physics import blood_classes
+        for c in blood_classes(n_classes):
+            mu[:, c] = mu[:, c] * cfg.blood_scale
     sg = mu.abs() * cfg.texture                                              # within-class texture
     if cfg.flow > 0:                                                         # flow: blood pools spread
         from .mri_physics import blood_classes

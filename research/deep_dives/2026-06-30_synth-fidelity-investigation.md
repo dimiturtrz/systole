@@ -73,3 +73,31 @@ diversity via TR/flip/field sweeps), with this fidelity gap characterized, not h
   `mri_physics.acquisition_for(vendor, ref)` (typical per-vendor cine bSSFP, reference-overridable, tested).
   Remaining (`bd ulw`): synth samples the real vendor/field distribution → acquisition_for → paint +
   emit meta → measure per-vendor fidelity + pure-synth transfer.
+
+## Correction — the cav gap sign was WRONG; blood is too DIM, not too bright (2026-07-01)
+The conclusion above ("cav too bright by ~0.9z", "no blood-signal knob can close it", line ~32/43/46)
+is **refuted by measurement**. It rested on one direction only: banding *lowers* blood → cav loc got
+*worse* (0.89→1.48), read as "z-renorm noise." Nobody tried *raising* blood.
+
+New probe `synth.blood_scale` (multiplies blood-pool MEAN, off=1.0) swept on `synth_fidelity`
+(val set, synth_p=1):
+
+| blood_scale | mean W1 | LV-cav W1 | cav location | RV location | LV-myo W1 |
+|---|---|---|---|---|---|
+| 1.0 (off) | 0.515 | 0.929 | 0.912 | 0.555 | 0.318 |
+| **1.6** | **0.385** | 0.380 | 0.356 | **0.004** | 0.625 |
+| 2.0 | 0.488 | 0.394 | 0.036 | 0.301 | 0.824 |
+
+So the gap closes by making blood **brighter**: scale≈1.6 cuts mean synth-real W1 **25%** and nearly
+perfectly matches RV location (0.555→0.004) — RV being the exact class the model shortcuts away. The
+banding-worsened-it result was **evidence blood was too dim**, mis-signed. Tradeoff: myo worsens
+(0.318→0.625) via the per-image z-norm coupling (brighter blood shifts global mean/std), so mean W1
+bottoms near 1.6 not 2.0. It's **semi-empirical** (a level-match scalar compensating z-norm
+composition, not a first-principles flow term) — physics gives the *shape* (0.05, ~perfect), this
+matches the *level*. Also re-confirmed: **vessel-bright bg ladder → worse** (mean W1 0.515→0.57; bg
+composition already matches, location ~0.005), so the gap is NOT background — it's the blood pools.
+
+**Open (the decisive test):** does the 25% fidelity gain + RV-location fix convert to pure-synth
+Dice / RV recall (vs 0.62 physics / 0.66 stats)? A pure-synth training run at blood_scale=1.6 vs 1.0
+(same protocol; the delta is protocol-independent) settles it. If yes, the "caps ~0.66, needs a
+learned generator" ceiling falls to one physics-ish scalar.

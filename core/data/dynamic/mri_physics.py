@@ -30,6 +30,10 @@ FIELDS: tuple[float, ...] = (1.5, 3.0)
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
 _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 # background intensity ladder dark -> bright; bg tiers INTERPOLATE params along it (no collisions, any K).
+# NB ends at fat, NOT blood: appending a blood endmember was measured to WORSEN synth-real fidelity
+# (mean W1 0.515->0.57, bg 0.236->0.295) — bg composition already matches real (bg location ~0.005), so
+# the pure-synth gap is NOT background. It's blood-pool over-brightness (LV-cav W1 0.93, ~all location
+# 0.91, shape 0.05). See bd 276 / ap6 notes. (measured 2026-07-01)
 _BG_LADDER = ("lung", "liver", "muscle", "fat")
 
 
