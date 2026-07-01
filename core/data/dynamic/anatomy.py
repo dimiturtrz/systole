@@ -92,6 +92,30 @@ def load(path: str | Path):
     return m
 
 
+def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
+               inplane: float = DEFAULT_INPLANE, min_fg: int = 40) -> tuple[Path, tuple]:
+    """Voxelize every *.vtk in `mesh_dir` -> SAX slices -> fit_square to `size` -> stacked label pool,
+    saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-ANATOMY training pool: label
+    maps only (the physics painter adds contrast per batch). Near-empty apex/base slices dropped."""
+    from core.preprocessing.preprocess import fit_square
+    meshes = sorted(Path(mesh_dir).rglob("*.vtk"))
+    slices = []
+    for mp in meshes:
+        vol = voxelize(load(mp), inplane=inplane)
+        for k in range(vol.shape[0]):
+            if int((vol[k] > 0).sum()) >= min_fg:
+                slices.append(fit_square(vol[k], size, 0).astype(np.uint8))
+    arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
+    out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out_path, slices=arr)
+    return out_path, arr.shape
+
+
+def load_pool(path: str | Path) -> np.ndarray:
+    """Load the anatomy pool [N, size, size] (label maps) built by build_pool."""
+    return np.load(str(path))["slices"]
+
+
 def _main():
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
     import argparse

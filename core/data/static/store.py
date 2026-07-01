@@ -55,6 +55,10 @@ class DataCfg(BaseModel):
     nyul: bool = False                                # Nyúl histogram standardization (harmonization,
     #                                                qfz): map the intensity distribution to a cohort-fit
     #                                                standard before z-score. The standard = reference data.
+    anatomy_pool: str = ""                            # if set: path to a synthetic-anatomy label-map pool
+    #                                                (core.data.dynamic.anatomy.build_pool from Rodero SSM
+    #                                                meshes). TRAIN masks come from it (synth anatomy, zero
+    #                                                real data); val/test stay REAL held-out. (bd 1vl/bwp)
     norm: str = "zscore"                              # intensity normalization: 'zscore' (default) or
     #                                                'blood' = two-point affine (air->0, blood->1),
     #                                                composition-robust harmonization (bd h8k). ORACLE

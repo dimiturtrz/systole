@@ -88,7 +88,18 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     # gpu only makes sense with a cuda device; fall back to cpu residency otherwise.
     data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
     with timed(log, f"preload slices (residency={cfg.residency}->{data_device}, {len(train_df)}+{len(val_df)} subj)"):
-        Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+        if d.anatomy_pool:
+            # TRAIN on synthetic anatomy (Rodero SSM label maps) — zero real data; val/test stay REAL.
+            import torch as _t
+            from core.data.dynamic.anatomy import load_pool
+            pool = load_pool(d.anatomy_pool)
+            Ytr = _t.as_tensor(pool, dtype=_t.long, device=data_device)               # [N,H,W] labels
+            Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)     # unused (flat bg, synth_p=1)
+            cfg.generator.synth.synth_p = 1.0
+            cfg.generator.synth.bg_mode = "flat"                                      # no real image to partition
+            log.info("ANATOMY POOL: %d synth-anatomy slices (train); real val/test held out", Ytr.shape[0])
+        else:
+            Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
     # the data engine: yields collapsed batches (real / synth / mixed by cfg.generator.synth)
     gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device)
