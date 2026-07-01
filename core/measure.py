@@ -33,6 +33,26 @@ def expected_volume_ml(prob: np.ndarray, spacing: Spacing) -> float:
     return float(np.asarray(prob).sum()) * voxel_volume_ml(spacing)
 
 
+def ef_statistics(ef_gt, ef_pred) -> dict:
+    """Bland–Altman EF agreement over paired EF arrays (percent). Single source for the
+    bias / SD / MAE / 95% limits-of-agreement quadruple that eval + results otherwise recompute
+    (with drifting ddof / NaN handling). NaN pairs (EDV<=0 -> undefined EF) are dropped first.
+    SD uses ddof=1 (sample). Returns {n, bias, sd, mae, loa=[lo,hi], mean_gt}; all-NaN -> NaNs."""
+    g = np.asarray(ef_gt, dtype=float)
+    p = np.asarray(ef_pred, dtype=float)
+    diff = p - g
+    ok = ~np.isnan(diff)
+    diff, g = diff[ok], g[ok]
+    n = int(diff.size)
+    if n == 0:
+        nan = float("nan")
+        return {"n": 0, "bias": nan, "sd": nan, "mae": nan, "loa": [nan, nan], "mean_gt": nan}
+    bias = float(diff.mean())
+    sd = float(diff.std(ddof=1)) if n > 1 else 0.0
+    return {"n": n, "bias": bias, "sd": sd, "mae": float(np.abs(diff).mean()),
+            "loa": [bias - LOA_Z * sd, bias + LOA_Z * sd], "mean_gt": float(g.mean())}
+
+
 def ejection_fraction(
     ed_mask: Mask, es_mask: Mask, spacing: Spacing, lv_label: int = LV_CAV
 ) -> tuple[float, float, float]:

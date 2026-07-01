@@ -12,6 +12,18 @@ from core.types import Mask
 from core.data.static.labels import FOREGROUND
 
 
+def largest_cc_binary(binary: np.ndarray) -> np.ndarray:
+    """Largest connected component of a boolean volume (drop stray islands). CPU/scipy.
+    Shared by mesh export and cardioview geometry; the per-class GPU/CPU paths below inline
+    the same logic on their respective array libs."""
+    lab, n = _cc_label(binary)
+    if n <= 1:
+        return binary
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0  # ignore background
+    return lab == int(sizes.argmax())
+
+
 def _gpu_cc():
     """cucim GPU connected-components (the linux GPU lane) if importable, else None -> scipy CPU.
     Detected once at import — a single capability gate, no per-call branching beyond the dispatch."""
@@ -55,11 +67,5 @@ def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = FOREGROUND) -> Ma
         binary = mask == lab
         if not binary.any():
             continue
-        cc, n = _cc_label(binary)
-        if n <= 1:
-            out[binary] = lab
-            continue
-        sizes = np.bincount(cc.ravel())
-        sizes[0] = 0  # ignore background
-        out[cc == int(sizes.argmax())] = lab
+        out[largest_cc_binary(binary)] = lab
     return out

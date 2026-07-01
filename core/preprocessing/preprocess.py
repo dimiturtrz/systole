@@ -36,6 +36,13 @@ def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
     return out
 
 
+def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> np.ndarray:
+    """fit_square each [H,W] slice to the model grid and stack -> [D, size, size]. The one-liner the
+    eval modules repeat for GT/label volumes; `dtype` casts the stack (uint8/int64 label maps)."""
+    out = np.stack([fit_square(s, size, pad_value) for s in slices])
+    return out.astype(dtype) if dtype is not None else out
+
+
 def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
     """Per-volume z-score on the whole array (uncalibrated intensity -> zero-mean)."""
     img = img.astype(np.float32)

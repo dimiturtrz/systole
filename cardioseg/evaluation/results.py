@@ -21,7 +21,7 @@ from core.data.static import store, splits
 from core.hparams import from_json
 from core.model import resolve_device
 from cardioseg.evaluation.distribution import collect, _pooled, strata_table
-from core.measure import LOA_Z
+from core.measure import ef_statistics
 from core.evaluate import surface_metrics, CLASSES
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
@@ -41,8 +41,7 @@ _NAMES = [CLASSES[c][0] for c in CLASSES]  # RV, LV-myo, LV-cav
 def _axis(run: Path, device: str, df, with_strata: bool) -> dict:
     rows = collect(run, device, df.iter_rows(named=True))
     dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
-    diff = ef_pred - ef_gt
-    bias, sd = float(diff.mean()), float(diff.std(ddof=1))
+    s = ef_statistics(ef_gt, ef_pred)
     dice, hd95, assd = {}, {}, {}
     for cl, (name, _) in CLASSES.items():
         pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
@@ -51,8 +50,8 @@ def _axis(run: Path, device: str, df, with_strata: bool) -> dict:
         hd95[name] = round(float(m["hd95"]), 1)
         assd[name] = round(float(m["assd"]), 2)
     out = {"n": len(rows), "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
-           "hd95": hd95, "assd": assd, "ef_mae": round(float(np.mean(np.abs(diff))), 1),
-           "ef_bias": round(bias, 1), "ef_loa": [round(bias - LOA_Z * sd, 1), round(bias + LOA_Z * sd, 1)]}
+           "hd95": hd95, "assd": assd, "ef_mae": round(s["mae"], 1),
+           "ef_bias": round(s["bias"], 1), "ef_loa": [round(s["loa"][0], 1), round(s["loa"][1], 1)]}
     if with_strata:
         out["strata"] = strata_table(rows, "pathology")
     return out

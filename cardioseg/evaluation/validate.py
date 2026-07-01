@@ -33,7 +33,7 @@ def validate(
     from core.measure import ejection_fraction
     from core.postprocess import largest_cc_per_class
     from core.evaluate import surface_distances, surface_metrics
-    from core.preprocessing.preprocess import fit_square
+    from core.preprocessing.preprocess import stack_slices
     from core.data.static.store import load_arrays
 
     inter = {c: 0.0 for c in CLASS_NAMES}
@@ -51,7 +51,7 @@ def validate(
             pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device, tta=tta)
             if postproc:
                 pred = largest_cc_per_class(pred)
-            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag.lower()}_gt"]])
+            gt = stack_slices(c[f"{tag.lower()}_gt"], size)
             vols[tag] = (pred, gt)
             for cl in CLASS_NAMES:
                 p, g = pred == cl, gt == cl

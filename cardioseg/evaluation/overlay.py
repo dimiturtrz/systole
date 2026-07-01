@@ -19,7 +19,7 @@ from core.config import FLAGSHIP_REF
 from core.registry import resolve
 from core.hparams import from_json
 from core.model import build_unet
-from core.preprocessing.preprocess import fit_square
+from core.preprocessing.preprocess import stack_slices
 from core.data.static import store, splits
 from core.data.static.store import load_arrays
 from core.inference import predict_volume
@@ -49,10 +49,10 @@ def _case(model, path, size, device):
     spacing = tuple(float(s) for s in c["spacing"])
     pred_ed = largest_cc_per_class(predict_volume(model, c["ed_img"], size, device, tta=True))
     pred_es = largest_cc_per_class(predict_volume(model, c["es_img"], size, device, tta=True))
-    gt_ed = np.stack([fit_square(s, size, 0) for s in c["ed_gt"]])
-    img_ed = np.stack([fit_square(s, size, 0.0) for s in c["ed_img"]])
+    gt_ed = stack_slices(c["ed_gt"], size)
+    img_ed = stack_slices(c["ed_img"], size, 0.0)
     ef_p, _, _ = ejection_fraction(pred_ed, pred_es, spacing)
-    gt_es = np.stack([fit_square(s, size, 0) for s in c["es_gt"]])
+    gt_es = stack_slices(c["es_gt"], size)
     ef_g, _, _ = ejection_fraction(gt_ed, gt_es, spacing)
     z = _mid_slice(gt_ed)
     return dict(group=c.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],

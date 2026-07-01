@@ -76,7 +76,6 @@ def save_model(staging_dir, *, run_name: str, params: dict | None = None,
     to mlflow under artifact_path 'model', register a version of MODEL_NAME, optionally set `alias`.
     Reuses `run_id` if given (the train run), else starts one. Returns the run-id."""
     mlflow = _mlflow()
-    from core.registry import MODEL_NAME as _N  # local for clarity
     staging = Path(staging_dir)
     own = run_id is None
     if own:
@@ -91,13 +90,13 @@ def save_model(staging_dir, *, run_name: str, params: dict | None = None,
             (mlflow.log_artifact(str(f), artifact_path="model") if own
              else c.log_artifact(rid, str(f), artifact_path="model"))
     src = f"runs:/{rid}/model"
-    mv = c.create_model_version(_N, source=src, run_id=rid)
+    mv = c.create_model_version(MODEL_NAME, source=src, run_id=rid)
     if description:
-        c.update_model_version(_N, mv.version, description=description)
+        c.update_model_version(MODEL_NAME, mv.version, description=description)
     for k, v in (tags or {}).items():
-        c.set_model_version_tag(_N, mv.version, k, str(v))
+        c.set_model_version_tag(MODEL_NAME, mv.version, k, str(v))
     if alias:
-        c.set_registered_model_alias(_N, alias, mv.version)
+        c.set_registered_model_alias(MODEL_NAME, alias, mv.version)
     if own:
         mlflow.end_run()
     return rid

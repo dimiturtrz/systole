@@ -69,7 +69,7 @@ def main():
     from core.data.static import store
     from core.model import load_run
     from core.registry import resolve
-    from core.preprocessing.preprocess import fit_square, SIZE
+    from core.preprocessing.preprocess import fit_square, stack_slices, SIZE
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
@@ -96,7 +96,7 @@ def main():
             if f"{tag}_img" not in c:
                 continue
             pred, ent, conf, ale, epi = tta_uncertainty(model, c[f"{tag}_img"], SIZE, device)
-            gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            gt = stack_slices(c[f"{tag}_gt"], SIZE, dtype=np.uint8)
             fg = (pred > 0) | (gt > 0)
             confs.append(conf[fg]); corrects.append((pred == gt)[fg]); ents.append(ent[fg])
             ales.append(ale[fg]); epis.append(epi[fg])

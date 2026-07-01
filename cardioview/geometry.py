@@ -2,17 +2,8 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import label as cc_label
 
-
-def keep_largest(binary: np.ndarray) -> np.ndarray:
-    """Keep only the largest connected component (drops model false-positive islands)."""
-    lab, n = cc_label(binary)
-    if n <= 1:
-        return binary
-    sizes = np.bincount(lab.ravel())
-    sizes[0] = 0  # ignore background
-    return lab == sizes.argmax()
+from core.postprocess import largest_cc_binary as keep_largest  # single source (bd cardiac-seg-y0x)
 
 
 def nearest_index(values, target) -> int:

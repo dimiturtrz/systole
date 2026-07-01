@@ -22,7 +22,7 @@ def _gather(model, paths, size, device, per_vol=4000, seed=0):
     subsampled to ~per_vol voxels/volume — plenty for a 1-param fit + ECE, bounded memory."""
     import torch
     from core.data.static import store
-    from core.preprocessing.preprocess import fit_square
+    from core.preprocessing.preprocess import fit_square, stack_slices
 
     rng = np.random.RandomState(seed)
     L, Y = [], []
@@ -33,7 +33,7 @@ def _gather(model, paths, size, device, per_vol=4000, seed=0):
             if f"{tag}_img" not in c:
                 continue
             xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in c[f"{tag}_img"]])
-            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag}_gt"]]).astype(np.int64)
+            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.int64)
             with torch.no_grad():
                 logits = model(torch.from_numpy(xs)[:, None].to(device))   # [D,C,H,W]
             logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]

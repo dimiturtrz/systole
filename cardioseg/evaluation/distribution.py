@@ -27,10 +27,10 @@ from scipy.stats import gaussian_kde
 from core.model import load_run, resolve_device
 from core.registry import resolve
 from core.config import FLAGSHIP_REF
-from core.preprocessing.preprocess import fit_square, SIZE
+from core.preprocessing.preprocess import stack_slices, SIZE
 from core.data.static import store, splits
 from core.inference import predict_volume
-from core.measure import ejection_fraction, LOA_Z
+from core.measure import ejection_fraction, ef_statistics, LOA_Z
 from core.evaluate import surface_distances, surface_metrics, dice, CLASSES
 from core.postprocess import largest_cc_per_class
 
@@ -63,7 +63,7 @@ def collect(run: Path, device: str, meta_rows):
             if f"{k}_img" not in c:
                 continue
             pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device, tta=True))
-            gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{k}_gt"]]).astype(np.uint8)
+            gt = stack_slices(c[f"{k}_gt"], SIZE, dtype=np.uint8)
             masks[tag] = (pred, gt)
             # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
             # made the boundary/Dice numbers optimistic.
@@ -118,8 +118,8 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
     upright on top; bias + 95% LoA as vertical lines (and in the title)."""
     mean = (ef_gt + ef_pred) / 2
     diff = ef_pred - ef_gt
-    bias, sd = float(np.mean(diff)), float(np.std(diff, ddof=1))
-    lo, hi = bias - LOA_Z * sd, bias + LOA_Z * sd
+    s = ef_statistics(ef_gt, ef_pred)
+    bias, sd, (lo, hi) = s["bias"], s["sd"], s["loa"]
 
     fig = plt.figure(figsize=(7, 5))
     gs = fig.add_gridspec(2, 1, height_ratios=(1, 3), hspace=0.05)
@@ -189,9 +189,8 @@ def strata_table(rows, key) -> dict:
     out = {}
     for grp, rs in g.items():
         d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
-        diff = np.array([r["ef_pred"] - r["ef_gt"] for r in rs])
-        gt_ef = float(np.mean([r["ef_gt"] for r in rs]))
-        mae, bias = float(np.mean(np.abs(diff))), float(np.mean(diff))
+        s = ef_statistics([r["ef_gt"] for r in rs], [r["ef_pred"] for r in rs])
+        mae, bias, gt_ef = s["mae"], s["bias"], s["mean_gt"]
         mean_d = float(np.mean(list(d.values())))
         flag = "  (small n)" if len(rs) < SMALL_N else ""
         print(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "

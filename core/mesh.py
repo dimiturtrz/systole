@@ -17,19 +17,10 @@ import numpy as np
 
 from core.config import data_root
 from core.data.static.labels import CLASSES        # {label: (name, hexcolor)}
+from core.postprocess import largest_cc_binary
 
 MESH_MM = 2.5      # surface resample step (coarser than voxels -> fewer triangles, still smooth)
 DECIMATE = 0.7     # fraction of triangles to drop (smaller files)
-
-
-def _largest_cc(binary: np.ndarray) -> np.ndarray:
-    """Largest connected component of a boolean volume (drop stray islands before meshing)."""
-    from scipy.ndimage import label as cc_label
-    lab, n = cc_label(binary)
-    if n <= 1:
-        return binary
-    sizes = np.bincount(lab.ravel()); sizes[0] = 0
-    return lab == int(sizes.argmax())
 
 
 def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
@@ -40,7 +31,7 @@ def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
     import pyvista as pv
     from scipy.ndimage import zoom
     from skimage.measure import marching_cubes
-    binary = _largest_cc(mask == label)
+    binary = largest_cc_binary(mask == label)
     if binary.sum() < 8:
         return None
     soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)

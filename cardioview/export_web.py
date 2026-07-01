@@ -14,7 +14,6 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 import torch
-from scipy.ndimage import zoom
 
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 from core.data.static.splits import split_patients

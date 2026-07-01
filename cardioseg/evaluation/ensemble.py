@@ -38,7 +38,7 @@ def ensemble_score(models, df, size, device):
     like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
     import numpy as np
     from core.data.static import store
-    from core.preprocessing.preprocess import fit_square
+    from core.preprocessing.preprocess import stack_slices
     from core.data.static.labels import FOREGROUND, LV_CAV
     from core.postprocess import largest_cc_per_class
     from core.measure import ejection_fraction
@@ -52,7 +52,7 @@ def ensemble_score(models, df, size, device):
             if f"{tag}_img" not in c:
                 continue
             pred = largest_cc_per_class(ensemble_decompose(models, c[f"{tag}_img"], size, device)[0])
-            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.uint8)
             preds[tag], gts[tag] = pred, gt
             for cl in FOREGROUND:
                 p, g = pred == cl, gt == cl
@@ -82,7 +82,7 @@ def _eval_df(cfg, which):
 def _headroom(models, df, size, device):
     """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
     from core.data.static import store
-    from core.preprocessing.preprocess import fit_square
+    from core.preprocessing.preprocess import stack_slices
     from .uncertainty import tta_uncertainty
     ea, ee, ta, te = [], [], [], []
     for r in df.iter_rows(named=True):
@@ -91,7 +91,7 @@ def _headroom(models, df, size, device):
             if f"{tag}_img" not in c:
                 continue
             pred, _, ale, epi = ensemble_decompose(models, c[f"{tag}_img"], size, device)
-            gt = np.stack([fit_square(s, size, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.uint8)
             fg = (pred > 0) | (gt > 0)
             ea.append(ale[fg]); ee.append(epi[fg])
             _, _, _, sa, se_ = tta_uncertainty(models[0], c[f"{tag}_img"], size, device)
@@ -102,7 +102,7 @@ def _headroom(models, df, size, device):
 
 
 def main():
-    from core.data.dynamic.dataset import SIZE
+    from core.preprocessing.preprocess import SIZE
     from core.model import load_run, resolve_device
     from core.registry import resolve
     from ..tracking import start

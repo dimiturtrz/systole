@@ -62,7 +62,6 @@ def flagship_dir() -> str:
 
 def flagship_model() -> str:
     """Path to the flagship trained weights (resolved from the registry)."""
-    from pathlib import Path
     return str(Path(flagship_dir()) / "model.pth")
 
 

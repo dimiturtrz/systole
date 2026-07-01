@@ -23,10 +23,10 @@ from core.registry import resolve
 from core.hparams import from_json
 from core.inference import predict_volume_probs
 from core.data.static.labels import LV_CAV
-from core.measure import expected_volume_ml, label_volume_ml
+from core.measure import expected_volume_ml, label_volume_ml, ef_statistics
 from core.model import load_run, resolve_device
 from core.postprocess import largest_cc_per_class
-from core.preprocessing.preprocess import SIZE, fit_square
+from core.preprocessing.preprocess import SIZE, stack_slices
 from cardioseg.evaluation.uncertainty import ece
 
 
@@ -58,7 +58,7 @@ def evaluate(run: Path):
             blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
             hard = largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
             gate = hard == LV_CAV
-            gt = np.stack([fit_square(s, SIZE, 0) for s in c[f"{tag}_gt"]]).astype(np.uint8)
+            gt = stack_slices(c[f"{tag}_gt"], SIZE, dtype=np.uint8)
             vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),
                          "soft": expected_volume_ml(blood * gate, sp),
                          "gt": label_volume_ml(gt, LV_CAV, sp)}
@@ -82,8 +82,8 @@ def main():
     print(f"\n=== {a.run}  (n={len(arr)}) ===")
     print(f"ECE: {e:.4f}")
     for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
-        d = pred - gt
-        print(f"{name:28} EF MAE {np.nanmean(np.abs(d)):5.1f}%  bias {np.nanmean(d):+5.1f}%")
+        s = ef_statistics(gt, pred)
+        print(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
 
 
 if __name__ == "__main__":
