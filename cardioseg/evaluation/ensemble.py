@@ -102,7 +102,7 @@ def _headroom(models, df, size, device):
 
 
 def main():
-    from ..data.dataset import SIZE
+    from core.data.dynamic.dataset import SIZE
     from core.model import load_run, resolve_device
     from core.registry import resolve
     from ..tracking import start
