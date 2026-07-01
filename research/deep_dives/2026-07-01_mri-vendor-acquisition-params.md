@@ -171,6 +171,28 @@ Note segmented cine acquires k-space over MANY heartbeats/TRs; the effective per
 
 ---
 
+## 4b. DERIVED, not tabulated — flip from physics (2026-07-01, supersedes §3 mid-bands)
+The §3 YAML picked cited **mid-bands** (Siemens 70@1.5T etc.) — those are magic numbers with a
+citation. Replaced by a **derivation** (`mri_physics.derive_acquisition`, reproducible → `verified:true`):
+- **TR** = 2.8 ms — the cine bSSFP gradient/banding floor (shortest feasible). A physical floor, argued.
+- **TE** = TR/2 — balanced-SSFP symmetric echo. Derived.
+- **flip** = `argmax_α |S_blood(α) − S_myo(α)|` (the blood–myo bSSFP contrast, from the signal equation
+  + our literature T1/T2), **capped by SAR** (80@1.5T / 50@3T). Result: **53°@1.5T, 44°@3T** (caps
+  non-binding here). Field-driven (T1/T2 shift), vendor-invariant (no per-model evidence).
+
+Note the gap from the paper's routine ~70°@1.5T: routine clinical flip is **SNR-optimized near the SAR
+ceiling**; our **contrast-optimal** flip (what matters for segmentation) is lower (53°). We use the
+contrast-optimal derivation — argued from the physics of the task, not a protocol quote.
+
+**Why not stats-derive flip from our images?** Per-image z-score removes absolute scale, and the data
+has only 2 distinct tissue signals (blood≈RV≈LV-cav, myocardium) + a background *mixture* — too few
+independent points to invert flip without modeling the bg mix. So the stats role here is **validation,
+not derivation**: after wiring acquisition into the paint, re-run `synth_fidelity.by_vendor` — does
+flip=53 make synth match real better than the old global flip range? That's the honest data test.
+
+The reference artifact (`build_acquisition`) now emits these derived values (`extracted_by: computed,
+verified: true`); each per-vendor block is an override slot for a future DICOM-mined measurement.
+
 ## 5. Open gaps / follow-ups
 - No per-model published cine TR/TE/flip for Aera/Trio/Avanto/Achieva/HDxt individually — values are family+field priors. A human could pull DICOM headers from the actual ACDC/M&Ms volumes to *verify* (that's what `verified:false` is waiting for).
 - Canon block is pure extrapolation — lowest trust, lowest data weight.

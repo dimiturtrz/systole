@@ -37,42 +37,59 @@ _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 _BG_LADDER = ("lung", "liver", "muscle", "fat")
 
 
-# --- machine dimension: (vendor, field_T) -> cine bSSFP acquisition (TR ms, TE ms, flip deg) ---
-# Committed PAPER priors (the irreducible non-derivable part: our data has no DICOM/CSV sequence
-# timing). Physics: TR/TE are near cross-vendor-invariant (~3/1.3 ms, gradient-limited); FLIP is the
-# SAR- and FIELD-driven axis (~70-80 @1.5T, ~40-50 @3T). Per-model granularity NOT warranted (no
-# published per-model cine tables). Cites: SAR flip caps PubMed 26509846; 1.5T flip 28429574; 3T
-# PMC6570530. deep-dive 2026-07-01_mri-vendor-acquisition-params (bd ex1 / 276).
-# NORMALIZED: this is the machine dimension keyed by (vendor, field); subjects hold that pair as the FK
-# (store meta vendor/field_T) and JOIN here via acquisition_for — attributes live once, never copied per
-# subject. reference/acquisition.yaml is the built artifact of this table + the slot for verified
-# (e.g. DICOM-mined) overrides.
-_ACQ: dict[tuple[str, float], tuple[float, float, float]] = {
-    ("Siemens", 1.5): (3.0, 1.3, 70.0), ("Siemens", 3.0): (3.0, 1.3, 40.0),
-    ("Philips", 1.5): (3.0, 1.3, 60.0), ("Philips", 3.0): (3.0, 1.3, 45.0),
-    ("GE",      1.5): (3.5, 1.5, 55.0), ("GE",      3.0): (3.5, 1.5, 40.0),
-    ("Canon",   1.5): (3.2, 1.4, 55.0), ("Canon",   3.0): (3.2, 1.4, 40.0),  # Canon: extrapolated, low conf
-}
-_ACQ_DEFAULT = (3.1, 1.3, 60.0)
-_FIELDS = (1.5, 3.0)
+# --- cine bSSFP acquisition, DERIVED from physics (not tabulated paper mid-bands) ---
+# The numbers are computed with an argument, reproducible from the signal equation + literature T1/T2:
+#   TR   = shortest feasible cine bSSFP TR (gradient-slew + banding floor, ~2.7-3ms). A physical floor.
+#   TE   = TR/2 (balanced-SSFP symmetric echo). Derived.
+#   flip = the flip MAXIMIZING |S_blood - S_myo| bSSFP contrast (the cine/segmentation-relevant contrast)
+#          at the given field, from TISSUE T1/T2, CAPPED by the SAR ceiling (SAR ~ B0^2*flip^2 -> ~80deg
+#          @1.5T, ~50deg@3T; Wang/Nayak PubMed 26509846). Field-driven (T1/T2 shift with B0), ~vendor-
+#          invariant (no per-model cine tables exist; deep-dive 2026-07-01_mri-vendor-acquisition-params).
+# NORMALIZED machine dimension: keyed by FIELD (the axis flip actually depends on). Subjects hold the FK
+# (vendor/scanner/field_T in the store) and JOIN via acquisition_for; a reference/ override slot lets a
+# human replace the derived value with a DICOM-mined per-(vendor,field) measurement later. (bd ex1/276)
+TR_MIN_MS = 2.8                              # cine bSSFP TR floor (gradient/banding limited)
+SAR_FLIP_CAP = {1.5: 80.0, 3.0: 50.0}       # SAR-limited max flip (deg); SAR ~ B0^2 (PubMed 26509846)
+
+
+def _contrast_optimal_flip(field: float, tr_ms: float) -> float:
+    """Flip (deg, integer sweep) maximizing |S_blood - S_myo| bSSFP contrast at `field`, from the TISSUE
+    T1/T2 table. Cine targets blood-myocardium contrast; this DERIVES the flip that maximizes it rather
+    than quoting a routine-protocol value (which is SNR-, not contrast-, optimized)."""
+    import math
+    bt1, bt2, bpd = _params("blood", field)
+    mt1, mt2, mpd = _params("myocardium", field)
+    a = torch.arange(1.0, 91.0)
+    rad = a * math.pi / 180.0
+    tr = torch.tensor(tr_ms)
+    sb = bssfp_signal(torch.tensor(bt1), torch.tensor(bt2), torch.tensor(bpd), tr, rad)
+    sm = bssfp_signal(torch.tensor(mt1), torch.tensor(mt2), torch.tensor(mpd), tr, rad)
+    return float(a[(sb - sm).abs().argmax()])
+
+
+def derive_acquisition(field: float) -> tuple[float, float, float]:
+    """(TR ms, TE ms, flip deg) DERIVED for cine bSSFP at `field`: TR floor, TE=TR/2, flip = blood-myo
+    contrast-optimal capped by SAR. Reproducible from the signal equation + TISSUE — no magic constants."""
+    f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
+    flip = min(_contrast_optimal_flip(f, TR_MIN_MS), SAR_FLIP_CAP[f])
+    return (TR_MIN_MS, TR_MIN_MS / 2.0, flip)
 
 
 def acquisition_for(vendor: str | None, field: float = 1.5, ref=None) -> tuple[float, float, float]:
-    """(TR ms, TE ms, flip deg) for a machine = (vendor, field) cine bSSFP — the JOIN into the machine
-    dimension. `field` snaps to the nearest tabulated strength (flip is field-driven). Prefers the
-    reference/ artifact (verified overrides, e.g. DICOM-mined: tr_ms/te_ms + flip_deg_1p5t/flip_deg_3t),
-    else the committed paper prior, else the generic default. `ref` = a
+    """(TR ms, TE ms, flip deg) for a machine = (vendor, field) cine bSSFP. Base = the physics
+    DERIVATION (derive_acquisition, field-driven). A verified reference/ leaf overrides it per vendor
+    (e.g. a DICOM-mined measurement): tr_ms / te_ms / flip_deg_1p5t / flip_deg_3t. `ref` = a
     core.data.static.reference.Reference (optional)."""
-    f = min(_FIELDS, key=lambda x: abs(x - float(field))) if field else 1.5
-    d = _ACQ.get((vendor or "", f), _ACQ_DEFAULT)
-    tr = te = fl = None
+    tr, te, fl = derive_acquisition(field)
     if ref is not None and vendor is not None:
-        tr = ref.get("acquisition", vendor, "tr_ms")
-        te = ref.get("acquisition", vendor, "te_ms")
-        fl = ref.get("acquisition", vendor, "flip_deg_1p5t" if f == 1.5 else "flip_deg_3t")
-    return (float(tr) if tr is not None else d[0],
-            float(te) if te is not None else d[1],
-            float(fl) if fl is not None else d[2])
+        f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
+        o_tr = ref.get("acquisition", vendor, "tr_ms")
+        o_te = ref.get("acquisition", vendor, "te_ms")
+        o_fl = ref.get("acquisition", vendor, "flip_deg_1p5t" if f == 1.5 else "flip_deg_3t")
+        tr = float(o_tr) if o_tr is not None else tr
+        te = float(o_te) if o_te is not None else te
+        fl = float(o_fl) if o_fl is not None else fl
+    return (tr, te, fl)
 
 
 def blood_classes(n_classes: int) -> list[int]:

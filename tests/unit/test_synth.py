@@ -121,25 +121,27 @@ def test_banding_dips_at_pi_deeper_for_blood():
     assert banding(blood_t2, tr, t([math.pi])) < banding(myo_t2, tr, t([math.pi]))      # blood bands deeper
 
 
-def test_acquisition_for_machine_join_and_reference_override(tmp_path):
-    """Machine dimension join (vendor, field) -> (TR, TE, flip): committed paper prior per machine,
-    field-driven flip (SAR axis), generic default for unknown, reference/acquisition.yaml (field-split
-    flip) overrides only when verified."""
-    from core.data.dynamic.mri_physics import acquisition_for, _ACQ_DEFAULT
-    assert acquisition_for("Siemens", 1.5) == (3.0, 1.3, 70.0)
-    assert acquisition_for("Siemens", 3.0) == (3.0, 1.3, 40.0)  # flip drops at 3T (SAR cap)
-    assert acquisition_for("GE", 1.5) == (3.5, 1.5, 55.0)
-    assert acquisition_for("Siemens", 2.8) == (3.0, 1.3, 40.0)  # field snaps to nearest tabulated (3T)
-    assert acquisition_for("Nonesuch", 1.5) == _ACQ_DEFAULT     # unknown machine -> generic default
+def test_acquisition_derived_and_reference_override(tmp_path):
+    """Acquisition is DERIVED from physics (contrast-optimal flip capped by SAR, TR floor, TE=TR/2), not
+    tabulated: acquisition_for == derive_acquisition by field, flip within the SAR cap, 3T flip < 1.5T,
+    field-invariant to vendor; a verified reference/ leaf overrides per (vendor, field)."""
+    from core.data.dynamic.mri_physics import (acquisition_for, derive_acquisition,
+                                               SAR_FLIP_CAP, TR_MIN_MS)
+    tr15, te15, f15 = derive_acquisition(1.5)
+    tr3, te3, f3 = derive_acquisition(3.0)
+    assert (tr15, te15) == (TR_MIN_MS, TR_MIN_MS / 2.0)          # TR floor, TE=TR/2 (derived, not typed)
+    assert f15 <= SAR_FLIP_CAP[1.5] and f3 <= SAR_FLIP_CAP[3.0]  # SAR ceiling respected
+    assert f3 < f15                                              # flip drops at 3T (shorter T1/T2 + cap)
+    assert acquisition_for("Siemens", 1.5) == (tr15, te15, f15)  # base = the derivation, vendor-invariant
+    assert acquisition_for("GE", 1.5) == acquisition_for("Philips", 1.5)
+    assert acquisition_for("X", 2.8)[2] == f3                    # field snaps to nearest tabulated (3T)
     from core.data.static.reference import Reference
     (tmp_path / "acquisition.yaml").write_text(
         "acquisition:\n  Siemens:\n"
-        "    tr_ms: {value: 2.9, source: study, based_on: x, extracted_by: paper, verified: true}\n"
-        "    flip_deg_1p5t: {value: 62, source: study, based_on: x, extracted_by: paper, verified: true}\n")
+        "    flip_deg_1p5t: {value: 62, source: dicom-mined, based_on: x, extracted_by: computed, verified: true}\n")
     tr, te, fl = acquisition_for("Siemens", 1.5, ref=Reference(root=tmp_path))
-    assert (tr, fl) == (2.9, 62.0)                              # verified reference overrides the prior
-    # unverified leaves are skipped -> fall back to the committed prior (te not in the file -> prior 1.3)
-    assert te == 1.3
+    assert fl == 62.0                                            # verified override wins
+    assert (tr, te) == (tr15, te15)                             # unset leaves fall back to the derivation
 
 
 def test_return_meta_emits_provenance():
