@@ -58,8 +58,8 @@ EF vs GT: **MAE 4.3%**, bias +0.9%, 95% LoA [−11.7, +13.5] (n=69).
 | unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
 | Canon mean Dice | 0.866 | 0.836 |
-| GE mean Dice | 0.878 | 0.838 |
-| Canon / GE EF MAE | **2.6 / 4.3%** | 12.1 / 11.5% |
+| GE mean Dice | 0.878 | 0.834 |
+| Canon / GE EF MAE | **2.6 / 4.3%** | 9.9 / 11.0% |
 <!-- /results:cardcompare -->
 
 Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.836) and

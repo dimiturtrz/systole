@@ -31,7 +31,7 @@ from cardioseg.evaluation.uncertainty import ece
 
 
 def _val(run: Path):
-    d = from_json(run / "config.json").data
+    d = from_json(run / "config.json").generator.data
     meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
     _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                   val_datasets=d.val_datasets, val_vendors=d.val_vendors)

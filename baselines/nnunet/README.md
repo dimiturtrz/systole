@@ -58,9 +58,9 @@ as val; Canon+GE as unseen-vendor test), **scored by `cardioseg.evaluation`** �
 <!-- results:nnucompare -->
 | segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |
 |---|---|---|---|---|---|---|
-| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.838 | 0.847 | 0.796 | 0.871 | 11.5% | deployable / ONNX |
+| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | 0.834 | 0.850 | 0.790 | 0.862 | 11.0% | deployable / ONNX |
 | **nnU-Net** (50 ep, 1 fold) | **0.878** | **0.914** | **0.842** | **0.877** | **4.3%** | baseline / not deployed |
-| Δ (nnU-Net − ours) | +4.0 | +6.7 | +4.6 | +0.6 | -7.2 | |
+| Δ (nnU-Net − ours) | +4.4 | +6.4 | +5.2 | +1.5 | -6.7 | |
 <!-- /results:nnucompare -->
 
 <sub>All Dice/HD95 pool ED+ES (both phases) — same yardstick both rows.</sub>

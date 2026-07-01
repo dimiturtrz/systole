@@ -63,7 +63,7 @@ def build(run: Path) -> dict:
     TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
     the run actually held out."""
     device = resolve_device()
-    d = from_json(run / "config.json").data
+    d = from_json(run / "config.json").generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                      val_datasets=d.val_datasets, val_vendors=d.val_vendors)
