@@ -112,6 +112,17 @@ which is the result:
    data we can't represent"** — not "resolved: neither / dead." Off by default (`n4=True` to enable),
    kept + documented precisely because finite-test-neutrality ≠ real-world-uselessness.
 
+5. **Blood-anchored normalization — ORACLE null (2026-07-01, bd h8k).** Two-point affine (air→0,
+   blood→1) on physical references: composition-robust, and it **halved cross-vendor tissue-level
+   spread** vs z-score (myo 0.558→0.262 z-units) — a real *input-level* effect, unlike Nyúl. But with
+   the **oracle** (GT blood, the method's upper bound) it moved cross-vendor Dice **+0.001** (0.861→
+   0.862) — **null**. Why: **InstanceNorm already removes the composition/scale variance per-instance**,
+   so input harmonization is redundant — the model re-derives it. Tested the *ceiling* → the inference
+   cascade (estimate blood) isn't worth building. `norm=blood` kept as a documented-null tool (like Nyúl).
+   **This is the capstone: even a physically-correct, oracle-perfect harmonizer is null because the
+   model self-normalizes.** Four independent confirmations now that harmonization isn't the lever for
+   cardiac seg (inverse ill-posed · Nyúl null · no clean reference/fat · oracle blood-anchor null).
+
 **Conclusion:** the cross-vendor gap is **not reducible by augmentation, same-recipe ensembling, or bias
 normalization** — these experiments exhausted our current recipe. The real reducible lever is a
 **stronger model class**: nnU-Net (50ep/1fold/2D floor, same split) achieves Canon EF 2.6% and GE EF
