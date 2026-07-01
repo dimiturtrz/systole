@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import nibabel as nib
@@ -27,8 +28,24 @@ from common import CHAMBERS, SIZE, MODELS, DEFAULT_MODEL, load_model, model_dir,
 from geometry import keep_largest, bbox_slices, nearest_index
 
 # Web assets live OUT of the repo, under the data root (<data>/meshes/cardioview/) — never committed.
-# The viewer is served from here (vite base / copy step, bd follow-up), not from cardioview/web/public.
+# This is the single external home: glb/manifest/slices here + the exact model in models/<name>.onnx.
+# The viewer serves it via web/scripts/sync-assets.mjs (copies here -> gitignored public/{data,models}
+# on predev/prebuild), not from a committed public dir. (bd cardiac-seg-ra3)
 OUT = Path(data_root("meshes")) / "cardioview"
+
+
+def publish_model(model_name: str) -> None:
+    """Copy the exact ONNX that produced these assets into the external home (models/<name>.onnx),
+    so the web bundle's model travels with its manifest. The registry artifact dir holds model.onnx
+    (built by core.export_onnx at train time)."""
+    src = Path(model_dir(MODELS[model_name])) / "model.onnx"
+    if not src.exists():
+        print(f"  ! no model.onnx in {src.parent} — run `python -m core.export_onnx` to bundle the web model")
+        return
+    dst = OUT / "models" / f"{model_name}.onnx"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dst)
+    print(f"  model  -> {dst}")
 
 
 def heldout_set(model_name: str) -> set[str]:
@@ -40,7 +57,7 @@ def heldout_set(model_name: str) -> set[str]:
     if cfg_path.exists():
         from core.hparams import from_json
         from core.data.static import store, splits
-        dc = from_json(cfg_path).data
+        dc = from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
         train, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
                                              val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
@@ -199,6 +216,7 @@ def main():
     ap.add_argument("--model", default=DEFAULT_MODEL, choices=list(MODELS))
     ap.add_argument("--stride", type=int, default=1, help="cine frame stride (animate)")
     a = ap.parse_args()
+    OUT.mkdir(parents=True, exist_ok=True)   # first writer (slice PNGs) runs before upsert_manifest
     # canned demo hearts (one per pathology); override with --patients (IDs or full paths).
     patients = a.patients or ["patient073", "patient006", "patient021", "patient053"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -207,6 +225,8 @@ def main():
         run_animate(patients, model, device, a.model, a.stride)
     else:
         run(patients, a.source, model, device, a.model)
+    if model is not None:
+        publish_model(a.model)          # bundle the exact ONNX next to its manifest (bd ra3)
     print(f"manifest: {OUT/'manifest.json'}")
 
 
