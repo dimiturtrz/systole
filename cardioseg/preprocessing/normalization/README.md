@@ -74,11 +74,11 @@ estimable; diversify when stripping is unreliable or discards signal.
 | per-volume brightness/scale | acquisition gain, windowing | gamma/contrast (have) | z-score per volume (have) | both, crude | ✅ |
 | coil sensitivity / B1 | receive coil → smooth brightness ramp | bias field (T1) | N4 bias correction (have, opt-in) | **test-neutral on our sample** (augment + strip both regressed on a bias-mild test that lacks the axis); N4 **retained opt-in** for bias-heavy real-world data we can't measure — NOT "dead" | ◐ test-bound |
 | vendor intensity dist. | T1-weighting, flip angle, recon LUT | random gamma + histogram retarget (T1) | histogram standardization (Nyúl) = harmonization `qfz` | diversify (qfz parked: vendors level in-domain) | ⬜ aug side |
-| noise floor / distribution | magnitude op on complex signal | Rician noise (T1) — we use plain Gaussian | denoise / variance-stabilize | diversify (Rician) | ⬜ |
+| noise floor / distribution | magnitude op on complex signal | Rician (pre-norm, on magnitude) vs Gaussian (post-norm perturbation) | denoise / variance-stabilize | **layer-split**: synth does Rician on the positive painted signal (pre-z-score, physically correct); aug adds Gaussian post-z-score (signed data — Rician there would rectify negatives = wrong). Each layer uses the noise valid for it. | ✅ resolved |
 | k-space artifacts | corrupted k-space, motion in acq | ghosting, spike (T1) | de-ghost / artifact reject | diversify (rare, hard to strip) | ⬜ |
 | geometry / orientation | pose, FOV, slice prescription | flip/rotate/scale (have) | resample to common grid (have) | both | ✅ |
 | contrast space (whole) | everything above, jointly | SynthSeg label→random-intensity (T2) | — (no cheap canonical contrast) | diversify (contrast-agnostic) | ⬜ T2 |
-| full acquisition physics | sequence TR/TE/flip, tissue T1/T2/PD | CMRsim Bloch sim (T3) | — | diversify (maximalist) | ⬜ T3 |
+| full acquisition physics | sequence TR/TE/flip, tissue T1/T2/PD | **DONE — light bSSFP paint** (steady-state signal eq + derived acquisition + entry-slice inflow; not full Bloch) | — | diversify (contrast-agnostic) | ✅ bd 276/ex1 |
 
 **Geometry/orientation** is the proof the pattern works — we already do *both* cleanly (resample strips,
 affine aug diversifies). **Bias field** is the row we're actively A/B-ing in both directions (Findings below).
