@@ -43,6 +43,20 @@ def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> np.ndar
     return out.astype(dtype) if dtype is not None else out
 
 
+def blood_anchor(img: Image, gt, blood=(1, 3), eps: float = ZSCORE_EPS) -> Image:
+    """Two-point affine intensity normalization: background-air -> 0, blood pool -> 1. Composition-robust
+    harmonization anchored on PHYSICAL references (air + blood, present on every scan, meaning the same
+    thing) instead of z-score's FOV-sensitive mean/std. Measured to halve cross-vendor tissue-level
+    spread vs z-score (bd h8k). Blood level is per-volume; falls back to z-score if blood/air absent.
+    ORACLE when `gt` is ground truth (upper bound); at inference a coarse blood/air seg estimates it."""
+    import numpy as _np
+    bm = _np.isin(gt, blood); am = gt == 0
+    if int(bm.sum()) < 50 or int(am.sum()) < 50:
+        return zscore(img)                                   # no anchor available -> safe fallback
+    b = float(img[bm].mean()); a = float(_np.median(img[am]))
+    return (img - a) / ((b - a) + eps)
+
+
 def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
     """Per-volume z-score on the whole array (uncalibrated intensity -> zero-mean)."""
     img = img.astype(np.float32)
@@ -72,7 +86,7 @@ def resample_inplane(
 
 def preprocess_case(
     patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE,
-    n4: bool = False, n4_params=None, nyul_standard=None,
+    n4: bool = False, n4_params=None, nyul_standard=None, norm: str = "zscore",
 ) -> dict:
     """Load + resample + (N4) + (Nyúl) + z-score one subject's ED/ES. PURE (no disk I/O).
 
@@ -100,7 +114,7 @@ def preprocess_case(
         if nyul_standard is not None:
             from core.preprocessing.nyul import transform as nyul_transform
             img = nyul_transform(img, np.asarray(nyul_standard))
-        out[f"{tag.lower()}_img"] = zscore(img)
+        out[f"{tag.lower()}_img"] = blood_anchor(img, gt) if norm == "blood" else zscore(img)
         out[f"{tag.lower()}_gt"] = gt
         new_sp = isp
     out["spacing"] = np.asarray(new_sp, dtype=np.float32)

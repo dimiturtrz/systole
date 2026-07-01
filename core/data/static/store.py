@@ -55,6 +55,10 @@ class DataCfg(BaseModel):
     nyul: bool = False                                # Nyúl histogram standardization (harmonization,
     #                                                qfz): map the intensity distribution to a cohort-fit
     #                                                standard before z-score. The standard = reference data.
+    norm: str = "zscore"                              # intensity normalization: 'zscore' (default) or
+    #                                                'blood' = two-point affine (air->0, blood->1),
+    #                                                composition-robust harmonization (bd h8k). ORACLE
+    #                                                (uses GT blood) — cache is separate (_blood suffix).
     val_frac: float = Field(0.2, gt=0, lt=1)
     size: int = Field(DEFAULT_SIZE, ge=32)
 
@@ -73,22 +77,24 @@ META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner",
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,
-              nyul: bool = False) -> str:
+              nyul: bool = False, norm: str = "zscore") -> str:
     """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
     too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
-    cache is separate from the plain one)."""
+    cache is separate). norm='blood' -> '_blood' suffix (blood-anchored normalization, bd h8k)."""
     key = f"inplane{str(inplane).replace('.', 'p')}"
     if n4:
         p = n4_params or N4Cfg()
         key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
     if nyul:
         key += "_nyul"
+    if norm != "zscore":
+        key += f"_{norm}"
     return key
 
 
 def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
-                n4_params: N4Cfg | None = None, nyul: bool = False) -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params, nyul)
+                n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
+    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params, nyul, norm)
 
 
 def _nyul_ref_path() -> Path:
@@ -184,14 +190,14 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
 
 def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
           n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False,
-          nyul: bool = False, nyul_standard=None) -> Path:
+          nyul: bool = False, nyul_standard=None, norm: str = "zscore") -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
 
     Process-if-missing: skips subjects already written; re-emits meta.csv each call. Parallel
     (ThreadPool — resample/N4 release the GIL). `nyul`+`nyul_standard` apply Nyúl harmonization
     (qfz) to a separate _nyul cache. Returns the processed dir.
     """
-    out = dataset_dir(name, inplane, n4, n4_params, nyul)
+    out = dataset_dir(name, inplane, n4, n4_params, nyul, norm)
     data_dir = out / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     adapter = get_adapter(name)
@@ -201,7 +207,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
     def _one(case: Path):
         arrays = preprocess_case(case, target_inplane=inplane, loader=adapter.load_ed_es,
                                  n4=n4, n4_params=n4_params,
-                                 nyul_standard=nyul_standard if nyul else None)
+                                 nyul_standard=nyul_standard if nyul else None, norm=norm)
         npz = {k: v for k, v in arrays.items() if k != "patient"}
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
@@ -237,7 +243,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
 def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
          n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None,
-         nyul: bool = False) -> pl.DataFrame:
+         nyul: bool = False, norm: str = "zscore") -> pl.DataFrame:
     """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
     (the data cloud, for these params). Adds an absolute `path` column to each npz. names=None -> all.
     nyul=True harmonizes to the cohort standard (reference/nyul.yaml; fit it first with
@@ -249,9 +255,10 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
                            "python -m core.data.static.store --fit-nyul")
     frames = []
     for name in names:
-        out = dataset_dir(name, inplane, n4, n4_params, nyul)
+        out = dataset_dir(name, inplane, n4, n4_params, nyul, norm)
         if not (out / "meta.csv").exists():
-            build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul, nyul_standard=std)
+            build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul,
+                  nyul_standard=std, norm=norm)
         # Pin `labelled` to Boolean — don't rely on polars schema inference (newer polars reads the
         # "true"/"false" column as String, breaking the `pl.col('labelled')` filter cross-platform).
         df = pl.read_csv(out / "meta.csv", infer_schema_length=10000,
