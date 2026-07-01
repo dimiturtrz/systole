@@ -191,6 +191,10 @@ label-protocol mismatch; it's domain/intensity. See
   per-scan fallback. `python -m cardioseg.preprocessing.normalization.persist`.
 - **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of gated sources.
 - **N4** ✅ — `n4.py` (bias correction; params in `DataCfg.n4_params`, recorded in config.json).
-- **Nyúl histogram standardization** ⬜ · **synth-aug T1/T2/T3** ⬜ (see tiers above).
+- **Nyúl histogram standardization** ✅ built (`core/preprocessing/nyul.py`, `DataCfg.nyul`; standard
+  fit to `reference/nyul.yaml`) — **measured NULL**: 0.857 vs 0.864 real-only cross-vendor Dice (−0.007,
+  within noise; EF unchanged). z-score + heavy aug already capture the harmonizable variance; the
+  residual cross-vendor gap is model-class (nnU-Net closes EF), not intensity-distribution. Off by
+  default; kept as a tested, reusable tool. · **synth-aug T1/T2/T3** ⬜ (see tiers above).
 
 Referenced from the main [README](../../../README.md#domain-shift--normalization).
