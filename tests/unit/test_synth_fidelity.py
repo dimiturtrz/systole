@@ -1,7 +1,7 @@
-"""Synth fidelity eval (cardioseg.evaluation.synth_fidelity). The testable core is wasserstein1d —
+"""Synth fidelity eval (core.data.analysis.synth_fidelity). The testable core is wasserstein1d —
 the per-class synth-vs-real distance metric that localizes where the generator breaks."""
 import torch
-from cardioseg.evaluation.synth_fidelity import wasserstein1d
+from core.data.analysis.synth_fidelity import wasserstein1d
 
 
 def test_w1_zero_for_identical():
@@ -18,3 +18,15 @@ def test_w1_recovers_shift():
 def test_w1_empty_is_nan():
     v = wasserstein1d(torch.tensor([]), torch.randn(10))
     assert v != v                                       # NaN (absent class)
+
+
+def test_fit_acquisition_reproduces_own_contrast():
+    """sim2real fit: bSSFP can reproduce a contrast it itself generated -> ~0 residual (expressiveness
+    sanity; the real residual on real data is the physics gap, e.g. RV/cav flow)."""
+    import math, torch
+    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+    from core.data.analysis.sim2real import fit_acquisition
+    n = 4
+    t1, t2, pd = tissue_params(n, 0, 1.5, "cpu")
+    target = bssfp_signal(t1, t2, pd, torch.tensor(3.0), torch.tensor(50 * math.pi / 180))[1:n]
+    assert fit_acquisition(target, n)["residual"] < 0.01
