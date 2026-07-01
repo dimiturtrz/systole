@@ -112,16 +112,22 @@ which is the result:
    data we can't represent"** — not "resolved: neither / dead." Off by default (`n4=True` to enable),
    kept + documented precisely because finite-test-neutrality ≠ real-world-uselessness.
 
-5. **Blood-anchored normalization — ORACLE null (2026-07-01, bd h8k).** Two-point affine (air→0,
-   blood→1) on physical references: composition-robust, and it **halved cross-vendor tissue-level
-   spread** vs z-score (myo 0.558→0.262 z-units) — a real *input-level* effect, unlike Nyúl. But with
-   the **oracle** (GT blood, the method's upper bound) it moved cross-vendor Dice **+0.001** (0.861→
-   0.862) — **null**. Why: **InstanceNorm already removes the composition/scale variance per-instance**,
-   so input harmonization is redundant — the model re-derives it. Tested the *ceiling* → the inference
-   cascade (estimate blood) isn't worth building. `norm=blood` kept as a documented-null tool (like Nyúl).
-   **This is the capstone: even a physically-correct, oracle-perfect harmonizer is null because the
-   model self-normalizes.** Four independent confirmations now that harmonization isn't the lever for
-   cardiac seg (inverse ill-posed · Nyúl null · no clean reference/fat · oracle blood-anchor null).
+5. **Normalization is FLAT — the whole design space lands at ~0.86 (2026-07-01, bd h8k).** Blood-anchored
+   two-point affine (air→0, blood→1) halved cross-vendor tissue-level spread vs z-score (myo 0.558→0.262)
+   — a real *input-level* effect — but it did **not** move Dice. The full grid (single-seed, real-only,
+   cross-vendor mean Dice): instance-norm + {z 0.861, blood 0.862}; **no-norm** + {z 0.870, blood 0.851}.
+   **Everything is 0.86 ± ~0.01 single-seed scatter — they are the same number.** So:
+   - Harmonization (blood-anchor) is null (oracle GT, the method's upper bound) — and *worse* than z-score
+     under no-norm — so it's not merely "hidden by InstanceNorm," it just doesn't help. Cascade not worth building.
+   - The **feature-norm layer choice (instance / none) is also flat** — an ablation to test the
+     "InstanceNorm subsumes it" hypothesis showed no-norm ≈ instance (within noise). So the earlier
+     "self-normalization subsumes harmonization" framing was too strong: the real statement is
+     **normalization — input OR feature-layer — does not move the model-class ceiling.**
+   - Discipline note: deltas <~0.02 single-seed here are NOISE (this grid spans 0.019 = pure scatter).
+     Claim effects only with multi-seed replication (pure-synth blood/inflow +0.05-0.075 across 2 seeds = real).
+   Five confirmations harmonization/normalization isn't the cardiac-seg lever (inverse ill-posed · Nyúl null
+   · no clean reference/fat · oracle blood-anchor null · norm-space flat). `norm=blood` + `ModelCfg.norm`
+   kept as documented-null tools.
 
 **Conclusion:** the cross-vendor gap is **not reducible by augmentation, same-recipe ensembling, or bias
 normalization** — these experiments exhausted our current recipe. The real reducible lever is a
