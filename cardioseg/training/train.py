@@ -38,7 +38,7 @@ def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
 
-def train_seg(cfg: TrainCfg, alias: str | None = None):
+def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     """Train from one TrainCfg. Returns (model, results). Builds artifacts in a gitignored staging
     dir, then registers the complete set (model.pth + config + metrics + onnx + card) to the mlflow
     model registry — the sole model store. `alias='production'` makes this run the flagship."""
@@ -166,6 +166,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None):
     log.info("saved model + config + metrics -> %s/", out)
 
     trk.summary(results)                                    # final per-axis dice/EF (metrics in the run)
+    if quick:                                               # experiment sweep: skip the artifact tail
+        log.info("quick mode: skipping model card / attribution / ONNX / registry")
+        trk.end()
+        return model, results
     # build the rest of the artifacts into staging (card + onnx) BEFORE registering the complete set.
     try:
         from ..evaluation.modelcard import generate
@@ -220,6 +224,8 @@ if __name__ == "__main__":
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides",
                     help="deep cfg overrides, e.g. generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5")
+    ap.add_argument("--quick", action="store_true",
+                    help="experiment sweep: train + eval only, skip ONNX/INT8/attribution/registry (~2x faster)")
     a = ap.parse_args()
 
     cfg = TrainCfg()
@@ -231,4 +237,4 @@ if __name__ == "__main__":
     if a.out:
         cfg.out_dir = a.out
     apply_overrides(cfg, a.overrides)
-    train_seg(cfg, alias=a.alias)
+    train_seg(cfg, alias=a.alias, quick=a.quick)

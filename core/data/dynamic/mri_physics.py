@@ -75,6 +75,17 @@ def derive_acquisition(field: float) -> tuple[float, float, float]:
     return (TR_MIN_MS, TR_MIN_MS / 2.0, flip)
 
 
+def derive_flip_range(field: float) -> tuple[float, float]:
+    """Physically-plausible cine flip RANGE (deg) for DOMAIN RANDOMIZATION: low-contrast end .. SAR cap.
+    Real acquisition flip spans this whole band; sampling across it gives contrast DIVERSITY. Measured:
+    collapsing to the single contrast-optimal flip trains WORSE (fidelity != training value — domain
+    randomization needs breadth, bd 276). SAR cap is the physical ceiling; the low end ~half of it
+    (routine low-contrast cine). Field-driven; contrast-optimal sits inside the band."""
+    f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
+    hi = SAR_FLIP_CAP[f]
+    return (0.5 * hi, hi)                                    # 1.5T ->(40,80), 3T ->(25,50)
+
+
 def acquisition_for(vendor: str | None, field: float = 1.5, ref=None) -> tuple[float, float, float]:
     """(TR ms, TE ms, flip deg) for a machine = (vendor, field) cine bSSFP. Base = the physics
     DERIVATION (derive_acquisition, field-driven). A verified reference/ leaf overrides it per vendor

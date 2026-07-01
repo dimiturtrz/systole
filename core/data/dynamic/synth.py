@@ -73,8 +73,13 @@ class SynthCfg(BaseModel):
     #                                                unsaturated spins entering the 2D slice each TR) -> the
     #                                                physical reason cine blood > bSSFP steady-state. f_fresh;
     #                                                0 = off. Physics-derived replacement for blood_scale (276).
-    derive_acq: bool = True                        # TR/flip from mri_physics.derive_acquisition per field
-    #                                                (+ acq_jitter). False = legacy cfg.tr_ms/flip_deg ranges.
+    derive_acq: bool = False                       # TR/flip from physics (derive_acquisition +
+    #                                                derive_flip_range, sampled across the SAR-bounded band)
+    #                                                instead of the cfg.tr_ms/flip_deg ranges. OPT-IN: the
+    #                                                physics-derived pipeline ~matches but doesn't beat the
+    #                                                empirical ranges on cross-vendor Dice (0.673 vs 0.701),
+    #                                                so it's not the default — it's the defensible/derived
+    #                                                path (bd 276), enabled with inflow for the physics run.
     # --- background ---
     bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
     #                                                into bg_tiers tissue tiers (real lung/fat/muscle
@@ -146,12 +151,16 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     fi = torch.randint(len(cfg.fields), (b,), device=dev)                    # per-sample field index
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
     if cfg.derive_acq:
-        # TR/flip DERIVED per field (mri_physics.derive_acquisition: contrast-optimal flip capped by
-        # SAR, TR floor) + fractional jitter = intra-machine spread. Physics, not a global cfg range.
-        from .mri_physics import derive_acquisition
-        acq = torch.tensor([derive_acquisition(float(f)) for f in cfg.fields], device=dev)  # [F,3]=(tr,te,flip)
+        # TR DERIVED per field (floor + jitter). FLIP sampled across the physically-plausible RANGE
+        # per field (derive_flip_range: low-contrast end .. SAR cap) — domain randomization needs
+        # contrast BREADTH, not the single contrast-optimal point (that measured worse; bd 276). Physics-
+        # bounded (SAR ceiling), not an arbitrary global range.
+        from .mri_physics import derive_acquisition, derive_flip_range
+        acq = torch.tensor([derive_acquisition(float(f)) for f in cfg.fields], device=dev)     # [F,3]
+        rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)      # [F,2] lo,hi
         tr = acq[fi, 0:1] * (1 + cfg.acq_jitter * (torch.rand(b, 1, device=dev) * 2 - 1))
-        fl = acq[fi, 2:3] * (1 + cfg.acq_jitter * (torch.rand(b, 1, device=dev) * 2 - 1))
+        lo, hi = rng[fi, 0:1], rng[fi, 1:2]
+        fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)                                     # flip diversity
     else:                                                                    # legacy global ranges
         tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
         fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]

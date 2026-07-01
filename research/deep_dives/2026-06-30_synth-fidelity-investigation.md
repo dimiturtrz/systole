@@ -138,6 +138,38 @@ cross-checked against the physiological range — slightly better fidelity, with
 wired into the paint. **Pending:** does derived inflow=0.15 + derived flip convert to pure-synth Dice
 (vs 0.701 at blood_scale=1.6)? Training run next.
 
+### Dice result: inflow validated, but the physics pipeline PLATEAUS at the empirical peak (2026-07-01)
+Pure-synth cross-vendor Dice (held-out; blood_scale runs = old code / global flip 35-70, TR 2.8-4.0):
+| config | mean | RV | RV recall |
+|---|---|---|---|
+| blood_scale=1.0 (old flip) | 0.649 | — | — |
+| blood_scale=1.6 (old flip) | **0.701** | — | — |
+| derived-acq (flip point 53), inflow 0 | 0.587 | 0.468 | 0.489 |
+| derived-acq (point), inflow 0.15 | 0.673 | 0.667 | 0.648 |
+| derived-acq **flip RANGE 40-80**, inflow 0 | 0.626 | 0.519 | — |
+| derived-acq flip RANGE, **inflow 0.15** | 0.673 | 0.633 | — |
+
+Findings:
+- **inflow is a real mechanism** (+0.047–0.086 over no-brightener; RV recall 0.49→0.65) — a physical,
+  voxel-derived replacement for the arbitrary blood_scale. This part is a clean win.
+- **Collapsing flip to the single contrast-optimal 53° HURT** (0.587) — worse than the old baseline
+  (0.649). Domain randomization needs contrast BREADTH; the *most physically-accurate* flip trains
+  *worse*. **Fidelity ≠ training value.** Fixed with `derive_flip_range` (sample the SAR-bounded band).
+- **But the full physics-derived pipeline plateaus at 0.673 — ~0.03 SHORT of the empirical
+  blood_scale=1.6 (0.701).** Widening the flip range didn't close it; the old hand-set flip/TR ranges
+  were marginally better *augmentation*. Closing the 0.03 = re-tuning flip/TR = re-introducing magic
+  numbers → not pursued (against the principle).
+
+**Resting point.** The physics pipeline (derived flip range bounded by SAR + entry-slice inflow, all
+grounded via public→stats→voxel-match, no fitted constants) **matches** the empirically-tuned baseline
+(0.673 vs 0.701) with full mechanistic defensibility. It does not beat it. Pure-synth ceiling ~0.70
+either way; the residual to real (0.86) / hybrid (0.77) needs the learned generator (bd ap6), as
+originally scoped. `derive_acq` is OPT-IN (default off — doesn't beat, shouldn't silently change the
+flagship); it's the defensible/derived path. `blood_scale` kept as the empirical peak.
+Speed note: `--quick` skips the ONNX/INT8/attribution/registry tail, but training epochs (~4.5min, 64
+ep) + the TTA+surface-metric eval (~2.75min) dominate — a light no-TTA/no-surface eval is the remaining
+sweep speedup (follow-up).
+
 ### Replication + augmentation (2026-07-01)
 - **Pure-synth REPLICATES.** Seed 1: 0.604 → 0.679 (Δ+0.075, RV +0.145); seed 0 was 0.649 → 0.701
   (Δ+0.052). Two-seed mean **0.627 → 0.690 (+0.063)**, RV the biggest gainer both times. The
