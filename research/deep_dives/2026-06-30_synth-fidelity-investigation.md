@@ -101,3 +101,21 @@ composition already matches, location ~0.005), so the gap is NOT background — 
 Dice / RV recall (vs 0.62 physics / 0.66 stats)? A pure-synth training run at blood_scale=1.6 vs 1.0
 (same protocol; the delta is protocol-independent) settles it. If yes, the "caps ~0.66, needs a
 learned generator" ceiling falls to one physics-ish scalar.
+
+### RESULT — it converts. Pure-synth ceiling beaten by one scalar (2026-07-01)
+Pure-synth (synth_p=1), same protocol, held-out cross-vendor test, single seed:
+
+| blood_scale | RV Dice | myo Dice | cav Dice | **mean** | RV recall |
+|---|---|---|---|---|---|
+| 1.0 (control) | 0.577 | 0.632 | 0.739 | **0.649** | 0.491 |
+| **1.6** | 0.681 | 0.665 | 0.757 | **0.701** | **0.598** |
+
+**+0.052 mean Dice, RV +0.104, RV recall 0.49→0.60** — the shortcut class recovers, every class up.
+Control 0.649 matches the documented ~0.62–0.66; treatment **0.701 clears the 0.66 ceiling**. So the
+earlier conclusion "no blood-signal knob can close it → needs a learned generator" is **wrong**: a
+single blood-pool level scalar (found via the fidelity metric) does. Note myo *Dice* rose despite its
+*fidelity W1* worsening at 1.6 → W1 is an imperfect Dice proxy (the z-norm coupling was benign).
+Caveats: single seed (Δ0.05 > the ~0.04 noise band but not yet replicated); 1.6 is semi-empirical
+(level-match, physics gives the shape); 0.701 still < 0.77 hybrid / 0.86 real — narrowed, not closed.
+Next: seed-replicate; test blood_scale as *augmentation* (synth_p=0.5) — the flagship-relevant path
+(uncalibrated synth-aug was neutral at 0.852 vs 0.864; calibrated may flip it positive).
