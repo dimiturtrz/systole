@@ -135,3 +135,15 @@ def test_acquisition_for_vendor_and_reference_override(tmp_path):
         "    flip_deg: {value: 60, source: study, based_on: x, extracted_by: paper, verified: true}\n")
     tr, fl = acquisition_for("Siemens", ref=Reference(root=tmp_path))
     assert (tr, fl) == (2.9, 60.0)                              # reference overrides the constant
+
+
+def test_return_meta_emits_provenance():
+    """return_meta=True -> synth carries per-sample provenance (vendor/field/tr/flip) so it flows the
+    same harmonization path as real. Default stays a 2-tuple (callers unchanged)."""
+    cfg = SynthCfg(synth_p=1.0, bg_mode="flat", vendors=("Siemens", "GE"))
+    out2 = synthesize_from_labels(_mask(3), cfg, N)
+    assert len(out2) == 2                                        # default unchanged
+    img, msk, meta = synthesize_from_labels(_mask(3), cfg, N, return_meta=True)
+    assert len(meta["vendor"]) == 3 and set(meta["vendor"]).issubset({"Siemens", "GE"})
+    assert meta["field"].shape == (3,) and meta["tr"].shape == (3,) and meta["flip"].shape == (3,)
+    assert set(meta["field"].tolist()).issubset(set(cfg.fields))

@@ -53,6 +53,9 @@ class SynthCfg(BaseModel):
     #                                                the cav-too-bright fidelity fix). 0 = on-resonance
     fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
     #                                                = the dominant cross-vendor relaxation axis
+    vendors: tuple[str, ...] = ("Siemens", "Philips", "GE", "Canon")   # sampled per-sample -> emitted as
+    #                                                metadata so synth carries provenance + flows the same
+    #                                                harmonization path as real (return_meta=True)
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
     texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
     flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
@@ -85,11 +88,12 @@ def _deform_grid(b: int, h: int, w: int, amp: float, dev) -> torch.Tensor:
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
-                           real_img: torch.Tensor | None = None
-                           ) -> tuple[torch.Tensor, torch.Tensor]:
+                           real_img: torch.Tensor | None = None, return_meta: bool = False):
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
     mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
+    return_meta=True appends a per-sample provenance dict {vendor, field, tr, flip} — the acquisition
+    each synth image simulated, so synth carries metadata like real data (harmonization / stratified eval).
     cfg.deform>0 warps the labels first (new anatomy; returned mask is the warped one so the target
     stays aligned). Each class is painted by the bSSFP SIGNAL of its tissue (mri_physics) under
     per-sample swept TR/flip/field -> physical, vendor-randomized contrast. With bg_mode='partition'
@@ -129,6 +133,9 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
     tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
     fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
+    vi = torch.randint(len(cfg.vendors), (b,), device=dev)                   # per-sample vendor tag
+    meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
+            "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint]
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     sg = mu.abs() * cfg.texture                                              # within-class texture
@@ -197,4 +204,5 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     # --- z-score per sample (match the real preprocessed input distribution) ---
     m = img.mean((1, 2, 3), keepdim=True)
     s = img.std((1, 2, 3), keepdim=True).clamp_min(1e-6)
-    return (img - m) / s, mask
+    img = (img - m) / s
+    return (img, mask, meta) if return_meta else (img, mask)   # opt-in provenance (vendor/field/tr/flip)
