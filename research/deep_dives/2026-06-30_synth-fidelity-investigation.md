@@ -120,6 +120,24 @@ Caveats: single seed (Δ0.05 > the ~0.04 noise band but not yet replicated); 1.6
 Next: seed-replicate; test blood_scale as *augmentation* (synth_p=0.5) — the flagship-relevant path
 (uncalibrated synth-aug was neutral at 0.852 vs 0.864; calibrated may flip it positive).
 
+### The derivation chain replaces the magic scalar (2026-07-01)
+Owner's grounding chain for any physics number: **public (papers/SAR) → stats (our data) → simulate +
+voxel-match (lever 3, "flying blinder but we have 10k+ voxels")**. Applied to the blood-level gap:
+1. **public** — flip is SAR-capped, field-driven; TR floor ~3ms (deep-dive 2026-07-01_mri-vendor-acq).
+2. **stats** — `real_levels` showed synth blood too DIM per vendor; but flip can't be analytically
+   inverted from z-scored 2-tissue+bg-mix data (underdetermined).
+3. **simulate + voxel-match** — sweep the physical `inflow` param, minimize real-vs-synth blood-voxel
+   W1 (3.1M blood voxels): **inflow ≈ 0.15** → mean W1 **0.368** (vs 0.385 for the empirical
+   blood_scale=1.6; 0.506 at inflow=0), RV location 0.522→**0.022**. And 0.15 sits inside the
+   physiological single-TR range (f≈0.02–0.39) the physics predicts — voxel-fit AGREES with the model.
+
+So `blood_scale=1.6` (a fit scalar) is replaced by `inflow` (entry-slice enhancement: blend blood
+toward fresh PD·sin(flip)), a physical mechanism whose value is derived by voxel-matching and
+cross-checked against the physiological range — slightly better fidelity, with an argument. Acquisition
+(TR/flip) is now derived per field (`derive_acq`, contrast-optimal flip=53@1.5T capped by SAR) and
+wired into the paint. **Pending:** does derived inflow=0.15 + derived flip convert to pure-synth Dice
+(vs 0.701 at blood_scale=1.6)? Training run next.
+
 ### Replication + augmentation (2026-07-01)
 - **Pure-synth REPLICATES.** Seed 1: 0.604 → 0.679 (Δ+0.075, RV +0.145); seed 0 was 0.649 → 0.701
   (Δ+0.052). Two-seed mean **0.627 → 0.690 (+0.063)**, RV the biggest gainer both times. The

@@ -61,11 +61,20 @@ class SynthCfg(BaseModel):
     flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
     #                                                texture on blood classes so cav/RV aren't flat-bright
     #                                                (real cine blood spreads from flow) — fidelity lever
-    blood_scale: float = Field(1.0, ge=0)          # multiplicative scale on blood-pool MEAN (not std).
-    #                                                1.0 = off. MEASURED: synth cav is DIMMER than real in
-    #                                                z-units (attenuating grows the gap), so this is a
-    #                                                fidelity probe on the LV-cav/RV location gap, not an
-    #                                                assumed flow-loss attenuation. (bd 276)
+    blood_scale: float = Field(1.0, ge=0)          # LEGACY empirical blood-pool MEAN scale (the fidelity-
+    #                                                found 1.6 that first localized the gap). Superseded by
+    #                                                `inflow` (physical); kept for comparison. 1.0 = off.
+    acq_jitter: float = Field(0.15, ge=0)          # fractional jitter around the DERIVED per-field TR/flip
+    #                                                (mri_physics.derive_acquisition) = intra-machine spread.
+    #                                                TR/flip are physics-derived per field now, not the
+    #                                                cfg.tr_ms/flip_deg ranges (those = legacy non-derived path).
+    inflow: float = Field(0.0, ge=0, le=1)         # entry-slice INFLOW enhancement: blend blood-pool signal
+    #                                                toward the fresh fully-relaxed value PD*sin(flip) (fresh
+    #                                                unsaturated spins entering the 2D slice each TR) -> the
+    #                                                physical reason cine blood > bSSFP steady-state. f_fresh;
+    #                                                0 = off. Physics-derived replacement for blood_scale (276).
+    derive_acq: bool = True                        # TR/flip from mri_physics.derive_acquisition per field
+    #                                                (+ acq_jitter). False = legacy cfg.tr_ms/flip_deg ranges.
     # --- background ---
     bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
     #                                                into bg_tiers tissue tiers (real lung/fat/muscle
@@ -136,14 +145,27 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
     fi = torch.randint(len(cfg.fields), (b,), device=dev)                    # per-sample field index
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
-    tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
-    fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
+    if cfg.derive_acq:
+        # TR/flip DERIVED per field (mri_physics.derive_acquisition: contrast-optimal flip capped by
+        # SAR, TR floor) + fractional jitter = intra-machine spread. Physics, not a global cfg range.
+        from .mri_physics import derive_acquisition
+        acq = torch.tensor([derive_acquisition(float(f)) for f in cfg.fields], device=dev)  # [F,3]=(tr,te,flip)
+        tr = acq[fi, 0:1] * (1 + cfg.acq_jitter * (torch.rand(b, 1, device=dev) * 2 - 1))
+        fl = acq[fi, 2:3] * (1 + cfg.acq_jitter * (torch.rand(b, 1, device=dev) * 2 - 1))
+    else:                                                                    # legacy global ranges
+        tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
+        fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
     vi = torch.randint(len(cfg.vendors), (b,), device=dev)                   # per-sample vendor tag
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
-    mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint]
+    mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
-    if cfg.blood_scale != 1.0:                    # blood-pool mean scale (fidelity probe on cav location)
+    if cfg.inflow > 0:                            # entry-slice inflow: blend blood toward fresh PD*sin(flip)
+        from .mri_physics import blood_classes    # (fresh unsaturated spins) -> physically brighter cine blood
+        s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
+        for c in blood_classes(n_classes):
+            mu[:, c] = (1 - cfg.inflow) * mu[:, c] + cfg.inflow * s_fresh[:, c]
+    if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
         from .mri_physics import blood_classes
         for c in blood_classes(n_classes):
             mu[:, c] = mu[:, c] * cfg.blood_scale
