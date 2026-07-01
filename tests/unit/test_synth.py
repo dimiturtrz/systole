@@ -126,10 +126,10 @@ def test_acquisition_derived_and_reference_override(tmp_path):
     tabulated: acquisition_for == derive_acquisition by field, flip within the SAR cap, 3T flip < 1.5T,
     field-invariant to vendor; a verified reference/ leaf overrides per (vendor, field)."""
     from core.data.dynamic.mri_physics import (acquisition_for, derive_acquisition,
-                                               SAR_FLIP_CAP, TR_MIN_MS)
+                                               SAR_FLIP_CAP, _TR_MID)
     tr15, te15, f15 = derive_acquisition(1.5)
     tr3, te3, f3 = derive_acquisition(3.0)
-    assert (tr15, te15) == (TR_MIN_MS, TR_MIN_MS / 2.0)          # TR floor, TE=TR/2 (derived, not typed)
+    assert (tr15, te15) == (_TR_MID, _TR_MID / 2.0)             # TR = cited-band mid, TE=TR/2 (derived)
     assert f15 <= SAR_FLIP_CAP[1.5] and f3 <= SAR_FLIP_CAP[3.0]  # SAR ceiling respected
     assert f3 < f15                                              # flip drops at 3T (shorter T1/T2 + cap)
     assert acquisition_for("Siemens", 1.5) == (tr15, te15, f15)  # base = the derivation, vendor-invariant

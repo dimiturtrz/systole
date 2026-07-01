@@ -48,8 +48,11 @@ _BG_LADDER = ("lung", "liver", "muscle", "fat")
 # NORMALIZED machine dimension: keyed by FIELD (the axis flip actually depends on). Subjects hold the FK
 # (vendor/scanner/field_T in the store) and JOIN via acquisition_for; a reference/ override slot lets a
 # human replace the derived value with a DICOM-mined per-(vendor,field) measurement later. (bd ex1/276)
-TR_MIN_MS = 2.8                              # cine bSSFP TR floor (gradient/banding limited)
+TR_RANGE_MS = (2.7, 3.5)                     # cited cross-vendor cine bSSFP TR band (mriquestions; SCMR
+#                                             family, PMC7038611). Sampled per synth sample (not a point +
+#                                             magic jitter); TE = TR/2. The gradient/banding-limited range.
 SAR_FLIP_CAP = {1.5: 80.0, 3.0: 50.0}       # SAR-limited max flip (deg); SAR ~ B0^2 (PubMed 26509846)
+_TR_MID = sum(TR_RANGE_MS) / 2.0            # representative TR for the canonical (point) derivation
 
 
 def _contrast_optimal_flip(field: float, tr_ms: float) -> float:
@@ -68,22 +71,32 @@ def _contrast_optimal_flip(field: float, tr_ms: float) -> float:
 
 
 def derive_acquisition(field: float) -> tuple[float, float, float]:
-    """(TR ms, TE ms, flip deg) DERIVED for cine bSSFP at `field`: TR floor, TE=TR/2, flip = blood-myo
-    contrast-optimal capped by SAR. Reproducible from the signal equation + TISSUE — no magic constants."""
+    """(TR ms, TE ms, flip deg) DERIVED for cine bSSFP at `field`: TR = mid of the cited band, TE=TR/2,
+    flip = blood-myo contrast-optimal capped by SAR. Reproducible from the signal equation + TISSUE — no
+    magic constants (this is the canonical POINT; synth samples TR/flip across their ranges)."""
     f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
-    flip = min(_contrast_optimal_flip(f, TR_MIN_MS), SAR_FLIP_CAP[f])
-    return (TR_MIN_MS, TR_MIN_MS / 2.0, flip)
+    flip = min(_contrast_optimal_flip(f, _TR_MID), SAR_FLIP_CAP[f])
+    return (_TR_MID, _TR_MID / 2.0, flip)
 
 
 def derive_flip_range(field: float) -> tuple[float, float]:
-    """Physically-plausible cine flip RANGE (deg) for DOMAIN RANDOMIZATION: low-contrast end .. SAR cap.
-    Real acquisition flip spans this whole band; sampling across it gives contrast DIVERSITY. Measured:
-    collapsing to the single contrast-optimal flip trains WORSE (fidelity != training value — domain
-    randomization needs breadth, bd 276). SAR cap is the physical ceiling; the low end ~half of it
-    (routine low-contrast cine). Field-driven; contrast-optimal sits inside the band."""
+    """Cine flip RANGE (deg) for DOMAIN RANDOMIZATION, DERIVED from the contrast curve: the FWHM band
+    where blood-myo bSSFP contrast is >= half its peak, capped by SAR. Bounds come from the physics (the
+    half-maximum convention on the contrast curve + the SAR ceiling) — no arbitrary fraction of the cap.
+    Sampling across this band gives contrast DIVERSITY (measured: the single contrast-optimal point
+    trains WORSE — fidelity != training value, bd 276). Field-driven; contrast-optimal sits inside it."""
+    import math
     f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
-    hi = SAR_FLIP_CAP[f]
-    return (0.5 * hi, hi)                                    # 1.5T ->(40,80), 3T ->(25,50)
+    bt1, bt2, bpd = _params("blood", f)
+    mt1, mt2, mpd = _params("myocardium", f)
+    a = torch.arange(1.0, 91.0)
+    rad = a * math.pi / 180.0
+    tr = torch.tensor(_TR_MID)
+    sb = bssfp_signal(torch.tensor(bt1), torch.tensor(bt2), torch.tensor(bpd), tr, rad)
+    sm = bssfp_signal(torch.tensor(mt1), torch.tensor(mt2), torch.tensor(mpd), tr, rad)
+    c = (sb - sm).abs()
+    band = a[c >= 0.5 * c.max()]                             # FWHM of the contrast curve (half-max convention)
+    return (float(band.min()), min(float(band.max()), SAR_FLIP_CAP[f]))
 
 
 def acquisition_for(vendor: str | None, field: float = 1.5, ref=None) -> tuple[float, float, float]:

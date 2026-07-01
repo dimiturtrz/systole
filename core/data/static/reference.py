@@ -236,13 +236,13 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
     NORMALIZED: the machine reference table (attributes live once). Subjects hold the FK (vendor,
     field_T) in the store and JOIN here via `acquisition_for`; each vendor block is also the slot to
     drop a DICOM-mined per-vendor override later. (bd ex1 / 276.)"""
-    from core.data.dynamic.mri_physics import derive_acquisition, TR_MIN_MS, SAR_FLIP_CAP
+    from core.data.dynamic.mri_physics import derive_acquisition, TR_RANGE_MS, SAR_FLIP_CAP
     from core.config import KNOWN_VENDORS
     tr15, te15, f15 = derive_acquisition(1.5)
     _, _, f30 = derive_acquisition(3.0)
     src = ("DERIVED: flip = argmax|S_blood-S_myo| (bSSFP signal eq + literature T1/T2), capped by SAR "
            f"({SAR_FLIP_CAP[1.5]:.0f}@1.5T/{SAR_FLIP_CAP[3.0]:.0f}@3T, PubMed 26509846); "
-           f"TR={TR_MIN_MS}ms floor, TE=TR/2")
+           f"TR=mid{TR_RANGE_MS}ms, TE=TR/2")
     based = "core.data.dynamic.mri_physics.derive_acquisition (reproducible)"
     def leaf(v):
         return {"value": round(v, 3), "source": src, "based_on": based,

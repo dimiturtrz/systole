@@ -64,10 +64,6 @@ class SynthCfg(BaseModel):
     blood_scale: float = Field(1.0, ge=0)          # LEGACY empirical blood-pool MEAN scale (the fidelity-
     #                                                found 1.6 that first localized the gap). Superseded by
     #                                                `inflow` (physical); kept for comparison. 1.0 = off.
-    acq_jitter: float = Field(0.15, ge=0)          # fractional jitter around the DERIVED per-field TR/flip
-    #                                                (mri_physics.derive_acquisition) = intra-machine spread.
-    #                                                TR/flip are physics-derived per field now, not the
-    #                                                cfg.tr_ms/flip_deg ranges (those = legacy non-derived path).
     inflow: bool = False                           # entry-slice INFLOW enhancement (PHYSICAL, no magic
     #                                                fraction): per sample f_fresh = min(1, v*TR/thk) from
     #                                                blood velocity v + slice thickness thk + the derived TR,
@@ -162,12 +158,11 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         # per field (derive_flip_range: low-contrast end .. SAR cap) — domain randomization needs
         # contrast BREADTH, not the single contrast-optimal point (that measured worse; bd 276). Physics-
         # bounded (SAR ceiling), not an arbitrary global range.
-        from .mri_physics import derive_acquisition, derive_flip_range
-        acq = torch.tensor([derive_acquisition(float(f)) for f in cfg.fields], device=dev)     # [F,3]
+        from .mri_physics import derive_flip_range, TR_RANGE_MS
         rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)      # [F,2] lo,hi
-        tr = acq[fi, 0:1] * (1 + cfg.acq_jitter * (torch.rand(b, 1, device=dev) * 2 - 1))
+        tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev) # sample cited TR band
         lo, hi = rng[fi, 0:1], rng[fi, 1:2]
-        fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)                                     # flip diversity
+        fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)                                     # flip diversity (FWHM band)
     else:                                                                    # legacy global ranges
         tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
         fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
