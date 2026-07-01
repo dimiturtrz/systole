@@ -125,32 +125,34 @@ aug + early stopping + largest-CC + TTA. On the **ACDC val** axis:
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 3.0 | 0.55 |
-| LV myocardium | 0.86 | 3.0 | 0.55 |
-| RV cavity | 0.88 | 6.0 | 0.83 |
-| **mean** | **0.88** | | |
+| LV cavity | 0.91 | 3.0 | 0.63 |
+| LV myocardium | 0.85 | 3.0 | 0.59 |
+| RV cavity | 0.86 | 7.5 | 0.94 |
+| **mean** | **0.87** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`). Published in-distribution ACDC is
 ~0.91–0.93 mean — context, not like-for-like (different test set; see the split caveat above).</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase (small contracted cavity), so
-including it is the honest read. **EF vs GT: MAE 6.5%** (bias −5.6%, 95% LoA [−20.1, +8.9], n=150).
+including it is the honest read. **EF vs GT: MAE 7.1%** (bias −6.4%, 95% LoA [−23.2, +10.4], n=150).
 **Two-axis generalization** (one model, our own split — the
 challenge splits aren't inherited):
 
 <!-- results:axis -->
 | held-out axis | role | n | mean Dice | EF MAE |
 |---|---|---|---|---|
-| **ACDC** — centre / protocol shift | val | 150 | 0.88 | 6.5% |
-| **Canon** — unseen vendor | test | 9 | 0.84 | 12.1% |
-| **GE** — unseen vendor | test | 69 | 0.84 | 11.5% |
+| **ACDC** — centre / protocol shift | val | 150 | 0.87 | 7.1% |
+| **Canon** — unseen vendor | test | 9 | 0.84 | 9.9% |
+| **GE** — unseen vendor | test | 69 | 0.83 | 11.0% |
 <!-- /results:axis -->
 
 Canon **n=9** (M&Ms-1 withholds GT for most of Testing: 320 on disk, 213 labelled, Canon 50 → 9
 usable) and GE **n=69** are both **unseen-vendor** test sets, scored independently. They return Dice
-**Canon 0.836 / GE 0.838** and EF MAE **~11–12%** — independent agreement at n=78 total makes this a robust
-unseen-vendor signal (not a fluke of one thin split). Pooling M&Ms-1 into training (vs 360 subjects
-alone) lifted the ACDC val axis (mean ~0.87 → 0.88 — extra vendor diversity paid off).
+**Canon 0.836 / GE 0.834** and EF MAE **~10–11%** (Canon 9.9%, GE 11.0%) — independent agreement at n=78
+total makes this a robust unseen-vendor signal (not a fluke of one thin split). Pooling M&Ms-1 into
+training (vs 360 subjects alone) lifted the ACDC val axis (extra vendor diversity paid off), and
+**50% synthetic augmentation** (physics-based bSSFP from labels) further cut the unseen-vendor EF MAE
+(Canon 12.1 → 9.9%, GE 11.5 → 11.0%) at a small ACDC-val cost (Dice 0.88 → 0.87, EF 6.5 → 7.1%).
 
 **Diversity buys robustness — the asymmetry proves it:**
 
@@ -161,7 +163,8 @@ alone) lifted the ACDC val axis (mean ~0.87 → 0.88 — extra vendor diversity 
 | M&M-2 → ACDC (generalization, flagship) | 0.87 | 0.84 | 9.4% |
 
 *Asymmetry table is the base model (identical config across directions, for a fair A/B); the pooled
-split + heavy aug + largest-CC + TTA lift the flagship to 0.88 Dice / 6.5% EF on ACDC-150 (top table).*
+split + heavy aug + 50% synth-aug + largest-CC + TTA lift the flagship to 0.87 Dice / 7.1% EF on
+ACDC-150 (top table) — the synth-aug trade buys cross-vendor EF at a small ACDC cost.*
 
 - Single-centre training loses ~17 Dice points off its home dataset (RV collapses 0.85 → 0.59);
   multi-vendor training carries to a new centre — and a new **vendor** — with **no segmentation drop**.
@@ -179,18 +182,18 @@ split + heavy aug + largest-CC + TTA lift the flagship to 0.88 Dice / 6.5% EF on
 Pooled numbers average over the failures. Broken down (same model, same eval; `distribution.py`
 emits these + `stratified.json`):
 
-**By pathology** (held-out ACDC). Dice is fairly flat (~0.87–0.90) → **masks aren't much worse
+**By pathology** (held-out ACDC). Dice is fairly flat (~0.85–0.89) → **masks aren't much worse
 anywhere**; the EF spread is a *ratio* effect. `gtEF` is given because EF MAE isn't comparable across groups
 with different cavity sizes — a fixed volume error moves EF more when the cavity is small:
 
 <!-- results:strata -->
 | pathology | gtEF | mean Dice | EF MAE | EF bias |
 |---|---|---|---|---|
-| dilated (DCM) | 20% | 0.89 | 1.8% | -0.1% |
-| ischemic (MINF) | 31% | 0.88 | 3.9% | -3.3% |
-| rv_congenital | 57% | 0.88 | 6.6% | -6.5% |
-| normal (NOR) | 62% | 0.90 | 6.3% | -6.1% |
-| **hypertrophic (HCM)** | 70% | 0.86 | 13.8% | -13.6% |
+| dilated (DCM) | 20% | 0.89 | 2.1% | -0.4% |
+| ischemic (MINF) | 31% | 0.87 | 4.1% | -3.4% |
+| rv_congenital | 57% | 0.87 | 7.3% | -7.1% |
+| normal (NOR) | 62% | 0.88 | 6.9% | -6.7% |
+| **hypertrophic (HCM)** | 70% | 0.85 | 15.0% | -14.4% |
 <!-- /results:strata -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`).</sub>
 

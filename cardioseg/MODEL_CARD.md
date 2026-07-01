@@ -9,8 +9,11 @@ This card follows Mitchell et al. 2019; the failure-mode and limitation sections
   `ModelCfg` (`cardioseg/hparams.py`): channels (16,32,64,128,256), strides (2,2,2,2), 2 res-units.
 - **Task:** per-slice short-axis segmentation → chamber volumes → EF = (EDV − ESV) / EDV.
 - **Training recipe:** Dice+CE loss, Adam (lr 1e-3), GPU-batched augmentation (flip/rotate/scale +
-  intensity gamma/contrast/blur/noise), AMP, early stopping (patience 20, 128-epoch ceiling,
-  best-val checkpoint), largest-connected-component postprocessing, test-time augmentation (4 flips).
+  intensity gamma/contrast/blur/noise), **50% synthetic augmentation** (physics-based bSSFP images
+  generated from the labels, `core/data/dynamic/synth.py`), AMP, early stopping (patience 20,
+  128-epoch ceiling, best-val checkpoint), largest-connected-component postprocessing, test-time
+  augmentation (4 flips). The synth-aug mix trades a small ACDC-val cost (Dice 0.88 → 0.87, EF MAE
+  6.5 → 7.1%) for **improved unseen-vendor EF** (Canon 12.1 → 9.9%, GE 11.5 → 11.0%).
 - **Soft boundary labels:** the flagship trains with **soft (diffuse / probabilistic) boundary
   targets** — boundary voxels are partial-volume mixes, so the target is a distribution, not a hard
   0/1. This leaves Dice/EF unchanged but improves calibration (ECE 0.093 → 0.081 on ACDC val). See
@@ -52,18 +55,18 @@ One model, one declarative split rule (DataCfg criteria: `test_datasets=('acdc',
 <!-- results:acdc -->
 | structure | Dice | HD95 (mm) | ASSD (mm) |
 |---|---|---|---|
-| LV cavity | 0.92 | 3.0 | 0.55 |
-| LV myocardium | 0.86 | 3.0 | 0.55 |
-| RV cavity | 0.88 | 6.0 | 0.83 |
-| **mean** | **0.88** | | |
+| LV cavity | 0.91 | 3.0 | 0.63 |
+| LV myocardium | 0.85 | 3.0 | 0.59 |
+| RV cavity | 0.86 | 7.5 | 0.94 |
+| **mean** | **0.87** | | |
 <!-- /results:acdc -->
 <sub>auto-filled from `RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit.</sub>
 
 Dice + HD95/ASSD pool **both phases (ED+ES)** — ES is the harder phase, so this is the honest read
-(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 6.5%**, bias −5.6%, 95% LoA [−20.1, +8.9] (n=150).
+(ED-only would be ~2 Dice points higher). EF vs GT: **MAE 7.1%**, bias −6.4%, 95% LoA [−23.2, +10.4] (n=150).
 
-**Unseen-vendor test (Canon n=9 + GE n=69 = 78 total):** they return mean Dice **Canon 0.836 / GE 0.838** and EF MAE
-**~11–12%** (Canon 12.1%, bias −12.1%; GE 11.5%, bias −11.1%) — independent agreement at n=78 makes
+**Unseen-vendor test (Canon n=9 + GE n=69 = 78 total):** they return mean Dice **Canon 0.836 / GE 0.834** and EF MAE
+**~10–11%** (Canon 9.9%, bias −9.8%; GE 11.0%, bias −10.1%) — independent agreement at n=78 makes
 this a robust unseen-vendor signal. Canon n=9 is thin because M&Ms-1 withholds GT for most of its
 Testing split (320 on disk, 213 labelled, Canon 50 → 9 usable); GE n=69 is the larger leg.
 
@@ -76,14 +79,14 @@ a floor), scored by the same eval layer:
 | unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |
 |---|---|---|
 | Canon mean Dice | 0.866 | 0.836 |
-| GE mean Dice | 0.878 | 0.838 |
-| Canon / GE EF MAE | **2.6 / 4.3%** | 12.1 / 11.5% |
+| GE mean Dice | 0.878 | 0.834 |
+| Canon / GE EF MAE | **2.6 / 4.3%** | 9.9 / 11.0% |
 <!-- /results:cardcompare -->
 
 Both pool ED+ES. nnU-Net leads by **~3–4 Dice points** on unseen-vendor Canon (0.866 vs 0.836) and
-GE (0.878 vs 0.838) — *even at its floor setting* (50ep/1fold; the full 1000ep × 5-fold + TTA
+GE (0.878 vs 0.834) — *even at its floor setting* (50ep/1fold; the full 1000ep × 5-fold + TTA
 ceiling, `cardiac-seg-yp3`, would pull further ahead). The **EF gap is substantial and
-model-class epistemic**: nnU-Net Canon 2.6% vs ours 12.1%; GE 4.3% vs 11.5% — a stronger model
+model-class epistemic**: nnU-Net Canon 2.6% vs ours 9.9%; GE 4.3% vs 11.0% — a stronger model
 class closes most of the cross-vendor EF gap, demonstrating it was reducible. Ours trades that for
 ONNX portability at ~57× fewer parameters; EF Bland-Altman: nnU-Net Canon bias −1.4%, LoA [−8.2,
 +5.4]; GE bias +0.9%, LoA [−11.7, +13.5] — both near the ±5% clinical bar on unseen vendors.
@@ -95,7 +98,7 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
 - **HCM / small cavities — the main EF failure mode.** EF bias is **entirely end-systolic cavity
   over-segmentation** (~fixed absolute mL of boundary + papillary voxels), so its *fractional* impact
   scales inversely with cavity size: corr(ES cavity, ESV ratio) = −0.50. Dilated (huge cavity) is EF-
-  unbiased (≈ −0.2%); hypertrophic (tiny cavity) is worst (EF MAE ~11.9%). Dice stays fairly flat (~0.88)
+  unbiased (≈ −0.4%); hypertrophic (tiny cavity) is worst (EF MAE ~15.0%). Dice stays fairly flat (~0.87)
   across pathologies — masks aren't worse, the EF *ratio* is range-dependent. (See
   `research/deep_dives/2026-06-21_ef-bias-mechanism-esv-overseg.md`.)
 - **RV boundary** is the loosest (HD95 5.8 mm vs myo 2.1, LV-cav 2.1) — basal slices + the small ES cavity.
@@ -104,14 +107,14 @@ Full baseline details + its own card → [`baselines/nnunet/MODEL_CARD.md`](../b
 
 ## Limitations & caveats
 - Single modality (cine MRI short-axis), 2D slice model — no long-axis, no 3D context.
-- Systematic EF under-prediction (bias ≈ −5%) from ES over-segmentation. **Structure (diagnostic):**
+- Systematic EF under-prediction (bias ≈ −6%) from ES over-segmentation. **Structure (diagnostic):**
   the bias is **proportional** (diff vs EF slope −0.18/EF%, r=−0.56, p<1e-13) and **pathology-structured**
-  (DCM ≈ 0% → HCM −11.5%), so a single global offset would over-correct DCM and under-correct HCM —
+  (DCM ≈ 0% → HCM −14.4%), so a single global offset would over-correct DCM and under-correct HCM —
   an honest correction would have to be per-subgroup, which needs target labels (domain adaptation, not
   zero-shot). So it's reported, not patched. Also **not** corrected by a
   constant offset (size-dependent → would over-correct dilated hearts) and **not** a measurement bug
   (volumes are computed correctly). The honest fix is segmentation-side at ES (`cardiac-seg-7oe`).
-- Unseen-vendor test is Canon n=9 + GE n=69 (n=78 total). Canon GT is thin (M&Ms-1 withholds most Testing labels); GE n=69 is the larger leg. Both vendors agree at Dice ~0.84 (Canon 0.836 / GE 0.838) / EF MAE ~11–12%.
+- Unseen-vendor test is Canon n=9 + GE n=69 (n=78 total). Canon GT is thin (M&Ms-1 withholds most Testing labels); GE n=69 is the larger leg. Both vendors agree at Dice ~0.84 (Canon 0.836 / GE 0.834) / EF MAE ~10–11% (Canon 9.9% / GE 11.0%).
 - Public-benchmark performance ≠ deployment performance. "Competent on public benchmarks," not clinical.
 
 ## References

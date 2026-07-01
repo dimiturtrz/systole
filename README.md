@@ -4,7 +4,7 @@
 fraction** — then asks the question most demos skip: *does that number survive a change of
 scanner?* The model trains on two vendors (Siemens + Philips, 495 subjects) and is evaluated on
 a centre-shift held-out set (ACDC, val) and two fully unseen vendors (Canon + GE, test);
-segmentation generalizes (Dice **0.88** on ACDC, **0.84** on unseen Canon+GE), while EF —
+segmentation generalizes (Dice **0.87** on ACDC, **0.84** on unseen Canon+GE), while EF —
 a ratio of volumes — is the honest hard part. The thread tying it together is geometry: per-voxel
 labels → a clinical number.
 
@@ -38,18 +38,18 @@ never seen in training, n=78 total).
 
 ### Ejection fraction — the clinical output
 EF is the number a clinician acts on, so it's the result that matters. On **ACDC-150**
-(val, centre/protocol shift), the model with heavy augmentation + early stopping + largest-CC +
-TTA: **MAE 6.5%**, bias **−5.6%** (systematic underprediction), 95% LoA [−20.1, +8.9]. The
-chambers are right; absolute volumes drift as calibration shifts across centres. On the two
-**unseen-vendor test sets** (Canon n=9, GE n=69), EF MAE is ~11–12%: Canon 12.1%, GE 11.5% —
-a larger cross-vendor gap that reflects the harder OOD shift.
+(val, centre/protocol shift), the model with heavy augmentation + 50% synthetic augmentation +
+early stopping + largest-CC + TTA: **MAE 7.1%**, bias **−6.4%** (systematic underprediction), 95%
+LoA [−23.2, +10.4]. The chambers are right; absolute volumes drift as calibration shifts across
+centres. On the two **unseen-vendor test sets** (Canon n=9, GE n=69), EF MAE is ~10–11%: Canon
+9.9%, GE 11.0% — a larger cross-vendor gap that reflects the harder OOD shift.
 
 ![EF Bland–Altman — flagship on held-out ACDC: error distribution + bias / 95% LoA](cardioseg/docs/media/ef_bland_altman.png)
 
-**Not clinically usable yet** — MAE 6.5% on val and ~11% on unseen vendors are still past the ±5%
-clinical bar. The plot splits the error in two: a systematic **−5.6% bias** (the curve sits left
+**Not clinically usable yet** — MAE 7.1% on val and ~10–11% on unseen vendors are still past the ±5%
+clinical bar. The plot splits the error in two: a systematic **−6.4% bias** (the curve sits left
 of zero — correctable) and a **spread** (tightened by the work below). EF is a *ratio* of two
-volumes, so it magnifies per-frame segmentation error — the masks are good (Dice 0.88), the
+volumes, so it magnifies per-frame segmentation error — the masks are good (Dice 0.87), the
 derived number isn't.
 
 **Where it fails — stratified (read carefully).** Dice is uniform across pathologies (~0.90), so
@@ -68,39 +68,48 @@ Paths from here, roughly in effort order:
 - ✅ **Test-time augmentation** (applied) — averaging over in-plane flips. Inference-time, no retrain.
 - ✅ **Heavy augmentation + early stopping** (applied) — wider geometry + vendor-style intensity
   jitter (gamma / contrast / blur), GPU-batched; trained to a val-Dice plateau (~95 epochs, kept
-  the best checkpoint), plus multi-source pooling (M&M-2 + M&Ms-1). RV Dice 0.84 → **0.88**,
-  mean → **0.88**, EF MAE 8.2 → **6.5%** (ACDC val), LoA tightened.
+  the best checkpoint), plus multi-source pooling (M&M-2 + M&Ms-1). Lifts the ACDC-val axis
+  (RV Dice 0.84 → ~0.88, EF MAE 8.2 → ~6.5 on the real-only base) before the synth-aug trade below.
+- ✅ **Synthetic augmentation** (applied) — the flagship now mixes in **50% physics-based synthetic
+  bSSFP images generated from the labels** (`core/data/dynamic/synth.py`) alongside real-image aug.
+  Measured effect: it **improved unseen-vendor EF** (Canon 12.1 → **9.9%**, GE 11.5 → **11.0%**) at
+  a small ACDC-val cost (Dice 0.88 → **0.87**, EF MAE 6.5 → **7.1%**) — a modest cross-vendor EF gain,
+  not a Dice gain. This is the diversify lever that actually moved cross-vendor EF.
 - **Cross-scanner intensity harmonization** — today it's per-volume z-score only; vendor-aware
-  histogram standardization may tighten the spread. (Dice already transfers, so this is a smaller
-  lever for EF than for segmentation — but it's the obvious gap.)
+  histogram standardization (Nyúl) was **tried and measured NULL** (0.857 vs 0.864 mean Dice — no
+  gain). Dice already transfers, so harmonization had nothing to close; synthetic augmentation, not
+  harmonization, was the lever that helped EF.
 - **Bias calibration** — a held-out linear EF correction, honest if reported as such.
 - **Stronger segmentation** — nnU-Net baseline, 3D context, or vendor-targeted augmentation.
 
 ### Segmentation — ours vs SOTA
-**A 1.6 M-param model: ~3–4 Dice points under nnU-Net's floor on unseen vendors (Canon 0.836 vs 0.866, GE 0.838 vs 0.878), at ~57× fewer parameters — and it exports to run in the browser. EF gap is model-class epistemic: nnU-Net Canon 2.6% / GE 4.3% vs ours 12.1% / 11.5% — a stronger model class substantially closes it; ours trades that for ONNX portability.**
+**A 1.6 M-param model: ~3–4 Dice points under nnU-Net's floor on unseen vendors (Canon 0.836 vs 0.866, GE 0.834 vs 0.878), at ~57× fewer parameters — and it exports to run in the browser. EF gap is model-class epistemic: nnU-Net Canon 2.6% / GE 4.3% vs ours 9.9% / 11.0% — a stronger model class substantially closes it; ours trades that for ONNX portability.**
 
 Per-structure, unseen-vendor Canon+GE (ED+ES), our deployable model vs the nnU-Net SOTA baseline (**same eval**):
 
 <!-- results:compare -->
 | model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |
 |---|---|---|---|---|---|---|
-| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.84 | 12.1% | 0.84 | 11.5% |
+| **ours** (ONNX-deployable) | **1.6 M** | **0.8 G** | 0.84 | 9.9% | 0.83 | 11.0% |
 | nnU-Net (SOTA baseline) | 92 M | 19 G | 0.87 | **2.6%** | 0.88 | **4.3%** |
 <!-- /results:compare -->
 <sub>numbers auto-filled from `cardioseg/RESULTS.json` (`cardioseg/evaluation/sync_numbers.py`) — do not hand-edit the table above.</sub>
 
 <sub>params + FLOPs measured (fvcore, single forward; nnU-Net at its 256×320 patch — inference adds tiling + TTA on top).</sub>
 
-**How we train:** a 2D U-Net on Siemens+Philips (495 subjects) — heavy GPU augmentation + early stopping +
-largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. The flagship trains with **soft
+**How we train:** a 2D U-Net on Siemens+Philips (495 subjects) — heavy GPU augmentation + **50% synthetic
+augmentation** (physics-based bSSFP images generated from the labels, `core/data/dynamic/synth.py`) +
+early stopping + largest-CC + TTA — ONNX-exported for cardioview's in-browser inference. The synthetic
+mix is the diversify lever that **improved unseen-vendor EF** (Canon 12.1 → 9.9%, GE 11.5 → 11.0%) at a
+small ACDC-val cost (Dice 0.88 → 0.87, EF 6.5 → 7.1%). The flagship also trains with **soft
 (diffuse) boundary labels** — boundary voxels are partial-volume mixes, so the target is a distribution,
 not a hard 0/1 — which leaves Dice/EF unchanged but improves calibration (ECE 0.093 → 0.081 on ACDC val;
 `research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md`). **The alternative,** nnU-Net
 (self-configuring SOTA), runs as a *quarantined baseline* ([baselines/nnunet/](baselines/nnunet/)),
 scored through the same eval but **not deployed** (its sliding-window + TTA pipeline doesn't
 clean-export). On unseen-vendor Canon+GE (same split, same eval), nnU-Net leads by **~3–4 Dice points**
-(Canon 0.866 vs 0.836, GE 0.878 vs 0.838). **EF gap is large and model-class epistemic**: nnU-Net Canon
-2.6% vs ours 12.1%; GE 4.3% vs 11.5% — demonstrating the cross-vendor EF gap was reducible by a
+(Canon 0.866 vs 0.836, GE 0.878 vs 0.834). **EF gap is large and model-class epistemic**: nnU-Net Canon
+2.6% vs ours 9.9%; GE 4.3% vs 11.0% — demonstrating the cross-vendor EF gap was reducible by a
 stronger model class. cardioseg trades that for ONNX portability at **~57× fewer parameters and ~23×
 fewer FLOPs**; nnU-Net's sliding-window pipeline doesn't clean-export.
 
@@ -117,15 +126,15 @@ on *purely synthetic* images, zero real pixels — is in
 
 ## Honest limits — the clinical-grade gap
 Competent on public benchmarks, **not** clinical-grade. The specific gaps, measured rather than assumed:
-- **EF precision.** On the ACDC val (centre-shift) 95% LoA are [−20, +9]; on unseen vendors wider
+- **EF precision.** On the ACDC val (centre-shift) 95% LoA are [−23, +10]; on unseen vendors wider
   still — both far past the ±5% clinical bar. And part of the
   the cross-vendor EF gap is **model-class epistemic**: nnU-Net on unseen Canon achieves bias −1.4%,
   LoA [−8.2, +5.4]; on GE bias +0.9%, LoA [−11.7, +13.5] — near the ±5% clinical bar, demonstrating
   the gap was reducible by a stronger model class. Our model's larger gap (bias ~−11%) is a model-class
   limitation, not an irreducible floor.
 - **Unseen-vendor EF degrades.** Two vendors never in training (Canon n=9, GE n=69, total n=78)
-  both score Dice **0.84** and EF MAE **~11–12%** — Canon and GE agree independently, so the
-  cross-vendor signal is robust, but the clinical gap is real (11% vs 6.5% on ACDC val). Canon
+  both score Dice **0.84** and EF MAE **~10–11%** — Canon and GE agree independently, so the
+  cross-vendor signal is robust, but the clinical gap is real (~10–11% vs 7.1% on ACDC val). Canon
   has only 9 labelled subjects (M&Ms-1 withholds most Testing GT), so GE (n=69) carries the EF
   signal; Canon confirms Dice. The LoA on unseen vendors is not yet characterised in full.
 - **Validation is thin.** One 80/20 split — no cross-validation, confidence intervals, or
@@ -142,7 +151,7 @@ adapters into one **data cloud** (830 subjects, 4 vendors, harmonized pathology 
 **M&M-2** ([link](https://www.ub.edu/mnms-2/), 360, 3 vendors), **ACDC**
 ([link](https://www.creatis.insa-lyon.fr/Challenge/acdc/), 150, Siemens), **M&Ms-1** (320 on disk /
 213 labelled, 4 vendors incl. Canon). Each adapter remaps labels + parses metadata to a common schema;
-we pull *all* data and make our own splits. Flagship model trained on Siemens+Philips only; validated on ACDC (centre-shift, 0.88 Dice) and
+we pull *all* data and make our own splits. Flagship model trained on Siemens+Philips only; validated on ACDC (centre-shift, 0.87 Dice) and
 tested on Canon+GE (unseen vendors, 0.84 Dice, n=78). Full schema + results →
 **[cardioseg/](cardioseg/)**.
 
@@ -225,7 +234,9 @@ Naive randomized synth collapses. The engineering is *why*, and fixing it by **d
 
 A U-Net trained on **zero real pixels** segments unseen-vendor cardiac MRI at **0.66 Dice** — short of
 the 0.86 real-trained model, but a working demonstration that label-only contrast-agnostic training
-transfers. As *augmentation* (synth mixed with real) it's Dice-neutral here. Honest read: the method
+transfers. As *augmentation* (synth mixed with real) it's Dice-neutral but **helps cross-vendor EF** —
+the flagship now trains with **50% synthetic augmentation**, which cut unseen-vendor EF MAE (Canon 12.1
+→ 9.9%, GE 11.5 → 11.0%) at a small ACDC-val cost (Dice 0.88 → 0.87). Honest read: the method
 works; the remaining gap is the synthetic background's realism, and the next lever is a learned (GAN)
 generator. The data engine lives behind one `Generator`/`GeneratorCfg` seam (`training/synth.py`,
 `training/generator.py`); the per-class intensity priors are provenance-tracked reference data.
