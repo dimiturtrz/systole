@@ -61,7 +61,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0) -> n
     Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
     LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
     import pyvista as pv
-    from scipy.ndimage import binary_fill_holes, label as cc_label
+    from scipy.ndimage import binary_fill_holes, binary_closing, binary_dilation, label as cc_label
     m = _sax_align(mesh)
     x0, x1, y0, y1, z0, z1 = m.bounds
     nx = int(np.ceil((x1 - x0) / inplane)); ny = int(np.ceil((y1 - y0) / inplane))
@@ -76,12 +76,45 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0) -> n
         if lw.sum() < 8:
             continue
         lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
-        both = binary_fill_holes(lw | rw) & ~(lw | rw)               # both cavities enclosed by LV+RV
+        # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
+        # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
+        # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
+        # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
+        walls = binary_closing(lw | rw, iterations=3)
+        both = binary_fill_holes(walls) & ~(lw | rw)
         rv_cav = both & ~lv_cav
+        if rw.any() and rv_cav.any():
+            lbl, n = cc_label(rv_cav)
+            near = binary_dilation(rw, iterations=2)
+            keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
+            rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
         out[k][rv_cav] = 1                                            # RV cavity
         out[k][lw] = 2                                               # LV myocardium (RV wall -> bg)
         out[k][lv_cav] = LV_CAV                                      # LV cavity (3)
     return out
+
+
+# Real ACDC heart size at 1.5 mm in-plane: per-patient MAX fg-bbox longest side (px), measured over
+# 150 patients x ED+ES (core/data/static/acdc): p5=62 p50=74 p95=89. Rodero voxelizes ~25-35% smaller
+# in-frame (~47 px), so we globally rescale each synth heart to a target sampled from this real range —
+# a per-heart factor that CENTERS scale on real AND spreads it across the real spread (domain-random),
+# while preserving each heart's own apico-basal size profile (uniform in-plane zoom, not per-slice).
+REAL_SIZE_PX = (58, 92)               # sample target max-bbox side here (measured real p5..p95, widened)
+
+
+def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
+    """Uniformly in-plane rescale a [D,H,W] label volume so its GLOBAL max fg-bbox longest side hits
+    `target_px` (nearest-neighbour, label-preserving). No-op if the heart has no foreground."""
+    from scipy.ndimage import zoom as _zoom
+    fg = vol > 0
+    if not fg.any():
+        return vol
+    zs, ys, xs = np.where(fg)
+    cur = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1
+    f = target_px / max(cur, 1)
+    if abs(f - 1.0) < 1e-3:
+        return vol
+    return _zoom(vol, (1.0, f, f), order=0)           # in-plane only; slices (z) untouched
 
 
 def load(path: str | Path):
@@ -93,18 +126,26 @@ def load(path: str | Path):
 
 
 def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
-               inplane: float = DEFAULT_INPLANE, min_fg: int = 40) -> tuple[Path, tuple]:
-    """Voxelize every *.vtk in `mesh_dir` -> SAX slices -> fit_square to `size` -> stacked label pool,
-    saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-ANATOMY training pool: label
-    maps only (the physics painter adds contrast per batch). Near-empty apex/base slices dropped."""
+               inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
+               seed: int = 0) -> tuple[Path, tuple]:
+    """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
+    -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
+    ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
+    apex/base slices dropped. Each mesh is globally rescaled to a target max-bbox side sampled from the
+    real ACDC size distribution (REAL_SIZE_PX); `scale_reps` emits that many independent scale draws per
+    mesh (cheap scale-diversity multiplier on top of the ~20-mesh cohort)."""
     from core.preprocessing.preprocess import fit_square
+    rng = np.random.default_rng(seed)
     meshes = sorted(Path(mesh_dir).rglob("*.vtk"))
     slices = []
     for mp in meshes:
         vol = voxelize(load(mp), inplane=inplane)
-        for k in range(vol.shape[0]):
-            if int((vol[k] > 0).sum()) >= min_fg:
-                slices.append(fit_square(vol[k], size, 0).astype(np.uint8))
+        for _ in range(max(1, scale_reps)):
+            tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
+            sv = _scale_to_target(vol, tgt)
+            for k in range(sv.shape[0]):
+                if int((sv[k] > 0).sum()) >= min_fg:
+                    slices.append(fit_square(sv[k], size, 0).astype(np.uint8))
     arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)

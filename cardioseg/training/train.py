@@ -95,9 +95,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             pool = load_pool(d.anatomy_pool)
             Ytr = _t.as_tensor(pool, dtype=_t.long, device=data_device)               # [N,H,W] Rodero labels
             cfg.generator.synth.synth_p = 1.0
-            if cfg.generator.synth.bg_mode == "flat":
-                Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device) # ZERO-REAL goalpost (flat bg)
-                log.info("ANATOMY POOL: %d Rodero slices, FLAT bg (zero real data)", Ytr.shape[0])
+            if cfg.generator.synth.bg_mode in ("flat", "procedural"):
+                # ZERO-REAL goalpost: no real image at all. flat = single bg tissue; procedural = synthetic
+                # random-field organ blobs (the whole-FOV bg that kills the flat-bg 0.07 wall). (bwp)
+                Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)
+                log.info("ANATOMY POOL: %d Rodero slices, ZERO-REAL bg=%s", Ytr.shape[0],
+                         cfg.generator.synth.bg_mode)
             else:
                 # DIAGNOSTIC: Rodero heart on REAL bg shapes (partition) — isolates the anatomy axis from
                 # the bg wall. Pairs each Rodero mask with a random real train image as the bg source.

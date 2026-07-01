@@ -86,8 +86,12 @@ class SynthCfg(BaseModel):
     # --- background ---
     bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
     #                                                into bg_tiers tissue tiers (real lung/fat/muscle
-    #                                                SHAPES, painted by tissue); "flat" = single bg tissue
+    #                                                SHAPES, painted by tissue); "flat" = single bg tissue;
+    #                                                "procedural" = SYNTHETIC random-field organ blobs (no
+    #                                                real img) -> whole-FOV bg for ZERO-REAL synth anatomy.
     bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
+    bg_blobs: int = Field(6, ge=2)                   # procedural bg: coarse random-field grid (smaller=bigger
+    #                                                organ blobs); upsampled+bucketized into bg_tiers regions
     keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: paste synth heart onto REAL bg
     #                                                (isolates bg realism; forces deform off). Not pure-synth.
     # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
@@ -149,6 +153,19 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         thr = torch.linspace(-1.0, 1.0, K - 1, device=dev)                  # K-1 thresholds -> K bins
         tier = torch.bucketize(real_img[:, 0].contiguous(), thr)            # [B,H,W] in 0..K-1
         ext = torch.where(mask == 0, n_classes + tier, mask)               # bg -> n_classes+tier
+        n_paint = n_classes + K
+    elif cfg.bg_mode == "procedural" and not hybrid:
+        # ZERO-REAL whole-FOV bg: a per-sample coarse random field (bg_blobs x bg_blobs) upsampled to
+        # smooth organ-like blobs, bucketized into K tiers -> each painted by an interpolated tissue on
+        # the bg ladder (mri_physics). SynthSeg-style random-shape context: the net can't localize the
+        # heart by "it's the only non-flat thing", it must learn the 3-class contrast signature. No real
+        # image needed -> this is the pure-synth-anatomy background (kills the flat-bg 0.07 wall). (bwp)
+        K = cfg.bg_tiers
+        coarse = torch.rand(b, 1, cfg.bg_blobs, cfg.bg_blobs, device=dev)
+        fieldb = F.interpolate(coarse, size=mask.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
+        thr = torch.linspace(0.0, 1.0, K + 1, device=dev)[1:-1]             # K-1 interior thresholds -> K bins
+        tier = torch.bucketize(fieldb.contiguous(), thr)                    # [B,H,W] in 0..K-1
+        ext = torch.where(mask == 0, n_classes + tier, mask)
         n_paint = n_classes + K
     oh = F.one_hot(ext, n_paint).permute(0, 3, 1, 2).float()                # [B,n_paint,H,W]
 
