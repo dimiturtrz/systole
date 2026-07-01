@@ -38,7 +38,11 @@ class SynthCfg(BaseModel):
     more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
     (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
     model_config = _VALIDATE
-    synth_p: float = Field(0.0, ge=0, le=1)         # fraction of in-batch samples replaced by synth
+    synth_p: float = Field(0.5, ge=0, le=1)         # fraction of in-batch samples replaced by synth.
+    #                                                DEFAULT 0.5 = the MINIMUM synthetic share in training
+    #                                                (owner mandate): synth stays in the pipeline. Costs
+    #                                                ~0.01 cross-vendor Dice (0.864->0.852) — a robustness
+    #                                                bet. synth_p=0 must be set explicitly for real-only.
     deform: float = Field(0.15, ge=0)              # nonlinear label-warp amplitude (norm coords); invents
     #                                                anatomy too (full SynthSeg). 0 = pixels-only, real mask
     # --- bSSFP sequence sweep = the physical cross-vendor contrast diversity ---
