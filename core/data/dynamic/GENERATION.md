@@ -124,6 +124,27 @@ sliced by the frame edge is a genuinely different, harder input).
 - **support / manifold** — the region of possible inputs the generator can produce; "how much space we
   model". Coverage = does that region contain the real data's region.
 
+## Generation SOURCES — a composite all-synthetic dataset (2026-07-02)
+
+The goal is **all-synthetic training data**, and no single generator reaches the whole real manifold.
+So think of it as a **portfolio of sources**, each ENTERING the DAG at a different point with a different
+**control degree**, all feeding the shared painter/corruption tail and **composed into one dataset**.
+Each source covers a different region; the union covers more than any one.
+
+| source | enters at | control | anatomy coverage | status |
+|---|---|---|---|---|
+| **fully parametric** | top (invent shape params → mesh → paint) | HIGH — every factor a knob | limited (needs a shape generator) | painter ✓, shape-invent ✗ |
+| **SSM (Rodero)** | shape = pre-built mesh → voxelize → paint | MED — SSM mode weights | healthy + MILD pathology (±3SD) | ✓ (pool_1000) |
+| **label-space edit** | shape = deform existing label maps | MED — deform params | variations; pathology via dilation | build (`vpn5`) |
+| **MRXCAT** | whole thing (torso+heart+physics) | LOW–MED — pathology knobs | whole-FOV + pathology + structured bg | `hpy` |
+| **learned prior** | shape = sample a learned model | LOW — latent | the real manifold incl pathology | future (`vpn5` option) |
+
+**Composition is cheap** (union of label pools → the painter is shared): `pool_composite = concat(sourceA,
+sourceB, …)`. The VALUE is *diverse sources*, not one bigger source. Coverage is measured per source and
+on the union (`shape_coverage`, `static_compare`), so we can see which source fills which gap — e.g. SSM
+covers normals (NOR 0.49), the DCM/RV tail needs label-space or learned or MRXCAT. Control degree is a
+*feature*: high-control sources (parametric) for targeted gaps, whole-thing sources (MRXCAT) for breadth.
+
 ## Current implementation map (what's built, where) — 2026-07-02
 
 **Factors / mechanisms (the forward process):**

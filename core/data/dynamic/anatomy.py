@@ -184,6 +184,45 @@ def convert_binary(mesh_dir: str | Path, workers: int = 0) -> int:
     return len(vtks)
 
 
+def pathology_deform(mask: np.ndarray, k: int) -> np.ndarray:
+    """Label-space pathology SOURCE (bd vpn5): remodel the LV to synthesize the DCM/HCM tail the healthy
+    SSM misses, keeping the OUTER heart size fixed and the myo a RING (topology-safe — the naive-deform
+    dead-end, bd bwp). k>0 = DILATE the LV cavity into the myo (thin wall -> DCM); k<0 = shrink cavity /
+    thicken wall (-> HCM). RV (label 1) untouched. Returns a new label map (uint8)."""
+    from scipy.ndimage import binary_dilation, binary_erosion
+    lvc, myo = mask == LV_CAV, mask == 2
+    wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
+    if not lvc.any() or not myo.any() or k == 0:
+        return mask.copy()
+    if k > 0:                                                 # DCM: cavity grows into the wall
+        new_lvc = binary_dilation(lvc, iterations=k) & wall
+    else:                                                     # HCM: cavity shrinks, wall thickens
+        new_lvc = binary_erosion(lvc, iterations=-k)
+    new_myo = wall & ~new_lvc
+    if new_myo.sum() < 0.10 * wall.sum():                    # guard: don't dissolve the myo ring
+        return mask.copy()
+    out = mask.copy()
+    out[wall] = 2                                            # reset LV wall region to myo
+    out[new_lvc] = LV_CAV                                    # then carve the (re)sized cavity
+    return out
+
+
+def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),
+                         seed: int = 0) -> tuple[Path, tuple]:
+    """Turn a healthy label pool into a PATHOLOGY pool: per slice, emit one DCM (cavity dilated by
+    k~U[k_dcm]) and one HCM (eroded by k~U[k_hcm]) variant (topology-safe pathology_deform). The
+    composite-dataset source that covers the DCM/RV tail the SSM misses (bd vpn5/uch6)."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for m in pool:
+        out.append(pathology_deform(m, int(rng.integers(k_dcm[0], k_dcm[1] + 1))))
+        out.append(pathology_deform(m, -int(rng.integers(k_hcm[0], k_hcm[1] + 1))))
+    arr = np.stack(out).astype(np.uint8)
+    out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out_path, slices=arr)
+    return out_path, arr.shape
+
+
 def _pool_worker(args) -> list[np.ndarray]:
     """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
     process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
