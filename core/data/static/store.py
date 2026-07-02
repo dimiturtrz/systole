@@ -49,6 +49,8 @@ class DataCfg(BaseModel):
     test_vendors: tuple[str, ...] = ("Canon", "GE")
     val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
     val_vendors: tuple[str, ...] = ()
+    train_vendors: tuple[str, ...] = ()              # if set: restrict TRAIN to these vendors only (the
+    #                                                scarce/single-vendor regime; val/test intact — bd 5r7n)
     inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
     n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
