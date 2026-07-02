@@ -20,7 +20,7 @@ def test_geom_metrics_are_sane():
     g = geom_metrics(_mask())
     assert g is not None
     assert g["lvc_area"] > 0 and g["myo_area"] > g["lvc_area"]     # myo ring bigger than cavity
-    assert 0 < g["lvc_sphericity"] <= 1.4                          # a disc is ~round
+    assert 0 < g["lvc_sphericity"] <= 2.0                          # a disc is ~round (discrete P inflates small)
     assert g["myo_thickness"] > 0
     assert geom_metrics(np.zeros((16, 16), np.uint8)) is None       # empty -> None
 
