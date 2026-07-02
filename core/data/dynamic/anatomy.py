@@ -184,39 +184,39 @@ def convert_binary(mesh_dir: str | Path, workers: int = 0) -> int:
     return len(vtks)
 
 
-def pathology_deform(mask: np.ndarray, k: int) -> np.ndarray:
-    """Label-space pathology SOURCE (bd vpn5): remodel the LV to synthesize the DCM/HCM tail the healthy
-    SSM misses, keeping the OUTER heart size fixed and the myo a RING (topology-safe — the naive-deform
-    dead-end, bd bwp). k>0 = DILATE the LV cavity into the myo (thin wall -> DCM); k<0 = shrink cavity /
-    thicken wall (-> HCM). RV (label 1) untouched. Returns a new label map (uint8)."""
+def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
+    """Label-space pathology SOURCE (bd vpn5): remodel LV and/or RV to synthesize the DCM/HCM/abnormal-RV
+    tail the healthy SSM misses, keeping the OUTER LV size fixed + myo a RING (topology-safe — the naive-
+    deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
+    (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
+    ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
     from scipy.ndimage import binary_dilation, binary_erosion
     lvc, myo = mask == LV_CAV, mask == 2
     wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
-    if not lvc.any() or not myo.any() or k == 0:
-        return mask.copy()
-    if k > 0:                                                 # DCM: cavity grows into the wall
-        new_lvc = binary_dilation(lvc, iterations=k) & wall
-    else:                                                     # HCM: cavity shrinks, wall thickens
-        new_lvc = binary_erosion(lvc, iterations=-k)
-    new_myo = wall & ~new_lvc
-    if new_myo.sum() < 0.10 * wall.sum():                    # guard: don't dissolve the myo ring
-        return mask.copy()
     out = mask.copy()
-    out[wall] = 2                                            # reset LV wall region to myo
-    out[new_lvc] = LV_CAV                                    # then carve the (re)sized cavity
+    if lvc.any() and myo.any() and k != 0:
+        new_lvc = binary_dilation(lvc, iterations=k) & wall if k > 0 else binary_erosion(lvc, iterations=-k)
+        new_myo = wall & ~new_lvc
+        if new_myo.sum() >= 0.10 * wall.sum():               # guard: don't dissolve the myo ring
+            out[wall] = 2
+            out[new_lvc] = LV_CAV
+    if rv_k > 0 and (mask == 1).any():                       # abnormal RV: grow RV cavity into bg only
+        grown = binary_dilation(mask == 1, iterations=rv_k) & ~(out == 2) & ~(out == LV_CAV)
+        out[grown] = 1
     return out
 
 
 def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),
-                         seed: int = 0) -> tuple[Path, tuple]:
-    """Turn a healthy label pool into a PATHOLOGY pool: per slice, emit one DCM (cavity dilated by
-    k~U[k_dcm]) and one HCM (eroded by k~U[k_hcm]) variant (topology-safe pathology_deform). The
-    composite-dataset source that covers the DCM/RV tail the SSM misses (bd vpn5/uch6)."""
+                         rv=(2, 6), seed: int = 0) -> tuple[Path, tuple]:
+    """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
+    HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
+    The composite source covering the DCM/HCM/RV tail the SSM misses (bd vpn5/uch6)."""
     rng = np.random.default_rng(seed)
     out = []
     for m in pool:
-        out.append(pathology_deform(m, int(rng.integers(k_dcm[0], k_dcm[1] + 1))))
-        out.append(pathology_deform(m, -int(rng.integers(k_hcm[0], k_hcm[1] + 1))))
+        out.append(pathology_deform(m, k=int(rng.integers(k_dcm[0], k_dcm[1] + 1))))
+        out.append(pathology_deform(m, k=-int(rng.integers(k_hcm[0], k_hcm[1] + 1))))
+        out.append(pathology_deform(m, rv_k=int(rng.integers(rv[0], rv[1] + 1))))
     arr = np.stack(out).astype(np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
