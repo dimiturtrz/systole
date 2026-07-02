@@ -124,6 +124,50 @@ sliced by the frame edge is a genuinely different, harder input).
 - **support / manifold** — the region of possible inputs the generator can produce; "how much space we
   model". Coverage = does that region contain the real data's region.
 
+## Current implementation map (what's built, where) — 2026-07-02
+
+**Factors / mechanisms (the forward process):**
+
+| DAG element | source | code | status |
+|---|---|---|---|
+| shape — real | real GT masks | `core/data/static/store.py` (load), `splits` | ✅ |
+| shape — parametric | SSM meshes → label maps | `core/data/dynamic/anatomy.py`: `voxelize`, `_sax_align`, `_scale_to_target`, `build_pool`/`load_pool` (pools under `<data>/processed/rodero_anatomy/`) | ✅ |
+| shape — learned | — | — | ⛔ (`vpn5`) |
+| color — tissue | T1/T2/PD table | `mri_physics.py`: `TISSUE`, `tissue_params`, `_HEART`, `blood_classes` | ✅ |
+| color — acquisition | field/TR/flip strategy | `synth.py`: `Acquisition` ABC → `LegacyAcq`/`RandomizedAcq`/`MatchedAcq`, `make_acquisition` | ✅ |
+| color — per-vendor | vendor→its acq | `mri_physics.acquisition_for` exists but not wired into paint | 🟡 (`ex1`) |
+| paint mechanism | bSSFP signal | `synth.py`: `synthesize_from_labels` (`bssfp_signal`, inflow, `banding`) | ✅ |
+| background factor | whole-FOV fill | `synth.py`: `Background` ABC → `Flat`/`Procedural`/`Partition`/`HybridBg`, `make_background` | ✅ |
+| nuisance — geometry | pan/rot/scale/flip | `augment.py`: `augment_batch` (translate opt-in, default 0) | ✅ (pan opt-in) |
+| nuisance — corruption | pv/bias/blur/kspace/noise | `synth.py` corruption chain | ✅ |
+| framing / FOV margin | canvas > FOV | — | ⛔ (`x8ne`) |
+| real-bg cleanup | excise real heart | `synth.py`: `excise_heart` | ✅ (`mirs` fixed) |
+
+**Operators:**
+
+| operator | code | status |
+|---|---|---|
+| **SAMPLE** (generate) | `generator.py`: `Generator.batch` + `synthesize_from_labels` | ✅ |
+| **FIX** (condition on real) | repaint path (`synth_p`<1, real masks) + `train.py` anatomy real-bg branch (excise) | ✅ |
+| **FIT** (invert / twin) | — | ⛔ (`ncph`) |
+
+**Control axis realized:** real ✅ (`store`) · parametric ✅ (SSM + `mri_physics` + strategies) · learned ⛔.
+
+**Per-factor metrics:**
+
+| metric | code | status |
+|---|---|---|
+| color coverage (W1, location/spread, by-vendor) | `core/data/analysis/synth_fidelity.py` | ✅ |
+| shape coverage (embedding) | — | ⛔ (`uy4d`) |
+| downstream Dice (cross-vendor) | `cardioseg/evaluation/validate` + `training/train.py` | ✅ |
+| inverse recon error | — | ⛔ (`ncph`) |
+
+**Reading it:** the whole **forward SAMPLE path is built** (parametric shape+color, all four bg strategies,
+acquisition strategies, corruption chain), plus **FIX** (repaint + excised real-bg) and the **color-coverage
+metric**. The gaps are the three that unlock the rest: **FIT** (`ncph`, the twin), **shape-coverage metric**
+(`uy4d`), and the **learned shape prior** (`vpn5`) — with framing (`x8ne`) and per-vendor color (`ex1`) as
+smaller fills.
+
 ## Current beads on this graph
 
 `b6tb` (color/shape coverage of *generate*), `pwih` (augmentation MIX), `hpy` (richer shape+bg factor),
