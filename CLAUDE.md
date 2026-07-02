@@ -3,7 +3,7 @@
 This file provides instructions and context for AI coding agents working on this project.
 
 ## Plan
-- Roadmap lives in `PLAN` (checked in) and `PLAN.local` (gitignored, private — its purpose is explained in `PLAN`). Read both at session start.
+- Roadmap lives in `PLAN` and `PLAN.local`. Read both at session start; `PLAN` explains them.
 
 ## Working directives (this project)
 - North star: **domain generalization**. **No external dependencies** for this artifact.
