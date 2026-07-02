@@ -90,7 +90,8 @@ def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
     return np.asarray(sel["SelectedPoints"]).astype(bool)
 
 
-def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0) -> np.ndarray:
+def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
+             rv_close: int = 3) -> np.ndarray:
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
     Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
     LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
@@ -115,7 +116,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0) -> n
         # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
         # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
         # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
-        walls = binary_closing(lw | rw, iterations=3)
+        walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
         both = binary_fill_holes(walls) & ~(lw | rw)
         rv_cav = both & ~lv_cav
         if rw.any() and rv_cav.any():
@@ -153,11 +154,34 @@ def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
 
 
 def load(path: str | Path):
-    """Read a Rodero VTK mesh (pyvista); sets 'ID' active for thresholding."""
+    """Read a Rodero mesh (pyvista); sets the region tag active for thresholding. Prefers a sibling
+    BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
     import pyvista as pv
-    m = pv.read(str(path))
+    p = Path(path)
+    vtu = p.with_suffix(".vtu")
+    m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
     m.set_active_scalars(_tag_name(m), preference="cell")
     return m
+
+
+def _convert_one(mp: str) -> str:
+    import pyvista as pv
+    out = Path(mp).with_suffix(".vtu")
+    if not out.exists():
+        pv.read(mp).save(str(out), binary=True)
+    return str(out)
+
+
+def convert_binary(mesh_dir: str | Path, workers: int = 0) -> int:
+    """One-time: write a BINARY .vtu beside every ASCII .vtk (parallel). load() then uses it (4.5x
+    faster). Returns count converted. ASCII parse is ~half the per-mesh voxelize cost."""
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+    vtks = [str(p) for p in sorted(Path(mesh_dir).rglob("*.vtk"))]
+    nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+    with ProcessPoolExecutor(max_workers=nw) as ex:
+        list(ex.map(_convert_one, vtks, chunksize=1))
+    return len(vtks)
 
 
 def _pool_worker(args) -> list[np.ndarray]:
