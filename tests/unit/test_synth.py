@@ -144,6 +144,53 @@ def test_acquisition_derived_and_reference_override(tmp_path):
     assert (tr, te) == (tr15, te15)                             # unset leaves fall back to the derivation
 
 
+def test_background_strategy_dispatch_and_zero_real():
+    """make_background maps each bg_mode to its strategy (one rep per equivalence class); flat/procedural
+    are ZERO-REAL (no real_img needed) and paint the whole FOV; partition/hybrid need a real image."""
+    from core.data.dynamic.synth import (make_background, FlatBg, ProceduralBg, PartitionBg, HybridBg)
+    assert isinstance(make_background(SynthCfg(bg_mode="flat")), FlatBg)
+    assert isinstance(make_background(SynthCfg(bg_mode="procedural")), ProceduralBg)
+    assert isinstance(make_background(SynthCfg(bg_mode="partition")), PartitionBg)
+    assert isinstance(make_background(SynthCfg(bg_mode="hybrid")), HybridBg)
+    try:
+        make_background(SynthCfg(bg_mode="nope")); assert False
+    except ValueError:
+        pass
+    for m in ("flat", "procedural"):                             # zero-real: real_img=None must work
+        img, _ = synthesize_from_labels(_mask(3), SynthCfg(bg_mode=m), N)
+        assert img.shape == (3, 1, 8, 8) and torch.isfinite(img).all()
+
+
+def test_excise_heart_removes_the_heart():
+    """excise_heart zeros+inpaints the gt>0 region so a real image can be a clean bg for a DIFFERENT
+    heart (bd mirs). The bright heart signal must be gone; non-heart pixels untouched."""
+    from core.data.dynamic.synth import excise_heart
+    img = torch.zeros(2, 1, 16, 16); img[:, :, 6:10, 6:10] = 5.0    # bright "heart" blob
+    gt = torch.zeros(2, 16, 16, dtype=torch.long); gt[:, 6:10, 6:10] = 3
+    out = excise_heart(img, gt)
+    assert out[:, :, 6:10, 6:10].abs().max() < 1.0                  # heart signal inpainted away
+    keep = gt[:, None].expand_as(out) == 0
+    assert torch.equal(out[keep], img[keep])                       # non-heart pixels untouched
+
+
+def test_acquisition_matched_is_fixed_randomized_is_not():
+    """make_acquisition: matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
+    vary per sample. One rep per acq_mode equivalence class."""
+    from core.data.dynamic.synth import make_acquisition, MatchedAcq, RandomizedAcq, LegacyAcq
+    cfg = SynthCfg(acq_mode="matched", match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0,
+                   match_vendor="GE", fields=(1.5, 3.0), vendors=("Siemens", "GE"))
+    assert isinstance(make_acquisition(cfg), MatchedAcq)
+    fi, tr, fl, vi = make_acquisition(cfg).sample(8, cfg, "cpu")
+    assert (fi == 1).all() and (vi == 1).all()                     # field=3.0 idx1, vendor=GE idx1
+    assert tr.unique().numel() == 1 and fl.unique().numel() == 1   # fixed, no spread
+    assert abs(float(tr[0]) - 3.2) < 1e-4 and abs(float(fl[0]) - 45.0) < 1e-4
+    rc = SynthCfg(acq_mode="randomized")
+    assert isinstance(make_acquisition(rc), RandomizedAcq)
+    _, rtr, rfl, _ = make_acquisition(rc).sample(64, rc, "cpu")
+    assert rtr.unique().numel() > 1 and rfl.unique().numel() > 1    # randomized varies
+    assert isinstance(make_acquisition(SynthCfg(acq_mode="legacy")), LegacyAcq)
+
+
 def test_return_meta_emits_provenance():
     """return_meta=True -> synth carries per-sample provenance (vendor/field/tr/flip) so it flows the
     same harmonization path as real. Default stays a 2-tuple (callers unchanged)."""

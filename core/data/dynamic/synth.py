@@ -78,13 +78,18 @@ class SynthCfg(BaseModel):
     #                                                (PMC9843884). The physical input to inflow, sampled per
     #                                                slice (position-varying) — the source of f's spread.
     slice_mm: tuple[float, float] = (6.0, 8.0)     # cine slice thickness (mm), SCMR standardized 6-8mm
-    derive_acq: bool = False                       # TR/flip from physics (derive_acquisition +
-    #                                                derive_flip_range, sampled across the SAR-bounded band)
-    #                                                instead of the cfg.tr_ms/flip_deg ranges. OPT-IN: the
-    #                                                physics-derived pipeline ~matches but doesn't beat the
-    #                                                empirical ranges on cross-vendor Dice (0.673 vs 0.701),
-    #                                                so it's not the default — it's the defensible/derived
-    #                                                path (bd 276), enabled with inflow for the physics run.
+    # acq_mode selects an Acquisition STRATEGY (see make_acquisition):
+    #   "legacy"     = sample TR/flip from the cfg.tr_ms/flip_deg global ranges (old default).
+    #   "randomized" = TR/flip DERIVED from physics (derive_acquisition + derive_flip_range, sampled
+    #                  across the SAR-bounded band). Defensible/derived path (bd 276); ~matches but
+    #                  doesn't beat the empirical ranges on cross-vendor Dice (0.673 vs 0.701).
+    #   "matched"    = paint TO a single TARGET scanner (match_* below) instead of randomizing — for
+    #                  known-deployment-machine training + the match-vs-randomize test (bd 7pto).
+    acq_mode: str = "legacy"
+    match_field: float = 1.5                        # matched-acq target: field (T; nearest in `fields`)
+    match_tr_ms: float = 3.0                        # matched-acq target: repetition time (ms)
+    match_flip_deg: float = 50.0                    # matched-acq target: flip angle (deg)
+    match_vendor: str = ""                          # matched-acq target vendor tag ("" -> first of vendors)
     # --- background (bg_mode selects a Background STRATEGY; see make_background) ---
     bg_mode: str = "partition"                      # one of: "flat" (single bg tissue) | "procedural"
     #                                                (SYNTHETIC random-field organ blobs, ZERO-REAL) |
@@ -237,6 +242,62 @@ def make_background(cfg: SynthCfg) -> Background:
         raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}")
 
 
+class Acquisition(ABC):
+    """Per-sample SCANNER SETTINGS strategy: pick field index (into cfg.fields), TR (ms), flip (deg),
+    and vendor index (into cfg.vendors). One impl per mode — the painter holds no acq if/else."""
+    @abstractmethod
+    def sample(self, b: int, cfg: SynthCfg, dev):
+        """-> (fi [b] long, tr [b,1], fl [b,1], vi [b] long)."""
+
+
+class LegacyAcq(Acquisition):
+    """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg). Field/vendor uniform-random."""
+    def sample(self, b, cfg, dev):
+        fi = torch.randint(len(cfg.fields), (b,), device=dev)
+        tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
+        fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
+        vi = torch.randint(len(cfg.vendors), (b,), device=dev)
+        return fi, tr, fl, vi
+
+
+class RandomizedAcq(Acquisition):
+    """Physics-bounded domain randomization: TR over the cited cine band, flip across the per-field
+    SAR-bounded FWHM contrast range (derive_flip_range). Breadth, not the single optimal point."""
+    def sample(self, b, cfg, dev):
+        from .mri_physics import derive_flip_range, TR_RANGE_MS
+        fi = torch.randint(len(cfg.fields), (b,), device=dev)
+        rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
+        tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev)
+        lo, hi = rng[fi, 0:1], rng[fi, 1:2]
+        fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)
+        vi = torch.randint(len(cfg.vendors), (b,), device=dev)
+        return fi, tr, fl, vi
+
+
+class MatchedAcq(Acquisition):
+    """Paint TO one target scanner (cfg.match_*): fixed field (nearest available), TR, flip, vendor —
+    no randomization. For known-deployment training + the match-vs-randomize test (bd 7pto)."""
+    def sample(self, b, cfg, dev):
+        fields = torch.tensor(cfg.fields, device=dev)
+        fidx = int(torch.argmin((fields - cfg.match_field).abs()))          # nearest available field
+        vidx = cfg.vendors.index(cfg.match_vendor) if cfg.match_vendor in cfg.vendors else 0
+        fi = torch.full((b,), fidx, device=dev, dtype=torch.long)
+        vi = torch.full((b,), vidx, device=dev, dtype=torch.long)
+        tr = torch.full((b, 1), float(cfg.match_tr_ms), device=dev)
+        fl = torch.full((b, 1), float(cfg.match_flip_deg), device=dev)
+        return fi, tr, fl, vi
+
+
+_ACQ_REGISTRY = {"legacy": LegacyAcq, "randomized": RandomizedAcq, "matched": MatchedAcq}
+
+
+def make_acquisition(cfg: SynthCfg) -> Acquisition:
+    try:
+        return _ACQ_REGISTRY[cfg.acq_mode]()
+    except KeyError:
+        raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}")
+
+
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
                            real_img: torch.Tensor | None = None, return_meta: bool = False):
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
@@ -272,22 +333,9 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     params = [tissue_params(n_classes, n_paint - n_classes, float(f), dev) for f in cfg.fields]
     t1s = torch.stack([p[0] for p in params]); t2s = torch.stack([p[1] for p in params])
     pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
-    fi = torch.randint(len(cfg.fields), (b,), device=dev)                    # per-sample field index
+    # acquisition STRATEGY: per-sample field/TR/flip/vendor (legacy ranges / physics-randomized / matched)
+    fi, tr, fl, vi = make_acquisition(cfg).sample(b, cfg, dev)
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
-    if cfg.derive_acq:
-        # TR DERIVED per field (floor + jitter). FLIP sampled across the physically-plausible RANGE
-        # per field (derive_flip_range: low-contrast end .. SAR cap) — domain randomization needs
-        # contrast BREADTH, not the single contrast-optimal point (that measured worse; bd 276). Physics-
-        # bounded (SAR ceiling), not an arbitrary global range.
-        from .mri_physics import derive_flip_range, TR_RANGE_MS
-        rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)      # [F,2] lo,hi
-        tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev) # sample cited TR band
-        lo, hi = rng[fi, 0:1], rng[fi, 1:2]
-        fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)                                     # flip diversity (FWHM band)
-    else:                                                                    # legacy global ranges
-        tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
-        fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
-    vi = torch.randint(len(cfg.vendors), (b,), device=dev)                   # per-sample vendor tag
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
