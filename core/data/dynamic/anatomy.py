@@ -163,7 +163,7 @@ def load(path: str | Path):
 def _pool_worker(args) -> list[np.ndarray]:
     """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
     process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
-    mp, inplane, size, min_fg, scale_reps, mseed = args
+    mp, inplane, size, min_fg, scale_reps, min_cav_frac, mseed = args
     from core.preprocessing.preprocess import fit_square
     rng = np.random.default_rng(mseed)
     out = []
@@ -175,14 +175,22 @@ def _pool_worker(args) -> list[np.ndarray]:
         tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
         sv = _scale_to_target(vol, tgt)
         for k in range(sv.shape[0]):
-            if int((sv[k] > 0).sum()) >= min_fg:
-                out.append(fit_square(sv[k], size, 0).astype(np.uint8))
+            s = sv[k]
+            fg = int((s > 0).sum())
+            if fg < min_fg:
+                continue
+            # drop pure-apical myo-only slices (no cavity): the mesh contributes its whole apico-basal
+            # stack, so apex slices (~all myo, no cavity) over-represent 11x vs real (19% vs 1.8%). Require
+            # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
+            if min_cav_frac > 0 and int(((s == 1) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
+                continue
+            out.append(fit_square(s, size, 0).astype(np.uint8))
     return out
 
 
 def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
                inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
-               seed: int = 0, workers: int = 0) -> tuple[Path, tuple]:
+               seed: int = 0, workers: int = 0, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
     """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
     -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
     ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
@@ -194,7 +202,8 @@ def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_S
     from concurrent.futures import ProcessPoolExecutor
     meshes = sorted(Path(mesh_dir).rglob("*.vtk"))
     nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
-    jobs = [(str(mp), inplane, size, min_fg, scale_reps, seed + i) for i, mp in enumerate(meshes)]
+    jobs = [(str(mp), inplane, size, min_fg, scale_reps, min_cav_frac, seed + i)
+            for i, mp in enumerate(meshes)]
     slices: list[np.ndarray] = []
     if nw == 1 or len(jobs) <= 1:
         for j in jobs:
