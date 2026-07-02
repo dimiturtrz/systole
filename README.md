@@ -11,7 +11,7 @@ labels → a clinical number.
 It's also how **I'm** ramping into cardiac imaging: built on public data, with an LLM-driven
 learning track ([`learning/`](learning/): theory write-ups + self-quizzes) alongside the code.
 Across modalities (**MRI now; CT, echo planned**); three pieces, general → specific, each linking
-into its folder. Full plan → **[ROADMAP.md](ROADMAP.md)**.
+into its folder. Full plan → **[docs/PLAN.md](docs/PLAN.md)**; roadmap → **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
 ## Understand the acquisition — [mri-sim](mri-sim/)
 Interactive 3D visualizer of the MRI **signal pipeline** — spins → slice select →
@@ -142,7 +142,7 @@ Competent on public benchmarks, **not** clinical-grade. The specific gaps, measu
 - **Not a device.** Public research data only; no DICOM/PII handling, no prospective or regulatory
   validation.
 
-The route out of each gap is concrete — EF paths above + **[ROADMAP.md](ROADMAP.md)** Gate 2
+The route out of each gap is concrete — EF paths above + **[docs/ROADMAP.md](docs/ROADMAP.md)** Gate 2
 (largest-CC ✅, then harmonization, calibration, augmentation, eval rigor).
 
 ## Data
@@ -275,7 +275,7 @@ evaluation discipline carry over from prior ML work; the clinical specifics I le
 - **SynthSeg** — Billot et al., *SynthSeg: domain randomisation for segmentation of brain scans of any
   contrast and resolution*, Medical Image Analysis 2023. (Basis for the synthetic-training experiment.)
 - **MRI simulators** (synthetic generation is built — see *Synthetic training data* above; the Bloch-sim
-  physics path remains planned, [ROADMAP](ROADMAP.md)):
+  physics path remains planned, [ROADMAP](docs/ROADMAP.md)):
   **KomaMRI** (Julia, GPU Bloch), **JEMRIS** (C++, full Bloch), **MRiLab** (MATLAB/GPU).
 
 ## License

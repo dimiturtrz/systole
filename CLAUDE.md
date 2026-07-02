@@ -3,7 +3,7 @@
 This file provides instructions and context for AI coding agents working on this project.
 
 ## Plan
-- Roadmap lives in `PLAN` and `PLAN.local`. Read both at session start; `PLAN` explains them.
+- Substance in `docs/PLAN.md` (+ private `docs/PLAN.local.md`); order/status in `docs/ROADMAP.md`. Read at session start.
 
 ## Working directives (this project)
 - North star: **domain generalization**. **No external dependencies** for this artifact.
@@ -110,7 +110,7 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
   Depends only on `core` (never on cardioseg).
 - `mri-sim/` — TS MRI acquisition visualizer (deprioritized).
 - `baselines/nnunet/` — SOTA reference, quarantined (own env, never a cardioseg dep).
-- `research/` — deep-dives; `learning/` — theory writeups. Public docs = README + ROADMAP. The
+- `research/` — deep-dives; `learning/` — theory writeups. Public docs = README + `docs/PLAN.md` + `docs/ROADMAP.md`. The
   domain-shift / variance-taxonomy canonical doc lives in `cardioseg/preprocessing/normalization/README.md`.
 - Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `cardioseg/evaluation/sync_numbers.py` fills doc marker blocks.
 

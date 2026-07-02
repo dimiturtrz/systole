@@ -4,7 +4,7 @@ My study material + quiz logs for the systole project — my ramp into cardiac i
 the **theory writeup** (what I study / prepare for), then a dated **quiz log**
 (questions, my answers, honest assessment) appended when I ask to be quizzed.
 
-These are the grid's "theory" cells (see [../ROADMAP.md](../ROADMAP.md)) —
+These are the grid's "theory" cells (see [../docs/ROADMAP.md](../docs/ROADMAP.md)) —
 learning-in-public, public at Gate 1.
 
 ## The circuit (how each topic is learned)
