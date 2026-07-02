@@ -43,12 +43,14 @@ class AugCfg(BaseModel):
     model_config = _VALIDATE
     rot_deg: float = Field(20.0, ge=0)
     scale: tuple[float, float] = (0.85, 1.15)
-    translate: float = Field(0.12, ge=0)           # per-axis random shift, FRACTION of FOV. Real ACDC
-    #                                                heart-centroid offset from FOV center: |x|/|y| p95
-    #                                                ~0.11-0.15, radial p95 0.17 (measured, 150 pts). Synth
-    #                                                hearts voxelize DEAD-CENTER, so without this the net
-    #                                                learns a center-position prior and fails off-center
-    #                                                real hearts (esp. zero-real synth). Derived, not magic.
+    translate: float = Field(0.0, ge=0)            # per-axis random shift, FRACTION of FOV. Real ACDC
+    #                                                heart-centroid offset from FOV center: radial p95 0.17
+    #                                                (measured, 150 pts); synth hearts voxelize DEAD-CENTER.
+    #                                                MEASURED NEUTRAL on zero-real (TEST +0.009 = noise): a
+    #                                                fully-conv U-Net is translation-equivariant, so absolute
+    #                                                position barely matters. OPT-IN (0.12 ~ real p95); kept
+    #                                                (correct aug, defensible) but OFF so it can't silently
+    #                                                perturb the flagship real run unmeasured. Derived range.
     gamma: tuple[float, float] = (0.7, 1.5)
     gamma_p: float = Field(0.3, ge=0, le=1)
     blur_p: float = Field(0.2, ge=0, le=1)
