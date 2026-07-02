@@ -68,3 +68,20 @@ def test_hard_target_when_sigma_zero():
     gen = Generator(cfg, X, Y, N, "cpu")
     _, yt = gen.batch(torch.arange(4))
     assert yt.shape == (4, 1, 16, 16)
+
+
+def test_force_synth_paints_flagged_rows_at_synth_p0():
+    """force_synth rows are painted EVERY batch (synth-anatomy mix, bd pwih) even with synth_p=0;
+    non-flagged real rows pass through untouched. synth_on must be True despite synth_p=0."""
+    X, Y = _resident(n=8)
+    force = torch.zeros(8, dtype=torch.bool); force[4:] = True     # last 4 = synth-anatomy rows
+    cfg = GeneratorCfg(synth=SynthCfg(synth_p=0.0, bg_mode="flat"),
+                       aug=AugCfg(rot_deg=0.0, scale=(1.0, 1.0), translate=0.0, gamma_p=0.0,
+                                  blur_p=0.0, contrast=(1.0, 1.0), noise=0.0, bias_p=0.0))
+    gen = Generator(cfg, X, Y, N, "cpu", force_synth=force)
+    assert gen.synth_on is True                                    # forced rows -> synth active
+    assert Generator(cfg, X, Y, N, "cpu", force_synth=None).synth_on is False   # no force + synth_p=0 -> off
+    torch.manual_seed(0); x, _ = gen.batch(torch.arange(8))
+    # synth output is z-scored per sample (std==1); real rows keep their source std (~1.15 here).
+    assert (x[4:].std(dim=(1, 2, 3)) - 1.0).abs().max() < 1e-3     # forced rows = z-scored synth
+    assert (x[:4].std(dim=(1, 2, 3)) - 1.0).abs().min() > 0.05     # unforced rows are NOT z-scored synth

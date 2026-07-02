@@ -28,3 +28,13 @@ def test_no_val_criteria_falls_back_to_random_frac():
     assert len(test) == 2                                       # Canon only
     assert len(val) > 0 and len(tr) > 0
     assert set(val["dataset"].unique()) <= {"mnm2", "mnms1", "acdc"}   # carved from non-test pool
+
+
+def test_train_vendors_restricts_train_only():
+    """train_vendors -> TRAIN keeps only those vendors (scarce/single-vendor regime); val/test intact."""
+    full = make_split(_meta(), test_vendors=("Canon", "GE"), val_datasets=("acdc",))
+    scarce = make_split(_meta(), test_vendors=("Canon", "GE"), val_datasets=("acdc",),
+                        train_vendors=("Siemens",))
+    assert set(scarce[0]["vendor"].unique()) == {"Siemens"}    # train = Siemens only
+    assert len(scarce[0]) < len(full[0])                       # dropped Philips from train
+    assert scarce[1].equals(full[1]) and scarce[2].equals(full[2])   # val/test unchanged
