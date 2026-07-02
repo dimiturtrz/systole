@@ -20,6 +20,8 @@ global RNG (seed for repro). Config = injected SynthCfg.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 import torch
 import torch.nn.functional as F
 from pydantic import BaseModel, Field
@@ -83,17 +85,17 @@ class SynthCfg(BaseModel):
     #                                                empirical ranges on cross-vendor Dice (0.673 vs 0.701),
     #                                                so it's not the default — it's the defensible/derived
     #                                                path (bd 276), enabled with inflow for the physics run.
-    # --- background ---
-    bg_mode: str = "partition"                      # "partition" = split bg by REAL per-slice intensity
-    #                                                into bg_tiers tissue tiers (real lung/fat/muscle
-    #                                                SHAPES, painted by tissue); "flat" = single bg tissue;
-    #                                                "procedural" = SYNTHETIC random-field organ blobs (no
-    #                                                real img) -> whole-FOV bg for ZERO-REAL synth anatomy.
+    # --- background (bg_mode selects a Background STRATEGY; see make_background) ---
+    bg_mode: str = "partition"                      # one of: "flat" (single bg tissue) | "procedural"
+    #                                                (SYNTHETIC random-field organ blobs, ZERO-REAL) |
+    #                                                "partition" (split a REAL image's intensity into bg
+    #                                                tiers = real SHAPES) | "hybrid" (paste synth heart
+    #                                                into a REAL image). partition/hybrid need real_img
+    #                                                with its heart EXCISED (excise_heart) or a DIFFERENT
+    #                                                heart survives unlabeled (bd mirs).
     bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
     bg_blobs: int = Field(6, ge=2)                   # procedural bg: coarse random-field grid (smaller=bigger
     #                                                organ blobs); upsampled+bucketized into bg_tiers regions
-    keep_real_bg: bool = False                      # DIAGNOSTIC/hybrid: paste synth heart onto REAL bg
-    #                                                (isolates bg realism; forces deform off). Not pure-synth.
     # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
     pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
     kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
@@ -120,6 +122,121 @@ def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> tor
     return ident + d
 
 
+def excise_heart(img: torch.Tensor, gt: torch.Tensor, iters: int = 40) -> torch.Tensor:
+    """Remove the heart from a REAL image so it can serve as a clean BACKGROUND for a DIFFERENT
+    (synthetic) heart. Zero the heart pixels (gt>0) and inpaint the hole by iterative neighbour
+    diffusion (masked 3x3 mean, growing the known region inward) — otherwise the real image's own
+    heart survives OUTSIDE the pasted synth-heart mask, unlabeled, and the net trains against a
+    phantom second heart (bd mirs). img [B,1,H,W], gt [B,H,W] (0=bg). Returns a heart-free copy."""
+    hole = (gt > 0)[:, None].float()                         # [B,1,H,W] region to erase+fill
+    out = img * (1.0 - hole)
+    known = 1.0 - hole
+    k = torch.ones(1, 1, 3, 3, device=img.device) / 9.0
+    for _ in range(iters):
+        num = F.conv2d(out * known, k, padding=1)
+        den = F.conv2d(known, k, padding=1).clamp_min(1e-6)
+        out = torch.where(known.bool(), out, num / den)      # fill only still-unknown pixels
+        known = (F.conv2d(known, k, padding=1) > 0).float()  # grow known region 1px into the hole
+    return out
+
+
+class Background(ABC):
+    """FOV-fill STRATEGY: turn a heart-only label map into a whole-FOV paint map (`extend`) and
+    optionally composite the painted image against a real image (`compose`). One impl per bg mode —
+    the painter holds NO bg if/elif; it just calls the strategy make_background(cfg) returns."""
+    needs_real_img: bool = False
+    keeps_heart_aligned: bool = False                        # True -> painter must NOT deform (heart
+
+    @abstractmethod                                          #         must line up with the real hole)
+    def extend(self, mask: torch.Tensor, n_classes: int, dev,
+               real_img: torch.Tensor | None = None) -> tuple[torch.Tensor, int]:
+        """-> (ext [B,H,W] long, n_paint). bg pixels (label 0) may be relabeled to n_classes+tier."""
+
+    def compose(self, img: torch.Tensor, mask: torch.Tensor,
+                real_img: torch.Tensor | None) -> torch.Tensor:
+        return img                                           # default: painter output is final
+
+
+class FlatBg(Background):
+    """Single background tissue (bg stays label 0 -> painted by the muscle fallback)."""
+    def extend(self, mask, n_classes, dev, real_img=None):
+        return mask, n_classes
+
+
+class _TierBg(Background):
+    """bg = K tissue tiers over the FOV; subclasses supply the per-pixel tier field in 0..K-1."""
+    def __init__(self, k_tiers: int):
+        self.k_tiers = k_tiers
+
+    @abstractmethod
+    def _field(self, mask, dev, real_img):
+        ...
+
+    def extend(self, mask, n_classes, dev, real_img=None):
+        if self.needs_real_img and real_img is None:
+            return mask, n_classes                           # no bg source -> fall back to flat
+        tier = self._field(mask, dev, real_img)
+        ext = torch.where(mask == 0, n_classes + tier, mask)
+        return ext, n_classes + self.k_tiers
+
+
+class ProceduralBg(_TierBg):
+    """ZERO-REAL: a coarse random field (blobs x blobs) upsampled to smooth organ-like blobs,
+    bucketized into K tiers -> SynthSeg-style random-shape context (no real image needed)."""
+    def __init__(self, k_tiers: int, blobs: int):
+        super().__init__(k_tiers)
+        self.blobs = blobs
+
+    def _field(self, mask, dev, real_img=None):
+        b = mask.shape[0]
+        coarse = torch.rand(b, 1, self.blobs, self.blobs, device=dev)
+        fb = F.interpolate(coarse, size=mask.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
+        thr = torch.linspace(0.0, 1.0, self.k_tiers + 1, device=dev)[1:-1]  # K-1 interior thresholds
+        return torch.bucketize(fb.contiguous(), thr)
+
+
+class PartitionBg(_TierBg):
+    """Split a REAL image's per-pixel intensity into K tiers = real background SHAPES. The real image
+    MUST have its heart excised (excise_heart) or a different heart leaks into the tiers (bd mirs)."""
+    needs_real_img = True
+
+    def _field(self, mask, dev, real_img):
+        thr = torch.linspace(-1.0, 1.0, self.k_tiers - 1, device=dev)       # K-1 thresholds -> K bins
+        return torch.bucketize(real_img[:, 0].contiguous(), thr)
+
+
+class HybridBg(Background):
+    """Paste the painted synth heart into a REAL image (heart voxels = synth, rest = real). The real
+    image MUST be heart-excised first, else its own heart survives unlabeled (bd mirs)."""
+    needs_real_img = True
+    keeps_heart_aligned = True
+
+    def extend(self, mask, n_classes, dev, real_img=None):
+        return mask, n_classes                               # paint heart + flat bg; bg replaced in compose
+
+    def compose(self, img, mask, real_img):
+        if real_img is None:
+            return img
+        fg = (mask > 0)[:, None]
+        return torch.where(fg, img, real_img)
+
+
+# bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
+_BG_REGISTRY = {
+    "flat":       lambda cfg: FlatBg(),
+    "procedural": lambda cfg: ProceduralBg(cfg.bg_tiers, cfg.bg_blobs),
+    "partition":  lambda cfg: PartitionBg(cfg.bg_tiers),
+    "hybrid":     lambda cfg: HybridBg(),
+}
+
+
+def make_background(cfg: SynthCfg) -> Background:
+    try:
+        return _BG_REGISTRY[cfg.bg_mode](cfg)
+    except KeyError:
+        raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}")
+
+
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
                            real_img: torch.Tensor | None = None, return_meta: bool = False):
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
@@ -139,34 +256,14 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
-    hybrid = cfg.keep_real_bg and real_img is not None
-    if cfg.deform > 0 and not hybrid:                # hybrid: keep heart aligned with real bg's hole
+    bg = make_background(cfg)                        # bg STRATEGY (flat/procedural/partition/hybrid)
+    if cfg.deform > 0 and not bg.keeps_heart_aligned:   # hybrid keeps heart aligned with the real hole
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                              padding_mode="border", align_corners=False)[:, 0].long()
-    # --- extend the label map to the whole FOV: split the bg by REAL per-slice intensity into bg_tiers
-    #     tissue tiers (lungs/fat land where they really are = real SHAPES), each painted by tissue. ---
-    n_paint = n_classes
-    ext = mask
-    if cfg.bg_mode == "partition" and real_img is not None and not hybrid:
-        K = cfg.bg_tiers
-        thr = torch.linspace(-1.0, 1.0, K - 1, device=dev)                  # K-1 thresholds -> K bins
-        tier = torch.bucketize(real_img[:, 0].contiguous(), thr)            # [B,H,W] in 0..K-1
-        ext = torch.where(mask == 0, n_classes + tier, mask)               # bg -> n_classes+tier
-        n_paint = n_classes + K
-    elif cfg.bg_mode == "procedural" and not hybrid:
-        # ZERO-REAL whole-FOV bg: a per-sample coarse random field (bg_blobs x bg_blobs) upsampled to
-        # smooth organ-like blobs, bucketized into K tiers -> each painted by an interpolated tissue on
-        # the bg ladder (mri_physics). SynthSeg-style random-shape context: the net can't localize the
-        # heart by "it's the only non-flat thing", it must learn the 3-class contrast signature. No real
-        # image needed -> this is the pure-synth-anatomy background (kills the flat-bg 0.07 wall). (bwp)
-        K = cfg.bg_tiers
-        coarse = torch.rand(b, 1, cfg.bg_blobs, cfg.bg_blobs, device=dev)
-        fieldb = F.interpolate(coarse, size=mask.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
-        thr = torch.linspace(0.0, 1.0, K + 1, device=dev)[1:-1]             # K-1 interior thresholds -> K bins
-        tier = torch.bucketize(fieldb.contiguous(), thr)                    # [B,H,W] in 0..K-1
-        ext = torch.where(mask == 0, n_classes + tier, mask)
-        n_paint = n_classes + K
+    # extend the heart-only labels to the whole FOV (bg tissue tiers / real SHAPES / random blobs — the
+    # chosen strategy decides). partition/hybrid assume real_img is heart-excised (bd mirs).
+    ext, n_paint = bg.extend(mask, n_classes, dev, real_img)
     oh = F.one_hot(ext, n_paint).permute(0, 3, 1, 2).float()                # [B,n_paint,H,W]
 
     # --- physical paint: each class' intensity = balanced-SSFP signal from its tissue T1/T2/PD under
@@ -264,11 +361,9 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
         im = cfg.noise * torch.randn_like(img)
         img = torch.sqrt(re * re + im * im)
 
-    # --- hybrid diagnostic: paste the synth heart onto the REAL background (heart voxels = synth,
-    #     everything else = real). Isolates whether bg realism is the wall for pure-synth. ---
-    if hybrid:
-        fg = (mask > 0)[:, None]
-        img = torch.where(fg, img, real_img)
+    # post-paint composite (strategy-specific: hybrid pastes the synth heart into the real image;
+    # every other strategy is a no-op). real_img must be heart-excised for this to be clean (bd mirs).
+    img = bg.compose(img, mask, real_img)
 
     # --- z-score per sample (match the real preprocessed input distribution) ---
     m = img.mean((1, 2, 3), keepdim=True)

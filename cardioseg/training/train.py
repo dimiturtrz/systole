@@ -102,11 +102,16 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
                 log.info("ANATOMY POOL: %d Rodero slices, ZERO-REAL bg=%s", Ytr.shape[0],
                          cfg.generator.synth.bg_mode)
             else:
-                # DIAGNOSTIC: Rodero heart on REAL bg shapes (partition) — isolates the anatomy axis from
-                # the bg wall. Pairs each Rodero mask with a random real train image as the bg source.
-                Xr, _ = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                # DIAGNOSTIC: Rodero heart on REAL bg (partition/hybrid) — isolates the anatomy axis from
+                # the bg wall. Pairs each Rodero mask with a random real train image as the bg source. The
+                # real image's OWN heart MUST be excised first, else it survives unlabeled next to the
+                # pasted Rodero heart (a phantom second heart) — bd mirs.
+                from core.data.dynamic.synth import excise_heart
+                Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                Xr = excise_heart(Xr, Yr)                                    # heart-free real backgrounds
                 Xtr = Xr[_t.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                log.info("ANATOMY POOL: %d Rodero slices on REAL bg (partition, anatomy-axis diagnostic)", Ytr.shape[0])
+                log.info("ANATOMY POOL: %d Rodero slices on REAL bg (heart-excised, %s)", Ytr.shape[0],
+                         cfg.generator.synth.bg_mode)
         else:
             Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
         Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
