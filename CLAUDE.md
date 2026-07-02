@@ -2,6 +2,15 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+## Plan
+- Roadmap lives in `PLAN` (checked in) and `PLAN.local` (gitignored, private — its purpose is explained in `PLAN`). Read both at session start.
+
+## Working directives (this project)
+- North star: **domain generalization**. **No external dependencies** for this artifact.
+- **All-synthetic training via a COMPOSITE of generation sources** (parametric / SSM / MRXCAT / label-space / learned) — each enters the generation DAG at a different point with a different control degree, unioned to cover the real manifold. See `core/data/dynamic/GENERATION.md`.
+- **Two directions**: uncontrolled (diversity → training) + controlled (inverse / parametric **digital-twin**).
+- **Diversity > fidelity** for training; **fidelity** for the twin.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:3216161c -->
 ## Beads Issue Tracker
 

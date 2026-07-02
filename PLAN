@@ -1,0 +1,11 @@
+# PLAN
+
+Public roadmap for this project.
+
+`PLAN.local` (gitignored) holds the private/sensitive plan — positioning, targets, and anything
+not meant for the public repo. Keep public direction here; keep private context there.
+
+## Current direction
+All-synthetic training via a composite of generation sources; a controlled inverse (digital-twin)
+alongside the uncontrolled (diversity) generator. See `core/data/dynamic/GENERATION.md` for the
+architecture and `bd ready` for live work.
