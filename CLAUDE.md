@@ -10,6 +10,7 @@ This file provides instructions and context for AI coding agents working on this
 - **All-synthetic training via a COMPOSITE of generation sources** (parametric / SSM / MRXCAT / label-space / learned) — each enters the generation DAG at a different point with a different control degree, unioned to cover the real manifold. See `core/data/dynamic/GENERATION.md`.
 - **Two directions**: uncontrolled (diversity → training) + controlled (inverse / parametric **digital-twin**).
 - **Diversity > fidelity** for training; **fidelity** for the twin.
+- **Headline metrics decided up front**; the comparison triad (real / synth-only / synth+DA) IS the result, not a leaderboard number.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:3216161c -->
 ## Beads Issue Tracker
