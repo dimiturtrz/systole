@@ -59,6 +59,10 @@ class DataCfg(BaseModel):
     #                                                (core.data.dynamic.anatomy.build_pool from Rodero SSM
     #                                                meshes). TRAIN masks come from it (synth anatomy, zero
     #                                                real data); val/test stay REAL held-out. (bd 1vl/bwp)
+    anatomy_mode: str = "replace"                     # how the anatomy_pool enters training: "replace" =
+    #                                                synth anatomy ONLY (zero real, the generation probe);
+    #                                                "mix" = REAL train + synth anatomy UNION, synth rows
+    #                                                painted per-batch, real rows kept (augmentation, bd pwih).
     norm: str = "zscore"                              # intensity normalization: 'zscore' (default) or
     #                                                'blood' = two-point affine (air->0, blood->1),
     #                                                composition-robust harmonization (bd h8k). ORACLE

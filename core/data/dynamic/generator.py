@@ -42,12 +42,15 @@ class Generator:
     the model. synth_p=0 -> pure real; synth_p=1 -> pure synthetic; in between -> per-sample mix."""
 
     def __init__(self, cfg: GeneratorCfg, X: torch.Tensor, Y: torch.Tensor,
-                 n_classes: int, device: str):
+                 n_classes: int, device: str, force_synth: torch.Tensor | None = None):
         self.cfg = cfg
         self.X, self.Y = X, Y
         self.n_classes = n_classes
         self.device = device
-        self.synth_on = cfg.synth.synth_p > 0
+        # force_synth [N] bool: rows that MUST be painted synthetic every batch (e.g. synth-anatomy masks
+        # with no real pixels), aligned to X/Y. Real rows still repaint with prob synth_p. (bd pwih)
+        self.force_synth = force_synth
+        self.synth_on = cfg.synth.synth_p > 0 or (force_synth is not None and bool(force_synth.any()))
         self.soft_sigma = cfg.aug.soft_label_sigma
         # Contrast is physical (bSSFP from tissue params, core.data.static.mri_physics) — no measured priors
         # needed. The background partition pulls its SHAPES from the real slice (real_img) at batch time.
@@ -62,7 +65,10 @@ class Generator:
             # bg partition the synth target is the warped mask -> blend both x and y per sample. Paint
             # BEFORE augment so affine geometry warps synth picture + mask together.
             xs, ys = synthesize_from_labels(y, self.cfg.synth, self.n_classes, real_img=x)
-            do = (torch.rand(x.shape[0], 1, 1, 1, device=self.device) < self.cfg.synth.synth_p).float()
+            pick = torch.rand(x.shape[0], device=self.device) < self.cfg.synth.synth_p
+            if self.force_synth is not None:                          # synth-anatomy rows: always paint
+                pick = pick | self.force_synth[idx].to(self.device)
+            do = pick.float()[:, None, None, None]
             x = do * xs + (1 - do) * x
             y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)
         x, y = augment_batch(x, y, self.cfg.aug)                     # GPU-batched real-pixel aug
