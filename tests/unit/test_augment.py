@@ -7,7 +7,7 @@ from core.data.dynamic.augment import augment_batch
 from core.data.dynamic.augment import AugCfg
 
 # everything off except (toggled) bias — flip is always-on, so isolate via same-seed bias on/off
-_NO_INTENSITY = dict(rot_deg=0.0, scale=(1.0, 1.0), gamma_p=0.0, blur_p=0.0,
+_NO_INTENSITY = dict(rot_deg=0.0, scale=(1.0, 1.0), translate=0.0, gamma_p=0.0, blur_p=0.0,
                      contrast=(1.0, 1.0), noise=0.0)
 
 
@@ -74,3 +74,24 @@ def test_deterministic_under_seed():
     a2, b2 = augment_batch(img.clone(), mask.clone())
     assert torch.allclose(a1, a2)
     assert torch.equal(b1, b2)            # same RNG seed -> identical augmentation
+
+
+def test_translation_moves_the_heart_off_center():
+    """translate>0 shifts the heart centroid across the batch (fixes the synth center-bias); translate=0
+    leaves a centered heart centered. Equivalence classes: {off, on}."""
+    def centroids(cfg):
+        m = torch.zeros(16, 64, 64, dtype=torch.long); m[:, 26:38, 26:38] = 3   # centered heart
+        img = torch.zeros(16, 1, 64, 64)
+        torch.manual_seed(0)
+        _, mo = augment_batch(img, m, cfg)
+        cs = []
+        for k in range(mo.shape[0]):
+            ys, xs = torch.where(mo[k] > 0)
+            if len(ys):
+                cs.append((float(ys.float().mean()) - 32, float(xs.float().mean()) - 32))
+        return torch.tensor(cs)
+    off = centroids(AugCfg(**_NO_INTENSITY, bias_p=0.0))                          # translate=0
+    on = centroids(AugCfg(rot_deg=0.0, scale=(1.0, 1.0), translate=0.15, gamma_p=0.0,
+                          blur_p=0.0, contrast=(1.0, 1.0), noise=0.0))
+    assert off.abs().max() < 1.0                     # centered stays centered
+    assert on.abs().max() > 3.0                      # translation moves it off-center

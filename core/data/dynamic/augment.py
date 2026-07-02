@@ -43,6 +43,12 @@ class AugCfg(BaseModel):
     model_config = _VALIDATE
     rot_deg: float = Field(20.0, ge=0)
     scale: tuple[float, float] = (0.85, 1.15)
+    translate: float = Field(0.12, ge=0)           # per-axis random shift, FRACTION of FOV. Real ACDC
+    #                                                heart-centroid offset from FOV center: |x|/|y| p95
+    #                                                ~0.11-0.15, radial p95 0.17 (measured, 150 pts). Synth
+    #                                                hearts voxelize DEAD-CENTER, so without this the net
+    #                                                learns a center-position prior and fails off-center
+    #                                                real hearts (esp. zero-real synth). Derived, not magic.
     gamma: tuple[float, float] = (0.7, 1.5)
     gamma_p: float = Field(0.3, ge=0, le=1)
     blur_p: float = Field(0.2, ge=0, le=1)
@@ -116,6 +122,11 @@ def augment_batch(
     theta[:, 0, 1] = fx * -sin * inv
     theta[:, 1, 0] = fy * sin * inv
     theta[:, 1, 1] = fy * cos * inv
+    # translation: FOV-fraction shift -> normalized grid units ([-1,1] spans the full dim, so *2).
+    # Gives the synth heart real-like position spread (see AugCfg.translate); no-op at translate=0.
+    if cfg.translate > 0:
+        theta[:, 0, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
+        theta[:, 1, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
     grid = F.affine_grid(theta, img.shape, align_corners=False)
     img = F.grid_sample(img, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
     mask = F.grid_sample(mask[:, None].to(dt), grid, mode="nearest", padding_mode="zeros",
