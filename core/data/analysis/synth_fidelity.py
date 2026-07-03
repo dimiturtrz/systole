@@ -61,6 +61,146 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
             "worst_class": worst}
 
 
+# --- separability (d'): a DIFFERENT axis from W1. W1 asks "is synth FAITHFUL to real?"; d' asks "are
+#     the classes DISTINGUISHABLE?" (the learnability bug-check — a net can't segment a boundary it can't
+#     see). Signal-detection d'(A,B) = |mu_A-mu_B| / sqrt(.5(var_A+var_B)); affine-invariant, so z-score
+#     safe. PER-SLICE (avg over slices) is the honest axis: it isolates WITHIN-image separability (what a
+#     2D net actually sees), removing the across-slice acquisition-sweep spread that POOLING conflates in.
+_PAIRS = [(2, 3), (2, 1), (2, 0), (1, 3), (1, 0), (3, 0)]     # (myo,cav)(myo,rv)(myo,bg)(rv,cav)(rv,bg)(cav,bg)
+
+
+def dprime(a: torch.Tensor, b: torch.Tensor) -> float:
+    """Separability of two 1-D samples. |mean diff| / pooled SD; nan if either < 50 pts (SD unstable)."""
+    if a.numel() < 50 or b.numel() < 50:
+        return float("nan")
+    denom = (0.5 * (a.var() + b.var())).sqrt()
+    return float((a.mean() - b.mean()).abs() / denom) if float(denom) > 0 else float("nan")
+
+
+def _pair_dprime(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
+    out = {}
+    for i, j in _PAIRS:
+        if i < n_classes and j < n_classes:
+            out[f"{_NAMES[i]}|{_NAMES[j]}"] = round(dprime(x1c[ym == i], x1c[ym == j]), 3)
+    return out
+
+
+def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: str) -> dict:
+    """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
+    and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
+    synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
+    import numpy as np
+    from core.data.dynamic.synth import synthesize_from_labels
+    Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
+    Xr, Xs = X[:, 0].to(device), Xs[:, 0]
+    ym = Y.to(device)
+    def per_slice(x1c):
+        acc = {}
+        for i in range(x1c.shape[0]):
+            for k, v in _pair_dprime(x1c[i].reshape(-1), ym[i].reshape(-1), n_classes).items():
+                acc.setdefault(k, []).append(v)
+        return {k: round(float(np.nanmean(v)), 3) for k, v in acc.items()}
+    out = {}
+    for lvl, real_v, syn_v in (("pooled", _pair_dprime(Xr.reshape(-1), ym.reshape(-1), n_classes),
+                                _pair_dprime(Xs.reshape(-1), ym.reshape(-1), n_classes)),
+                               ("per_slice", per_slice(Xr), per_slice(Xs))):
+        ratio = {k: round(syn_v[k] / real_v[k], 3) if real_v[k] == real_v[k] and real_v[k] > 0
+                 else float("nan") for k in real_v}
+        out[lvl] = {"real": real_v, "synth": syn_v, "ratio_synth_over_real": ratio}
+    return out
+
+
+# --- variance attribution: WHERE does synth's per-class spread come from, and does it match REAL's? The
+#     generator's diversity is a SUM of knobs. Split each class's spread into POOLED std (across-slice =
+#     inter-sample DIVERSITY: the acquisition sweep, jitter, inflow, bias) vs mean PER-SLICE std (within-
+#     image TEXTURE: texture, noise). Toggle each knob OFF and measure the drop = that knob's marginal
+#     contribution. REAL's per-class std is the TARGET a physical knob must reproduce. This decides whether
+#     an unphysical knob (jitter) is REDUNDANT with the physical sweep or supplies spread physics must
+#     replace (-> literature T1/T2/PD sampling sized to exactly that gap). No training.
+_KNOB_OFF = {"jitter": {"jitter": 0.0}, "texture": {"texture": 0.0}, "noise": {"noise": 0.0},
+             "inflow": {"inflow": False}, "bias": {"bias_strength": 0.0}, "blur": {"blur": (0.0, 0.0)},
+             "sweep": {"acq_mode": "matched"}}      # matched = single fixed field/TR/flip -> sweep off
+
+
+def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
+    """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
+    import numpy as np
+    xr, yr = x1c.reshape(-1), ym.reshape(-1)
+    pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > 50 else float("nan")
+              for c in range(n_classes)}
+    ps = {c: [] for c in range(n_classes)}
+    for i in range(x1c.shape[0]):
+        xi, yi = x1c[i].reshape(-1), ym[i].reshape(-1)
+        for c in range(n_classes):
+            if int((yi == c).sum()) > 50:
+                ps[c].append(float(xi[yi == c].std()))
+    perslice = {c: round(float(np.nanmean(v)), 3) if v else float("nan") for c, v in ps.items()}
+    return {"pooled": {_NAMES[c]: round(pooled[c], 3) for c in range(n_classes)},
+            "per_slice": {_NAMES[c]: perslice[c] for c in range(n_classes)}}
+
+
+def variance_attribution(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: str,
+                         field: float | None = None) -> dict:
+    """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
+    pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
+    generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
+    import copy
+    from core.data.dynamic.synth import synthesize_from_labels
+    Xdev, Ydev = X[:, 0].to(device), Y.to(device)
+    base = copy.deepcopy(cfg)
+    if field is not None:
+        base.fields = (field,)
+    def synth_spread(c):
+        Xs, _ = synthesize_from_labels(Ydev, c, n_classes, real_img=X.to(device))
+        return _spread(Xs[:, 0], Ydev, n_classes)
+    out = {"field": field or "sweep",
+           "real_target": _spread(Xdev, Ydev, n_classes),
+           "synth_baseline": synth_spread(base)}
+    deltas = {}
+    for name, ov in _KNOB_OFF.items():
+        c = copy.deepcopy(base)
+        for k, v in ov.items():
+            setattr(c, k, v)
+        off = synth_spread(c)
+        deltas[name] = {lvl: {cl: round(out["synth_baseline"][lvl][cl] - off[lvl][cl], 3)
+                              for cl in off[lvl] if out["synth_baseline"][lvl][cl] == out["synth_baseline"][lvl][cl]
+                              and off[lvl][cl] == off[lvl][cl]}
+                        for lvl in ("pooled", "per_slice")}
+    out["knob_delta"] = deltas
+    return out
+
+
+def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800) -> dict:
+    """Per-VENDOR real per-class pooled σ, and the σ BAND (min..max across vendors) + all-pooled. The
+    fair target for a DIVERSITY synth: real spread isn't one number, it's a RANGE across scanners. Synth
+    σ ABOVE the band's max on a class = genuinely wider than any real vendor (candidate over-spread);
+    WITHIN the band = just covering the vendor range (domain randomization working, not a defect).
+    DIAGNOSTIC ONLY — never a tuning target (fitting synth to these = leaking real/test-vendor stats)."""
+    import numpy as np
+    import polars as pl
+    import torch
+    from core.data.dynamic.dataset import load_to_gpu
+    from core.data.static import splits
+    per_vendor = {}
+    for v in sorted(meta.get_column("vendor").unique().to_list()):
+        sub = meta.filter(pl.col("vendor") == v)
+        X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
+        n = int(X.shape[0])
+        if n < 100:
+            continue
+        if n > max_per_vendor:
+            g = torch.Generator().manual_seed(0)
+            idx = torch.randperm(n, generator=g)[:max_per_vendor]
+            X, Y = X[idx], Y[idx]
+        per_vendor[v] = _spread(X[:, 0], Y, n_classes)["pooled"]
+    band = {}
+    for c in range(n_classes):
+        vals = [per_vendor[v][_NAMES[c]] for v in per_vendor
+                if per_vendor[v][_NAMES[c]] == per_vendor[v][_NAMES[c]]]
+        band[_NAMES[c]] = {"min": round(min(vals), 3), "max": round(max(vals), 3)} if vals else {}
+    return {"per_vendor": per_vendor, "band_across_vendors": band}
+
+
 def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
               min_slices: int = 200, max_slices: int = 1200) -> dict:
     """Per-vendor synth-vs-real distance — does the blood-level (location) gap differ by SCANNER?
@@ -99,27 +239,52 @@ def _main():
     from core.model import resolve_device
     from core.obs import setup
 
-    ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real distribution distance.")
+    ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real intensity analysis. "
+                                 "distance=W1 faithfulness | separability=d' distinguishability | "
+                                 "variance=per-knob spread attribution vs real (all on VAL, test untouched).")
+    ap.add_argument("--mode", choices=("distance", "separability", "variance"), default="distance")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides", help="synth cfg overrides, e.g. synth.bg_tiers=8")
-    ap.add_argument("--by-vendor", action="store_true", help="break the distance down per scanner vendor "
-                    "(is the blood-level gap machine-dependent?) over all labelled cases")
+    ap.add_argument("--by-vendor", action="store_true", help="distance mode: break down per scanner vendor")
+    ap.add_argument("--by-field", action="store_true", help="variance mode: stratify by field (1.5/3T) too")
+    ap.add_argument("--val-only", action="store_true", help="target = acdc-val only (default: ALL labelled "
+                    "real, all vendors — the fair multi-vendor spread for a diversity synth; DIAGNOSTIC, "
+                    "not a tuning target)")
+    ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
+                    "sample-size-agnostic; bounds VRAM)")
     a = ap.parse_args()
     setup()
     from core.hparams import apply_overrides
     import polars as pl
+    import torch
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0
     device = resolve_device(None)
     d = cfg.generator.data
+    sc, nc = cfg.generator.synth, cfg.model.out_channels
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4)
-    if a.by_vendor:
-        s = by_vendor(meta.filter(pl.col("labelled")), cfg.generator.synth,
-                      cfg.model.out_channels, device, d.size)
+    if a.mode == "distance" and a.by_vendor:
+        print(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
+        return
+    # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
+    # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
+    if a.val_only:
+        _, real_df, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
     else:
-        _, va, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
-        X, Y = load_to_gpu(splits.paths(va), d.size, "cpu")
-        s = synth_real_distance(X, Y, cfg.generator.synth, cfg.model.out_channels, device)
+        real_df = meta.filter(pl.col("labelled"))
+    X, Y = load_to_gpu(splits.paths(real_df), d.size, "cpu")
+    n = int(X.shape[0])
+    if n > a.max_slices:
+        idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:a.max_slices]
+        X, Y = X[idx], Y[idx]
+    if a.mode == "separability":
+        s = separability(X, Y, sc, nc, device)
+    elif a.mode == "variance":
+        fields = (None, 1.5, 3.0) if a.by_field else (None,)
+        s = {str(f or "sweep"): variance_attribution(X, Y, sc, nc, device, field=f) for f in fields}
+        s["real_vendor_bands"] = real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
+    else:
+        s = synth_real_distance(X, Y, sc, nc, device)
     print(json.dumps(s, indent=2))
 
 

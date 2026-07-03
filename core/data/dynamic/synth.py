@@ -66,7 +66,7 @@ class SynthCfg(BaseModel):
     blood_scale: float = Field(1.0, ge=0)          # LEGACY empirical blood-pool MEAN scale (the fidelity-
     #                                                found 1.6 that first localized the gap). Superseded by
     #                                                `inflow` (physical); kept for comparison. 1.0 = off.
-    inflow: bool = False                           # entry-slice INFLOW enhancement (PHYSICAL, no magic
+    inflow: bool = True                            # entry-slice INFLOW enhancement (PHYSICAL, no magic
     #                                                fraction): per sample f_fresh = min(1, v*TR/thk) from
     #                                                blood velocity v + slice thickness thk + the derived TR,
     #                                                then blend blood toward fresh PD*sin(flip) (unsaturated

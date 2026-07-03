@@ -37,7 +37,14 @@ Design in [`PLAN.md`](PLAN.md) / [`GENERATION.md`](../core/data/dynamic/GENERATI
   unseen-vendor gap; 4-seed ensemble shows only ~15–18% reducible headroom → the gap is aleatoric +
   model-class. ([normalization README](../cardioseg/preprocessing/normalization/README.md))
 - ✅ **SSM anatomy source** (Rodero) — voxelizer + 1000-mesh pool; zero-real generation ~0.56
-  cross-vendor (probe's "walled" verdict was wrong once confounds fixed).
+  cross-vendor (probe's "walled" verdict was wrong once confounds fixed). Physical **inflow** now
+  default (2× verified: +0.054 zero-real, RV +0.095; neutral on the DA path) — cine blood is
+  inflow-enhanced, so synth-only needs it, real+synth doesn't.
+- ✅ **Myo weak-link diagnosed** (`bd b6tb`) — geometry ruled out (synth wall thickness matches real,
+  3.82 vs 4.21 px); it's a contrast/**separability** gap (within-slice myo|blood d′ 0.54 vs real 2.67).
+  Brightness levers are d′-invariant (variance scales with signal) — why every cheap lever was
+  Dice-neutral. Separability is *learnable* (net gets myo at .50), so the gap-to-real is **fidelity,
+  not a bug**; chasing it down trades away the DR breadth generalization needs. Not knob-fixable.
 - ✅ **Label-space pathology source** — DCM/HCM/abnormal-RV deformation; closes the shape-coverage
   tail (DCM 0.70→0.96, all groups ~0.9+). Composite Dice **neutral** (~0.57): coverage-in-descriptors
   ≠ Dice; the residual is shape *fidelity* (boundary detail) + color, not coverage.
