@@ -154,7 +154,7 @@ covers normals (NOR 0.49), the DCM/RV tail needs label-space or learned or MRXCA
 | DAG element | source | code | status |
 |---|---|---|---|
 | shape — real | real GT masks | `core/data/static/store.py` (load), `splits` | ✅ |
-| shape — parametric | SSM meshes → label maps | `core/data/dynamic/anatomy.py`: `voxelize`, `_sax_align`, `_scale_to_target`, `build_pool`/`load_pool` (pools under `<data>/processed/rodero_anatomy/`) | ✅ |
+| shape — parametric | SSM meshes → label maps | `core/data/dynamic/anatomy.py`: `voxelize`, `_sax_align`, `_scale_to_target`, `build_pool`/`load_pool`. Meshes are a DIFFERENT data type from MRI images → live under `<data>/volumetric/meshes/{raw,processed}` (raw = Rodero `.vtu`; pools = `processed/rodero_anatomy/*.npz`), NOT under `mri/`. `build_pool` discovers by stem, prefers `.vtu` (ASCII `.vtk` pruned as a redundant dup) | ✅ |
 | shape — learned | — | — | ⛔ (`vpn5`) |
 | color — tissue | T1/T2/PD table | `mri_physics.py`: `TISSUE`, `tissue_params`, `_HEART`, `blood_classes` | ✅ |
 | color — acquisition | field/TR/flip strategy | `synth.py`: `Acquisition` ABC → `LegacyAcq`/`RandomizedAcq`/`MatchedAcq`, `make_acquisition` | ✅ |

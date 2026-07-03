@@ -263,7 +263,12 @@ def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_S
     per-mesh select_enclosed_points on ~2M-cell tets) — embarrassingly parallel, deterministic."""
     import os
     from concurrent.futures import ProcessPoolExecutor
-    meshes = sorted(Path(mesh_dir).rglob("*.vtk"))
+    # discover meshes by STEM: prefer the binary .vtu (4.5x faster load; the ASCII .vtk is a redundant
+    # duplicate and is pruned from storage), fall back to .vtk for a fresh, unconverted download.
+    stems = {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtu")}
+    stems |= {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtk")}
+    meshes = sorted((s.with_suffix(".vtu") if s.with_suffix(".vtu").exists() else s.with_suffix(".vtk"))
+                    for s in stems)
     nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
     jobs = [(str(mp), inplane, size, min_fg, scale_reps, min_cav_frac, seed + i)
             for i, mp in enumerate(meshes)]
