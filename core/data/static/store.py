@@ -183,6 +183,44 @@ def _is_labelled(arrays: dict) -> bool:
     return all(ok)
 
 
+def fit_acquisition_reference(root: str | Path | None = None) -> dict:
+    """Aggregate REAL DICOM acquisition (TR/TE/flip) from the built stores into per-(vendor,field)
+    reference values -> reference/acquisition.yaml (verified: DICOM-measured). This is the DAG COMPOSE:
+    `mri_physics.acquisition_for` OVERRIDES its physics derivation with these where present, and the
+    derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
+    real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
+    so the whole domain-randomization sweep survives for everything we lack real values for."""
+    import polars as pl
+    from omegaconf import OmegaConf
+    from core.data.static.reference import reference_dir
+    base = Path(data_root("processed"))
+    metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
+    if not metas:
+        return {}
+    df = pl.concat(metas, how="diagonal")
+    if "tr_ms" not in df.columns:
+        return {}
+    real = df.filter(pl.col("tr_ms").is_not_null() & pl.col("vendor").is_not_null())
+    # normalize field to a float so "1.5" and "1.500000" (DICOM formatting) are ONE group, not two
+    real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
+    acq: dict[str, dict] = {}
+    for (vendor, field), g in real.group_by(["vendor", "_field"]):
+        med = lambda c: round(float(g[c].cast(pl.Float64).median()), 3)
+        based = f"{g.height} DICOM subjects @{field}T"
+        leaf = lambda v: {"value": v, "source": "DICOM-measured", "based_on": based,
+                          "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
+        e = acq.setdefault(str(vendor), {})
+        e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))
+        near15 = abs(float(field) - 1.5) < 0.6 if field else True
+        e["flip_deg_1p5t" if near15 else "flip_deg_3t"] = leaf(med("flip_deg"))
+    out = reference_dir() / "acquisition.yaml"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("# Real per-(vendor,field) acquisition, DICOM-mined by store.fit_acquisition_reference.\n"
+                   "# acquisition_for OVERRIDES the physics derivation with these where present (DAG compose).\n"
+                   + OmegaConf.to_yaml(OmegaConf.create({"acquisition": acq})))
+    return acq
+
+
 def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dict:
     f = meta.get("field_T")
     return {
@@ -302,10 +340,17 @@ if __name__ == "__main__":
     ap.add_argument("--nyul", action="store_true", help="harmonize to the Nyúl standard (fit it first)")
     ap.add_argument("--fit-nyul", action="store_true", dest="fit_nyul",
                     help="fit the Nyúl standard from the cohort -> reference/nyul.yaml, then exit")
+    ap.add_argument("--fit-acquisition", action="store_true", dest="fit_acq",
+                    help="mine real per-(vendor,field) TR/TE/flip from built DICOM stores -> "
+                         "reference/acquisition.yaml (acquisition_for then overrides the derivation), then exit")
     args = ap.parse_args()
     if args.fit_nyul:
         std = fit_nyul_standard(args.names, inplane=args.inplane)
         print(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
+        raise SystemExit
+    if args.fit_acq:
+        acq = fit_acquisition_reference()
+        print(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
         raise SystemExit
     df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
     print(f"\n=== data cloud: {len(df)} subjects ===")
