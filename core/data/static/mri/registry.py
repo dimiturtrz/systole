@@ -8,9 +8,10 @@ from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.mri.mnm2 import Mnm2Adapter
 from core.data.static.mri.mnms1 import Mnms1Adapter
 from core.data.static.mri.cmrxmotion import CmrxMotionAdapter
+from core.data.static.mri.scd import ScdAdapter
 
 _ADAPTERS: dict[str, DatasetAdapter] = {
-    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter(), CmrxMotionAdapter())
+    a.name: a for a in (AcdcAdapter(), Mnm2Adapter(), Mnms1Adapter(), CmrxMotionAdapter(), ScdAdapter())
 }
 
 

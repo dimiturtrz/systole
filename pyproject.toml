@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest"]
 n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True).
+dicom = ["SimpleITK"]        # DICOM I/O (core/data/static/mri/dicom.py, scd adapter). SimpleITK/GDCM reader; `uv run --extra dicom …` (plain `uv run` drops optional extras)
 export = ["onnx", "onnxruntime"]   # ONNX export (torch.onnx needs `onnx`) + parity check (core/export_onnx.py)
 viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose

@@ -15,14 +15,36 @@ from pathlib import Path
 from core.types import Spacing, Volume
 
 # DICOM tags we surface for the reference/normalization store (mirrors what the NIfTI adapters carry).
-_TAGS = {"0008|0070": "vendor", "0018|0087": "field_T", "0018|0080": "tr_ms",
-         "0018|1314": "flip_deg", "0018|0050": "slice_mm", "0010|0040": "sex"}
+_TAGS = {"0008|0070": "vendor", "0018|0087": "field_T", "0018|0080": "tr_ms", "0018|0081": "te_ms",
+         "0018|1314": "flip_deg", "0018|0050": "slice_mm", "0020|1041": "slice_loc",
+         "0018|1060": "trigger_ms", "0008|103e": "series_desc", "0010|0040": "sex", "0010|1010": "age"}
 
 
 def series_ids(dicom_dir: str | Path) -> list[str]:
     """The GDCM series UIDs present in `dicom_dir` (a SAX cine directory usually holds several)."""
     import SimpleITK as sitk
     return list(sitk.ImageSeriesReader.GetGDCMSeriesIDs(str(dicom_dir)))
+
+
+def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
+    """Read ONE DICOM file -> (array [H,W], (row_mm, col_mm) in-plane spacing, meta tags). For datasets
+    keyed by individual instances (e.g. SCD contours reference a specific slice/phase image), not a stack."""
+    import numpy as np
+    import SimpleITK as sitk
+    r = sitk.ImageFileReader()
+    r.SetFileName(str(dcm_path))
+    r.LoadPrivateTagsOn()
+    img = r.Execute()
+    arr = sitk.GetArrayFromImage(img)[0]                     # [1,H,W] -> [H,W]
+    sx, sy = img.GetSpacing()[:2]                            # (col, row) mm
+    meta = {}
+    for tag, name in _TAGS.items():
+        try:
+            if r.HasMetaDataKey(tag):
+                meta[name] = r.GetMetaData(tag).strip()
+        except Exception:
+            pass
+    return arr, (sy, sx), meta
 
 
 def read_series(dicom_dir: str | Path, series_id: str | None = None) -> tuple[Volume, Spacing, dict]:

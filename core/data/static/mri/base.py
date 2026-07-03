@@ -41,7 +41,7 @@ def load_csv_info(csv_path, key_col: str, *, alt_key_col: str | None = None,
     info: dict[str, dict[str, str]] = {}
     p = Path(csv_path)
     if p.exists():
-        with p.open(newline="") as f:
+        with p.open(newline="", encoding="utf-8-sig") as f:      # utf-8-sig strips a BOM (SCD csv has one)
             for row in csv.DictReader(f):
                 k = (row.get(key_col) or (row.get(alt_key_col) if alt_key_col else None) or "").strip()
                 if k:
