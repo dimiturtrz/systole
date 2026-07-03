@@ -44,6 +44,34 @@ def to_canonical(vol: np.ndarray) -> np.ndarray:
     return out
 
 
+# Whole-FOV TISSUE map (bd q4ww): unlike to_canonical (which collapses everything but the heart to bg
+# for the SEG TARGET), this keeps the surrounding organs as PAINTABLE classes so the synth image carries
+# realistic whole-FOV context — MRXCAT's edge over the heart-only SSM pool. Class → tissue NAME is fixed
+# (aligned to mri_physics.TISSUE) so the painter renders each by physical bSSFP contrast. XCAT code groups
+# per MRXCAT's own `defineTissuePropertiesMRXCAT` (authoritative). Seg target still = to_canonical (heart
+# only); this drives the painted background only — two consistent views of the same phantom volume.
+FOV_TISSUE = {0: "air", 1: "blood", 2: "myocardium", 3: "blood",   # 0 bg | 1 RV-cav | 2 myo | 3 LV-cav
+              4: "lung", 5: "liver", 6: "muscle", 7: "fat"}          # + surrounding organs
+_XCAT_TO_FOV = {1: 2, 5: 3, 6: 1,                       # heart: LV-wall→myo, LV-blood→LV-cav, RV-blood→RV-cav
+                #  (code 2 is a BROAD raw-XCAT label, not just RV wall — render showed stray myo; → muscle)
+                15: 4, 16: 4,                            # lung (air-filled)
+                13: 5, 40: 5, 41: 5, 42: 5, 43: 5, 52: 5,  # liver group
+                50: 7, 99: 7,                            # fat
+                7: 6, 8: 6}                               # other blood → soft tissue (not a bright cavity)
+_BONE = {31, 32, 33, 34, 35, 51}                          # cortical bone → dark → bg tier
+
+
+def to_tissue_map(vol: np.ndarray) -> np.ndarray:
+    """Whole-FOV paint map (uint8 0..7, classes = `FOV_TISSUE`): heart + surrounding organs, each a
+    paintable tissue. Body soft tissue (unlisted, non-air, non-bone codes) → muscle; outside air / bone → bg."""
+    out = np.zeros_like(vol, dtype=np.uint8)
+    body = (vol != 0) & ~np.isin(vol, list(_BONE))        # inside body, not bone
+    out[body] = 6                                          # default soft tissue = muscle
+    for src, dst in _XCAT_TO_FOV.items():
+        out[vol == src] = dst
+    return out
+
+
 def load_vti_labels(path: str | Path) -> np.ndarray:
     """Read an MRXCAT `.vti` phantom → integer label volume [nz, ny, nx] (the `labels` point array).
     pyvista (the `viz` extra, lazy) — same reader family as `anatomy.load`. VTK ImageData is x-fastest;

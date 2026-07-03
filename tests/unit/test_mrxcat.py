@@ -23,6 +23,18 @@ def test_empty_and_allbg_are_zero():
     assert to_canonical(np.zeros((4, 4), int)).sum() == 0
 
 
+def test_tissue_map_keeps_heart_and_surrounding_organs():
+    """Whole-FOV paint map (q4ww): heart codes → canonical heart classes; surrounding organs kept as
+    paintable tissue classes (lung/liver/fat), body soft tissue → muscle, outside/bone → bg. NB code 2
+    is a BROAD raw-XCAT label (not just RV wall) → muscle, not myo (render caught the stray-myo bug)."""
+    from core.data.dynamic.mrxcat import to_tissue_map
+    raw = np.array([[1, 5, 6], [15, 13, 50], [2, 9, 0], [31, 0, 0]])
+    #                myo LVcav RVcav | lung liver fat | broad→musc soft→musc outside | bone outside outside
+    got = to_tissue_map(raw)
+    assert got.tolist() == [[2, 3, 1], [4, 5, 7], [6, 6, 0], [0, 0, 0]]
+    assert got.dtype == np.uint8
+
+
 def test_heart_crop_scale_recovers_offcentre_heart():
     """Regression: MRXCAT hearts are small + OFF-CENTRE in a big whole-torso frame; a plain centre
     fit_square crops them away (empty pool). _heart_crop_scale must recover + centre them."""
