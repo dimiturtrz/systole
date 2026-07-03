@@ -24,8 +24,10 @@ labels, not a black-box GAN), and it's a **composite of generation sources**.
   degree, unioned to cover more than any one: fully-parametric (highest control), SSM meshes (Rodero),
   label-space pathology deformation (covers the DCM/HCM/RV tail the healthy SSM misses), MRXCAT
   (whole-torso), learned prior (future).
-- **Two directions.** *Uncontrolled* → diversity for training (diversity > fidelity: the most
-  physically-accurate synth trains *worse*). *Controlled* → an inverse/parametric **digital-twin**:
+- **Two directions.** *Uncontrolled* → **physically-constrained diversity** for training: not random
+  (random contrast trains worse than physics — UltimateSynth > SynthSeg), and not a single fidelity
+  point (the most physically-accurate *point* trains *worse* than a swept physical manifold). Diversity
+  *within* the physical manifold. *Controlled* → an inverse/parametric **digital-twin**:
   fit the generator's params to a real recording, recover interpretable qMRI-like values, reconstruct
   (fidelity is the objective here). Same engine, opposite objectives.
 - **Measured honestly.** Report `real / synth-only / synth+real` as a triad — that comparison IS the
@@ -35,7 +37,8 @@ labels, not a black-box GAN), and it's a **composite of generation sources**.
 ## Principles
 - **No magic constants** — every number derived (public → our-data stats → simulate). Physics >
   statistics.
-- **Diversity > fidelity** for training; **fidelity** for the inverse twin.
+- **Physically-constrained diversity** for training (random < physics < swept physical manifold);
+  **fidelity** for the inverse twin.
 - **No dependencies** for this artifact; **domain generalization** is the north star.
 - **Honest eval** — Dice + surface metrics (HD95/ASSD) *and* clinical metrics (EF MAE, Bland–Altman),
   stratified failure by pathology/vendor.

@@ -78,8 +78,10 @@ Each factor needs its **own** coverage check — one global number hides which f
 - **downstream** → cross-vendor Dice (the training objective).
 - **inverse** → reconstruction error of FIT (the twin's objective).
 
-Note the two objectives pull opposite ways, and that's fine: **forward/training wants wide coverage
-(diversity > fidelity); inverse/twin wants tight fidelity.** Same process, opposite operations.
+Note the two objectives pull opposite ways, and that's fine: **forward/training wants wide coverage —
+physically-constrained diversity (random contrast < physics < a swept physical manifold; random loses
+to physics per UltimateSynth>SynthSeg, and a single fidelity point loses to the sweep); inverse/twin
+wants tight fidelity.** Same process, opposite operations.
 
 ## Steering principle (how to grow this without wrecking it)
 
