@@ -50,8 +50,8 @@ def to_canonical(vol: np.ndarray) -> np.ndarray:
 # (aligned to mri_physics.TISSUE) so the painter renders each by physical bSSFP contrast. XCAT code groups
 # per MRXCAT's own `defineTissuePropertiesMRXCAT` (authoritative). Seg target still = to_canonical (heart
 # only); this drives the painted background only — two consistent views of the same phantom volume.
-FOV_TISSUE = {0: "air", 1: "blood", 2: "myocardium", 3: "blood",   # 0 bg | 1 RV-cav | 2 myo | 3 LV-cav
-              4: "lung", 5: "liver", 6: "muscle", 7: "fat"}          # + surrounding organs
+FOV_TISSUE = {0: "lung", 1: "blood", 2: "myocardium", 3: "blood",  # 0 bg/air (lung=darkest TISSUE) | 1 RV-cav
+              4: "lung", 5: "liver", 6: "muscle", 7: "fat"}          # 2 myo | 3 LV-cav | + surrounding organs
 _XCAT_TO_FOV = {1: 2, 5: 3, 6: 1,                       # heart: LV-wall→myo, LV-blood→LV-cav, RV-blood→RV-cav
                 #  (code 2 is a BROAD raw-XCAT label, not just RV wall — render showed stray myo; → muscle)
                 15: 4, 16: 4,                            # lung (air-filled)
@@ -123,6 +123,55 @@ def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SI
             sq = _heart_crop_scale(s, size, int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1)))
             if sq is not None:
                 slices.append(sq)
+    arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
+    out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out_path, slices=arr)
+    return out_path, arr.shape
+
+
+def canonical_from_fov(fov: np.ndarray) -> np.ndarray:
+    """Seg target from a whole-FOV tissue map: keep heart classes {1,2,3}, everything else → bg. The FOV
+    heart codes coincide with `to_canonical` (both from XCAT 6/1/5), so this is the aligned 4-class label."""
+    out = np.zeros_like(fov, dtype=np.uint8)
+    m = np.isin(fov, (1, 2, 3))
+    out[m] = fov[m]
+    return out
+
+
+def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
+    """Crop a `scale`×(heart-bbox) chest WINDOW centred on the heart (realistic cardiac FOV — surrounding
+    lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
+    the SSM pool lacks, unlike `_heart_crop_scale` (heart-only). None if no heart."""
+    from scipy.ndimage import zoom as _zoom
+    from core.preprocessing.preprocess import fit_square
+    heart = np.isin(s, (1, 2, 3))
+    if not heart.any():
+        return None
+    ys, xs = np.where(heart)
+    cy, cx = (ys.min() + ys.max()) // 2, (xs.min() + xs.max()) // 2
+    half = int(max(ys.max() - ys.min(), xs.max() - xs.min()) * scale / 2) + 1
+    y0, y1 = max(0, cy - half), min(s.shape[0], cy + half)
+    x0, x1 = max(0, cx - half), min(s.shape[1], cx + half)
+    win = _zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0)
+    return fit_square(win, size, 0).astype(np.uint8)
+
+
+def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
+                   min_fg: int = 40, scale: float = 3.0) -> tuple[Path, tuple]:
+    """WHOLE-FOV pool (bd q4ww): every `*.vti` → `to_tissue_map` → per slice, crop a chest window around
+    the heart (`scale`× heart bbox) → resize to `size` → stacked 8-class FOV maps (npz `slices`). Unlike
+    `build_pool` (heart-only 4-class), these keep surrounding organs so the painter (bg_mode='mrxcat')
+    renders realistic whole-FOV context; the seg target is `canonical_from_fov`. Slices with no heart
+    dropped."""
+    slices: list[np.ndarray] = []
+    for vp in sorted(Path(vti_dir).rglob("*.vti")):
+        fov = to_tissue_map(load_vti_labels(vp))
+        for k in range(fov.shape[0]):
+            if int(np.isin(fov[k], (1, 2, 3)).sum()) < min_fg:
+                continue
+            w = _fov_window(fov[k], size, scale)
+            if w is not None:
+                slices.append(w)
     arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)

@@ -161,6 +161,12 @@ class Background(ABC):
                 real_img: torch.Tensor | None) -> torch.Tensor:
         return img                                           # default: painter output is final
 
+    def paint_params(self, n_classes: int, n_paint: int, field: float, dev):
+        """(T1,T2,PD) [n_paint] for the extended classes at `field`. Default = heart classes + bg-ladder
+        tiers (`tissue_params`). A strategy that assigns each class an EXPLICIT tissue (FovBg) overrides."""
+        from .mri_physics import tissue_params
+        return tissue_params(n_classes, n_paint - n_classes, field, dev)
+
 
 class FlatBg(Background):
     """Single background tissue (bg stays label 0 -> painted by the muscle fallback)."""
@@ -226,12 +232,30 @@ class HybridBg(Background):
         return torch.where(fg, img, real_img)
 
 
+class FovBg(Background):
+    """MRXCAT WHOLE-FOV (bd q4ww): the input map is ALREADY a whole-FOV tissue map
+    (`mrxcat.to_tissue_map`, classes 0..7 = `FOV_TISSUE`), so there's no bg to invent — every class is
+    painted by its named tissue (`paint_params` → `named_tissue_params`). The heart classes (1/2/3)
+    coincide with the canonical seg labels, so the training target is recovered downstream as the FOV map
+    restricted to {1,2,3}. `mask` passed to the painter IS this FOV map; n_classes stays the model's 4
+    (blood/inflow logic keys on cavities 1/3, unchanged)."""
+    def extend(self, mask, n_classes, dev, real_img=None):
+        from .mrxcat import FOV_TISSUE
+        return mask.long(), len(FOV_TISSUE)                  # mask is the FOV tissue map; paint all 8
+
+    def paint_params(self, n_classes, n_paint, field, dev):
+        from .mri_physics import named_tissue_params
+        from .mrxcat import FOV_TISSUE
+        return named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
+
+
 # bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
 _BG_REGISTRY = {
     "flat":       lambda cfg: FlatBg(),
     "procedural": lambda cfg: ProceduralBg(cfg.bg_tiers, cfg.bg_blobs),
     "partition":  lambda cfg: PartitionBg(cfg.bg_tiers),
     "hybrid":     lambda cfg: HybridBg(),
+    "mrxcat":     lambda cfg: FovBg(),
 }
 
 
@@ -330,7 +354,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     # --- physical paint: each class' intensity = balanced-SSFP signal from its tissue T1/T2/PD under
     #     per-sample swept sequence params (TR, flip) and FIELD strength (1.5T/3T = cross-vendor axis). ---
     # tissue params per available field -> [n_fields, n_paint]; pick one field per sample
-    params = [tissue_params(n_classes, n_paint - n_classes, float(f), dev) for f in cfg.fields]
+    params = [bg.paint_params(n_classes, n_paint, float(f), dev) for f in cfg.fields]  # strategy owns tissues
     t1s = torch.stack([p[0] for p in params]); t2s = torch.stack([p[1] for p in params])
     pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
     # acquisition STRATEGY: per-sample field/TR/flip/vendor (legacy ranges / physics-randomized / matched)

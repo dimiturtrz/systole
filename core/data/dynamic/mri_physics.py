@@ -149,6 +149,18 @@ def _params(name: str, field: float) -> tuple[float, float, float]:
     return table[f]
 
 
+def named_tissue_params(names: list[str], field: float, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """(T1,T2,PD) tensors for an EXPLICIT list of tissue names (each a key of TISSUE) at `field`. Generic
+    builder for sources that assign every class a specific tissue — e.g. MRXCAT whole-FOV paints classes
+    0..7 = air/blood/myo/blood/lung/liver/muscle/fat — instead of the heart+bg-ladder default of
+    `tissue_params`. Index order = the given name order (so it lines up with the class ids)."""
+    rows = [_params(nm, field) for nm in names]
+    t1 = torch.tensor([r[0] for r in rows], device=device)
+    t2 = torch.tensor([r[1] for r in rows], device=device)
+    pd = torch.tensor([r[2] for r in rows], device=device)
+    return t1, t2, pd
+
+
 def tissue_params(n_classes: int, n_bg_tiers: int, field: float,
                   device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """(T1, T2, PD) tensors length n_classes + n_bg_tiers at the given field. Heart labels via _HEART;
