@@ -31,8 +31,10 @@ cardioview/web/debug-shot.png
 cardioview/web/public/models/
 cardioview/web/debug-import.png
 
-# bd issue tracker (local only — contains internal task notes)
-.beads/
+# bd issue tracker: sync via issues.jsonl in git (over https), like mindscape. The nested
+# .beads/.gitignore keeps the Dolt engine (embeddeddolt/, backup/, locks) out; issues.jsonl +
+# config.yaml + metadata.json + hooks are tracked so the tracker rides with the code repo.
+.beads-credential-key
 cardioview/web/debug-*.png
 
 # private job-application material — never public
