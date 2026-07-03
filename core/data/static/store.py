@@ -190,6 +190,9 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
         "vendor": _norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
         "pathology": harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
         "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
+        # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
+        # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
+        "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
         "centre": meta.get("centre"), "country": meta.get("country"),
         "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
         "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
