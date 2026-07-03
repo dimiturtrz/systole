@@ -82,8 +82,8 @@ SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
 # withhold some). `motion_grade` (CMRxMotion respiratory-motion severity 1-3) is the schema growing
 # to hold a genuinely new stratification axis — null on datasets that don't carry it.
 META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner", "pathology",
-               "pathology_raw", "field_T", "centre", "country", "age", "age_band", "sex", "height",
-               "weight", "bsa", "motion_grade", "labelled"]
+               "pathology_raw", "field_T", "tr_ms", "te_ms", "flip_deg", "centre", "country", "age",
+               "age_band", "sex", "height", "weight", "bsa", "motion_grade", "labelled"]
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,

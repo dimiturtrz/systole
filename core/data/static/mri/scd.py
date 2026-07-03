@@ -67,12 +67,13 @@ def _read_contour(path: Path) -> np.ndarray:
 
 
 def _fill(pts: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    """Rasterize a closed polygon (x,y pixel coords) to a boolean mask on `shape` [rows,cols]."""
-    from matplotlib.path import Path as MplPath
-    rows, cols = shape
-    yy, xx = np.mgrid[0:rows, 0:cols]
-    inside = MplPath(pts).contains_points(np.c_[xx.ravel(), yy.ravel()])
-    return inside.reshape(rows, cols)
+    """Rasterize a closed polygon (x=col, y=row pixel coords) to a boolean mask on `shape` [rows,cols].
+    skimage.draw (a core dep) — matplotlib.path circular-imports in spawn workers on Windows."""
+    from skimage.draw import polygon
+    m = np.zeros(shape, dtype=bool)
+    rr, cc = polygon(pts[:, 1], pts[:, 0], shape)        # polygon(row=y, col=x)
+    m[rr, cc] = True
+    return m
 
 
 def _rasterize(endo: np.ndarray | None, epi: np.ndarray | None, shape) -> np.ndarray:
