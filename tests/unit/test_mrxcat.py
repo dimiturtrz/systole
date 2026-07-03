@@ -21,3 +21,19 @@ def test_unmapped_codes_are_background():
 
 def test_empty_and_allbg_are_zero():
     assert to_canonical(np.zeros((4, 4), int)).sum() == 0
+
+
+def test_heart_crop_scale_recovers_offcentre_heart():
+    """Regression: MRXCAT hearts are small + OFF-CENTRE in a big whole-torso frame; a plain centre
+    fit_square crops them away (empty pool). _heart_crop_scale must recover + centre them."""
+    from core.data.dynamic.mrxcat import _heart_crop_scale
+    big = np.zeros((920, 920), np.uint8)                 # whole-torso-sized frame
+    big[60:90, 100:130] = 2                              # myo ring-ish, off-centre (top-left)
+    big[68:82, 108:122] = 3                              # LV-cav inside
+    big[60:90, 130:150] = 1                              # RV-cav beside
+    sq = _heart_crop_scale(big, size=128, target_px=80)
+    assert sq.shape == (128, 128)
+    assert set(np.unique(sq)) >= {0, 1, 2, 3}            # all classes survived the crop+scale
+    # heart is now roughly centred, not lost to a corner
+    ys, xs = np.where(sq > 0)
+    assert 30 < ys.mean() < 98 and 30 < xs.mean() < 98

@@ -55,13 +55,33 @@ def load_vti_labels(path: str | Path) -> np.ndarray:
     return np.moveaxis(lab, 2, 0)                  # → [nz, ny, nx]
 
 
-def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
-               min_fg: int = 40, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
-    """Every `*.vti` in `vti_dir` → canonical label volume → SAX slices → `fit_square` to `size` → stacked
-    label pool, saved to `out_path` (npz `slices` [N,size,size] uint8 — the shared `anatomy.load_pool`
-    schema, so the generator consumes it identically). Near-empty and cavity-less slices dropped (same
-    composition guard as `anatomy.build_pool`: apex slices with no cavity over-represent vs real)."""
+def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | None:
+    """MRXCAT is WHOLE-TORSO (920²): the heart is a small, OFF-CENTRE region, so a plain centre
+    `fit_square` crops it away. Crop to the heart bbox, uniformly scale (nearest, label-preserving) so
+    its longest side hits `target_px`, then centre `fit_square` to `size` — heart-filling like the SSM
+    pool (`anatomy._scale_to_target` intent), drop-in for the shared painter. None if ~empty."""
+    from scipy.ndimage import zoom as _zoom
     from core.preprocessing.preprocess import fit_square
+    ys, xs = np.where(s > 0)
+    if ys.size == 0:
+        return None
+    crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    f = target_px / max(max(crop.shape), 1)
+    if abs(f - 1.0) > 1e-3:
+        crop = _zoom(crop, f, order=0)
+    return fit_square(crop, size, 0).astype(np.uint8)
+
+
+def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
+               min_fg: int = 40, min_cav_frac: float = 0.05, seed: int = 0) -> tuple[Path, tuple]:
+    """Every `*.vti` in `vti_dir` → canonical label volume → SAX slices → heart-crop+scale-to-real →
+    `fit_square` to `size` → stacked label pool, saved to `out_path` (npz `slices` [N,size,size] uint8 —
+    the shared `anatomy.load_pool` schema, so the generator consumes it identically). Heart bbox is
+    scaled to a target side sampled from the real ACDC size band (`anatomy.REAL_SIZE_PX`) so MRXCAT
+    hearts frame like the SSM pool. Near-empty and cavity-less slices dropped (same composition guard as
+    `anatomy.build_pool`: apex slices with no cavity over-represent vs real)."""
+    from .anatomy import REAL_SIZE_PX
+    rng = np.random.default_rng(seed)
     slices: list[np.ndarray] = []
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
         canon = to_canonical(load_vti_labels(vp))
@@ -72,7 +92,9 @@ def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SI
                 continue
             if min_cav_frac > 0 and int(((s == 1) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
                 continue
-            slices.append(fit_square(s, size, 0).astype(np.uint8))
+            sq = _heart_crop_scale(s, size, int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1)))
+            if sq is not None:
+                slices.append(sq)
     arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
