@@ -167,6 +167,12 @@ class Background(ABC):
         from .mri_physics import tissue_params
         return tissue_params(n_classes, n_paint - n_classes, field, dev)
 
+    def seg_target(self, mask: torch.Tensor) -> torch.Tensor:
+        """The SEG label map from the (painted) label map. Default: the paint map IS the target. A
+        strategy whose paint map carries EXTRA non-target classes (FovBg's whole-FOV tissues) restricts
+        it to the segmentation classes — so paint and train target decouple with no caller change."""
+        return mask
+
 
 class FlatBg(Background):
     """Single background tissue (bg stays label 0 -> painted by the muscle fallback)."""
@@ -247,6 +253,9 @@ class FovBg(Background):
         from .mri_physics import named_tissue_params
         from .mrxcat import FOV_TISSUE
         return named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
+
+    def seg_target(self, mask):
+        return mask.where(mask <= 3, torch.zeros_like(mask))  # FOV classes 4..7 (organs) → bg; heart 1..3 kept
 
 
 # bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
@@ -441,4 +450,5 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     m = img.mean((1, 2, 3), keepdim=True)
     s = img.std((1, 2, 3), keepdim=True).clamp_min(1e-6)
     img = (img - m) / s
+    mask = bg.seg_target(mask)                                 # decouple paint map from seg target (FovBg)
     return (img, mask, meta) if return_meta else (img, mask)   # opt-in provenance (vendor/field/tr/flip)

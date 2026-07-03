@@ -109,11 +109,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             else:                                                            # "replace": synth anatomy ONLY
                 Ytr = Ys
                 cfg.generator.synth.synth_p = 1.0
-                if cfg.generator.synth.bg_mode in ("flat", "procedural"):
+                if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
                     # ZERO-REAL goalpost: no real image at all. flat = single bg tissue; procedural =
-                    # synthetic random-field organ blobs (whole-FOV bg, kills the flat-bg 0.07 wall). (bwp)
+                    # synthetic random-field organ blobs (whole-FOV bg, kills the flat-bg 0.07 wall, bwp);
+                    # mrxcat = the pool IS a whole-FOV tissue map, FovBg paints organs directly (q4ww).
                     Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)
-                    log.info("ANATOMY POOL: %d Rodero slices, ZERO-REAL bg=%s", Ytr.shape[0],
+                    log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0],
                              cfg.generator.synth.bg_mode)
                 else:
                     # DIAGNOSTIC: Rodero heart on REAL bg (partition/hybrid) — isolates the anatomy axis.
