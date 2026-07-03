@@ -28,11 +28,12 @@ viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
 track = ["mlflow", "psutil", "pynvml"]   # experiment tracking + registry (the model store); psutil+pynvml for system (GPU/CPU/mem) metrics — without them mlflow start_run hard-fails when system-metrics logging is enabled
 diag = ["captum"]   # attribution diagnostic (evaluation/attribution.py): saliency = what the model attends to. confusion runs without it
+mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: run the vendored MRXCAT2.0 warper (external/mrxcat2) to generate phantom label pools. The one dep our env lacks (vtk/scipy/torch/imageio already in core/viz); NOT a runtime dep — we consume its output masks + paint with our own engine (core/data/dynamic/mrxcat.py)
 # GPU lane (LINUX-only by marker — cucim/cupy ship no Windows wheels). On Windows these silently
 # resolve to nothing; the code falls back to scipy/CPU via a single capability gate. Install on
 # linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["SimpleITK", "onnx", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "psutil", "pynvml", "captum", "pytest"]
+all = ["SimpleITK", "onnx", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "psutil", "pynvml", "captum", "opencv-python-headless", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
