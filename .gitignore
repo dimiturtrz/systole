@@ -2,6 +2,8 @@
 /data/
 # machine-specific absolute paths (copy from paths.example.yaml)
 paths.yaml
+# vendored external generation tools (quarantined, MIT; fetched on demand, never a core dep)
+external/
 # mri-sim (TypeScript app) build artifacts
 mri-sim/node_modules/
 mri-sim/dist/
