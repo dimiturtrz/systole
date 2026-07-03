@@ -48,8 +48,13 @@ the physical version wins.
 
 ## Q1b — **UltimateSynth: the physics-based SynthSeg** (the most important find)
 
-*"UltimateSynth: MRI Physics for Pan-Contrast AI"* (PMC11661081, 2024). **Replaces SynthSeg's random
-GMM with actual Bloch-equation physics.**
+*"UltimateSynth: MRI Physics for Pan-Contrast AI"* (bioRxiv 2024.12.05.627056, v2 Aug 2025; PMC11661081).
+**PROVENANCE/CODE GATE:** bioRxiv **preprint, NOT peer-reviewed**; authors Case Western / Duke / UNC —
+Dan Ma (MR-Fingerprinting inventor) + Pew-Thian Yap (credible). **No code/weights/repo released**
+(MATLAB R2024a in-house). So the numbers below are self-reported in-house comparisons — a strong
+signal, not a validated fact; the LEAD is the method, reimplementable from the equations (no dependency).
+**Replaces SynthSeg's random GMM with actual Bloch-equation physics.** (Acronym: Ultrawide Landscape of
+Tissue-faithful Images for Multicontrast Annotation, Training, Evaluation via Synthesis.)
 - Magnetization via spin-dynamics: system matrix A = R(T1,T2,TE)·Q(α,φ); builds a **122M-entry
   dictionary** over (T1,T2,PD)×(TR,TE,TI,flip), SVD-reduced to a 10-D contrast subspace (>99.95%
   energy) for efficient sampling of *physically valid* contrasts.
@@ -209,7 +214,7 @@ prior-art support for that task.
 
 ## Sources
 - SynthSeg — Billot et al., *Medical Image Analysis* 2023 — https://arxiv.org/abs/2107.09559 · https://github.com/BBillot/SynthSeg
-- UltimateSynth (MRI physics for pan-contrast AI) — https://pmc.ncbi.nlm.nih.gov/articles/PMC11661081/
+- UltimateSynth (MRI physics for pan-contrast AI) — **bioRxiv preprint, not peer-reviewed, no code** — https://www.biorxiv.org/content/10.1101/2024.12.05.627056 · https://pmc.ncbi.nlm.nih.gov/articles/PMC11661081/
 - Reverse Imaging — arXiv 2508.21254 (2025) — https://arxiv.org/html/2508.21254
 - Chalcroft et al., physics-constrained stroke synthesis — arXiv 2412.03318 (2024) — https://arxiv.org/pdf/2412.03318
 - FASTR-SCANN, relaxation-based synthetic contrast (cardiac T1) — https://pubs.rsna.org/doi/10.1148/ryai.210294
