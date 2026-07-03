@@ -138,7 +138,7 @@ Each source covers a different region; the union covers more than any one.
 | **fully parametric** | top (invent shape params → mesh → paint) | HIGH — every factor a knob | limited (needs a shape generator) | painter ✓, shape-invent ✗ |
 | **SSM (Rodero)** | shape = pre-built mesh → voxelize → paint | MED — SSM mode weights | healthy + MILD pathology (±3SD) | ✓ (pool_1000) |
 | **label-space edit** | shape = deform existing label maps | MED — deform params | variations; pathology via dilation | build (`vpn5`) |
-| **MRXCAT** | whole thing (torso+heart+physics) | LOW–MED — pathology knobs | whole-FOV + pathology + structured bg | `hpy` |
+| **MRXCAT** | whole thing (torso+heart+physics) — **pre-rendered image+label**, not masks-only | LOW–MED — pathology knobs | whole-FOV + pathology + structured bg | `hpy` — planned adapter `core/data/dynamic/mrxcat.py` (mirror `anatomy.py`): ingest MRXCAT2.0 out (12-class+bSSFP+T1/T2/PD) → canonical 4-class pool. Offline data, not a runtime dep (MIT GitLab + XCAT/Duke). NB MRXCAT2.0 *removes myo texture for uniformity* — external confirm of our myo over-spread finding |
 | **learned prior** | shape = sample a learned model | LOW — latent | the real manifold incl pathology | future (`vpn5` option) |
 
 **Composition is cheap** (union of label pools → the painter is shared): `pool_composite = concat(sourceA,
