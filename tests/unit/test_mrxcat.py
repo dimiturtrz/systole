@@ -42,6 +42,21 @@ def test_canonical_from_fov_keeps_only_heart():
     assert canonical_from_fov(fov).tolist() == [[1, 2, 3], [0, 0, 0], [0, 0, 0]]
 
 
+def test_place_heart_in_fov_swaps_anatomy():
+    """SSM x MRXCAT (majh): excise the phantom's heart, paste OUR heart at its location. Result keeps
+    surrounding tissue + carries our heart classes; the old phantom-heart pixels not covered → muscle."""
+    from core.data.dynamic.mrxcat import place_heart_in_fov
+    fov = np.full((60, 60), 6, np.uint8)                 # muscle body
+    fov[20:40, 20:40] = 2                                # phantom myo block
+    fov[26:34, 26:34] = 3                                # phantom LV-cav
+    fov[10:50, 45:52] = 4                                # lung (surrounding, must survive)
+    heart = np.zeros((40, 40), np.uint8)                 # our heart, centred in its own frame
+    heart[12:28, 12:28] = 2; heart[16:24, 16:24] = 3; heart[12:28, 28:32] = 1
+    out = place_heart_in_fov(fov, heart)
+    assert set(np.unique(out).tolist()) >= {1, 2, 3, 4, 6}   # our RV/myo/cav + lung + muscle
+    assert (out == 4).sum() == (fov == 4).sum()          # surrounding lung untouched
+
+
 def test_fovbg_paints_wholefov_map():
     """Integration: bg_mode='mrxcat' paints an 8-class FOV tissue map (FovBg + named_tissue_params) with
     no bg invention — every class rendered by its tissue, image finite, heart target recoverable."""

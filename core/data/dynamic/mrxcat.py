@@ -178,6 +178,57 @@ def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAUL
     return out_path, arr.shape
 
 
+def place_heart_in_fov(fov: np.ndarray, heart: np.ndarray) -> np.ndarray:
+    """SSM × MRXCAT (bd majh): drop OUR heart (canonical 1/2/3, heart-centred) into an XCAT whole-FOV
+    tissue map — excise the phantom's own heart (→ muscle) and paste ours scaled to that heart's size at
+    its location. Gives OUR anatomy diversity inside MRXCAT's realistic surrounding context, without XCAT
+    generation or MATLAB. Returns an 8-class FOV map (paint via bg_mode='mrxcat'); None-safe (returns fov
+    unchanged if either heart is absent)."""
+    from scipy.ndimage import zoom as _zoom
+    hm = np.isin(fov, (1, 2, 3))
+    hys, hxs = np.where(heart > 0)
+    if not hm.any() or hys.size == 0:
+        return fov
+    ys, xs = np.where(hm)
+    cy, cx = (ys.min() + ys.max()) // 2, (xs.min() + xs.max()) // 2
+    target = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1     # XCAT heart size to match
+    out = fov.copy()
+    out[hm] = 6                                                     # excise phantom heart → muscle
+    crop = heart[hys.min():hys.max() + 1, hxs.min():hxs.max() + 1]
+    crop = _zoom(crop, target / max(crop.shape), order=0)
+    h, w = crop.shape
+    y0, x0 = cy - h // 2, cx - w // 2
+    for yy in range(max(0, -y0), min(h, out.shape[0] - y0)):        # paste non-bg heart pixels, clipped
+        for xx in range(max(0, -x0), min(w, out.shape[1] - x0)):
+            v = crop[yy, xx]
+            if v:
+                out[y0 + yy, x0 + xx] = v
+    return out
+
+
+def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,
+                       size: int = DEFAULT_SIZE, scale: float = 3.0, seed: int = 0) -> tuple[Path, tuple]:
+    """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
+    into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.
+    Paint with bg_mode='mrxcat'. Reuses `_fov_window` for the XCAT backgrounds and `place_heart_in_fov`."""
+    from .anatomy import load_pool
+    hearts = load_pool(rodero_pool)                                # [N,size,size] canonical (heart-centred)
+    bgs = []                                                       # XCAT whole-FOV chest windows (with heart)
+    for vp in sorted(Path(vti_dir).rglob("*.vti")):
+        fov = to_tissue_map(load_vti_labels(vp))
+        for k in range(fov.shape[0]):
+            if int(np.isin(fov[k], (1, 2, 3)).sum()) >= 40:
+                w = _fov_window(fov[k], size, scale)
+                if w is not None:
+                    bgs.append(w)
+    rng = np.random.default_rng(seed)
+    slices = [place_heart_in_fov(bgs[int(rng.integers(len(bgs)))], h) for h in hearts] if bgs else []
+    arr = np.stack(slices).astype(np.uint8) if slices else np.zeros((0, size, size), np.uint8)
+    out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out_path, slices=arr)
+    return out_path, arr.shape
+
+
 def _main():
     """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
     import argparse
