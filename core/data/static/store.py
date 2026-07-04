@@ -82,8 +82,9 @@ SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
 # withhold some). `motion_grade` (CMRxMotion respiratory-motion severity 1-3) is the schema growing
 # to hold a genuinely new stratification axis — null on datasets that don't carry it.
 META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner", "pathology",
-               "pathology_raw", "field_T", "tr_ms", "te_ms", "flip_deg", "centre", "country", "age",
-               "age_band", "sex", "height", "weight", "bsa", "motion_grade", "labelled"]
+               "pathology_raw", "field_T", "tr_ms", "te_ms", "flip_deg", "centre", "country",
+               "institution", "age", "age_band", "sex", "height", "weight", "bsa", "motion_grade",
+               "labelled"]
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,
@@ -231,12 +232,53 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
         # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
         # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
         "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
-        "centre": meta.get("centre"), "country": meta.get("country"),
+        "centre": meta.get("centre"), "country": meta.get("country"), "institution": meta.get("institution"),
         "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
         "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
         "bsa": _bsa(meta.get("height"), meta.get("weight")),
         "motion_grade": meta.get("motion_grade"), "labelled": _is_labelled(arrays),
     }
+
+
+def _write_meta(name: str, adapter, data_dir: Path, out: Path) -> Path:
+    """(re)write out/meta.csv over every written subject via adapter.meta() (sidecar parse, no image
+    reload) — the ONE place the meta schema is materialized. Shared by build() and migrate_meta()."""
+    rows = []
+    for case in adapter.cases():
+        f = f"{case.name}.npz"
+        if not (data_dir / f).exists():
+            continue
+        try:
+            meta = adapter.meta(case)
+        except Exception:
+            meta = {}
+        arrays = dict(np.load(data_dir / f, allow_pickle=True))
+        rows.append(_meta_row(name, case, arrays, meta, f))
+    _dt = lambda k: pl.Float64 if k in ("age", "height", "weight", "bsa") else (
+        pl.Boolean if k == "labelled" else pl.Utf8)
+    pl.DataFrame(rows, schema={k: _dt(k) for k in META_FIELDS}, strict=False).write_csv(out / "meta.csv")
+    return out / "meta.csv"
+
+
+def migrate_meta(names: list[str] | None = None) -> list[Path]:
+    """MIGRATION: re-emit meta.csv for already-built stores with the CURRENT META_FIELDS + adapter.meta()
+    — NO image reload (sidecar parse only). Run after adding a metadata column or fixing an adapter's
+    meta() (e.g. SCD now carrying centre/country/scanner). Every processed/<name>/<paramkey>/ of a
+    REGISTERED adapter is refreshed; unregistered dirs (anatomy pools etc.) skipped. `names` filters."""
+    from core.data.static.mri.registry import get_adapter
+    base = Path(data_root("processed"))
+    out: list[Path] = []
+    for meta_csv in sorted(base.glob("*/*/meta.csv")):
+        param_dir = meta_csv.parent
+        name = param_dir.parent.name
+        if names and name not in names:
+            continue
+        try:
+            adapter = get_adapter(name)
+        except KeyError:
+            continue                                         # not a registered dataset (e.g. mrxcat pools)
+        out.append(_write_meta(name, adapter, param_dir / "data", param_dir))
+    return out
 
 
 def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
@@ -272,23 +314,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
             for _ in progress(ex.map(_one, todo), f"consolidate {name}", total=len(todo)):
                 pass
 
-    # (re)write meta.csv over ALL written subjects (cheap: meta() is sidecar parsing, no image load)
-    rows = []
-    for case in cases:
-        f = f"{case.name}.npz"
-        if not (data_dir / f).exists():
-            continue
-        try:
-            meta = adapter.meta(case)
-        except Exception:
-            meta = {}
-        arrays = dict(np.load(data_dir / f, allow_pickle=True))
-        rows.append(_meta_row(name, case, arrays, meta, f))
-    def _dtype(k):
-        if k in ("age", "height", "weight", "bsa"):
-            return pl.Float64
-        return pl.Boolean if k == "labelled" else pl.Utf8
-    pl.DataFrame(rows, schema={k: _dtype(k) for k in META_FIELDS}, strict=False).write_csv(out / "meta.csv")
+    _write_meta(name, adapter, data_dir, out)                # (re)emit meta.csv (sidecar parse, no reload)
     return out
 
 
@@ -340,6 +366,9 @@ if __name__ == "__main__":
     ap.add_argument("--nyul", action="store_true", help="harmonize to the Nyúl standard (fit it first)")
     ap.add_argument("--fit-nyul", action="store_true", dest="fit_nyul",
                     help="fit the Nyúl standard from the cohort -> reference/nyul.yaml, then exit")
+    ap.add_argument("--migrate-meta", action="store_true", dest="migrate_meta",
+                    help="re-emit meta.csv for built stores with the current schema/adapter.meta() "
+                         "(no image reload) — run after adding metadata fields, then exit")
     ap.add_argument("--fit-acquisition", action="store_true", dest="fit_acq",
                     help="mine real per-(vendor,field) TR/TE/flip from built DICOM stores -> "
                          "reference/acquisition.yaml (acquisition_for then overrides the derivation), then exit")
@@ -351,6 +380,12 @@ if __name__ == "__main__":
     if args.fit_acq:
         acq = fit_acquisition_reference()
         print(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
+        raise SystemExit
+    if args.migrate_meta:
+        paths = migrate_meta(args.names)
+        print(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
+        for p in paths:
+            print(f"  {p}")
         raise SystemExit
     df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
     print(f"\n=== data cloud: {len(df)} subjects ===")

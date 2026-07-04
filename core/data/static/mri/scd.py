@@ -135,12 +135,14 @@ def scd_meta(case: str | Path, root: str | Path | None = None) -> dict:
     case = Path(case)
     info = _patient_csv(_root(root)).get(case.name, {})
     m = {"group": info.get("Pathology"), "sex": info.get("Gender"), "age": info.get("Age"),
-         "vendor": "GE", "original_id": info.get("OriginalID")}       # SCD = single-vendor (GE Signa)
-    sax = _sax_series_dir(case)                                       # real acquisition from a sample DICOM —
-    dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip the NIfTI sets lack
+         "vendor": "GE", "original_id": info.get("OriginalID"),        # SCD = single-vendor (GE Signa)
+         "centre": "Sunnybrook Health Sciences Centre", "country": "Canada"}   # single-centre Toronto
+    sax = _sax_series_dir(case)                                       # real acquisition + scanner from DICOM —
+    dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip/model the NIfTI sets lack
     if dcm is not None:
         _, _, d = read_image(dcm)
-        m.update(tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"), field_T=d.get("field_T"))
+        m.update(tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
+                 field_T=d.get("field_T"), scanner=d.get("scanner"), institution=d.get("institution"))
     return m
 
 

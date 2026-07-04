@@ -15,7 +15,8 @@ from pathlib import Path
 from core.types import Spacing, Volume
 
 # DICOM tags we surface for the reference/normalization store (mirrors what the NIfTI adapters carry).
-_TAGS = {"0008|0070": "vendor", "0018|0087": "field_T", "0018|0080": "tr_ms", "0018|0081": "te_ms",
+_TAGS = {"0008|0070": "vendor", "0008|1090": "scanner", "0008|0080": "institution",
+         "0018|0087": "field_T", "0018|0080": "tr_ms", "0018|0081": "te_ms",
          "0018|1314": "flip_deg", "0018|0050": "slice_mm", "0020|1041": "slice_loc",
          "0018|1060": "trigger_ms", "0008|103e": "series_desc", "0010|0040": "sex", "0010|1010": "age"}
 
