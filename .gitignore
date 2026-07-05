@@ -41,6 +41,8 @@ cardioview/web/debug-*.png
 
 # private job-application material — never public
 applications/
+# elevator pitch (private note, not public)
+elevator.txt
 
 # Private/local-only docs (generic pattern — reveals no intent in the ignore list itself)
 *.local.md
