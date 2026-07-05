@@ -82,9 +82,20 @@ SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
 # withhold some). `motion_grade` (CMRxMotion respiratory-motion severity 1-3) is the schema growing
 # to hold a genuinely new stratification axis — null on datasets that don't carry it.
 META_FIELDS = ["subject_id", "dataset", "file", "raw_path", "vendor", "scanner", "pathology",
-               "pathology_raw", "field_T", "tr_ms", "te_ms", "flip_deg", "centre", "country",
+               "pathology_raw", "field_T", "tr_ms", "te_ms", "flip_deg", "centre", "country", "region",
                "institution", "age", "age_band", "sex", "height", "weight", "bsa", "motion_grade",
                "labelled"]
+
+# country -> region: the coarse population-shift axis (genetic Europe/Asia, lifestyle Europe/America)
+# at the granularity our thin per-country data supports. DERIVED from real country (never fabricated) —
+# null country stays null region; extend the map as new countries land.
+_REGION = {"France": "Europe", "Spain": "Europe", "Germany": "Europe", "Italy": "Europe", "UK": "Europe",
+           "China": "Asia", "Japan": "Asia", "Korea": "Asia",
+           "USA": "North America", "Canada": "North America"}
+
+
+def _region_of(country):
+    return _REGION.get(country) if country else None
 
 
 def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,
@@ -236,7 +247,8 @@ def _meta_row(name: str, case: Path, arrays: dict, meta: dict, file: str) -> dic
         # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
         # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
         "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
-        "centre": meta.get("centre"), "country": meta.get("country"), "institution": meta.get("institution"),
+        "centre": meta.get("centre"), "country": meta.get("country"),
+        "region": _region_of(meta.get("country")), "institution": meta.get("institution"),
         "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
         "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
         "bsa": _bsa(meta.get("height"), meta.get("weight")),

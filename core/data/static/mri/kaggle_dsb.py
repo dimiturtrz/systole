@@ -84,8 +84,9 @@ def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
     it (store.fit_acquisition_reference)."""
     from core.data.static.mri.dicom import read_image
     from core.data.static.store import _norm_vendor
+    from core.data.static.store import _region_of
     case = Path(case)
-    m = {"centre": CENTRE, "country": COUNTRY}
+    m = {"centre": CENTRE, "country": COUNTRY, "region": _region_of(COUNTRY)}
     sd = next(iter((case / "study").glob("sax_*")), None)
     dcm = next(iter(sd.glob("*.dcm")), None) if sd else None
     if dcm is not None:
