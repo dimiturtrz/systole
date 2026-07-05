@@ -34,11 +34,15 @@ def _key(df: pl.DataFrame) -> set[str]:
 
 def _train_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
     """The model's TRAIN subject keys (for the leak/OOD flag), reconstructed from its DataCfg over the
-    CURRENT store. None if the model carried no config (can't know its split)."""
+    CURRENT store. None if the model carried no config (can't know its split). Restricted to the
+    model's OWN `sources` — else a dataset the model never loaded (e.g. SCD, absent from its sources)
+    would wrongly appear in the reconstructed train and mis-flag an honest OOD cell as a leak."""
     if cfg is None:
         return None
     from core.data.static.splits import split_from_cfg
-    train, _, _, _ = split_from_cfg(cfg.generator.data, meta, seed=cfg.seed)
+    d = cfg.generator.data
+    in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
+    train, _, _, _ = split_from_cfg(d, in_sources, seed=cfg.seed)
     return _key(train)
 
 
