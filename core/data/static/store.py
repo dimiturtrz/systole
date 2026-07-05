@@ -34,8 +34,8 @@ from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 
 class DataCfg(BaseModel):
-    """The data + the split. Load `sources`; TEST = frozen manifests (`test_manifests`, preferred —
-    comparable across store growth) or live criteria (`test_datasets`/`test_vendors`); train/val =
+    """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.splits).
+    Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
     the labelled rest. Serialized to config.json (the run self-documents its split). Named presets
     live in splits.SPLITS (`--split xvendor`); defaults = the generalization split (ACDC centre-shift
     VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
@@ -46,15 +46,10 @@ class DataCfg(BaseModel):
     # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
     # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
     # at test. TRAIN = the rest (Siemens + Philips).
-    # TEST source, two mutually-exclusive modes. test_manifests (preferred) = FROZEN manifests by name
-    # (core.data.static.manifest): the test set is pinned + comparable across store growth. When empty,
-    # fall back to LIVE criteria (test_datasets / test_vendors), recomputed over the current cloud — the
-    # original behaviour, kept for ad-hoc runs. Named splits (splits.SPLITS) set test_manifests.
     # NEW-STYLE split: a coded-filter family@version (core.data.splits). When set, it OWNS the
     # train/val/test partition (via core.data.split.resolve) and the criteria below are ignored — the
-    # split is code, not criteria. Recorded to config.json for lineage. Empty -> old criteria path.
+    # split is code, not criteria. Recorded to config.json for lineage. Empty -> legacy criteria path.
     split: str = ""
-    test_manifests: tuple[str, ...] = ()
     test_datasets: tuple[str, ...] = ("cmrxmotion",)
     test_vendors: tuple[str, ...] = ("Canon", "GE")
     val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)

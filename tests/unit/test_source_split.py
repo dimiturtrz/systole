@@ -24,8 +24,7 @@ class _Fam:
     name = "fam"
     versions = {"1.0.0": SplitDef(
         test=lambda c: StaticSource(c.filter(V("labelled") & (V("vendor") == "Canon")), "canon"),
-        val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "acdc"),
-        test_lock="")}
+        val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "acdc"))}
 
 
 def test_ids_hash_order_independent():
@@ -54,23 +53,7 @@ def test_resolve_builds_triple_and_complement_train():
     assert set(r.val.subjects()) == {("acdc", "s1"), ("acdc", "s2")}
     assert set(r.train.subjects()) == {("mnms1", "g1")}        # no test/val leak
     assert r.version == "1.0.0" and r.test_hash == r.test.ids_hash()
-
-
-def test_lock_guard_raises_on_drift():
-    fam = _Fam()
-    fam.versions = {"1.0.0": SplitDef(test=fam.versions["1.0.0"].test, val=fam.versions["1.0.0"].val,
-                                      test_lock="sha256:deadbeef")}
-    with pytest.raises(ValueError, match="drifted"):
-        resolve(fam, _cloud())
-
-
-def test_lock_guard_passes_when_hash_matches():
-    c = _cloud()
-    good = _Fam.versions["1.0.0"].test(c).ids_hash()
-    fam = _Fam()
-    fam.versions = {"1.0.0": SplitDef(test=fam.versions["1.0.0"].test, val=fam.versions["1.0.0"].val,
-                                      test_lock=good)}
-    assert resolve(fam, c).test_hash == good                   # no raise
+    # the test-lock drift guard now lives on the TestSet (tested in test_testsets.py)
 
 
 def test_latest_picks_highest_semver():
@@ -113,17 +96,19 @@ def test_dynamic_source_seeded_is_composite(monkeypatch):
     assert (X[:2] == 1).all() and (X[2:] == 0).all()          # real pixels kept, synth zeroed
 
 
-def test_static_main_registered_and_locked():
+def test_static_main_registered_with_locked_testset():
+    from core.data.testsets import STATIC_MAIN_TEST
     assert "static_main" in list_splits()
     d = load_split("static_main").versions["1.0.0"]
-    assert d.test_lock.startswith("sha256:") and len(d.test_lock) > 20   # real lock, not placeholder
     assert d.train is None                                     # train = complement
+    assert STATIC_MAIN_TEST.lock.startswith("sha256:") and len(STATIC_MAIN_TEST.lock) > 20
 
 
-def test_synth_main_registered_and_locked():
+def test_synth_main_registered_with_locked_testset():
     from core.data.splits.synth_main import POOL, ZERO_REAL_BG
+    from core.data.testsets import SYNTH_MAIN_TEST
     assert "synth_main" in list_splits()
     d = load_split("synth_main").versions["1.0.0"]
-    assert d.test_lock.startswith("sha256:") and len(d.test_lock) > 20
     assert d.train is not None                                 # explicit dynamic train (not complement)
     assert POOL and ZERO_REAL_BG                               # named constants, not bare literals
+    assert SYNTH_MAIN_TEST.lock.startswith("sha256:") and len(SYNTH_MAIN_TEST.lock) > 20

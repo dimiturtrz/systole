@@ -86,11 +86,8 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             log.info("split=%s@%s test_hash=%s | train=%s val=%s test n=%d",
                      name, r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
         else:
-            train_src = val_src = None               # old-style: frames + inline anatomy block
-            train_df, val_df, test_df, missing = splits.split_from_cfg(d, meta, cfg.seed)
-            if missing:                              # frozen test ids absent from the store (drift)
-                log.warning("test-manifest drift: %d frozen subject(s) missing from store: %s",
-                            len(missing), missing[:8])
+            train_src = val_src = None               # legacy: DataCfg criteria + inline anatomy block
+            train_df, val_df, test_df = splits.split_from_cfg(d, meta, cfg.seed)
     if cfg.n_patients:                          # debug cap (old-style frames only; test always capped)
         test_df = test_df.head(cfg.n_patients)
         if train_src is None:
@@ -302,14 +299,12 @@ if __name__ == "__main__":
     a = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.split:                                      # coded-filter family (new) OR DataCfg preset (old)
+    if a.split:                                      # coded-filter family owns the partition (core.data.splits)
         from core.data.splits import list_splits
         name = a.split.split("@", 1)[0]
-        if name in list_splits():                    # new-style: family owns the partition
-            cfg.generator.data.split = a.split
-        else:                                        # old preset -> the split's DataCfg (pre --set)
-            from core.data.static.splits import named_split
-            cfg.generator.data = named_split(a.split)
+        if name not in list_splits():
+            raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
+        cfg.generator.data.split = a.split
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients"):
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))

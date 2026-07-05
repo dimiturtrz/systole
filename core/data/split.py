@@ -25,12 +25,11 @@ CloudFn = Callable[[pl.DataFrame], Source]
 
 @dataclass(frozen=True)
 class SplitDef:
-    """One version's ingredients. test/val/train = coded (cloud)->Source. train=None -> complement.
-    test_lock = sha256 of the resolved test ids (drift guard); "" until first freeze."""
+    """One version's ingredients. test/val/train = coded (cloud)->Source. test is a TestSet's source
+    (self-frozen by its own lock, core.data.testsets). train=None -> the labelled complement."""
     test: CloudFn
     val: CloudFn
     train: CloudFn | None = None
-    test_lock: str = ""
 
 
 class Split(Protocol):
@@ -62,14 +61,10 @@ def _complement(cloud: pl.DataFrame, exclude: list[Source]) -> StaticSource:
 
 
 def resolve(family: Split, cloud: pl.DataFrame, version: str | None = None) -> Resolution:
-    """Build (train, val, test) Sources for a family@version over `cloud`. Enforces the test lock:
-    a drifted test set raises rather than silently rescoring on different subjects."""
+    """Build (train, val, test) Sources for a family@version over `cloud`. The test is a TestSet source
+    which enforces its own content-hash lock (raises on drift) — no separate guard needed here."""
     v = version or _latest(family.versions)
     d = family.versions[v]
-    test, val = d.test(cloud), d.val(cloud)
+    test, val = d.test(cloud), d.val(cloud)                      # test's TestSet lock is checked in .source()
     train = d.train(cloud) if d.train is not None else _complement(cloud, [test, val])
-    h = test.ids_hash()                                          # type: ignore[attr-defined]
-    if d.test_lock and d.test_lock != h:
-        raise ValueError(f"{family.name}@{v}: test drifted (lock {d.test_lock[:19]}… != {h[:19]}…) — "
-                         f"the store changed the test set; freeze a new version, don't mutate this one")
-    return Resolution(train, val, test, v, h)
+    return Resolution(train, val, test, v, test.ids_hash())      # type: ignore[attr-defined]

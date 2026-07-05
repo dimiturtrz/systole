@@ -16,6 +16,7 @@ import polars as pl
 from core.data.source import StaticSource
 from core.data.dynamic.source import DynamicSource
 from core.data.split import SplitDef
+from core.data.testsets import SYNTH_MAIN_TEST
 
 V = pl.col
 
@@ -45,8 +46,6 @@ class SynthMain:
                                           note=f"Rodero {POOL}, zero-real {ZERO_REAL_BG} bg"),
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
                                        "ACDC real val (held from test; synth val = 6rd7)"),
-            test=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") != "acdc")),
-                                        "all real except the ACDC val"),
-            test_lock="sha256:ecd60aad00b5a19d49fc3b4bced9cc5768d10f931d4e94107d0c1dd031dfe8ed",  # 642 real (all labelled minus ACDC val)
+            test=lambda c: SYNTH_MAIN_TEST.source(c),            # all seg real minus ACDC val (642, locked)
         ),
     }

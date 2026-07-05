@@ -1,6 +1,6 @@
-"""Generalization-matrix runner — locks the two decisions that aren't trivial: the OOD-vs-leak flag
-(a cell is OOD iff no manifest subject was in the model's train) and seg_lv class restriction (myo+cav
-only, no RV). Model load + validate are stubbed; split_from_cfg and resolve_paths run for real.
+"""Generalization-matrix runner — locks the two non-trivial decisions: the OOD-vs-leak flag (a cell
+is OOD iff no TestSet subject was in the model's train) and seg_lv class restriction (myo+cav only, no
+RV). Model load + validate are stubbed; split_from_cfg and TestSet.source run for real.
 """
 import types
 
@@ -8,7 +8,10 @@ import polars as pl
 import pytest
 
 from cardioseg.evaluation import matrix
+from core.data.testsets import TestSet
 from core.data.static.store import DataCfg
+
+V = pl.col
 
 
 def _meta():
@@ -19,35 +22,35 @@ def _meta():
          for d, s, v in rows])
 
 
+# lock-free TestSets (no drift guard) over the controlled meta
+_TS = {
+    "canon": TestSet("canon", "seg4", V("vendor") == "Canon"),
+    "siemens": TestSet("siemens", "seg4", V("vendor") == "Siemens"),
+    "scd_lv": TestSet("scd_lv", "seg_lv", V("dataset") == "acdc"),   # acdc stands in as a resolvable seg_lv
+}
+
+
 @pytest.fixture
 def _stub(monkeypatch):
-    # a model whose DataCfg holds out Canon -> train = Siemens (s1,s2)
+    # a model whose DataCfg holds out Canon -> train = Siemens (s1, s2)
     cfg = types.SimpleNamespace(seed=0, generator=types.SimpleNamespace(
-        data=DataCfg(test_vendors=("Canon",), test_manifests=(), test_datasets=(), val_datasets=())))
+        data=DataCfg(test_vendors=("Canon",), test_datasets=(), val_datasets=())))
     monkeypatch.setattr("core.registry.resolve", lambda ref: ref)
     monkeypatch.setattr("core.model.load_run", lambda run, device=None: (object(), cfg, "cpu"))
     monkeypatch.setattr("core.data.static.store.load", lambda *a, **k: _meta())
-    # validate: fixed per-class Dice, no EF rows
     monkeypatch.setattr("cardioseg.evaluation.validate.validate",
                         lambda model, paths, size, device, tta=True: ({1: 0.9, 2: 0.8, 3: 0.85}, [], {}))
-    manifests = {
-        "vendor_canon": {"task": "seg4", "subjects": [["mnms1", "c1"], ["mnms1", "c2"]]},
-        "vendor_siemens": {"task": "seg4", "subjects": [["acdc", "s1"], ["acdc", "s2"]]},
-        "scd_lv": {"task": "seg_lv", "subjects": [["acdc", "s1"]]},   # reuse a resolvable id
-    }
-    monkeypatch.setattr("core.data.static.manifest.load", lambda n: manifests[n])
-    monkeypatch.setattr("core.data.static.manifest.list_manifests", lambda: list(manifests))
-    return None
+    monkeypatch.setattr("cardioseg.evaluation.matrix.TESTSETS", _TS)
 
 
-def test_ood_when_no_manifest_subject_in_train(_stub):
-    [r] = matrix.score_matrix(["m"], ["vendor_canon"])
+def test_ood_when_no_testset_subject_in_train(_stub):
+    [r] = matrix.score_matrix(["m"], ["canon"])
     assert r["ood"] is True and r["n"] == 2                 # Canon held out -> honest OOD
     assert r["dice_mean"] == pytest.approx((0.9 + 0.8 + 0.85) / 3, abs=1e-4)
 
 
-def test_leak_when_manifest_subject_in_train(_stub):
-    [r] = matrix.score_matrix(["m"], ["vendor_siemens"])
+def test_leak_when_testset_subject_in_train(_stub):
+    [r] = matrix.score_matrix(["m"], ["siemens"])
     assert r["ood"] is False                                # Siemens WAS trained on -> flagged leak
 
 

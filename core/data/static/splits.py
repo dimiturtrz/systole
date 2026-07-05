@@ -68,71 +68,10 @@ def paths(df: pl.DataFrame) -> list[str]:
     return df.get_column("path").to_list()
 
 
-# ── Named splits ────────────────────────────────────────────────────────────────────────────────
-# A split recipe IS a DataCfg (store.DataCfg): sources + train/val/test criteria + the synth knob
-# (anatomy_pool/anatomy_mode). Named presets live here as override dicts — the codebase's config is
-# typed-code, so a dict of DataCfg overrides (not a YAML folder) keeps one home, DRY, type-checked.
-# TEST points at FROZEN manifests (comparable); train/val stay live criteria (the pool may grow).
-# `named_split(name)` -> a DataCfg; train.py takes `--split <name>` and tags the model with it.
-SPLITS: dict[str, dict] = {
-    # The generalization split (was the DataCfg default): unseen vendors + a motion cohort held out
-    # as the frozen test; ACDC = the domain-shift VAL (tune without peeking at test); train = the rest.
-    "xvendor": dict(
-        test_manifests=("vendor_canon", "vendor_ge", "dataset_cmrxmotion"),
-        test_datasets=(), test_vendors=(),
-        val_datasets=("acdc",),
-    ),
-    # Magnum opus — zero real data in training: TRAIN (and val) from the synthetic anatomy pool, ALL
-    # real data is the TEST set. The purest domain-generalization claim. NB val is still real here
-    # until the val-synth plumbing lands (a follow-up); the claim upgrades to "zero real in train".
-    "synth_to_real": dict(
-        anatomy_pool="", anatomy_mode="replace",          # set anatomy_pool at launch (--set) to a built pool
-        test_manifests=("all_real",),
-        test_datasets=(), test_vendors=(), val_datasets=("acdc",),
-    ),
-}
-
-
-def named_split(name: str):
-    """Build a DataCfg from a named preset in SPLITS (lazily imports DataCfg to avoid a cycle)."""
-    from core.data.static.store import DataCfg
-    if name not in SPLITS:
-        raise KeyError(f"unknown split {name!r}; have {sorted(SPLITS)}")
-    return DataCfg(**SPLITS[name])
-
-
-def _keyed(meta: pl.DataFrame) -> pl.DataFrame:
-    return meta.with_columns(
-        (pl.col("dataset") + "\t" + pl.col("subject_id").cast(pl.Utf8)).alias("_k"))
-
-
 def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0
-                   ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame, list[list]]:
-    """(train, val, test, missing) from a DataCfg-like `d`, honouring FROZEN test manifests.
-
-    If `d.test_manifests` is set: TEST = the union of those frozen manifests' subjects (resolved to
-    current rows); those exact subjects are carved OUT of train (no leak); val = val_datasets/
-    val_vendors criteria else a random frac; `missing` = frozen ids absent from the store (drift, the
-    caller must surface). Else: fall back to criteria `make_split` (missing = [])."""
-    tm = tuple(getattr(d, "test_manifests", ()) or ())
-    if not tm:
-        tr, val, test = make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
-                                   d.val_datasets, d.val_vendors, d.train_vendors)
-        return tr, val, test, []
-    from core.data.static import manifest
-    want: set[str] = set()
-    for name in tm:
-        want |= {f"{a}\t{b}" for a, b in manifest.load(name)["subjects"]}
-    k = _keyed(meta).filter(pl.col("labelled"))
-    in_test = pl.col("_k").is_in(want)
-    test = k.filter(in_test).drop("_k")
-    rest = k.filter(~in_test)
-    missing = [x.split("\t") for x in sorted(want - set(k.filter(in_test)["_k"]))]
-    if d.val_datasets or d.val_vendors:
-        vexpr = pl.col("dataset").is_in(list(d.val_datasets)) | pl.col("vendor").is_in(list(d.val_vendors))
-        train, val = rest.filter(~vexpr).drop("_k"), rest.filter(vexpr).drop("_k")
-    else:
-        train, val = patient_val(rest.drop("_k"), d.val_frac, seed)
-    if d.train_vendors:
-        train = train.filter(pl.col("vendor").is_in(list(d.train_vendors)))
-    return train, val, test, missing
+                   ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """(train, val, test) from a DataCfg's CRITERIA (test_datasets/test_vendors, val criteria). The
+    LEGACY path — kept so a run without a coded split, and the matrix reconstructing an OLD model's
+    train set from its saved DataCfg, still work. New splits are coded families (core.data.splits)."""
+    return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
+                      d.val_datasets, d.val_vendors, d.train_vendors)

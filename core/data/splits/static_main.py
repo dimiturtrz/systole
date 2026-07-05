@@ -11,6 +11,7 @@ import polars as pl
 
 from core.data.source import StaticSource
 from core.data.split import SplitDef
+from core.data.testsets import STATIC_MAIN_TEST
 
 V = pl.col
 
@@ -19,12 +20,9 @@ class StaticMain:
     name = "static_main"
     versions = {
         "1.0.0": SplitDef(
-            test=lambda c: StaticSource(
-                c.filter(V("labelled") & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion"))),
-                "unseen vendors (GE, Canon) + motion cohort (cmrxmotion)"),
+            test=lambda c: STATIC_MAIN_TEST.source(c),           # unseen vendors + motion cohort (147, locked)
             val=lambda c: StaticSource(
                 c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),
             # train = labelled complement (Siemens + Philips)
-            test_lock="sha256:5f8f0a98e56065e6eca42ff51caf7d06d0be4ff98b8d9bf142dda77e8953faa5",  # 147 subjects; == old xvendor frozen manifests
         ),
     }
