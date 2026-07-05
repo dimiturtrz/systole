@@ -118,3 +118,12 @@ def test_static_main_registered_and_locked():
     d = load_split("static_main").versions["1.0.0"]
     assert d.test_lock.startswith("sha256:") and len(d.test_lock) > 20   # real lock, not placeholder
     assert d.train is None                                     # train = complement
+
+
+def test_synth_main_registered_and_locked():
+    from core.data.splits.synth_main import POOL, ZERO_REAL_BG
+    assert "synth_main" in list_splits()
+    d = load_split("synth_main").versions["1.0.0"]
+    assert d.test_lock.startswith("sha256:") and len(d.test_lock) > 20
+    assert d.train is not None                                 # explicit dynamic train (not complement)
+    assert POOL and ZERO_REAL_BG                               # named constants, not bare literals

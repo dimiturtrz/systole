@@ -78,17 +78,23 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             from core.data.split import resolve
             name, ver = (d.split.split("@", 1) + [None])[:2]
             r = resolve(load_split(name), meta, ver)
-            train_df, val_df, test_df = r.train.frame, r.val.frame, r.test.frame
-            log.info("split=%s@%s test_hash=%s | %d/%d/%d train/val/test",
-                     name, r.version, r.test_hash[:19], len(train_df), len(val_df), len(test_df))
+            train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> materialize seam
+            test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
+            val_df = r.val.frame                     # val is real -> its frame drives scoring/export/params
+            if r.train.kind == "static":
+                train_df = r.train.frame             # dynamic train has no frame (counts via tensors)
+            log.info("split=%s@%s test_hash=%s | train=%s val=%s test n=%d",
+                     name, r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
         else:
+            train_src = val_src = None               # old-style: frames + inline anatomy block
             train_df, val_df, test_df, missing = splits.split_from_cfg(d, meta, cfg.seed)
-            if missing:                             # frozen test ids absent from the store (drift)
+            if missing:                              # frozen test ids absent from the store (drift)
                 log.warning("test-manifest drift: %d frozen subject(s) missing from store: %s",
                             len(missing), missing[:8])
-    if cfg.n_patients:                          # debug cap
-        train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
+    if cfg.n_patients:                          # debug cap (old-style frames only; test always capped)
         test_df = test_df.head(cfg.n_patients)
+        if train_src is None:
+            train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
 
     # Preload ALL slices into device memory (VRAM): after this, the epoch loop is pure GPU — index a
     # permutation, augment, train; zero per-epoch CPU/disk/host↔device copy. The slice set fits the
@@ -98,10 +104,20 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     # residency = where the preloaded tensors live (gpu=VRAM-resident / cpu=RAM, copied per batch).
     # gpu only makes sense with a cuda device; fall back to cpu residency otherwise.
     data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
-    with timed(log, f"preload slices (residency={cfg.residency}->{data_device}, {len(train_df)}+{len(val_df)} subj)"):
+    with timed(log, f"preload slices (residency={cfg.residency}->{data_device})"):
         import torch as _t
         force_synth = None
-        if d.anatomy_pool:
+        if train_src is not None:                    # NEW-STYLE: sources -> materialize seam (real/synth
+            # uniform, no if). A DynamicSource carries the painter strategy (bg_mode) + synth fraction —
+            # apply to the generator cfg before the engine is built.
+            if train_src.kind == "dynamic":
+                cfg.generator.synth.bg_mode = train_src.bg_mode
+                cfg.generator.synth.synth_p = train_src.synth_p
+            Xtr, Ytr, force_synth = train_src.materialize(d.size, data_device)
+            Xva, Yva, _ = val_src.materialize(d.size, data_device)
+            log.info("SOURCES train=%s val=%s | %d train / %d val slices",
+                     train_src.kind, val_src.kind, Xtr.shape[0], Xva.shape[0])
+        elif d.anatomy_pool:
             # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
             from core.data.dynamic.anatomy import load_pool
             pool = load_pool(d.anatomy_pool)
@@ -139,12 +155,13 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
                              cfg.generator.synth.bg_mode)
         else:
             Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-        Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
+        if train_src is None:                        # old-style val load (new-style did it via source)
+            Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
     # the data engine: yields collapsed batches (real / synth / mixed by cfg.generator.synth)
     gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
     nb = max(1, Xtr.shape[0] // cfg.batch)
-    log.info("patients: %d train / %d val / %d test | slices: %d train / %d val (resident on %s, compute %s)",
-             len(train_df), len(val_df), len(test_df), Xtr.shape[0], Xva.shape[0], data_device, device)
+    log.info("slices: %d train / %d val / %d test-subj (resident on %s, compute %s)",
+             Xtr.shape[0], Xva.shape[0], len(test_df), data_device, device)
     model = build_unet(cfg.model).to(device)
     # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
     # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
@@ -159,9 +176,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
 
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
     best_dice, best_state, bad = -1.0, None, 0   # nb (batches/epoch) computed above from the resident set
+    # n_train in slices when the train source is dynamic (no patient frame); else patient rows.
+    n_train = Xtr.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
+    split_tag = d.split or ("+".join(d.test_vendors) or "legacy")
     trk = track_run("cardioseg", out.name, run_dir=out,
-                    params={**cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df)},
-                    tags={"split": "+".join(d.test_vendors) or "legacy", "seed": cfg.seed})
+                    params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
+                    tags={"split": split_tag, "seed": cfg.seed})
     fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
@@ -210,7 +230,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
         results["test"] = summarize(tdice, tef, tsurf)
 
     torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
-    meta = {"config": cfg.model_dump(), "n_train": len(train_df), "n_val": len(val_df),
+    meta = {"config": cfg.model_dump(), "n_train": n_train, "n_val": len(val_df),
             "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
     (out / "metrics.json").write_text(json.dumps(meta, indent=2))
     log.info("saved model + config + metrics -> %s/", out)

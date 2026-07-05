@@ -10,8 +10,9 @@ A family = a class with `name` + `versions` (see core.data.split.Split). Add one
 from __future__ import annotations
 
 from core.data.splits.static_main import StaticMain
+from core.data.splits.synth_main import SynthMain
 
-_FAMILIES = {c.name: c for c in (StaticMain,)}
+_FAMILIES = {c.name: c for c in (StaticMain, SynthMain)}
 
 
 def load_split(name: str):
