@@ -57,13 +57,19 @@ class StaticSource:
     def ids_hash(self) -> str:
         return ids_hash(self.subjects())
 
-    def materialize(self, size: int, device: str):
-        """Resident training tensors (X [N,1,H,W], Y [N,H,W], force_synth=None) — real slices from the
-        selected npz. The seam the training engine consumes; DynamicSource returns the same triple with
-        force_synth set. `force_synth=None` = pure real (never painted)."""
+    def resident(self, size: int, device: str):
+        """Raw resident (X [N,1,H,W], Y [N,H,W]) — real slices, no transforms. Used for val/test scoring
+        and as a train_gen's seed."""
         from core.data.dynamic.dataset import load_to_gpu
-        X, Y = load_to_gpu(self.paths(), size, device)
-        return X, Y, None
+        return load_to_gpu(self.paths(), size, device)
+
+    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+        """The source's own batch engine (owns its resident tensors + transform chain). Static = real
+        pixels + the configured aug/DR-synth (gen_cfg.synth as-is: synth_p>0 -> physics-recontrast DR on
+        real labels; the flagship recipe). No force_synth (real rows are never fully replaced)."""
+        from core.data.dynamic.generator import Generator
+        X, Y = self.resident(size, device)
+        return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None)
 
     def __len__(self) -> int:
         return self._f.height

@@ -30,21 +30,29 @@ class DynamicSource:
         self.seed = seed
         self._note = note
 
-    def materialize(self, size: int, device: str):
-        """(X [N,1,H,W], Y [N,H,W], force_synth [N] bool). Zero-input: N = pool size, X = zeros, all
-        force. Seeded: real (from seed) ++ synth-anatomy rows, force only the synth ones."""
+    def _resident(self, size: int, device: str):
+        """(X, Y, force_synth) resident tensors for this source's Generator. Zero-input: N = pool size,
+        X = zeros, all force. Seeded: seed's real ++ synth-anatomy rows, force only the synth ones."""
         import torch
         from core.data.dynamic.anatomy import load_pool
         Ys = torch.as_tensor(load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
         Xsy = torch.zeros((Ys.shape[0], 1, size, size), device=device)                 # no real pixels
         if self.seed is None:                                                          # zero real input
-            fs = torch.ones(Ys.shape[0], dtype=torch.bool, device=device)
-            return Xsy, Ys, fs
-        Xr, Yr, _ = self.seed.materialize(size, device)                                # composite: real ++ synth
+            return Xsy, Ys, torch.ones(Ys.shape[0], dtype=torch.bool, device=device)
+        Xr, Yr = self.seed.resident(size, device)                                      # composite: real ++ synth
         X = torch.cat([Xr, Xsy]); Y = torch.cat([Yr, Ys])
         fs = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=device),
                         torch.ones(Ys.shape[0], dtype=torch.bool, device=device)])
         return X, Y, fs
+
+    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+        """The source's own batch engine. The painter (bg_mode) + synth fraction ride on a COPY of the
+        generator cfg — no global mutation. force_synth is internal (never in the public interface)."""
+        from core.data.dynamic.generator import Generator
+        X, Y, fs = self._resident(size, device)
+        synth = gen_cfg.synth.model_copy(update={"bg_mode": self.bg_mode, "synth_p": self.synth_p})
+        cfg = gen_cfg.model_copy(update={"synth": synth})
+        return Generator(cfg, X, Y, n_classes, device, force_synth=fs)
 
     def provenance(self) -> dict:
         return {"kind": self.kind, "pool": self.pool, "bg_mode": self.bg_mode, "synth_p": self.synth_p,

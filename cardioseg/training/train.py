@@ -103,62 +103,49 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
     with timed(log, f"preload slices (residency={cfg.residency}->{data_device})"):
         import torch as _t
-        force_synth = None
-        if train_src is not None:                    # NEW-STYLE: sources -> materialize seam (real/synth
-            # uniform, no if). A DynamicSource carries the painter strategy (bg_mode) + synth fraction —
-            # apply to the generator cfg before the engine is built.
-            if train_src.kind == "dynamic":
-                cfg.generator.synth.bg_mode = train_src.bg_mode
-                cfg.generator.synth.synth_p = train_src.synth_p
-            Xtr, Ytr, force_synth = train_src.materialize(d.size, data_device)
-            Xva, Yva, _ = val_src.materialize(d.size, data_device)
-            log.info("SOURCES train=%s val=%s | %d train / %d val slices",
-                     train_src.kind, val_src.kind, Xtr.shape[0], Xva.shape[0])
-        elif d.anatomy_pool:
-            # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
-            from core.data.dynamic.anatomy import load_pool
-            pool = load_pool(d.anatomy_pool)
-            Ys = _t.as_tensor(pool, dtype=_t.long, device=data_device)                # [N,H,W] Rodero labels
-            if d.anatomy_mode == "mix":
-                # AUGMENTATION (bd pwih): REAL train + synth-anatomy UNION. Real rows keep their pixels
-                # (repainted only with prob synth_p); synth-anatomy rows (zeros img) are FORCE-painted every
-                # batch via force_synth. Tests whether synth ADDED to real beats real-alone (~0.854).
-                Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-                Xsy = _t.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
-                Xtr = _t.cat([Xr, Xsy]); Ytr = _t.cat([Yr, Ys])
-                force_synth = _t.cat([_t.zeros(Xr.shape[0], dtype=_t.bool, device=data_device),
-                                      _t.ones(Ys.shape[0], dtype=_t.bool, device=data_device)])
-                log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s, synth_p=%.2f real repaint)",
-                         Xr.shape[0], Ys.shape[0], cfg.generator.synth.bg_mode, cfg.generator.synth.synth_p)
-            else:                                                            # "replace": synth anatomy ONLY
-                Ytr = Ys
-                cfg.generator.synth.synth_p = 1.0
-                if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
-                    # ZERO-REAL goalpost: no real image at all. flat = single bg tissue; procedural =
-                    # synthetic random-field organ blobs (whole-FOV bg, kills the flat-bg 0.07 wall, bwp);
-                    # mrxcat = the pool IS a whole-FOV tissue map, FovBg paints organs directly (q4ww).
-                    Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)
-                    log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0],
-                             cfg.generator.synth.bg_mode)
-                else:
-                    # DIAGNOSTIC: Rodero heart on REAL bg (partition/hybrid) — isolates the anatomy axis.
-                    # The real image's OWN heart MUST be excised first, else it survives unlabeled next to
-                    # the pasted Rodero heart (a phantom second heart) — bd mirs.
-                    from core.data.dynamic.synth import excise_heart
-                    Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-                    Xr = excise_heart(Xr, Yr)                                # heart-free real backgrounds
-                    Xtr = Xr[_t.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                    log.info("ANATOMY POOL: %d Rodero slices on REAL bg (heart-excised, %s)", Ytr.shape[0],
-                             cfg.generator.synth.bg_mode)
+        if train_src is not None:
+            # NEW: each Source OWNS its batch engine (train_gen). No static/dynamic if, no force_synth in
+            # the interface, no bg_mode poke — StaticSource = real + DR-aug, DynamicSource = synth painter.
+            gen = train_src.train_gen(d.size, data_device, cfg.generator, cfg.model.out_channels)
+            Xva, Yva = val_src.resident(d.size, data_device)
         else:
-            Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-        if train_src is None:                        # old-style val load (new-style did it via source)
+            # LEGACY criteria path: build resident tensors (+ inline anatomy) and the shared Generator.
+            force_synth = None
+            if d.anatomy_pool:
+                # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
+                from core.data.dynamic.anatomy import load_pool
+                Ys = _t.as_tensor(load_pool(d.anatomy_pool), dtype=_t.long, device=data_device)  # [N,H,W]
+                if d.anatomy_mode == "mix":
+                    # AUGMENTATION (bd pwih): REAL train + synth-anatomy UNION; synth rows force-painted.
+                    Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                    Xsy = _t.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
+                    Xtr = _t.cat([Xr, Xsy]); Ytr = _t.cat([Yr, Ys])
+                    force_synth = _t.cat([_t.zeros(Xr.shape[0], dtype=_t.bool, device=data_device),
+                                          _t.ones(Ys.shape[0], dtype=_t.bool, device=data_device)])
+                    log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
+                             cfg.generator.synth.bg_mode)
+                else:                                                        # "replace": synth anatomy ONLY
+                    Ytr = Ys
+                    cfg.generator.synth.synth_p = 1.0
+                    if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
+                        Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
+                        log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0],
+                                 cfg.generator.synth.bg_mode)
+                    else:                                                    # Rodero heart on real bg (excised)
+                        from core.data.dynamic.synth import excise_heart
+                        Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                        Xr = excise_heart(Xr, Yr)
+                        Xtr = Xr[_t.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
+                        log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0],
+                                 cfg.generator.synth.bg_mode)
+            else:
+                Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
             Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
-    # the data engine: yields collapsed batches (real / synth / mixed by cfg.generator.synth)
-    gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
-    nb = max(1, Xtr.shape[0] // cfg.batch)
-    log.info("slices: %d train / %d val / %d test-subj (resident on %s, compute %s)",
-             Xtr.shape[0], Xva.shape[0], len(test_df), data_device, device)
+            gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
+    nb = max(1, gen.X.shape[0] // cfg.batch)
+    log.info("engine train=%s | slices: %d train / %d val / %d test-subj (resident %s, compute %s)",
+             (train_src.kind if train_src else "legacy"), gen.X.shape[0], Xva.shape[0], len(test_df),
+             data_device, device)
     model = build_unet(cfg.model).to(device)
     # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
     # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
@@ -174,7 +161,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
     best_dice, best_state, bad = -1.0, None, 0   # nb (batches/epoch) computed above from the resident set
     # n_train in slices when the train source is dynamic (no patient frame); else patient rows.
-    n_train = Xtr.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
+    n_train = gen.X.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
     split_tag = d.split or ("+".join(d.test_vendors) or "legacy")
     trk = track_run("cardioseg", out.name, run_dir=out,
                     params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
@@ -186,7 +173,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
         if hasattr(loss_fn, "epoch"):
             loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
         tot = 0.0
-        perm = torch.randperm(Xtr.shape[0], device=Xtr.device)   # shuffle on the data's device
+        perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
         for bi in progress(range(nb), f"epoch {ep}", total=nb):
             idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
             x, yt = gen.batch(idx, pin)                         # collapsed batch (real/synth/mixed)

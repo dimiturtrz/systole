@@ -60,40 +60,50 @@ def test_latest_picks_highest_semver():
     assert _latest({"1.0.0": None, "1.10.0": None, "1.2.0": None}) == "1.10.0"
 
 
-def test_static_source_materialize_is_pure_real(monkeypatch):
+def test_static_source_resident_is_raw_real(monkeypatch):
     import torch
-    from core.data import source as src_mod
     monkeypatch.setattr("core.data.dynamic.dataset.load_to_gpu",
                         lambda paths, size, device: (torch.zeros(len(paths), 1, size, size), torch.zeros(len(paths), size, size)))
-    s = StaticSource(_cloud().filter(V("labelled")))
-    X, Y, fs = s.materialize(8, "cpu")
-    assert X.shape == (4, 1, 8, 8) and Y.shape == (4, 8, 8) and fs is None    # pure real, never painted
+    X, Y = StaticSource(_cloud().filter(V("labelled"))).resident(8, "cpu")
+    assert X.shape == (4, 1, 8, 8) and Y.shape == (4, 8, 8)     # raw real, no transforms
 
 
-def test_dynamic_source_zero_input_force_paints_all(monkeypatch):
+def test_dynamic_resident_zero_input_force_paints_all(monkeypatch):
     import numpy as np, torch
     from core.data.dynamic.source import DynamicSource
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
-    X, Y, fs = DynamicSource(pool="p").materialize(8, "cpu")
+    X, Y, fs = DynamicSource(pool="p")._resident(8, "cpu")
     assert X.shape == (5, 1, 8, 8) and (X == 0).all()          # no real pixels
-    assert Y.shape == (5, 8, 8)
     assert fs.dtype == torch.bool and bool(fs.all())           # every row force-painted
 
 
-def test_dynamic_source_seeded_is_composite(monkeypatch):
+def test_dynamic_resident_seeded_is_composite(monkeypatch):
     import numpy as np, torch
     from core.data.dynamic.source import DynamicSource
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
 
-    class _Seed:                                               # 2 real rows
-        def materialize(self, size, device):
-            return torch.ones(2, 1, size, size), torch.ones(2, size, size, dtype=torch.long), None
-        def provenance(self): return {"kind": "static", "n": 2}
+    class _Seed:                                               # 2 real rows, exposes resident() (no materialize)
+        def resident(self, size, device):
+            return torch.ones(2, 1, size, size), torch.ones(2, size, size, dtype=torch.long)
 
-    X, Y, fs = DynamicSource(pool="p", seed=_Seed()).materialize(8, "cpu")
-    assert X.shape == (5, 1, 8, 8) and Y.shape == (5, 8, 8)    # 2 real ++ 3 synth
-    assert fs.tolist() == [False, False, True, True, True]     # only synth rows forced
+    X, Y, fs = DynamicSource(pool="p", seed=_Seed())._resident(8, "cpu")
+    assert X.shape == (5, 1, 8, 8) and fs.tolist() == [False, False, True, True, True]  # only synth forced
     assert (X[:2] == 1).all() and (X[2:] == 0).all()          # real pixels kept, synth zeroed
+
+
+def test_dynamic_train_gen_no_global_mutation(monkeypatch):
+    """The refactor's whole point: a DynamicSource configures its OWN engine via a cfg COPY — it must
+    NOT mutate the passed generator cfg (the old bg_mode/synth_p poke)."""
+    import numpy as np
+    from core.data.dynamic.source import DynamicSource
+    from core.data.dynamic.generator import GeneratorCfg
+    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
+    cfg = GeneratorCfg()
+    orig_bg = cfg.synth.bg_mode
+    gen = DynamicSource(pool="p", bg_mode="procedural", synth_p=1.0).train_gen(8, "cpu", cfg, 4)
+    assert cfg.synth.bg_mode == orig_bg                        # passed cfg UNTOUCHED (no poke)
+    assert gen.cfg.synth.bg_mode == "procedural"               # engine got the override on its copy
+    assert bool(gen.force_synth.all())                         # zero-input -> all rows force-painted
 
 
 def test_static_main_registered_with_locked_testset():
