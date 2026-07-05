@@ -16,6 +16,12 @@ import csv
 from pathlib import Path
 
 
+# Provenance is dataset knowledge -> it lives in the adapter (the PROCESS layer), not the raw data.
+# DSB 2015 was compiled by NIH + Children's National, scanned in the Washington DC area.
+CENTRE = "Children's National Medical Center / NIH"
+COUNTRY = "USA"
+
+
 def _base(root: str | Path | None = None) -> Path:
     from core.config import data_root
     return Path(root) if root else Path(data_root("raw")) / "kaggle_dsb2015"
@@ -69,3 +75,39 @@ def load_sax(case: str | Path) -> list[tuple]:
             continue
     rows.sort(key=lambda t: t[3])
     return [(v, s, m) for v, s, m, _ in rows]
+
+
+def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
+    """Per-case metadata: location constants (adapter = process layer) + real vendor/scanner/acquisition
+    from a sample SAX DICOM + the EF target. NB Kaggle is MIXED sequences (segmented cine/GRE) -> its TR
+    is NOT the ~3ms per-frame bSSFP TR; captured as-recorded, but the bSSFP acquisition reference filters
+    it (store.fit_acquisition_reference)."""
+    from core.data.static.mri.dicom import read_image
+    from core.data.static.store import _norm_vendor
+    case = Path(case)
+    m = {"centre": CENTRE, "country": COUNTRY}
+    sd = next(iter((case / "study").glob("sax_*")), None)
+    dcm = next(iter(sd.glob("*.dcm")), None) if sd else None
+    if dcm is not None:
+        _, _, d = read_image(dcm)
+        m.update(vendor=_norm_vendor(d.get("vendor")), scanner=d.get("scanner"), field_T=d.get("field_T"),
+                 tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
+                 institution=d.get("institution"))
+    if ef_targets and (t := ef_targets.get(case.name)):
+        m.update(t)                                          # edv, esv, ef
+    return m
+
+
+def build_kaggle_meta(split: str, root: str | Path | None = None) -> Path:
+    """Extract Kaggle's per-case metadata to processed/kaggle/<split>/meta.csv (location + vendor/scanner/
+    acquisition + EF target). NO image npz — Kaggle is EF-at-scale, images stay pristine in raw and are
+    read on demand (load_sax). This meta.csv makes Kaggle's location/vendor/acquisition part of the data
+    cloud (fit_acquisition_reference reads the tr_ms column, bSSFP-filtered)."""
+    import polars as pl
+    from core.config import data_root
+    ef = kaggle_ef(split, root)
+    rows = [{"subject_id": c.name, "dataset": "kaggle", **kaggle_meta(c, ef)} for c in kaggle_cases(split, root)]
+    out = Path(data_root("processed")) / "kaggle" / split
+    out.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(rows, strict=False).write_csv(out / "meta.csv")
+    return out / "meta.csv"

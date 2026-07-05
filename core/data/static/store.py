@@ -201,7 +201,11 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     df = pl.concat(metas, how="diagonal")
     if "tr_ms" not in df.columns:
         return {}
-    real = df.filter(pl.col("tr_ms").is_not_null() & pl.col("vendor").is_not_null())
+    # bSSFP-TR sanity gate: cine bSSFP TR is ~2.7-6 ms (mriquestions). Mixed-sequence DICOM (Kaggle:
+    # segmented cine / GRE, TR ~39 ms) must NOT feed the bSSFP-derivation override — filter it out.
+    tr = pl.col("tr_ms").cast(pl.Float64, strict=False)
+    real = df.filter(pl.col("tr_ms").is_not_null() & pl.col("vendor").is_not_null()
+                     & (tr >= 2.0) & (tr <= 6.0))
     # normalize field to a float so "1.5" and "1.500000" (DICOM formatting) are ONE group, not two
     real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
     acq: dict[str, dict] = {}
