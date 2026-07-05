@@ -73,10 +73,19 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     with timed(log, "store.load + split"):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
-        train_df, val_df, test_df, missing = splits.split_from_cfg(d, meta, cfg.seed)
-        if missing:                                 # frozen test ids absent from the store (drift)
-            log.warning("test-manifest drift: %d frozen subject(s) missing from store: %s",
-                        len(missing), missing[:8])
+        if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
+            from core.data.splits import load_split
+            from core.data.split import resolve
+            name, ver = (d.split.split("@", 1) + [None])[:2]
+            r = resolve(load_split(name), meta, ver)
+            train_df, val_df, test_df = r.train.frame, r.val.frame, r.test.frame
+            log.info("split=%s@%s test_hash=%s | %d/%d/%d train/val/test",
+                     name, r.version, r.test_hash[:19], len(train_df), len(val_df), len(test_df))
+        else:
+            train_df, val_df, test_df, missing = splits.split_from_cfg(d, meta, cfg.seed)
+            if missing:                             # frozen test ids absent from the store (drift)
+                log.warning("test-manifest drift: %d frozen subject(s) missing from store: %s",
+                            len(missing), missing[:8])
     if cfg.n_patients:                          # debug cap
         train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
         test_df = test_df.head(cfg.n_patients)
@@ -261,8 +270,8 @@ if __name__ == "__main__":
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--split", default=None,
-                    help="named split preset (splits.SPLITS), e.g. 'xvendor' / 'synth_to_real'; "
-                         "sets generator.data before --set overrides")
+                    help="coded-filter family 'name[@ver]' (core.data.splits, e.g. static_main) OR an "
+                         "old DataCfg preset (splits.SPLITS, e.g. xvendor); sets the split before --set")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--alias", default=None,
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")
@@ -273,9 +282,14 @@ if __name__ == "__main__":
     a = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.split:                                      # named preset -> the split's DataCfg (pre --set)
-        from core.data.static.splits import named_split
-        cfg.generator.data = named_split(a.split)
+    if a.split:                                      # coded-filter family (new) OR DataCfg preset (old)
+        from core.data.splits import list_splits
+        name = a.split.split("@", 1)[0]
+        if name in list_splits():                    # new-style: family owns the partition
+            cfg.generator.data.split = a.split
+        else:                                        # old preset -> the split's DataCfg (pre --set)
+            from core.data.static.splits import named_split
+            cfg.generator.data = named_split(a.split)
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients"):
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))

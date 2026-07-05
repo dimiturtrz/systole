@@ -50,6 +50,10 @@ class DataCfg(BaseModel):
     # (core.data.static.manifest): the test set is pinned + comparable across store growth. When empty,
     # fall back to LIVE criteria (test_datasets / test_vendors), recomputed over the current cloud — the
     # original behaviour, kept for ad-hoc runs. Named splits (splits.SPLITS) set test_manifests.
+    # NEW-STYLE split: a coded-filter family@version (core.data.splits). When set, it OWNS the
+    # train/val/test partition (via core.data.split.resolve) and the criteria below are ignored — the
+    # split is code, not criteria. Recorded to config.json for lineage. Empty -> old criteria path.
+    split: str = ""
     test_manifests: tuple[str, ...] = ()
     test_datasets: tuple[str, ...] = ("cmrxmotion",)
     test_vendors: tuple[str, ...] = ("Canon", "GE")

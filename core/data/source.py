@@ -42,6 +42,11 @@ class StaticSource:
         self._f = frame
         self._note = note
 
+    @property
+    def frame(self) -> pl.DataFrame:
+        """The selected rows — for consumers that still work on the polars frame (preload, counts)."""
+        return self._f
+
     def paths(self) -> list[str]:
         return self._f.get_column("path").to_list()
 
