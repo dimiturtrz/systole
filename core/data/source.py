@@ -57,6 +57,14 @@ class StaticSource:
     def ids_hash(self) -> str:
         return ids_hash(self.subjects())
 
+    def materialize(self, size: int, device: str):
+        """Resident training tensors (X [N,1,H,W], Y [N,H,W], force_synth=None) — real slices from the
+        selected npz. The seam the training engine consumes; DynamicSource returns the same triple with
+        force_synth set. `force_synth=None` = pure real (never painted)."""
+        from core.data.dynamic.dataset import load_to_gpu
+        X, Y = load_to_gpu(self.paths(), size, device)
+        return X, Y, None
+
     def __len__(self) -> int:
         return self._f.height
 
