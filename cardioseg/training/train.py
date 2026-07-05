@@ -65,8 +65,9 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     np.random.seed(cfg.seed)                    # augmentation uses global np.random
     device = resolve_device(cfg.device)
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
-    log.info("device=%s torch=%s seed=%s | held out: datasets=%s vendors=%s", device,
-             torch.__version__, cfg.seed, list(d.test_datasets), list(d.test_vendors))
+    log.info("device=%s torch=%s seed=%s | TEST: manifests=%s | datasets=%s vendors=%s", device,
+             torch.__version__, cfg.seed, list(d.test_manifests), list(d.test_datasets),
+             list(d.test_vendors))
 
     # split = criteria over the consolidated store (builds processed/<ds>/ if missing)
     with timed(log, "store.load + split"):
