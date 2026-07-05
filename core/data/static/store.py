@@ -34,10 +34,11 @@ from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 
 class DataCfg(BaseModel):
-    """The data + the split, as criteria over the cloud (no named splits). Load `sources`; hold out
-    everything matching `test_datasets` (whole dataset) OR `test_vendors` (by vendor); train/val =
-    the rest, labelled. The criteria ARE the split — serialized to config.json. Defaults = the
-    generalization split (ACDC centre-shift + Canon unseen-vendor)."""
+    """The data + the split. Load `sources`; TEST = frozen manifests (`test_manifests`, preferred —
+    comparable across store growth) or live criteria (`test_datasets`/`test_vendors`); train/val =
+    the labelled rest. Serialized to config.json (the run self-documents its split). Named presets
+    live in splits.SPLITS (`--split xvendor`); defaults = the generalization split (ACDC centre-shift
+    VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
     # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
@@ -45,6 +46,11 @@ class DataCfg(BaseModel):
     # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
     # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
     # at test. TRAIN = the rest (Siemens + Philips).
+    # TEST source, two mutually-exclusive modes. test_manifests (preferred) = FROZEN manifests by name
+    # (core.data.static.manifest): the test set is pinned + comparable across store growth. When empty,
+    # fall back to LIVE criteria (test_datasets / test_vendors), recomputed over the current cloud — the
+    # original behaviour, kept for ad-hoc runs. Named splits (splits.SPLITS) set test_manifests.
+    test_manifests: tuple[str, ...] = ()
     test_datasets: tuple[str, ...] = ("cmrxmotion",)
     test_vendors: tuple[str, ...] = ("Canon", "GE")
     val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)

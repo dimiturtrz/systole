@@ -72,9 +72,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     with timed(log, "store.load + split"):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
-        train_df, val_df, test_df = splits.make_split(
-            meta, d.test_datasets, d.test_vendors, d.val_frac, cfg.seed,
-            val_datasets=d.val_datasets, val_vendors=d.val_vendors, train_vendors=d.train_vendors)
+        train_df, val_df, test_df, missing = splits.split_from_cfg(d, meta, cfg.seed)
+        if missing:                                 # frozen test ids absent from the store (drift)
+            log.warning("test-manifest drift: %d frozen subject(s) missing from store: %s",
+                        len(missing), missing[:8])
     if cfg.n_patients:                          # debug cap
         train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
         test_df = test_df.head(cfg.n_patients)
@@ -258,6 +259,9 @@ if __name__ == "__main__":
     ap.add_argument("--epochs", type=int); ap.add_argument("--batch", type=int)
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
+    ap.add_argument("--split", default=None,
+                    help="named split preset (splits.SPLITS), e.g. 'xvendor' / 'synth_to_real'; "
+                         "sets generator.data before --set overrides")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--alias", default=None,
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")
@@ -268,6 +272,9 @@ if __name__ == "__main__":
     a = ap.parse_args()
 
     cfg = TrainCfg()
+    if a.split:                                      # named preset -> the split's DataCfg (pre --set)
+        from core.data.static.splits import named_split
+        cfg.generator.data = named_split(a.split)
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients"):
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))
