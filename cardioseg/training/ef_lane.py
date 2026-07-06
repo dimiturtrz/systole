@@ -22,7 +22,7 @@ def _stack(vol, size: int, device: str) -> torch.Tensor:
     return torch.stack(slices)[:, None].to(device)
 
 
-def volume_loss_batch(model, npz_paths, size: int, device: str, delta: float = 10.0,
+def volume_loss_batch(model, npz_paths, size: int, device: str, delta: float = 0.1,
                       amp: bool = True) -> torch.Tensor | None:
     """Mean volume-consistency loss over the given labeled subjects (GT-derived EDV/ESV targets).
     Grad-enabled per-patient forward. Skips subjects missing ED/ES or with no cavity. None if empty."""

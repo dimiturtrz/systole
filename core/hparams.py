@@ -83,8 +83,9 @@ class TrainCfg(BaseModel):
     n_patients: int = Field(0, ge=0)               # debug cap (0 = all)
     # EF/volume-consistency auxiliary lane: after warmup, each epoch adds `ef_lambda`·vol_loss (soft
     # EDV/ESV vs GT, over `ef_subjects` sampled subjects) INTO one seg gradient step — a NUDGE, not a
-    # co-equal vote: seg is dense per-pixel signal, EF is 2 scalars/patient, so ef_lambda is tiny
-    # (~1e-3). ef_warmup lets seg establish first (like the HD/HER aux losses). 0 = off. (ef_lane)
+    # co-equal vote (seg is dense signal, EF is 2 scalars/patient). vol_loss is DIMENSIONLESS (relative
+    # to EDV_gt) so ef_lambda is O(1) + scale-robust, not a unit-coupled magic number. ef_warmup lets
+    # seg establish first (like the HD/HER aux losses). 0 = off. (cardioseg.training.ef_lane)
     ef_lambda: float = Field(0.0, ge=0)
     ef_warmup: int = Field(4, ge=0)
     ef_subjects: int = Field(16, ge=1)

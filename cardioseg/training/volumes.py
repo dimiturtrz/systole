@@ -30,11 +30,14 @@ def soft_ef(ed_probs: torch.Tensor, es_probs: torch.Tensor, spacing, lv_label: i
 
 
 def vol_loss(edv_pred: torch.Tensor, esv_pred: torch.Tensor, edv_gt: float, esv_gt: float,
-             delta: float = 10.0) -> torch.Tensor:
-    """Volume-consistency loss (mL) — Huber(EDV_pred, EDV_gt) + Huber(ESV_pred, ESV_gt). Huber (not L1/
-    L2) is robust to the odd mis-scaled patient. Supervises LV-cav VOLUME directly — the quantity EF
-    depends on — so it attacks the EF bias (ES cavity over-fill) that per-pixel Dice is blind to."""
+             delta: float = 0.1) -> torch.Tensor:
+    """DIMENSIONLESS volume-consistency loss — both volumes normalized by the (stable, >0) GT EDV, so
+    the mL scale cancels: spacing / heart-size / dataset invariant, and ~the same magnitude as Dice+CE
+    (so its weight is O(1), not a unit-coupled magic number). Huber (robust to the odd mis-scaled
+    patient); `delta` is now in RELATIVE units (0.1 = a 10% volume error is the L2/L1 knee). Normalizing
+    both by EDV_gt (not each by its own GT) avoids a blow-up when ESV_gt -> 0, and matches EF's own
+    framing (EF = 1 - ESV/EDV). Supervises LV-cav VOLUME — what EF depends on, which per-pixel Dice is
+    blind to."""
     import torch.nn.functional as F
-    p = torch.stack([edv_pred, esv_pred])
-    g = p.new_tensor([edv_gt, esv_gt])
-    return F.huber_loss(p, g, delta=delta)
+    r = torch.stack([edv_pred, esv_pred]) / edv_gt                 # dimensionless (target 1, ESV_gt/EDV_gt)
+    return F.huber_loss(r, r.new_tensor([1.0, esv_gt / edv_gt]), delta=delta)
