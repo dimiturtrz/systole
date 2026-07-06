@@ -20,8 +20,9 @@ from pydantic import BaseModel, Field
 from core.config import _VALIDATE
 from core.data.static.store import DataCfg
 
-from .augment import AugCfg, augment_batch, soften
-from .synth import SynthCfg, synthesize_from_labels
+from .augment import AugCfg
+from .synth import SynthCfg
+from .pipeline import Batch, build_pipeline
 
 
 class GeneratorCfg(BaseModel):
@@ -45,33 +46,25 @@ class Generator:
                  n_classes: int, device: str, force_synth: torch.Tensor | None = None):
         self.cfg = cfg
         self.X, self.Y = X, Y
-        self.n_classes = n_classes
         self.device = device
         # force_synth [N] bool: rows that MUST be painted synthetic every batch (e.g. synth-anatomy masks
         # with no real pixels), aligned to X/Y. Real rows still repaint with prob synth_p. (bd pwih)
         self.force_synth = force_synth
-        self.synth_on = cfg.synth.synth_p > 0 or (force_synth is not None and bool(force_synth.any()))
-        self.soft_sigma = cfg.aug.soft_label_sigma
-        # Contrast is physical (bSSFP from tissue params, core.data.static.mri_physics) — no measured priors
-        # needed. The background partition pulls its SHAPES from the real slice (real_img) at batch time.
+        # The transform recipe: synth-replace -> augment -> soften. A composable op list, not an
+        # if-ladder — sweepable (physically-constrained diversity), and each op is unit-testable.
+        self.pipeline = build_pipeline(cfg, n_classes)
+
+    @property
+    def synth_on(self) -> bool:
+        """Whether synth painting can fire this Generator (synth_p>0, or any forced-synth row)."""
+        return self.cfg.synth.synth_p > 0 or (self.force_synth is not None and bool(self.force_synth.any()))
 
     def batch(self, idx: torch.Tensor, pin: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
-        """Collapsed batch for the given resident indices. Order: index real -> per-sample synth replace
-        (invent image+anatomy from labels) -> augment (geometry+intensity on real pixels) -> soften."""
-        x = self.X[idx].to(self.device, non_blocking=pin)            # [B,1,H,W] f32
-        y = self.Y[idx].to(self.device, non_blocking=pin).long()     # [B,H,W]
-        if self.synth_on:
-            # invent image+anatomy from labels for a per-sample fraction (synth_p=1 -> pure synth). With
-            # bg partition the synth target is the warped mask -> blend both x and y per sample. Paint
-            # BEFORE augment so affine geometry warps synth picture + mask together.
-            xs, ys = synthesize_from_labels(y, self.cfg.synth, self.n_classes, real_img=x)
-            pick = torch.rand(x.shape[0], device=self.device) < self.cfg.synth.synth_p
-            if self.force_synth is not None:                          # synth-anatomy rows: always paint
-                pick = pick | self.force_synth[idx].to(self.device)
-            do = pick.float()[:, None, None, None]
-            x = do * xs + (1 - do) * x
-            y = torch.where(do[:, 0, 0, 0].bool()[:, None, None], ys, y)
-        x, y = augment_batch(x, y, self.cfg.aug)                     # GPU-batched real-pixel aug
-        # soften AFTER augment (aug stays on the hard mask, nearest-interp) -> soft target last
-        yt = soften(y, self.soft_sigma, self.n_classes) if self.soft_sigma > 0 else y[:, None]
-        return x, yt
+        """Collapsed batch for the resident indices: build the Batch, run it through the pipeline
+        (index real -> synth replace -> augment -> soften), return (x, yt)."""
+        b = Batch(x=self.X[idx].to(self.device, non_blocking=pin),
+                  y=self.Y[idx].to(self.device, non_blocking=pin).long(),
+                  force=None if self.force_synth is None else self.force_synth[idx].to(self.device))
+        for t in self.pipeline:
+            b = t(b)
+        return b.x, b.yt
