@@ -4,9 +4,9 @@ Pure inference, no retrain: this is what the frozen TestSets buy. Any model, any
 comparable (an old model and a new one score on the SAME lock-frozen subjects). For each (model,
 testset) cell: resolve the model (registry) with its OWN preprocessing, resolve the TestSet to current
 npz paths (its lock guards drift), validate. A cell is OOD (the honest generalization number) when NONE
-of the test subjects were in the model's TRAIN — reconstructed from the model's saved config: a coded
-split family (new) or DataCfg criteria (old). A synth-trained model has NO real train subjects, so every
-real TestSet is OOD. Otherwise the cell is in-domain (a leak) and flagged, never mixed with OOD.
+of the test subjects were in the model's SEEN set (train ∪ val — a val subject IS seen) — reconstructed
+as a coded filter from the model's saved config: a coded split family (new) or DataCfg criteria (old).
+A synth-trained model's SEEN = its real val only. Otherwise the cell is in-domain (a leak) and flagged.
 
 Task per TestSet: seg4 -> all three classes; seg_lv (SCD, no RV in GT) -> myo+cav only.
 
@@ -30,11 +30,13 @@ def _key(df: pl.DataFrame) -> set[str]:
     return set((df["dataset"] + "\t" + df["subject_id"].cast(pl.Utf8)).to_list())
 
 
-def _train_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
-    """The model's TRAIN subject keys, for the leak/OOD flag. Restricted to the model's OWN `sources`
-    (a dataset it never loaded must not appear in its reconstructed train). None if unknowable.
-      - new coded split (cfg.data.split set): resolve it; a DYNAMIC train has no real subjects -> {}.
-      - old DataCfg criteria: split_from_cfg."""
+def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
+    """The real subjects the model SAW (train ∪ val) — the honest basis for the OOD/leak flag (a val
+    subject IS seen; early-stopping touched it). Restricted to the model's OWN `sources`. None if
+    unknowable. Reconstruction is a coded filter either way, no split_from_cfg:
+      - new coded split (cfg.data.split): resolve -> train (if static) ∪ val Sources. A DYNAMIC train
+        contributes no real subjects, so a synth-trained model's SEEN = its real val only.
+      - old criteria: SEEN = labelled ∩ sources − test (test_datasets/test_vendors)."""
     if cfg is None:
         return None
     d = cfg.generator.data
@@ -43,11 +45,13 @@ def _train_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
         from core.data.splits import load_split
         from core.data.split import resolve
         name, ver = (d.split.split("@", 1) + [None])[:2]
-        train = resolve(load_split(name), in_sources, ver).train
-        return _key(train.frame) if getattr(train, "kind", "static") == "static" else set()
-    from core.data.static.splits import split_from_cfg
-    train, _, _ = split_from_cfg(d, in_sources, seed=cfg.seed)
-    return _key(train)
+        r = resolve(load_split(name), in_sources, ver)
+        seen = set(r.val.subjects())                            # val is always a real StaticSource
+        if getattr(r.train, "kind", "static") == "static":
+            seen |= set(r.train.subjects())
+        return {f"{a}\t{b}" for a, b in seen}
+    test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
+    return _key(in_sources.filter(pl.col("labelled") & ~test))
 
 
 def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
@@ -69,11 +73,11 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
         meta = store.load(EVAL_SOURCES, inplane=(d.inplane if d else store.TARGET_INPLANE),
                           n4=(d.n4 if d else False), nyul=(d.nyul if d else False),
                           norm=(d.norm if d else "zscore"))
-        train_keys = _train_keys(cfg, meta)
+        seen = _seen_keys(cfg, meta)
         for ts in tsets:
             src = ts.source(meta)                        # lock-checked; raises on drift
             paths, subj = src.paths(), set(src.subjects())
-            ood = None if train_keys is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(train_keys)
+            ood = None if seen is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(seen)
             dice, ef_rows, _ = validate(model, paths, size, device, tta=tta)
             classes = _LV_ONLY if ts.task == "seg_lv" else tuple(dice)
             dmean = float(np.nanmean([dice[c] for c in classes]))
