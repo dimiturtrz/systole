@@ -1,0 +1,28 @@
+name: tests
+
+# Gate for the dev -> main flow: unit tests must pass on every PR (and on pushes to dev/main).
+# Enforced as a required status check via branch protection on main (merge blocked until green).
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    # no dataset on the runner -> point the data root at an empty POSIX dir so the data-gated tests
+    # skip cleanly (adapters glob an absent raw/ -> no subjects -> pytest.skip) instead of erroring on
+    # a missing paths.yaml. A plain POSIX path needs no Windows->mount translation, so resolve_data_root
+    # uses it as-is.
+    env:
+      CARDIAC_DATA: /tmp/cardiac-nodata
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
+      - name: Unit tests
+        run: uv run pytest tests/unit -q
