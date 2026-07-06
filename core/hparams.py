@@ -89,6 +89,10 @@ class TrainCfg(BaseModel):
     ef_lambda: float = Field(0.0, ge=0)
     ef_warmup: int = Field(4, ge=0)
     ef_subjects: int = Field(16, ge=1)
+    # ef_learn: retire the hand-set ef_lambda — LEARN the seg-vs-EF balance via Kendall uncertainty
+    # weighting (2 log-variances trained with the model). Self-balancing, no magic weight. Needs
+    # ef_lambda>0 only as the on-switch (its value is ignored when ef_learn=True).
+    ef_learn: bool = False
     device: Optional[str] = None
     out_dir: Optional[str] = None
     # Where the preloaded slice tensors live during training — the speed/capacity tradeoff

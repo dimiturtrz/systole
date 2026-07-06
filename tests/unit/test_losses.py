@@ -53,3 +53,12 @@ def test_per_sample_mask_mixes_full_and_partial():
     valid = torch.cat([FULL, SCD])                                  # sample 0 full, sample 1 LV-only
     out = PartialLabelDiceCE()(logits, y, valid=valid)
     assert out.dim() == 0 and torch.isfinite(out)
+
+
+def test_uncertainty_weighted_matches_kendall_formula():
+    from cardioseg.training.losses import uncertainty_weighted
+    L1, L2 = torch.tensor(2.0), torch.tensor(4.0)
+    s1, s2 = torch.tensor(0.5), torch.tensor(-0.3)
+    got = uncertainty_weighted([L1, L2], [s1, s2])
+    want = torch.exp(-s1) * L1 + s1 + torch.exp(-s2) * L2 + s2
+    assert torch.allclose(got, want)

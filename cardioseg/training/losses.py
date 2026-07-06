@@ -182,6 +182,16 @@ class PartialLabelDiceCE:
         return self.ld * dice_loss + self.lce * ce
 
 
+def uncertainty_weighted(loss_terms, log_vars):
+    """Kendall (2018) homoscedastic-uncertainty weighting: Σ exp(-s_i)·L_i + s_i, with s_i = log σ_i²
+    LEARNABLE. The net auto-balances the tasks (lower s_i -> higher weight on L_i); the +s_i penalty
+    stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
+    scale-free (paired with the dimensionless vol_loss). Pass the learnable log-vars as parameters in
+    the optimizer."""
+    import torch
+    return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars))
+
+
 def build_loss(cfg: LossCfg | None = None):
     """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
     an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""

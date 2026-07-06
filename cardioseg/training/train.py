@@ -166,6 +166,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     else:
         loss_fn = build_loss(cfg.loss)
     opt = torch.optim.Adam(model.parameters(), cfg.lr)
+    # Kendall learned seg-vs-EF balance (ef_learn): two log-variances trained alongside the model.
+    log_sig = torch.zeros(2, device=device, requires_grad=True) if (cfg.ef_lambda > 0 and cfg.ef_learn) else None
+    if log_sig is not None:
+        opt.add_param_group({"params": [log_sig]})
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
@@ -205,9 +209,17 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
                 opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", enabled=pin):
                     seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
-                scaler.scale(seg + cfg.ef_lambda * vl).backward()      # joint: seg dominant, EF nudge
+                if log_sig is not None:                                # learned Kendall balance
+                    from .losses import uncertainty_weighted
+                    loss_j = uncertainty_weighted([seg, vl], [log_sig[0], log_sig[1]])
+                else:                                                  # fixed nudge (seg dominant)
+                    loss_j = seg + cfg.ef_lambda * vl
+                scaler.scale(loss_j).backward()
                 scaler.step(opt)
                 scaler.update()
+                if log_sig is not None:
+                    log.info("ef balance (learned): seg_w=%.3f vol_w=%.3f",
+                             float(torch.exp(-log_sig[0])), float(torch.exp(-log_sig[1])))
         vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
         improved = vd > best_dice + 1e-4
         if improved:
@@ -299,6 +311,8 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--ef-lambda", type=float, dest="ef_lambda",
                     help="weight of the EF/volume-consistency auxiliary lane (0 = off)")
+    ap.add_argument("--ef-learn", action="store_true", dest="ef_learn",
+                    help="LEARN the seg-vs-EF balance (Kendall) instead of the fixed ef_lambda")
     ap.add_argument("--split", default=None,
                     help="coded-filter split family 'name[@ver]' (core.data.ingest.splits, e.g. "
                          "static_main / synth_main); sets generator.data.split before --set overrides")
@@ -323,6 +337,8 @@ if __name__ == "__main__":
             setattr(cfg, attr, getattr(a, attr))
     if a.n4:
         cfg.generator.data.n4 = True
+    if a.ef_learn:
+        cfg.ef_learn = True
     if a.out:
         cfg.out_dir = a.out
     apply_overrides(cfg, a.overrides)
