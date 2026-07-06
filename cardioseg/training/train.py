@@ -272,8 +272,8 @@ if __name__ == "__main__":
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--split", default=None,
-                    help="coded-filter family 'name[@ver]' (core.data.ingest.splits, e.g. static_main) OR an "
-                         "old DataCfg preset (splits.SPLITS, e.g. xvendor); sets the split before --set")
+                    help="coded-filter split family 'name[@ver]' (core.data.ingest.splits, e.g. "
+                         "static_main / synth_main); sets generator.data.split before --set overrides")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--alias", default=None,
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")

@@ -36,9 +36,9 @@ from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 class DataCfg(BaseModel):
     """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
     Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
-    the labelled rest. Serialized to config.json (the run self-documents its split). Named presets
-    live in splits.SPLITS (`--split xvendor`); defaults = the generalization split (ACDC centre-shift
-    VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
+    the labelled rest. Serialized to config.json (the run self-documents its split). Prefer a coded
+    split family (`split` field, core.data.ingest.splits); these criteria defaults = the generalization
+    split (ACDC centre-shift VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
     # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
