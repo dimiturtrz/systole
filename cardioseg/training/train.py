@@ -194,6 +194,17 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
+        if cfg.ef_lambda > 0 and train_src is not None and train_src.kind == "static":
+            # EF/volume-consistency auxiliary lane: volume-batched pass over a sample of labeled subjects
+            from .ef_lane import volume_loss_batch
+            paths = splits.paths(train_df)
+            sub = [paths[i] for i in np.random.permutation(len(paths))[:cfg.ef_subjects]]
+            vl = volume_loss_batch(model, sub, d.size, device, amp=pin)
+            if vl is not None:
+                opt.zero_grad(set_to_none=True)
+                scaler.scale(cfg.ef_lambda * vl).backward()
+                scaler.step(opt)
+                scaler.update()
         vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
         improved = vd > best_dice + 1e-4
         if improved:
@@ -283,6 +294,8 @@ if __name__ == "__main__":
     ap.add_argument("--epochs", type=int); ap.add_argument("--batch", type=int)
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
+    ap.add_argument("--ef-lambda", type=float, dest="ef_lambda",
+                    help="weight of the EF/volume-consistency auxiliary lane (0 = off)")
     ap.add_argument("--split", default=None,
                     help="coded-filter split family 'name[@ver]' (core.data.ingest.splits, e.g. "
                          "static_main / synth_main); sets generator.data.split before --set overrides")
@@ -302,7 +315,7 @@ if __name__ == "__main__":
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
         cfg.generator.data.split = a.split
-    for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients"):
+    for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
         if getattr(a, attr) is not None:
             setattr(cfg, attr, getattr(a, attr))
     if a.n4:

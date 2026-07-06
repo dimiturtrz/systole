@@ -27,3 +27,14 @@ def soft_ef(ed_probs: torch.Tensor, es_probs: torch.Tensor, spacing, lv_label: i
     esv = soft_lv_volume(es_probs, spacing, lv_label)
     ef = (edv - esv) / edv * 100.0 if float(edv) > 0 else edv.new_tensor(float("nan"))
     return ef, edv, esv
+
+
+def vol_loss(edv_pred: torch.Tensor, esv_pred: torch.Tensor, edv_gt: float, esv_gt: float,
+             delta: float = 10.0) -> torch.Tensor:
+    """Volume-consistency loss (mL) — Huber(EDV_pred, EDV_gt) + Huber(ESV_pred, ESV_gt). Huber (not L1/
+    L2) is robust to the odd mis-scaled patient. Supervises LV-cav VOLUME directly — the quantity EF
+    depends on — so it attacks the EF bias (ES cavity over-fill) that per-pixel Dice is blind to."""
+    import torch.nn.functional as F
+    p = torch.stack([edv_pred, esv_pred])
+    g = p.new_tensor([edv_gt, esv_gt])
+    return F.huber_loss(p, g, delta=delta)

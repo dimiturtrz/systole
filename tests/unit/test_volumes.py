@@ -34,3 +34,9 @@ def test_soft_volume_is_differentiable():
     logits = torch.randn(3, 4, 8, 8, requires_grad=True)
     soft_lv_volume(logits.softmax(1), SP).backward()
     assert logits.grad is not None and float(logits.grad.abs().sum()) > 0
+
+
+def test_vol_loss_zero_when_exact_and_positive_on_mismatch():
+    from cardioseg.training.volumes import vol_loss
+    assert float(vol_loss(torch.tensor(120.0), torch.tensor(50.0), 120.0, 50.0)) == 0.0
+    assert float(vol_loss(torch.tensor(120.0), torch.tensor(50.0), 100.0, 50.0)) > 0
