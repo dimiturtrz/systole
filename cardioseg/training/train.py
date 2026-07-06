@@ -194,15 +194,18 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
-        if cfg.ef_lambda > 0 and train_src is not None and train_src.kind == "static":
-            # EF/volume-consistency auxiliary lane: volume-batched pass over a sample of labeled subjects
+        if cfg.ef_lambda > 0 and ep >= cfg.ef_warmup and train_src is not None and train_src.kind == "static":
+            # EF/volume-consistency NUDGE: add ef_lambda·vol_loss INTO one seg gradient step (not a
+            # separate vote) — seg's dense signal keeps the direction, EF only bends the cavity volume.
             from .ef_lane import volume_loss_batch
             paths = splits.paths(train_df)
             sub = [paths[i] for i in np.random.permutation(len(paths))[:cfg.ef_subjects]]
             vl = volume_loss_batch(model, sub, d.size, device, amp=pin)
             if vl is not None:
                 opt.zero_grad(set_to_none=True)
-                scaler.scale(cfg.ef_lambda * vl).backward()
+                with torch.autocast("cuda", enabled=pin):
+                    seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
+                scaler.scale(seg + cfg.ef_lambda * vl).backward()      # joint: seg dominant, EF nudge
                 scaler.step(opt)
                 scaler.update()
         vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)

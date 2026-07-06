@@ -81,10 +81,12 @@ class TrainCfg(BaseModel):
     workers: int = Field(6, ge=0)                  # store consolidation only (DataLoader is workers=0)
     seed: int = Field(0, ge=0)
     n_patients: int = Field(0, ge=0)               # debug cap (0 = all)
-    # EF/volume-consistency auxiliary lane: each epoch, after the slice-seg steps, run a volume-batched
-    # pass over `ef_subjects` sampled labeled subjects -> soft EDV/ESV -> vol_loss vs GT volumes, added
-    # at weight `ef_lambda` (0 = off). Attacks the EF bias directly. (cardioseg.training.ef_lane)
+    # EF/volume-consistency auxiliary lane: after warmup, each epoch adds `ef_lambda`·vol_loss (soft
+    # EDV/ESV vs GT, over `ef_subjects` sampled subjects) INTO one seg gradient step — a NUDGE, not a
+    # co-equal vote: seg is dense per-pixel signal, EF is 2 scalars/patient, so ef_lambda is tiny
+    # (~1e-3). ef_warmup lets seg establish first (like the HD/HER aux losses). 0 = off. (ef_lane)
     ef_lambda: float = Field(0.0, ge=0)
+    ef_warmup: int = Field(4, ge=0)
     ef_subjects: int = Field(16, ge=1)
     device: Optional[str] = None
     out_dir: Optional[str] = None
