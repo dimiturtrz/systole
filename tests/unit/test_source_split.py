@@ -5,9 +5,9 @@ test_lock drift guard. StaticMain's real-data parity vs the old xvendor split is
 import polars as pl
 import pytest
 
-from core.data.source import StaticSource, ids_hash
-from core.data.split import SplitDef, resolve, _complement, _latest
-from core.data.splits import load_split, list_splits
+from core.data.ingest.source import StaticSource, ids_hash
+from core.data.ingest.split import SplitDef, resolve, _complement, _latest
+from core.data.ingest.splits import load_split, list_splits
 
 V = pl.col
 
@@ -107,7 +107,7 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
 
 
 def test_static_main_registered_with_locked_testset():
-    from core.data.testsets import STATIC_MAIN_TEST
+    from core.data.ingest.testsets import STATIC_MAIN_TEST
     assert "static_main" in list_splits()
     d = load_split("static_main").versions["1.0.0"]
     assert d.train is None                                     # train = complement
@@ -115,8 +115,8 @@ def test_static_main_registered_with_locked_testset():
 
 
 def test_synth_main_registered_with_locked_testset():
-    from core.data.splits.synth_main import POOL, ZERO_REAL_BG
-    from core.data.testsets import SYNTH_MAIN_TEST
+    from core.data.ingest.splits.synth_main import POOL, ZERO_REAL_BG
+    from core.data.ingest.testsets import SYNTH_MAIN_TEST
     assert "synth_main" in list_splits()
     d = load_split("synth_main").versions["1.0.0"]
     assert d.train is not None                                 # explicit dynamic train (not complement)

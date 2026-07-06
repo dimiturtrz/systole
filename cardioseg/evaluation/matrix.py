@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from core.data.testsets import MATRIX_TESTSETS, TESTSETS, EVAL_SOURCES
+from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, EVAL_SOURCES
 
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
@@ -42,8 +42,8 @@ def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
     d = cfg.generator.data
     in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
     if getattr(d, "split", ""):
-        from core.data.splits import load_split
-        from core.data.split import resolve
+        from core.data.ingest.splits import load_split
+        from core.data.ingest.split import resolve
         name, ver = (d.split.split("@", 1) + [None])[:2]
         r = resolve(load_split(name), in_sources, ver)
         seen = set(r.val.subjects())                            # val is always a real StaticSource

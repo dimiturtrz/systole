@@ -75,8 +75,8 @@ def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
     ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
     the coded splits' val — a trap this removes)."""
     if getattr(d, "split", ""):
-        from core.data.splits import load_split
-        from core.data.split import resolve
+        from core.data.ingest.splits import load_split
+        from core.data.ingest.split import resolve
         name, ver = (d.split.split("@", 1) + [None])[:2]
         return resolve(load_split(name), meta, ver).val.frame
     return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -87,6 +87,6 @@ def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0
                    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """(train, val, test) from a DataCfg's CRITERIA (test_datasets/test_vendors, val criteria). The
     LEGACY path — kept so a run without a coded split, and the matrix reconstructing an OLD model's
-    train set from its saved DataCfg, still work. New splits are coded families (core.data.splits)."""
+    train set from its saved DataCfg, still work. New splits are coded families (core.data.ingest.splits)."""
     return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
                       d.val_datasets, d.val_vendors, d.train_vendors)

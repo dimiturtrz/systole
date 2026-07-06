@@ -18,7 +18,7 @@ from typing import Callable, Protocol
 
 import polars as pl
 
-from core.data.source import Source, StaticSource
+from core.data.ingest.source import Source, StaticSource
 
 CloudFn = Callable[[pl.DataFrame], Source]
 
@@ -26,7 +26,7 @@ CloudFn = Callable[[pl.DataFrame], Source]
 @dataclass(frozen=True)
 class SplitDef:
     """One version's ingredients. test/val/train = coded (cloud)->Source. test is a TestSet's source
-    (self-frozen by its own lock, core.data.testsets). train=None -> the labelled complement."""
+    (self-frozen by its own lock, core.data.ingest.testsets). train=None -> the labelled complement."""
     test: CloudFn
     val: CloudFn
     train: CloudFn | None = None

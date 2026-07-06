@@ -34,7 +34,7 @@ from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 
 class DataCfg(BaseModel):
-    """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.splits).
+    """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
     Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
     the labelled rest. Serialized to config.json (the run self-documents its split). Named presets
     live in splits.SPLITS (`--split xvendor`); defaults = the generalization split (ACDC centre-shift
@@ -46,8 +46,8 @@ class DataCfg(BaseModel):
     # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
     # real domain-shift tuning signal that is NOT test, so aug/calibration are tuned without peeking
     # at test. TRAIN = the rest (Siemens + Philips).
-    # NEW-STYLE split: a coded-filter family@version (core.data.splits). When set, it OWNS the
-    # train/val/test partition (via core.data.split.resolve) and the criteria below are ignored — the
+    # NEW-STYLE split: a coded-filter family@version (core.data.ingest.splits). When set, it OWNS the
+    # train/val/test partition (via core.data.ingest.split.resolve) and the criteria below are ignored — the
     # split is code, not criteria. Recorded to config.json for lineage. Empty -> legacy criteria path.
     split: str = ""
     test_datasets: tuple[str, ...] = ("cmrxmotion",)

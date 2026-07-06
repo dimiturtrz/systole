@@ -14,7 +14,7 @@ looks up); train.py applies it to the generator cfg before building the engine.
 """
 from __future__ import annotations
 
-from core.data.source import Source
+from core.data.ingest.source import Source
 
 DEFAULT_POOL_BG = "procedural"          # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
 

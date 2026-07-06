@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from cardioseg.evaluation import matrix
-from core.data.testsets import TestSet
+from core.data.ingest.testsets import TestSet
 from core.data.static.store import DataCfg
 
 V = pl.col

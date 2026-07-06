@@ -1,16 +1,16 @@
 """Split registry — discover split families, load by name.
 
-    from core.data.splits import load_split
-    from core.data.split import resolve
+    from core.data.ingest.splits import load_split
+    from core.data.ingest.split import resolve
     fam = load_split("static_main")
     r = resolve(fam, cloud)                 # -> Resolution(train, val, test, version, test_hash)
 
-A family = a class with `name` + `versions` (see core.data.split.Split). Add one by importing it here.
+A family = a class with `name` + `versions` (see core.data.ingest.split.Split). Add one by importing it here.
 """
 from __future__ import annotations
 
-from core.data.splits.static_main import StaticMain
-from core.data.splits.synth_main import SynthMain
+from core.data.ingest.splits.static_main import StaticMain
+from core.data.ingest.splits.synth_main import SynthMain
 
 _FAMILIES = {c.name: c for c in (StaticMain, SynthMain)}
 

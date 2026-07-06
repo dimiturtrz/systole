@@ -74,8 +74,8 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
         if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
-            from core.data.splits import load_split
-            from core.data.split import resolve
+            from core.data.ingest.splits import load_split
+            from core.data.ingest.split import resolve
             name, ver = (d.split.split("@", 1) + [None])[:2]
             r = resolve(load_split(name), meta, ver)
             train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> materialize seam
@@ -274,7 +274,7 @@ if __name__ == "__main__":
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
     ap.add_argument("--seed", type=int); ap.add_argument("--n-patients", type=int, dest="n_patients")
     ap.add_argument("--split", default=None,
-                    help="coded-filter family 'name[@ver]' (core.data.splits, e.g. static_main) OR an "
+                    help="coded-filter family 'name[@ver]' (core.data.ingest.splits, e.g. static_main) OR an "
                          "old DataCfg preset (splits.SPLITS, e.g. xvendor); sets the split before --set")
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--alias", default=None,
@@ -286,8 +286,8 @@ if __name__ == "__main__":
     a = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.split:                                      # coded-filter family owns the partition (core.data.splits)
-        from core.data.splits import list_splits
+    if a.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
+        from core.data.ingest.splits import list_splits
         name = a.split.split("@", 1)[0]
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")

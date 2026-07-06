@@ -16,12 +16,12 @@ from pathlib import Path
 
 import polars as pl
 
-from core.data.source import StaticSource
+from core.data.ingest.source import StaticSource
 
 V = pl.col
 
 # Locks live in a committed lockfile (DATA, derived) — not hand-pasted into the source (predicates are
-# CODE). `python -m core.data.testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
+# CODE). `python -m core.data.ingest.testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
 # -> empty locks -> no guard (bootstrap: run --freeze once).
 _LOCKFILE = Path(__file__).resolve().parent / "testsets.lock.json"
 _LOCKS: dict[str, str] = json.loads(_LOCKFILE.read_text()) if _LOCKFILE.exists() else {}

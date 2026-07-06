@@ -2,7 +2,7 @@
 import polars as pl
 import pytest
 
-from core.data.testsets import TestSet, TESTSETS, MATRIX_TESTSETS
+from core.data.ingest.testsets import TestSet, TESTSETS, MATRIX_TESTSETS
 
 V = pl.col
 
