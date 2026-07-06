@@ -115,7 +115,7 @@ def _main():
     model, cfg, device = load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4)
-    _, va, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
+    va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
     X, Y = load_to_gpu(splits.paths(va), d.size, device)
     s = run_attribution(model, X, Y, (cfg.model.out_channels if cfg else 4), device, a.out or run_dir)
     print(json.dumps(s, indent=2))

@@ -269,7 +269,7 @@ def _main():
     # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
     # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
     if a.val_only:
-        _, real_df, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0)
+        real_df = splits.model_val(d, meta)          # coded split's val if set, else criteria
     else:
         real_df = meta.filter(pl.col("labelled"))
     X, Y = load_to_gpu(splits.paths(real_df), d.size, "cpu")

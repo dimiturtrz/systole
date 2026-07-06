@@ -68,6 +68,21 @@ def paths(df: pl.DataFrame) -> list[str]:
     return df.get_column("path").to_list()
 
 
+def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
+    """The val subject frame a model (DataCfg `d`) held out — a coded split's resolved val when
+    `d.split` is set, else the DataCfg-criteria val. Analysis tools that want 'the model's held-out
+    real slices' MUST use this, not raw make_split: make_split reads only the criteria and silently
+    ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
+    the coded splits' val — a trap this removes)."""
+    if getattr(d, "split", ""):
+        from core.data.splits import load_split
+        from core.data.split import resolve
+        name, ver = (d.split.split("@", 1) + [None])[:2]
+        return resolve(load_split(name), meta, ver).val.frame
+    return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+                      d.val_datasets, d.val_vendors, d.train_vendors)[1]
+
+
 def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0
                    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """(train, val, test) from a DataCfg's CRITERIA (test_datasets/test_vendors, val criteria). The
