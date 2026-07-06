@@ -113,7 +113,10 @@ class KaggleEF:
             P, L = min(v.shape[0] for v, _, _ in sax), len(sax)
             arr = np.array([[fit_square(_zscore(vol[p]), size, 0.0) for p in range(P)]
                             for vol, _, _ in sax])                      # [L,P,H,W]
-            self.X.append(torch.from_numpy(arr).reshape(L * P, 1, size, size).to(device))
+            # Kept on CPU (host RAM): the pool is large and each cine is touched rarely (k sampled/
+            # epoch). Residing it in VRAM hoards ~tens of GB and thrashes the card — the big rarely-hit
+            # pool belongs in RAM, sampled cines ship to the GPU per epoch (mirrors residency='cpu').
+            self.X.append(torch.from_numpy(arr).reshape(L * P, 1, size, size))   # CPU tensor
             self.LP.append((L, P))
             self.ef.append(float(t["ef"]))
         self.n = len(self.X)
@@ -122,17 +125,17 @@ class KaggleEF:
         if self.n == 0:
             return None
         import torch.nn.functional as F
-        idx = [int(i) for i in torch.randperm(self.n, device=self.device)[:self.k]]
-        xs = [self.X[i] for i in idx]
+        idx = [int(i) for i in torch.randperm(self.n)[:self.k]]
+        xs = [self.X[i].to(self.device, non_blocking=True) for i in idx]   # ship sampled cines to GPU
         sizes = [x.shape[0] for x in xs]
         with torch.no_grad(), torch.autocast("cuda", enabled=amp):      # phase-find, batched
             pix = model(torch.cat(xs)).softmax(1)[:, self.lv].float().sum((1, 2))
         ed_stacks, es_stacks, ls, tgt = [], [], [], []
         off = 0
-        for i, sz in zip(idx, sizes):
+        for gx, i, sz in zip(xs, idx, sizes):                            # gx = the GPU-resident cine
             L, P = self.LP[i]
             pv = pix[off:off + sz].view(L, P).sum(0); off += sz          # [P] cavity vol / phase
-            X = self.X[i].view(L, P, 1, self.size, self.size)
+            X = gx.view(L, P, 1, self.size, self.size)
             ed_stacks.append(X[:, int(pv.argmax())])
             es_stacks.append(X[:, int(pv.argmin())])
             ls.append(L); tgt.append(self.ef[i])
