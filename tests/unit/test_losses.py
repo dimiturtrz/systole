@@ -40,6 +40,12 @@ def test_soft_target_accepted():
     assert out.dim() == 0 and torch.isfinite(out)
 
 
+def test_valid_row_registry():
+    from core.data.static.labels import valid_row
+    assert valid_row("scd") == [False, False, True, True]      # LV-only: bg + RV untrusted
+    assert valid_row("acdc") == [True, True, True, True]       # full-label
+
+
 def test_per_sample_mask_mixes_full_and_partial():
     torch.manual_seed(3)
     logits = torch.randn(2, 4, 8, 8)

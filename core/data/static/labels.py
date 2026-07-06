@@ -33,6 +33,26 @@ FOREGROUND: tuple[int, ...] = tuple(CLASSES)        # (1, 2, 3) — non-backgrou
 LV_CAV: int = int(Label.LV_CAV)                     # the EF blood-pool label (3)
 CLASS_NAMES: list[str] = [n for n, _ in CLASSES.values()]   # ["RV", "LV-myo", "LV-cav"]
 
+# ── Partial-label: which classes a dataset actually ANNOTATES (trustworthy GT) ────────────────────
+# Default = all four. SCD labels LV only (endo/epi contours) — RV is unlabeled and lumped into the
+# background, so BOTH RV and bg are untrustworthy for it -> valid = {MYO, LV_CAV}. The partial-label
+# loss (PartialLabelDiceCE) masks the rest so SCD never teaches "RV -> bg".
+ALL_CLASSES: tuple[int, ...] = tuple(int(c) for c in Label)         # (0, 1, 2, 3)
+LABELED_CLASSES: dict[str, tuple[int, ...]] = {
+    "scd": (int(Label.MYO), int(Label.LV_CAV)),                     # LV-only; bg + RV untrusted
+}
+
+
+def valid_classes(dataset: str) -> tuple[int, ...]:
+    """The classes whose GT is trustworthy for a dataset (default: all four)."""
+    return LABELED_CLASSES.get(dataset, ALL_CLASSES)
+
+
+def valid_row(dataset: str, n_classes: int = 4) -> list[bool]:
+    """Per-class validity flags [C] for a dataset — one row of the [N, C] partial-label mask."""
+    vc = set(valid_classes(dataset))
+    return [c in vc for c in range(n_classes)]
+
 
 def overlay_cmap(alpha: float = 0.5):
     """Matplotlib ListedColormap for a label overlay: background transparent, each
