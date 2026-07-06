@@ -71,10 +71,24 @@ class StaticSource:
     def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
         """The source's own batch engine (owns its resident tensors + transform chain). Static = real
         pixels + the configured aug/DR-synth (gen_cfg.synth as-is: synth_p>0 -> physics-recontrast DR on
-        real labels; the flagship recipe). No force_synth (real rows are never fully replaced)."""
+        real labels; the flagship recipe). No force_synth. Carries a per-slice partial-label mask when
+        the source mixes datasets that annotate different classes (e.g. SCD = LV-only)."""
+        from core.data.dynamic.dataset import load_to_gpu
         from core.data.dynamic.generator import Generator
-        X, Y = self.resident(size, device)
-        return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None)
+        X, Y, owners = load_to_gpu(self.paths(), size, device, return_owners=True)
+        return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None,
+                         valid=self._valid_mask(owners, n_classes, device))
+
+    def _valid_mask(self, owners, n_classes: int, device: str):
+        """Per-slice class-validity [N,C] bool (labels.valid_row of each slice's dataset). None if every
+        slice is full-label — keeps the full-label path mask-free (loss stays on the standard recipe)."""
+        import torch
+        from core.data.static.labels import valid_row
+        ds = self._f.get_column("dataset").to_list()            # per-path dataset, aligned to paths()
+        rows = [valid_row(ds[o], n_classes) for o in owners.tolist()]
+        if all(all(r) for r in rows):
+            return None
+        return torch.tensor(rows, dtype=torch.bool, device=device)
 
     def __len__(self) -> int:
         return self._f.height

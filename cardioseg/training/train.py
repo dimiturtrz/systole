@@ -145,10 +145,17 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
              (train_src.kind if train_src else "legacy"), gen.X.shape[0], Xva.shape[0], len(test_df),
              data_device, device)
     model = build_unet(cfg.model).to(device)
-    # Soft-label training (honest probabilistic boundary targets) takes the SoftDiceCE path; σ=0
-    # (default) keeps the hard-label Dice+CE recipe bit-for-bit.
+    # Loss selection. PARTIAL-LABEL (a train source carries a per-slice valid mask, e.g. SCD LV-only)
+    # overrides -> PartialLabelDiceCE (handles soft yt + the [B,C] mask). Else soft-label -> SoftDiceCE;
+    # else the configured (MONAI) loss. Full-label runs are untouched (partial=False).
     soft_sigma = cfg.generator.aug.soft_label_sigma
-    if soft_sigma > 0:
+    partial = getattr(gen, "valid", None) is not None
+    if partial:
+        from .losses import PartialLabelDiceCE
+        loss_fn = PartialLabelDiceCE()
+        log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
+                 int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
+    elif soft_sigma > 0:
         from .losses import SoftDiceCE
         loss_fn = SoftDiceCE()
     else:
@@ -174,10 +181,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
         perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
         for bi in progress(range(nb), f"epoch {ep}", total=nb):
             idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
-            x, yt = gen.batch(idx, pin)                         # collapsed batch (real/synth/mixed)
+            x, yt, valid = gen.batch(idx, pin)                  # collapsed batch (+ partial-label mask)
             opt.zero_grad(set_to_none=True)
             with torch.autocast("cuda", enabled=pin):
-                loss = loss_fn(model(x), yt)
+                loss = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()

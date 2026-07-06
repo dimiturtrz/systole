@@ -106,6 +106,33 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
     assert bool(gen.force_synth.all())                         # zero-input -> all rows force-painted
 
 
+def test_static_source_valid_mask_partial():
+    import torch
+    cloud = pl.DataFrame([{"dataset": "acdc", "subject_id": "a", "labelled": True, "path": "/p/a.npz"},
+                          {"dataset": "scd", "subject_id": "s", "labelled": True, "path": "/p/s.npz"}])
+    # 2 slices from acdc (path 0, full), 1 from scd (path 1, LV-only)
+    vm = StaticSource(cloud)._valid_mask(torch.tensor([0, 0, 1]), 4, "cpu")
+    assert vm.tolist() == [[True, True, True, True], [True, True, True, True], [False, False, True, True]]
+
+
+def test_static_source_valid_mask_none_when_all_full():
+    import torch
+    src = StaticSource(pl.DataFrame([{"dataset": "acdc", "subject_id": "a", "labelled": True, "path": "/p/a.npz"}]))
+    assert src._valid_mask(torch.tensor([0, 0]), 4, "cpu") is None   # full-label -> mask-free
+
+
+def test_generator_batch_slices_valid():
+    import torch
+    from core.data.dynamic.generator import Generator, GeneratorCfg
+    from core.data.dynamic.synth import SynthCfg
+    N = 4
+    cfg = GeneratorCfg(synth=SynthCfg(synth_p=0.0))                  # no synth compute for the test
+    valid = torch.tensor([[True] * 4, [False, False, True, True], [True] * 4, [True] * 4])
+    g = Generator(cfg, torch.zeros(N, 1, 8, 8), torch.zeros(N, 8, 8, dtype=torch.long), 4, "cpu", valid=valid)
+    _, _, v = g.batch(torch.tensor([1, 2]))
+    assert v.tolist() == [[False, False, True, True], [True, True, True, True]]   # sliced, untouched
+
+
 def test_static_main_registered_with_locked_testset():
     from core.data.ingest.testsets import STATIC_MAIN_TEST
     assert "static_main" in list_splits()

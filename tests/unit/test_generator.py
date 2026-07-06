@@ -30,7 +30,7 @@ def _gen(synth_p, **synth):
 def test_batch_shapes_and_soft_target():
     """Real batch (synth off): x [B,1,H,W], soft target [B,C,H,W] (soft_label_sigma default > 0)."""
     gen, X, Y = _gen(0.0)
-    x, yt = gen.batch(torch.arange(4))
+    x, yt, _ = gen.batch(torch.arange(4))
     assert x.shape == (4, 1, 16, 16)
     assert yt.shape == (4, N, 16, 16)
     assert torch.allclose(yt.sum(1), torch.ones(4, 16, 16), atol=1e-4)   # soft probs sum to 1
@@ -46,7 +46,7 @@ def test_synth_on_runs():
     """synth_p=1 -> physical (bSSFP) synth batch, right shapes (no priors needed)."""
     gen, _, _ = _gen(1.0)
     assert gen.synth_on is True
-    x, yt = gen.batch(torch.arange(4))
+    x, yt, _ = gen.batch(torch.arange(4))
     assert x.shape == (4, 1, 16, 16) and yt.shape == (4, N, 16, 16)
 
 
@@ -56,8 +56,8 @@ def test_synth_changes_the_image():
     g_real, _, _ = _gen(0.0)
     g_syn, _, _ = _gen(1.0, bg_mode="flat")
     idx = torch.arange(4)
-    torch.manual_seed(0); xr, _ = g_real.batch(idx)
-    torch.manual_seed(0); xs, _ = g_syn.batch(idx)
+    torch.manual_seed(0); xr, _, _ = g_real.batch(idx)
+    torch.manual_seed(0); xs, _, _ = g_syn.batch(idx)
     assert not torch.allclose(xr, xs)
 
 
@@ -66,7 +66,7 @@ def test_hard_target_when_sigma_zero():
     X, Y = _resident()
     cfg = GeneratorCfg(synth=SynthCfg(synth_p=0.0), aug=AugCfg(soft_label_sigma=0.0))
     gen = Generator(cfg, X, Y, N, "cpu")
-    _, yt = gen.batch(torch.arange(4))
+    _, yt, _ = gen.batch(torch.arange(4))
     assert yt.shape == (4, 1, 16, 16)
 
 
@@ -81,7 +81,7 @@ def test_force_synth_paints_flagged_rows_at_synth_p0():
     gen = Generator(cfg, X, Y, N, "cpu", force_synth=force)
     assert gen.synth_on is True                                    # forced rows -> synth active
     assert Generator(cfg, X, Y, N, "cpu", force_synth=None).synth_on is False   # no force + synth_p=0 -> off
-    torch.manual_seed(0); x, _ = gen.batch(torch.arange(8))
+    torch.manual_seed(0); x, _, _ = gen.batch(torch.arange(8))
     # synth output is z-scored per sample (std==1); real rows keep their source std (~1.15 here).
     assert (x[4:].std(dim=(1, 2, 3)) - 1.0).abs().max() < 1e-3     # forced rows = z-scored synth
     assert (x[:4].std(dim=(1, 2, 3)) - 1.0).abs().min() > 0.05     # unforced rows are NOT z-scored synth

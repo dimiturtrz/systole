@@ -47,9 +47,10 @@ class ACDCSliceDataset(Dataset):
         from core.obs import progress
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
+        self.owners: list[int] = []                      # per-slice index into npz_paths (for per-slice meta)
         self.frames = frames
         self.augment = augment
-        for p in progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths)):
+        for pi, p in enumerate(progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
             c = load_arrays(p)
             for tag in frames:
                 img = c.get(f"{tag.lower()}_img")        # [D, H, W]
@@ -60,8 +61,8 @@ class ACDCSliceDataset(Dataset):
                     m = gt[z]                             # [H, W]
                     if not keep_empty and m.max() == 0:
                         continue          # drop slices with no heart (apex/base air)
-                    self.items.append((img[z].astype(np.float32),
-                                       m.astype(np.uint8)))
+                    self.items.append((img[z].astype(np.float32), m.astype(np.uint8)))
+                    self.owners.append(pi)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -78,22 +79,28 @@ class ACDCSliceDataset(Dataset):
 
 
 def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",
-                frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False):
+                frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False,
+                return_owners: bool = False):
     """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
 
     The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training
     loop indexes these tensors on the GPU each epoch — zero per-epoch CPU / disk / host↔device copy
     (everything after setup runs on the GPU). The cardiac slice set fits VRAM easily (~3 GB at 256px
     on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
-    (CI / no-GPU) — same index-batched loop, just on CPU."""
+    (CI / no-GPU) — same index-batched loop, just on CPU. `return_owners` also returns a per-slice
+    LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask)."""
     import torch
     ds = ACDCSliceDataset(npz_paths, size=size, frames=frames, keep_empty=keep_empty)
     if not ds.items:
         z = torch.zeros((0, size, size))
-        return z[:, None].to(device), z.to(torch.uint8).to(device)
+        empty = (z[:, None].to(device), z.to(torch.uint8).to(device))
+        return (*empty, torch.zeros(0, dtype=torch.long, device=device)) if return_owners else empty
     imgs = np.stack([fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
     msks = np.stack([fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
-    return torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
+    X, Y = torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
+    if return_owners:
+        return X, Y, torch.tensor(ds.owners, dtype=torch.long, device=device)
+    return X, Y
 
 
 def datasets(train_paths: list[str], val_paths: list[str], size: int = SIZE

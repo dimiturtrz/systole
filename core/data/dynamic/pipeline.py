@@ -20,11 +20,13 @@ from .synth import SynthCfg, synthesize_from_labels
 @dataclass
 class Batch:
     """The mutable batch flowing through the pipeline. `x` image, `y` hard mask, `force` = per-row
-    bool 'must be painted synthetic' (None = none), `yt` = the (soft) target the model trains on."""
+    bool 'must be painted synthetic' (None = none), `yt` = the (soft) target the model trains on,
+    `valid` = per-sample [B,C] class-validity for partial-label loss (None = all classes valid)."""
     x: torch.Tensor                    # [B,1,H,W] f32
     y: torch.Tensor                    # [B,H,W] long
     force: torch.Tensor | None = None  # [B] bool
     yt: torch.Tensor | None = None     # [B,C,H,W] or [B,1,H,W], set by Soften
+    valid: torch.Tensor | None = None  # [B,C] bool
 
 
 class Transform(Protocol):

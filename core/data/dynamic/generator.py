@@ -43,13 +43,17 @@ class Generator:
     the model. synth_p=0 -> pure real; synth_p=1 -> pure synthetic; in between -> per-sample mix."""
 
     def __init__(self, cfg: GeneratorCfg, X: torch.Tensor, Y: torch.Tensor,
-                 n_classes: int, device: str, force_synth: torch.Tensor | None = None):
+                 n_classes: int, device: str, force_synth: torch.Tensor | None = None,
+                 valid: torch.Tensor | None = None):
         self.cfg = cfg
         self.X, self.Y = X, Y
         self.device = device
         # force_synth [N] bool: rows that MUST be painted synthetic every batch (e.g. synth-anatomy masks
         # with no real pixels), aligned to X/Y. Real rows still repaint with prob synth_p. (bd pwih)
         self.force_synth = force_synth
+        # valid [N,C] bool: per-slice class-validity for partial-label training (None = all valid). Rides
+        # to the loss via Batch.valid; the Generator just slices + carries it (no transform touches it).
+        self.valid = valid
         # The transform recipe: synth-replace -> augment -> soften. A composable op list, not an
         # if-ladder — sweepable (physically-constrained diversity), and each op is unit-testable.
         self.pipeline = build_pipeline(cfg, n_classes)
@@ -59,12 +63,14 @@ class Generator:
         """Whether synth painting can fire this Generator (synth_p>0, or any forced-synth row)."""
         return self.cfg.synth.synth_p > 0 or (self.force_synth is not None and bool(self.force_synth.any()))
 
-    def batch(self, idx: torch.Tensor, pin: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
+    def batch(self, idx: torch.Tensor, pin: bool = False):
         """Collapsed batch for the resident indices: build the Batch, run it through the pipeline
-        (index real -> synth replace -> augment -> soften), return (x, yt)."""
+        (index real -> synth replace -> augment -> soften), return (x, yt, valid). `valid` is None
+        unless the source is partial-label (then [B,C] for the loss)."""
         b = Batch(x=self.X[idx].to(self.device, non_blocking=pin),
                   y=self.Y[idx].to(self.device, non_blocking=pin).long(),
-                  force=None if self.force_synth is None else self.force_synth[idx].to(self.device))
+                  force=None if self.force_synth is None else self.force_synth[idx].to(self.device),
+                  valid=None if self.valid is None else self.valid[idx].to(self.device))
         for t in self.pipeline:
             b = t(b)
-        return b.x, b.yt
+        return b.x, b.yt, b.valid
