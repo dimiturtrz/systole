@@ -38,6 +38,8 @@ bd close <id>         # Complete work
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
+**Branching:** work on `dev` (long-lived working branch); `main` stays stable. Push `dev`; merge `dev`→`main` at milestones (mirrors mindscape). `git push` below pushes the current branch — stay on `dev`, never commit directly to `main`.
+
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
