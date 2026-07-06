@@ -180,6 +180,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     trk = track_run("cardioseg", out.name, run_dir=out,
                     params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
                     tags={"split": split_tag, "seed": cfg.seed})
+    if cfg.ef_kaggle:                                       # load the Kaggle EF-only cases once
+        from core.data.static.mri.kaggle_dsb import kaggle_cases, kaggle_ef
+        kag_cases, kag_ef = kaggle_cases("train"), kaggle_ef("train")
+        log.info("EF-Kaggle weak-supervision lane: %d cases", len(kag_cases))
     fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
@@ -205,6 +209,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             paths = splits.paths(train_df)
             sub = [paths[i] for i in np.random.permutation(len(paths))[:cfg.ef_subjects]]
             vl = volume_loss_batch(model, sub, d.size, device, amp=pin)
+            if cfg.ef_kaggle:                                          # + Kaggle EF-only weak supervision
+                from .ef_lane import kaggle_ef_loss
+                ks = [kag_cases[i] for i in np.random.permutation(len(kag_cases))[:cfg.ef_kaggle_subjects]]
+                kl = kaggle_ef_loss(model, ks, kag_ef, d.size, device, amp=pin)
+                if kl is not None:
+                    vl = kl if vl is None else vl + kl
             if vl is not None:
                 opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", enabled=pin):
@@ -313,6 +323,8 @@ if __name__ == "__main__":
                     help="weight of the EF/volume-consistency auxiliary lane (0 = off)")
     ap.add_argument("--ef-learn", action="store_true", dest="ef_learn",
                     help="LEARN the seg-vs-EF balance (Kendall) instead of the fixed ef_lambda")
+    ap.add_argument("--ef-kaggle", action="store_true", dest="ef_kaggle",
+                    help="add the Kaggle EF-only cases to the vol lane (EF-ratio weak supervision)")
     ap.add_argument("--split", default=None,
                     help="coded-filter split family 'name[@ver]' (core.data.ingest.splits, e.g. "
                          "static_main / synth_main); sets generator.data.split before --set overrides")
@@ -339,6 +351,8 @@ if __name__ == "__main__":
         cfg.generator.data.n4 = True
     if a.ef_learn:
         cfg.ef_learn = True
+    if a.ef_kaggle:
+        cfg.ef_kaggle = True
     if a.out:
         cfg.out_dir = a.out
     apply_overrides(cfg, a.overrides)

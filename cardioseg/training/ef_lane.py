@@ -44,3 +44,47 @@ def volume_loss_batch(model, npz_paths, size: int, device: str, delta: float = 0
         total = loss if total is None else total + loss
         n += 1
     return (total / n) if n else None
+
+
+def _zscore(s):
+    import numpy as np
+    s = s.astype(np.float32)
+    return (s - s.mean()) / (s.std() + 1e-6)
+
+
+def kaggle_ef_loss(model, cases, ef_targets: dict, size: int, device: str, amp: bool = True,
+                   delta: float = 0.1):
+    """EF-RATIO consistency on Kaggle (EF-only, NO masks). EF is spacing-invariant, so it sidesteps
+    Kaggle's ambiguous slice-spacing: predict LV-cav over the cine, per-phase volume (any unit) ->
+    EDV=max-phase, ESV=min-phase -> EF -> Huber vs the csv EF. Efficiency: a NO-GRAD pass over all
+    (location,phase) slices finds the ED/ES phases, then only those 2 phases are forwarded WITH grad
+    (grad cost ~ a labeled patient, not 16x). Weak supervision from 1140 EF-labeled cases. valid={}
+    for these (no dense mask) so the seg loss never touches them."""
+    import numpy as np
+    import torch
+    import torch.nn.functional as F
+    from core.data.static.mri.kaggle_dsb import load_sax
+    total, n = None, 0
+    for c in cases:
+        t = ef_targets.get(c.name)
+        if not t or not t.get("ef"):
+            continue
+        sax = load_sax(c)
+        if not sax:
+            continue
+        P = min(v.shape[0] for v, _, _ in sax)                       # common phase count
+        X = torch.from_numpy(np.array([[fit_square(_zscore(vol[p]), size, 0.0) for p in range(P)]
+                                       for vol, _, _ in sax])).to(device)          # [L, P, H, W]
+        L = X.shape[0]
+        with torch.no_grad(), torch.autocast("cuda", enabled=amp):
+            pv = model(X.reshape(L * P, 1, size, size)).softmax(1)[:, LV_CAV]       # [L*P, H, W]
+            phase_vol = pv.float().sum((1, 2)).view(L, P).sum(0)                    # [P] cavity vol / phase
+        ed_p, es_p = int(phase_vol.argmax()), int(phase_vol.argmin())
+        with torch.autocast("cuda", enabled=amp):                                  # grad on ED/ES phases only
+            ed = model(X[:, ed_p].unsqueeze(1)).softmax(1)[:, LV_CAV].float().sum()
+            es = model(X[:, es_p].unsqueeze(1)).softmax(1)[:, LV_CAV].float().sum()
+        ef_pred = (ed - es) / ed * 100.0 if float(ed) > 0 else ed.new_tensor(0.0)
+        loss = F.huber_loss(ef_pred / 100, ef_pred.new_tensor(t["ef"] / 100), delta=delta)
+        total = loss if total is None else total + loss
+        n += 1
+    return (total / n) if n else None

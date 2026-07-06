@@ -93,6 +93,10 @@ class TrainCfg(BaseModel):
     # weighting (2 log-variances trained with the model). Self-balancing, no magic weight. Needs
     # ef_lambda>0 only as the on-switch (its value is ignored when ef_learn=True).
     ef_learn: bool = False
+    # ef_kaggle: also feed the vol lane the Kaggle EF-only cases (1140, no masks) as EF-RATIO weak
+    # supervision — the original point (turn "unusable" EF-only data into LV-cav volume signal).
+    ef_kaggle: bool = False
+    ef_kaggle_subjects: int = Field(4, ge=1)       # Kaggle cine is ~16x a labeled patient -> sample few
     device: Optional[str] = None
     out_dir: Optional[str] = None
     # Where the preloaded slice tensors live during training — the speed/capacity tradeoff
