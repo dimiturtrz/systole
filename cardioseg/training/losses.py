@@ -140,6 +140,48 @@ class SoftDiceCE:
         return self.ld * d + self.lce * ce
 
 
+class PartialLabelDiceCE:
+    """Dice+CE with a per-sample VALID-CLASS mask `valid` [B, C] bool — the general partial-label loss.
+
+    A sample declares which classes' GT is trustworthy (e.g. SCD labels LV only; RV is unlabeled and
+    lumped into background, so BOTH rv and bg are untrustworthy for it -> valid = {myo, cav}). Then:
+      - Dice is averaged over each sample's VALID classes only (bg counts only where valid).
+      - CE ignores every pixel whose GT (argmax) class is not valid for that sample — so SCD's
+        RV-contaminated background contributes no gradient (never teaches 'RV -> bg').
+    `valid=None` (or all-True) -> every class/pixel counts = ordinary Dice+CE. Accepts a hard target
+    [B,1,H,W]/[B,H,W] or a soft one [B,C,H,W]. fp32 under autocast (softmax/log_softmax are fp16-unsafe).
+    Used ONLY when a batch carries a mask; the full-label path stays on the existing (MONAI) losses.
+    """
+
+    def __init__(self, lambda_dice: float = 1.0, lambda_ce: float = 1.0, eps: float = 1e-5):
+        self.ld, self.lce, self.eps = lambda_dice, lambda_ce, eps
+
+    def __call__(self, logits, target, valid=None):
+        import torch
+        import torch.nn.functional as F
+        B, C = logits.shape[:2]
+        with torch.autocast(device_type=logits.device.type, enabled=False):
+            logits = logits.float()
+            if target.dim() == 4 and target.shape[1] == C:            # soft [B,C,H,W]
+                oh = target.float()
+                cls = oh.argmax(1)                                    # [B,H,W] dominant class (pixel validity)
+            else:                                                     # hard labels
+                cls = (target[:, 0] if target.dim() == 4 else target).long()
+                oh = F.one_hot(cls, C).permute(0, 3, 1, 2).float()
+            if valid is None:
+                valid = torch.ones(B, C, dtype=torch.bool, device=logits.device)
+            vf = valid.float()
+            prob = logits.softmax(1)
+            inter = (prob * oh).sum((2, 3))                           # [B,C]
+            denom = prob.sum((2, 3)) + oh.sum((2, 3))
+            dice = (2 * inter + self.eps) / (denom + self.eps)        # [B,C]
+            dice_loss = (1 - (dice * vf).sum(1) / vf.sum(1).clamp_min(1)).mean()
+            ce_pix = -(oh * F.log_softmax(logits, 1)).sum(1)          # [B,H,W]
+            valid_pix = valid.gather(1, cls.reshape(B, -1)).reshape(cls.shape).float()
+            ce = (ce_pix * valid_pix).sum() / valid_pix.sum().clamp_min(1)
+        return self.ld * dice_loss + self.lce * ce
+
+
 def build_loss(cfg: LossCfg | None = None):
     """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
     an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
