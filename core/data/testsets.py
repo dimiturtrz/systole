@@ -10,13 +10,21 @@ TestSets) consume these — one freeze mechanism, one home. Drift (the store gre
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass
+from pathlib import Path
 
 import polars as pl
 
 from core.data.source import StaticSource
 
 V = pl.col
+
+# Locks live in a committed lockfile (DATA, derived) — not hand-pasted into the source (predicates are
+# CODE). `python -m core.data.testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
+# -> empty locks -> no guard (bootstrap: run --freeze once).
+_LOCKFILE = Path(__file__).resolve().parent / "testsets.lock.json"
+_LOCKS: dict[str, str] = json.loads(_LOCKFILE.read_text()) if _LOCKFILE.exists() else {}
 
 
 # The standard segmentation cohort (canonical 4-class datasets). Vendor test sets scope to it so a
@@ -43,31 +51,26 @@ class TestSet:
         return s
 
 
+def _ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
+    """A TestSet with its lock pulled from the committed lockfile (empty until --freeze)."""
+    return TestSet(name, task, predicate, _LOCKS.get(name, ""))
+
+
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
-CANON = TestSet("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"),
-                "sha256:25de0c1c725e8e4692f0df46770317e9964fcd0f2cc2b6dd879c03965ccaf6c1")
-GE = TestSet("ge", "seg4", _IN_SEG & (V("vendor") == "GE"),
-             "sha256:972fa8d357139393e343874aaea7517e6d85e38876833ab48569d0b3e6e6fad5")
-CMRXMOTION = TestSet("cmrxmotion", "seg4", V("dataset") == "cmrxmotion",
-                     "sha256:1dde3ba03d3ed703bcc789e679530cb9c39826bab32bd96f98aa4c84bad193ca")
-ACDC = TestSet("acdc", "seg4", V("dataset") == "acdc",
-               "sha256:59abff2997890dd2d49da3d83e100d77dfc99ab211dfcc451d4383ca9de3fde8")
-MNM2 = TestSet("mnm2", "seg4", V("dataset") == "mnm2",
-               "sha256:b5e7e8f24f1a44c4faa30085354e5e8ddeede7914740c90e9083b5995038e4b2")
-MNMS1 = TestSet("mnms1", "seg4", V("dataset") == "mnms1",
-                "sha256:6d459b3934e706e2faa5aef14a05442f2d5b71d659939abe3bbe63d1eec1ed68")
-SCD_LV = TestSet("scd_lv", "seg_lv", V("dataset") == "scd",
-                 "sha256:1219e59aae642f34cdeb6a320c8cfcf2e4ee360a3dbd445e2304c9b5ddfc447b")
+CANON = _ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
+GE = _ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
+CMRXMOTION = _ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
+ACDC = _ts("acdc", "seg4", V("dataset") == "acdc")
+MNM2 = _ts("mnm2", "seg4", V("dataset") == "mnm2")
+MNMS1 = _ts("mnms1", "seg4", V("dataset") == "mnms1")
+SCD_LV = _ts("scd_lv", "seg_lv", V("dataset") == "scd")
 
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
-STATIC_MAIN_TEST = TestSet(
-    "static_main_test", "seg4",
-    _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")),
-    "sha256:5f8f0a98e56065e6eca42ff51caf7d06d0be4ff98b8d9bf142dda77e8953faa5")
+STATIC_MAIN_TEST = _ts("static_main_test", "seg4",
+                       _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
-SYNTH_MAIN_TEST = TestSet("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"),
-                          "sha256:ecd60aad00b5a19d49fc3b4bced9cc5768d10f931d4e94107d0c1dd031dfe8ed")
+SYNTH_MAIN_TEST = _ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
 
 # the matrix's default granular battery (over-held models score OOD on the ones they didn't train)
 MATRIX_TESTSETS: list[TestSet] = [CANON, GE, CMRXMOTION, ACDC, MNM2, MNMS1, SCD_LV]
@@ -79,10 +82,26 @@ TESTSETS: dict[str, TestSet] = {ts.name: ts for ts in _ALL}     # lookup by name
 EVAL_SOURCES = ["acdc", "mnm2", "mnms1", "cmrxmotion", "scd"]
 
 
-def freeze_all(cloud: pl.DataFrame) -> dict[str, str]:
-    """Recompute every TestSet's lock over `cloud` — run to fill/refresh the PLACEHOLDER locks."""
-    out = {}
-    for ts in _ALL:
-        h = StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash()
-        out[ts.name] = h
-    return out
+def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
+    """Recompute every TestSet's lock (content hash) over `cloud`."""
+    return {ts.name: StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash() for ts in _ALL}
+
+
+if __name__ == "__main__":
+    import argparse
+    from core.data.static import store
+    ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
+    ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
+    ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
+    a = ap.parse_args()
+    fresh = compute_locks(store.load(EVAL_SOURCES))
+    if a.freeze:
+        _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
+        print(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
+    else:                                                        # --check (default)
+        drift = {n: (h, _LOCKS.get(n, "")) for n, h in fresh.items() if h != _LOCKS.get(n, "")}
+        if drift:
+            for n, (now, was) in drift.items():
+                print(f"DRIFT {n}: lockfile {was[:19]}… != store {now[:19]}…")
+            raise SystemExit(1)
+        print(f"OK — {len(fresh)} TestSet locks match the store")

@@ -1,0 +1,11 @@
+{
+  "canon": "sha256:25de0c1c725e8e4692f0df46770317e9964fcd0f2cc2b6dd879c03965ccaf6c1",
+  "ge": "sha256:972fa8d357139393e343874aaea7517e6d85e38876833ab48569d0b3e6e6fad5",
+  "cmrxmotion": "sha256:1dde3ba03d3ed703bcc789e679530cb9c39826bab32bd96f98aa4c84bad193ca",
+  "acdc": "sha256:59abff2997890dd2d49da3d83e100d77dfc99ab211dfcc451d4383ca9de3fde8",
+  "mnm2": "sha256:b5e7e8f24f1a44c4faa30085354e5e8ddeede7914740c90e9083b5995038e4b2",
+  "mnms1": "sha256:6d459b3934e706e2faa5aef14a05442f2d5b71d659939abe3bbe63d1eec1ed68",
+  "scd_lv": "sha256:1219e59aae642f34cdeb6a320c8cfcf2e4ee360a3dbd445e2304c9b5ddfc447b",
+  "static_main_test": "sha256:5f8f0a98e56065e6eca42ff51caf7d06d0be4ff98b8d9bf142dda77e8953faa5",
+  "synth_main_test": "sha256:ecd60aad00b5a19d49fc3b4bced9cc5768d10f931d4e94107d0c1dd031dfe8ed"
+}
