@@ -44,7 +44,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     model registry — the sole model store. `alias='production'` makes this run the flagship."""
     import numpy as np
     import torch
-    from .losses import build_loss
+    from .losses import build_loss, uncertainty_weighted
     from ..evaluation.validate import validate, summarize
     from core.model import build_unet, resolve_device
     from core.data.dynamic.dataset import load_to_gpu
@@ -166,10 +166,6 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     else:
         loss_fn = build_loss(cfg.loss)
     opt = torch.optim.Adam(model.parameters(), cfg.lr)
-    # Kendall learned seg-vs-EF balance (ef_learn): two log-variances trained alongside the model.
-    log_sig = torch.zeros(2, device=device, requires_grad=True) if (cfg.ef_lambda > 0 and cfg.ef_learn) else None
-    if log_sig is not None:
-        opt.add_param_group({"params": [log_sig]})
     scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
 
     # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
@@ -180,10 +176,19 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
     trk = track_run("cardioseg", out.name, run_dir=out,
                     params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
                     tags={"split": split_tag, "seed": cfg.seed})
-    if cfg.ef_kaggle:                                       # load the Kaggle EF-only cases once
-        from core.data.static.mri.kaggle_dsb import kaggle_cases, kaggle_ef
-        kag_cases, kag_ef = kaggle_cases("train"), kaggle_ef("train")
-        log.info("EF-Kaggle weak-supervision lane: %d cases", len(kag_cases))
+    # Auxiliary EF lanes (GPU-resident, built once) — a list the epoch loop iterates, so it never
+    # branches on cfg.ef_*. Empty when the lane is off / train source isn't static.
+    from .ef_lane import build_aux
+    aux = build_aux(cfg, splits, train_df, d.size, device,
+                    train_src is not None and train_src.kind == "static")
+    # ef_learn: learn the seg-vs-aux balance (Kendall, one log-var per term) instead of a fixed λ. A
+    # plain guard — the only real asymmetry is that the log-vars need registering as optimizer params.
+    log_sig = None
+    if cfg.ef_learn and aux:
+        log_sig = torch.zeros(1 + len(aux), device=device, requires_grad=True)
+        opt.add_param_group({"params": [log_sig]})
+    for lane in aux:
+        log.info("aux lane: %s (%d items cached, GPU)", type(lane).__name__, lane.n)
     fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
     for ep in range(cfg.epochs):
         t0 = time.perf_counter()
@@ -202,34 +207,20 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
             scaler.step(opt)
             scaler.update()
             tot += loss.item()
-        if cfg.ef_lambda > 0 and ep >= cfg.ef_warmup and train_src is not None and train_src.kind == "static":
-            # EF/volume-consistency NUDGE: add ef_lambda·vol_loss INTO one seg gradient step (not a
-            # separate vote) — seg's dense signal keeps the direction, EF only bends the cavity volume.
-            from .ef_lane import volume_loss_batch
-            paths = splits.paths(train_df)
-            sub = [paths[i] for i in np.random.permutation(len(paths))[:cfg.ef_subjects]]
-            vl = volume_loss_batch(model, sub, d.size, device, amp=pin)
-            if cfg.ef_kaggle:                                          # + Kaggle EF-only weak supervision
-                from .ef_lane import kaggle_ef_loss
-                ks = [kag_cases[i] for i in np.random.permutation(len(kag_cases))[:cfg.ef_kaggle_subjects]]
-                kl = kaggle_ef_loss(model, ks, kag_ef, d.size, device, amp=pin)
-                if kl is not None:
-                    vl = kl if vl is None else vl + kl
-            if vl is not None:
+        if aux and ep >= cfg.ef_warmup:
+            # EF/volume-consistency NUDGE: fold the aux lanes INTO one seg gradient step (not a separate
+            # vote) — seg's dense signal keeps the direction, the lanes only bend the cavity volume.
+            # Fixed λ nudge (seg dominant) or learned Kendall balance (log_sig); seg stays dominant.
+            auxs = [l for l in (lane.loss(model, amp=pin) for lane in aux) if l is not None]
+            if auxs:
                 opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", enabled=pin):
                     seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
-                if log_sig is not None:                                # learned Kendall balance
-                    from .losses import uncertainty_weighted
-                    loss_j = uncertainty_weighted([seg, vl], [log_sig[0], log_sig[1]])
-                else:                                                  # fixed nudge (seg dominant)
-                    loss_j = seg + cfg.ef_lambda * vl
+                loss_j = (uncertainty_weighted([seg, *auxs], list(log_sig)) if log_sig is not None
+                          else seg + cfg.ef_lambda * sum(auxs))     # learned Kendall | fixed nudge
                 scaler.scale(loss_j).backward()
                 scaler.step(opt)
                 scaler.update()
-                if log_sig is not None:
-                    log.info("ef balance (learned): seg_w=%.3f vol_w=%.3f",
-                             float(torch.exp(-log_sig[0])), float(torch.exp(-log_sig[1])))
         vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
         improved = vd > best_dice + 1e-4
         if improved:
