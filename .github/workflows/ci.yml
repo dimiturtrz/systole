@@ -22,7 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Install dependencies (locked)
-        run: uv sync --frozen
+      - name: Install dependencies (locked, + dev extra for pytest)
+        run: uv sync --frozen --extra dev
       - name: Unit tests
         run: uv run pytest tests/unit -q
