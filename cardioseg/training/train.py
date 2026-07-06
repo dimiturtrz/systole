@@ -69,9 +69,14 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
              torch.__version__, cfg.seed, d.split or "(legacy criteria)",
              list(d.test_datasets), list(d.test_vendors))
 
-    # split = criteria over the consolidated store (builds processed/<ds>/ if missing)
+    # split = criteria over the consolidated store (builds processed/<ds>/ if missing). A coded split
+    # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
+    srcs = list(d.sources)
+    if d.split:
+        from core.data.ingest.splits import load_split, parse_ref
+        srcs = list(getattr(load_split(parse_ref(d.split)[0]), "sources", None) or d.sources)
     with timed(log, "store.load + split"):
-        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
+        meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
         if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
             from core.data.ingest.splits import resolve_cfg
