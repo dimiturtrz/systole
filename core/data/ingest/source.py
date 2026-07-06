@@ -23,6 +23,11 @@ def ids_hash(subjects: list[tuple[str, str]]) -> str:
     return "sha256:" + hashlib.sha256(blob.encode()).hexdigest()
 
 
+def subject_keys(df: pl.DataFrame) -> set[str]:
+    """The '{dataset}\\t{subject_id}' identity-key set for a frame — for join/leak/dedup checks."""
+    return set((df["dataset"] + "\t" + df["subject_id"].cast(pl.Utf8)).to_list())
+
+
 @runtime_checkable
 class Source(Protocol):
     """Yields samples to the pipe. Static exposes a fixed subject set (paths); dynamic streams from a

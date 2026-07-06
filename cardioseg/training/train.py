@@ -74,17 +74,15 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False):
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
         if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
-            from core.data.ingest.splits import load_split
-            from core.data.ingest.split import resolve
-            name, ver = (d.split.split("@", 1) + [None])[:2]
-            r = resolve(load_split(name), meta, ver)
-            train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> materialize seam
+            from core.data.ingest.splits import resolve_cfg
+            r = resolve_cfg(d, meta)
+            train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam
             test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
             val_df = r.val.frame                     # val is real -> its frame drives scoring/export/params
             if r.train.kind == "static":
                 train_df = r.train.frame             # dynamic train has no frame (counts via tensors)
             log.info("split=%s@%s test_hash=%s | train=%s val=%s test n=%d",
-                     name, r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
+                     d.split.split("@")[0], r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
         else:
             train_src = val_src = None               # legacy: DataCfg criteria + inline anatomy block
             train_df, val_df, test_df = splits.split_from_cfg(d, meta, cfg.seed)

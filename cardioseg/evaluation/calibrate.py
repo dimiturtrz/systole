@@ -91,9 +91,14 @@ def main():
     run = resolve(a.run)
     model, cfg, device = load_run(run)
     d = cfg.generator.data
-    meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
-    _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                     val_datasets=d.val_datasets, val_vendors=d.val_vendors)
+    meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
+    if getattr(d, "split", ""):                           # coded split -> its resolved val/test
+        from core.data.ingest.splits import resolve_cfg
+        r = resolve_cfg(d, meta)
+        val, test = r.val.frame, r.test.frame
+    else:
+        _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+                                         val_datasets=d.val_datasets, val_vendors=d.val_vendors)
     size = d.size
 
     val_logits, val_labels = _gather(model, splits.paths(val), size, device)

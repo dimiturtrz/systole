@@ -23,3 +23,17 @@ def load_split(name: str):
 
 def list_splits() -> list[str]:
     return sorted(_FAMILIES)
+
+
+def parse_ref(ref: str) -> tuple[str, str | None]:
+    """'name@version' -> (name, version); 'name' -> (name, None)."""
+    name, ver = (ref.split("@", 1) + [None])[:2]
+    return name, ver
+
+
+def resolve_cfg(d, meta):
+    """Resolve a DataCfg's coded split (`d.split`) over `meta` -> Resolution(train, val, test, …).
+    The one place the name@version parse + load_split + resolve dance lives."""
+    from core.data.ingest.split import resolve
+    name, ver = parse_ref(d.split)
+    return resolve(load_split(name), meta, ver)

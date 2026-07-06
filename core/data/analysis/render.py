@@ -29,7 +29,7 @@ def render_synth_vs_real(out_png: str | Path = ".staging/synth_diag.png", k: int
     torch.manual_seed(seed); np.random.seed(seed)
     d = TrainCfg().generator.data
     n = len(CLASSES) + 1
-    meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4, workers=4)
+    meta = store.load_cfg(d, workers=4)              # ALL preprocessing params (nyul/norm too)
     va = splits.model_val(d, meta)                   # held-out real slices (coded split's val if set)
     X, Y = load_to_gpu(splits.paths(va), d.size, "cpu")
     good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]

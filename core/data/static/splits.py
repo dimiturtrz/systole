@@ -75,10 +75,8 @@ def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
     ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
     the coded splits' val — a trap this removes)."""
     if getattr(d, "split", ""):
-        from core.data.ingest.splits import load_split
-        from core.data.ingest.split import resolve
-        name, ver = (d.split.split("@", 1) + [None])[:2]
-        return resolve(load_split(name), meta, ver).val.frame
+        from core.data.ingest.splits import resolve_cfg
+        return resolve_cfg(d, meta).val.frame
     return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                       d.val_datasets, d.val_vendors, d.train_vendors)[1]
 

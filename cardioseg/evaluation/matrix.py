@@ -22,12 +22,9 @@ import numpy as np
 import polars as pl
 
 from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, EVAL_SOURCES
+from core.data.ingest.source import subject_keys
 
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
-
-
-def _key(df: pl.DataFrame) -> set[str]:
-    return set((df["dataset"] + "\t" + df["subject_id"].cast(pl.Utf8)).to_list())
 
 
 def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
@@ -42,16 +39,14 @@ def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
     d = cfg.generator.data
     in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
     if getattr(d, "split", ""):
-        from core.data.ingest.splits import load_split
-        from core.data.ingest.split import resolve
-        name, ver = (d.split.split("@", 1) + [None])[:2]
-        r = resolve(load_split(name), in_sources, ver)
+        from core.data.ingest.splits import resolve_cfg
+        r = resolve_cfg(d, in_sources)
         seen = set(r.val.subjects())                            # val is always a real StaticSource
         if getattr(r.train, "kind", "static") == "static":
             seen |= set(r.train.subjects())
         return {f"{a}\t{b}" for a, b in seen}
     test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
-    return _key(in_sources.filter(pl.col("labelled") & ~test))
+    return subject_keys(in_sources.filter(pl.col("labelled") & ~test))
 
 
 def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
@@ -70,9 +65,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
         model, cfg, device = load_run(resolve_model(ref))
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
-        meta = store.load(EVAL_SOURCES, inplane=(d.inplane if d else store.TARGET_INPLANE),
-                          n4=(d.n4 if d else False), nyul=(d.nyul if d else False),
-                          norm=(d.norm if d else "zscore"))
+        meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
         seen = _seen_keys(cfg, meta)
         for ts in tsets:
             src = ts.source(meta)                        # lock-checked; raises on drift

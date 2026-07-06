@@ -370,6 +370,14 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 
 
+def load_cfg(d, sources=None, workers: int | None = None) -> pl.DataFrame:
+    """Load the cloud a model (DataCfg `d`) trained under — ALL its preprocessing params (inplane, n4,
+    nyul, norm), not just some. Callers that pass only inplane/n4 silently read zscore npz for a nyul/
+    blood-norm model (a trap). `sources` overrides d.sources (e.g. the matrix's full eval cloud)."""
+    return load(list(sources if sources is not None else d.sources), inplane=d.inplane, n4=d.n4,
+                n4_params=d.n4_params, nyul=d.nyul, norm=d.norm, workers=workers)
+
+
 def load_arrays(path: str | Path) -> dict:
     """Load one consolidated subject npz -> dict (ed_img/ed_gt/es_img/es_gt/spacing/group)."""
     z = np.load(path, allow_pickle=True)

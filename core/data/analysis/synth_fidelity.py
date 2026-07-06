@@ -262,7 +262,7 @@ def _main():
     device = resolve_device(None)
     d = cfg.generator.data
     sc, nc = cfg.generator.synth, cfg.model.out_channels
-    meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4)
+    meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     if a.mode == "distance" and a.by_vendor:
         print(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
         return
