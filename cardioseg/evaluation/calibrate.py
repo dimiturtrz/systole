@@ -68,7 +68,7 @@ def main():
     model, cfg, device = load_run(run)
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
-    if getattr(d, "split", ""):                           # coded split -> its resolved val/test
+    if d.split:                                           # coded split -> its resolved val/test
         r = resolve_cfg(d, meta)
         val, test = r.val.frame, r.test.frame
     else:

@@ -90,7 +90,7 @@ class SeedTrainer:
     def _build_loss(self):
         """PARTIAL-LABEL mask -> PartialLabelDiceCE; soft-label -> SoftDiceCE; else the configured loss."""
         gen = self.gen
-        partial = getattr(gen, "valid", None) is not None
+        partial = gen.valid is not None
         if partial:
             self.log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
                           int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
