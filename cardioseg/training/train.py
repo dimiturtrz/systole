@@ -16,7 +16,7 @@ import mlflow
 import numpy as np
 import torch
 
-from core.data.analysis.attribution import run_attribution
+from core.data.analysis.attribution import Attribution
 from core.data.dynamic.anatomy import load_pool
 from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.generator import Generator
@@ -125,7 +125,7 @@ def _finalize(sh: dict, cfg: TrainCfg, out, model, results: dict, alias: str | N
     except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("model card skipped: %s", e)
     try:                                                   # attribution diagnostic (confusion + saliency)
-        s = run_attribution(model, Xva, Yva, cfg.model.out_channels, device, out)
+        s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
         log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
     except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("attribution skipped: %s", e)
