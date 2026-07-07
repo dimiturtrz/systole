@@ -173,21 +173,28 @@ def test_excise_heart_removes_the_heart():
 
 
 def test_acquisition_matched_is_fixed_randomized_is_not():
-    """make_acquisition: matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
-    vary per sample. One rep per acq_mode equivalence class."""
-    from core.data.dynamic.synth import LegacyAcq, MatchedAcq, RandomizedAcq, make_acquisition
-    cfg = SynthCfg(acq_mode="matched", match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0,
-                   match_vendor="GE", fields=(1.5, 3.0), vendors=("Siemens", "GE"))
-    assert isinstance(make_acquisition(cfg), MatchedAcq)
-    fi, tr, fl, vi = make_acquisition(cfg).sample(8, cfg, "cpu")
+    """cfg.acq.build(): matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
+    vary per sample. One rep per acq variant."""
+    from core.data.dynamic.synth import (
+        LegacyAcq,
+        LegacyAcqCfg,
+        MatchedAcq,
+        MatchedAcqCfg,
+        RandomizedAcq,
+        RandomizedAcqCfg,
+    )
+    cfg = SynthCfg(acq=MatchedAcqCfg(match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0, match_vendor="GE"),
+                   fields=(1.5, 3.0), vendors=("Siemens", "GE"))
+    assert isinstance(cfg.acq.build(), MatchedAcq)
+    fi, tr, fl, vi = cfg.acq.build().sample(8, cfg, "cpu")
     assert (fi == 1).all() and (vi == 1).all()                     # field=3.0 idx1, vendor=GE idx1
     assert tr.unique().numel() == 1 and fl.unique().numel() == 1   # fixed, no spread
     assert abs(float(tr[0]) - 3.2) < 1e-4 and abs(float(fl[0]) - 45.0) < 1e-4
-    rc = SynthCfg(acq_mode="randomized")
-    assert isinstance(make_acquisition(rc), RandomizedAcq)
-    _, rtr, rfl, _ = make_acquisition(rc).sample(64, rc, "cpu")
+    rc = SynthCfg(acq=RandomizedAcqCfg())
+    assert isinstance(rc.acq.build(), RandomizedAcq)
+    _, rtr, rfl, _ = rc.acq.build().sample(64, rc, "cpu")
     assert rtr.unique().numel() > 1 and rfl.unique().numel() > 1    # randomized varies
-    assert isinstance(make_acquisition(SynthCfg(acq_mode="legacy")), LegacyAcq)
+    assert isinstance(SynthCfg(acq=LegacyAcqCfg()).acq.build(), LegacyAcq)
 
 
 def test_return_meta_emits_provenance():

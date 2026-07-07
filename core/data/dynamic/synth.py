@@ -22,10 +22,11 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from typing import Annotated, Literal
 
 import torch
 import torch.nn.functional as F
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
 
@@ -42,6 +43,48 @@ from .mri_physics import (
 from .mrxcat import FOV_TISSUE
 
 
+# Acquisition strategy as a discriminated union: each variant BUILDS its Acquisition (cfg.acq.build()).
+# build() bodies resolve the strategy classes (defined lower) at call-time.
+class AcquisitionCfg(BaseModel):
+    """Per-sample scanner-settings strategy cfg. Subclass build() returns the Acquisition."""
+    model_config = _VALIDATE
+
+    def build(self) -> "Acquisition":
+        raise NotImplementedError
+
+
+class LegacyAcqCfg(AcquisitionCfg):
+    """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg)."""
+    mode: Literal["legacy"] = "legacy"
+
+    def build(self):
+        return LegacyAcq()
+
+
+class RandomizedAcqCfg(AcquisitionCfg):
+    """Physics-bounded domain randomization (derive_flip_range over the SAR-bounded band)."""
+    mode: Literal["randomized"] = "randomized"
+
+    def build(self):
+        return RandomizedAcq()
+
+
+class MatchedAcqCfg(AcquisitionCfg):
+    """Paint TO one target scanner — no randomization (bd 7pto)."""
+    mode: Literal["matched"] = "matched"
+    match_field: float = 1.5                        # target field (T; nearest in `fields`)
+    match_tr_ms: float = 3.0                        # target repetition time (ms)
+    match_flip_deg: float = 50.0                    # target flip angle (deg)
+    match_vendor: str = ""                          # target vendor tag ("" -> first of vendors)
+
+    def build(self):
+        return MatchedAcq(self.match_field, self.match_tr_ms, self.match_flip_deg, self.match_vendor)
+
+
+AnyAcqCfg = Annotated[LegacyAcqCfg | RandomizedAcqCfg | MatchedAcqCfg, Field(discriminator="mode")]
+ACQ_VARIANTS = {c.model_fields["mode"].default: c for c in (LegacyAcqCfg, RandomizedAcqCfg, MatchedAcqCfg)}
+
+
 class SynthCfg(BaseModel):
     """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
     Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
@@ -51,6 +94,19 @@ class SynthCfg(BaseModel):
     more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
     (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
     model_config = _VALIDATE
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_acq(cls, v):
+        """Back-compat: old config.json had flat `acq_mode` + `match_*`; fold them into the `acq` union."""
+        if isinstance(v, dict) and "acq" not in v and "acq_mode" in v:
+            v = dict(v)
+            acq: dict = {"mode": v.pop("acq_mode")}
+            for k in ("match_field", "match_tr_ms", "match_flip_deg", "match_vendor"):
+                if k in v:
+                    acq[k] = v.pop(k)
+            v["acq"] = acq
+        return v
     synth_p: float = Field(0.5, ge=0, le=1)         # fraction of in-batch samples replaced by synth.
     #                                                DEFAULT 0.5 = the MINIMUM synthetic share in training
     #                                                (owner mandate): synth stays in the pipeline. Costs
@@ -89,18 +145,7 @@ class SynthCfg(BaseModel):
     #                                                (PMC9843884). The physical input to inflow, sampled per
     #                                                slice (position-varying) — the source of f's spread.
     slice_mm: tuple[float, float] = (6.0, 8.0)     # cine slice thickness (mm), SCMR standardized 6-8mm
-    # acq_mode selects an Acquisition STRATEGY (see make_acquisition):
-    #   "legacy"     = sample TR/flip from the cfg.tr_ms/flip_deg global ranges (old default).
-    #   "randomized" = TR/flip DERIVED from physics (derive_acquisition + derive_flip_range, sampled
-    #                  across the SAR-bounded band). Defensible/derived path (bd 276); ~matches but
-    #                  doesn't beat the empirical ranges on cross-vendor Dice (0.673 vs 0.701).
-    #   "matched"    = paint TO a single TARGET scanner (match_* below) instead of randomizing — for
-    #                  known-deployment-machine training + the match-vs-randomize test (bd 7pto).
-    acq_mode: str = "legacy"
-    match_field: float = 1.5                        # matched-acq target: field (T; nearest in `fields`)
-    match_tr_ms: float = 3.0                        # matched-acq target: repetition time (ms)
-    match_flip_deg: float = 50.0                    # matched-acq target: flip angle (deg)
-    match_vendor: str = ""                          # matched-acq target vendor tag ("" -> first of vendors)
+    acq: AnyAcqCfg = Field(default_factory=LegacyAcqCfg)   # scanner-settings strategy (legacy/randomized/matched)
     # --- background (bg_mode selects a Background STRATEGY; see make_background) ---
     bg_mode: str = "partition"                      # one of: "flat" (single bg tissue) | "procedural"
     #                                                (SYNTHETIC random-field organ blobs, ZERO-REAL) |
@@ -314,27 +359,20 @@ class RandomizedAcq(Acquisition):
 
 
 class MatchedAcq(Acquisition):
-    """Paint TO one target scanner (cfg.match_*): fixed field (nearest available), TR, flip, vendor —
-    no randomization. For known-deployment training + the match-vs-randomize test (bd 7pto)."""
+    """Paint TO one target scanner (from MatchedAcqCfg): fixed field (nearest available), TR, flip,
+    vendor — no randomization. For known-deployment training + the match-vs-randomize test (bd 7pto)."""
+    def __init__(self, field: float, tr_ms: float, flip_deg: float, vendor: str):
+        self.field, self.tr_ms, self.flip_deg, self.vendor = field, tr_ms, flip_deg, vendor
+
     def sample(self, b, cfg, dev):
         fields = torch.tensor(cfg.fields, device=dev)
-        fidx = int(torch.argmin((fields - cfg.match_field).abs()))          # nearest available field
-        vidx = cfg.vendors.index(cfg.match_vendor) if cfg.match_vendor in cfg.vendors else 0
+        fidx = int(torch.argmin((fields - self.field).abs()))               # nearest available field
+        vidx = cfg.vendors.index(self.vendor) if self.vendor in cfg.vendors else 0
         fi = torch.full((b,), fidx, device=dev, dtype=torch.long)
         vi = torch.full((b,), vidx, device=dev, dtype=torch.long)
-        tr = torch.full((b, 1), float(cfg.match_tr_ms), device=dev)
-        fl = torch.full((b, 1), float(cfg.match_flip_deg), device=dev)
+        tr = torch.full((b, 1), float(self.tr_ms), device=dev)
+        fl = torch.full((b, 1), float(self.flip_deg), device=dev)
         return fi, tr, fl, vi
-
-
-_ACQ_REGISTRY = {"legacy": LegacyAcq, "randomized": RandomizedAcq, "matched": MatchedAcq}
-
-
-def make_acquisition(cfg: SynthCfg) -> Acquisition:
-    try:
-        return _ACQ_REGISTRY[cfg.acq_mode]()
-    except KeyError:
-        raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}") from None
 
 
 _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the conv
@@ -377,7 +415,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     t1s = torch.stack([p[0] for p in params]); t2s = torch.stack([p[1] for p in params])
     pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
     # acquisition STRATEGY: per-sample field/TR/flip/vendor (legacy ranges / physics-randomized / matched)
-    fi, tr, fl, vi = make_acquisition(cfg).sample(b, cfg, dev)
+    fi, tr, fl, vi = cfg.acq.build().sample(b, cfg, dev)
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 from core.config import _VALIDATE
 from core.data.dynamic.augment import AugCfg
 from core.data.dynamic.generator import GeneratorCfg
-from core.data.dynamic.synth import SynthCfg
+from core.data.dynamic.synth import ACQ_VARIANTS, SynthCfg
 from core.data.static.store import DataCfg
 from core.losses import (
     LOSS_VARIANTS,
@@ -118,16 +118,24 @@ def _coerce(val: str, cur):
     return val
 
 
+# discriminator field name -> {tag: variant cls}, for --set switching of a union field's variant.
+_UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": ACQ_VARIANTS}
+
+
 def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
     """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'data.test_vendors=(\"GE\",)').
     Each setattr is validated (validate_assignment) -> an out-of-bounds/typo value raises immediately."""
     for it in items or []:
         key, _, val = it.partition("=")
-        key = key.strip()
-        if key == "loss.kind":                    # union: switch the loss VARIANT (a setattr can't cross types)
-            cfg.loss = LOSS_VARIANTS[val.strip()]()
+        *parents, leaf = key.strip().split(".")
+        # a discriminated-union field is chosen by its tag ('kind'/'mode'); a setattr can't cross variant
+        # types, so overriding the tag REBUILDS the whole variant on its container.
+        if leaf in _UNION_VARIANTS and parents:
+            container = cfg
+            for p in parents[:-1]:
+                container = getattr(container, p)
+            setattr(container, parents[-1], _UNION_VARIANTS[leaf][val.strip()]())
             continue
-        *parents, leaf = key.split(".")
         obj = cfg
         for p in parents:
             obj = getattr(obj, p)
