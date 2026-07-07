@@ -40,6 +40,7 @@ def _pool(name: str) -> str:
 
 class SynthMain:
     name = "synth_main"
+    sources = ()                        # synth train adds no real store sources
     versions = {
         "1.0.0": SplitDef(
             train=lambda c: DynamicSource(pool=_pool(POOL), bg_mode=ZERO_REAL_BG,

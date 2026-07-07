@@ -100,8 +100,7 @@ class Evaluator:
         scores = _ClassScores()                                  # holds the Dice/boundary accumulators
         ef_rows = []
         for npz_path in npz_paths:
-            c = load_arrays(npz_path)
-            c = {k: (c[k].item() if k == "group" and hasattr(c[k], "item") else c[k]) for k in c}
+            c = load_arrays(npz_path)                            # group already a plain py scalar
             spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
             vols = {}
             for tag in ("ED", "ES"):

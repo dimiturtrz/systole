@@ -18,6 +18,7 @@ V = pl.col
 
 class StaticMain:
     name = "static_main"
+    sources = ()                        # default seg cloud (= DataCfg.sources); no extra
     versions = {
         "1.0.0": SplitDef(
             test=lambda c: STATIC_MAIN_TEST.source(c),           # unseen vendors + motion cohort (147, locked)

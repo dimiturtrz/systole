@@ -189,11 +189,14 @@ def build_loss(cfg: LossCfg | None = None):
     an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
     cfg = cfg or LossCfg()
     if cfg.kind == "dice_ce":
-        return dice_ce_loss()
-    if cfg.kind == "dice_ce_tversky":
-        return DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda)
-    if cfg.kind == "dice_ce_her":
-        return DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp)
-    if cfg.kind == "dice_ce_hd":
-        return DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp)
-    raise ValueError(f"unknown loss {cfg.kind!r} (dice_ce | dice_ce_tversky | dice_ce_her | dice_ce_hd)")
+        loss = dice_ce_loss()
+    elif cfg.kind == "dice_ce_tversky":
+        loss = DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda)
+    elif cfg.kind == "dice_ce_her":
+        loss = DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp)
+    elif cfg.kind == "dice_ce_hd":
+        loss = DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp)
+    else:
+        raise ValueError(f"unknown loss {cfg.kind!r} (dice_ce | dice_ce_tversky | dice_ce_her | dice_ce_hd)")
+    loss.epoch = 0    # uniform interface: the train loop sets .epoch each epoch (HD-warmup losses use it, others ignore)
+    return loss

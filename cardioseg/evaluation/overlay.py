@@ -50,8 +50,7 @@ def _panel(ax, img, mask, title):
 
 
 def _case(model, path, size, device):
-    c = load_arrays(path)
-    c = {k: (c[k].item() if k == "group" and hasattr(c[k], "item") else c[k]) for k in c}
+    c = load_arrays(path)                                    # group already a plain py scalar
     spacing = tuple(float(s) for s in c["spacing"])
     pred_ed = largest_cc_per_class(predict_volume(model, c["ed_img"], size, device, tta=True))
     pred_es = largest_cc_per_class(predict_volume(model, c["es_img"], size, device, tta=True))

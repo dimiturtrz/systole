@@ -387,7 +387,7 @@ def load_cfg(d, sources=None, workers: int | None = None) -> pl.DataFrame:
 def load_arrays(path: str | Path) -> dict:
     """Load one consolidated subject npz -> dict (ed_img/ed_gt/es_img/es_gt/spacing/group)."""
     z = np.load(path, allow_pickle=True)
-    return {k: z[k] for k in z.files}
+    return {k: (z[k].item() if k == "group" else z[k]) for k in z.files}   # group -> plain py scalar (0-d npz)
 
 
 if __name__ == "__main__":

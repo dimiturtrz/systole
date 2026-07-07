@@ -126,8 +126,7 @@ class SeedTrainer:
         for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
             t0 = time.perf_counter()
             model.train()
-            if hasattr(loss_fn, "epoch"):
-                loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
+            loss_fn.epoch = ep                                 # drives the HD-warmup ramp (dice_ce_hd); no-op for others
             tot = 0.0
             perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
             for bi in progress(range(nb), f"epoch {ep}", total=nb):
@@ -299,7 +298,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
     srcs = list(d.sources)
     if d.split:
-        srcs = list(getattr(load_split(parse_ref(d.split)[0]), "sources", None) or d.sources)
+        srcs = list(load_split(parse_ref(d.split)[0]).sources or d.sources)
     with timed(log, "store.load + split"):
         meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
