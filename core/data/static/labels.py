@@ -33,6 +33,8 @@ CLASSES: dict[int, tuple[str, str]] = {
 
 FOREGROUND: tuple[int, ...] = tuple(CLASSES)        # (1, 2, 3) — non-background labels
 LV_CAV: int = int(Label.LV_CAV)                     # the EF blood-pool label (3)
+MYO: int = int(Label.MYO)                           # LV-myocardium label (2)
+RV: int = int(Label.RV)                             # RV-cavity label (1)
 CLASS_NAMES: list[str] = [n for n, _ in CLASSES.values()]   # ["RV", "LV-myo", "LV-cav"]
 
 # ── Partial-label: which classes a dataset actually ANNOTATES (trustworthy GT) ────────────────────

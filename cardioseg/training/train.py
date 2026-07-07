@@ -10,6 +10,7 @@ for provenance + reproducibility — the criteria ARE the record of what was hel
 import argparse
 import json
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import mlflow
@@ -201,21 +202,15 @@ class SeedTrainer:
         model, out, log = self.model, self.out, self.log
         Xva, Yva, val_df, device = self.sh["Xva"], self.sh["Yva"], self.sh["val_df"], self.device
         cfg, d, alias, seed = self.cfg, self.d, self.alias, self.seed
-        try:
+        with self._artifact_step("model card"):
             generate(out)
             log.info("wrote %s/MODEL_CARD.md", out)
-        except Exception as e:  # noqa: BLE001  best-effort artifact step
-            log.warning("model card skipped: %s", e)
-        try:                                                   # attribution diagnostic (confusion + saliency)
+        with self._artifact_step("attribution"):               # attribution diagnostic (confusion + saliency)
             s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
             log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
-        except Exception as e:  # noqa: BLE001  best-effort artifact step
-            log.warning("attribution skipped: %s", e)
-        try:
+        with self._artifact_step("ONNX export"):
             export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
-        except Exception as e:  # noqa: BLE001  best-effort artifact step
-            log.warning("ONNX export skipped: %s", e)
-        try:
+        with self._artifact_step("registry save"):
             rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
             split = "+".join(d.test_vendors) or "legacy"
             kind = "flagship" if alias == "production" else "candidate"
@@ -223,8 +218,18 @@ class SeedTrainer:
                        description=f"{out.name} · split={split} · seed={seed}",
                        tags={"kind": kind, "split": split, "seed": seed})
             log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
-        except Exception as e:  # noqa: BLE001  best-effort artifact step
-            log.warning("registry save skipped: %s", e)
+
+    @contextmanager
+    def _artifact_step(self, name):
+        """Run one post-training artifact step best-effort. By the time _finalize runs the model.pth is
+        ALREADY saved, so a card / attribution / ONNX / registry hiccup (a missing optional dep, one bad
+        val slice, a locked mlflow db) must be logged and swallowed — never lose an hour-long trained run.
+        This is the ONE place a blanket except earns its keep: the steps are heterogeneous heavy 3rd-party
+        ops (matplotlib / torch.onnx / mlflow) with no shared failure type worth enumerating. KEEP?"""
+        try:
+            yield
+        except Exception as e:  # noqa: BLE001  artifact tail, model already persisted — see docstring
+            self.log.warning("%s skipped: %s", name, e)
 
 
 def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):  # noqa: PLR0913  one-off legacy-path builder — independent inputs

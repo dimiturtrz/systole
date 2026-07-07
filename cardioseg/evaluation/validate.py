@@ -48,6 +48,22 @@ class Evaluator:
     def __init__(self, model, device: str, cfg: EvalCfg | None = None):
         self.model, self.device, self.cfg = model, device, cfg or EvalCfg()
 
+    @staticmethod
+    def _accumulate(pred, gt, spacing, inter, denom, surf):  # noqa: PLR0913  KEEP? folds one volume into 3 running accumulators; they ARE the state being mutated, not bundle-able config
+        """Fold one predicted volume's per-class Dice numerator/denominator + boundary distances into the
+        running accumulators. NB re: the "triple for" — this class loop is exactly 3 iterations (RV/myo/
+        LV-cav) of *vectorized* numpy ops + one HD95 each; it does NOT drive wall-time. The forward pass in
+        predict_volume (and, secondarily, surface_distances' distance transform) dominates — de-nesting it
+        into a helper is for readability, not speed; the arithmetic here is negligible."""
+        for cl in CLASS_NAMES:
+            p, g = pred == cl, gt == cl
+            inter[cl] += 2.0 * np.logical_and(p, g).sum()
+            denom[cl] += p.sum() + g.sum()
+            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
+            if sd.size:
+                m = surface_metrics(sd)
+                surf[cl]["hd95"].append(m["hd95"]); surf[cl]["assd"].append(m["assd"])
+
     def validate(self, npz_paths) -> tuple[dict[int, float], list[dict], dict]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
         all val slices}. ef_rows: {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}. `npz_paths` are
@@ -72,14 +88,7 @@ class Evaluator:
                     pred = largest_cc_per_class(pred)
                 gt = stack_slices(c[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
-                for cl in CLASS_NAMES:
-                    p, g = pred == cl, gt == cl
-                    inter[cl] += 2.0 * np.logical_and(p, g).sum()
-                    denom[cl] += p.sum() + g.sum()
-                    sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
-                    if sd.size:
-                        m = surface_metrics(sd)
-                        surf[cl]["hd95"].append(m["hd95"]); surf[cl]["assd"].append(m["assd"])
+                self._accumulate(pred, gt, spacing, inter, denom, surf)
             if "ED" in vols and "ES" in vols:
                 ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
                 ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)

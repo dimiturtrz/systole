@@ -16,6 +16,7 @@ from pathlib import Path
 import mlflow
 import numpy as np
 import polars as pl
+from mlflow.exceptions import MlflowException
 
 from cardioseg.evaluation.distribution import _pooled, collect, strata_table
 from core.config import FLAGSHIP_REF
@@ -105,8 +106,8 @@ def main():
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
                 mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
             mlflow.log_artifact(a.out)
-    except Exception:  # noqa: S110, BLE001  — best-effort mlflow logging; never break scoring
-        pass
+    except MlflowException as e:   # db locked / run gone / tracking-uri unreachable — logging is a side
+        log.warning("mlflow metric logging skipped: %s", e)   # channel; scoring (already written to a.out) must not break on it
 
 
 if __name__ == "__main__":

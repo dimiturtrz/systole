@@ -21,12 +21,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import polars as pl
 from scipy.ndimage import binary_erosion
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from core.config import FLAGSHIP_REF
-from core.data.static import store
+from core.data.static import splits, store
 from core.data.static.labels import overlay_cmap
 from core.inference import predict_volume_members
 from core.obs import setup
@@ -129,10 +128,7 @@ def main():
     run = resolve(a.run)
     model, _, device = load_run(run)
 
-    if a.eval == "canon":
-        df = store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
-    else:
-        df = store.load(["acdc"]).filter(pl.col("labelled"))
+    df = splits.eval_set(a.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
 
     out = run / "plots"
     out.mkdir(parents=True, exist_ok=True)

@@ -32,7 +32,12 @@ from scipy.ndimage import label as cc_label
 from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
-from core.data.static.labels import LV_CAV  # 3
+from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
+
+
+class MeshError(Exception):
+    """A mesh could not be read or voxelized into a usable label volume (bad file, degenerate
+    geometry, no foreground). The pool builder skips these — one bad mesh must not kill the build."""
 from core.obs import setup
 from core.preprocessing.preprocess import fit_square
 
@@ -112,6 +117,9 @@ def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
     return np.asarray(sel["SelectedPoints"]).astype(bool)
 
 
+_MIN_LV_WALL_PX = 8   # fewer LV-wall px than this in a SAX slice -> too little to close a cavity ring, skip
+
+
 def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
              rv_close: int = 3) -> np.ndarray:
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
@@ -122,6 +130,8 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     x0, x1, y0, y1, z0, z1 = m.bounds
     nx = int(np.ceil((x1 - x0) / inplane)); ny = int(np.ceil((y1 - y0) / inplane))
     nz = int(np.ceil((z1 - z0) / slice_mm))
+    if min(nx, ny, nz) < 1:                              # degenerate/empty mesh -> no grid to rasterize
+        raise MeshError(f"degenerate mesh bounds {m.bounds} -> grid {(nx, ny, nz)}")
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=(inplane, inplane, slice_mm),
                         origin=(x0, y0, z0))
     lv = _wall_mask(m, LV_ID, grid, tn).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
@@ -129,7 +139,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
         lw, rw = lv[k], rv[k]
-        if lw.sum() < 8:  # noqa: PLR2004 (min LV-wall px for a usable slice)
+        if lw.sum() < _MIN_LV_WALL_PX:
             continue
         lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
         # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
@@ -144,8 +154,8 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
             near = binary_dilation(rw, iterations=2)
             keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
             rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
-        out[k][rv_cav] = 1                                            # RV cavity
-        out[k][lw] = 2                                               # LV myocardium (RV wall -> bg)
+        out[k][rv_cav] = RV                                           # RV cavity
+        out[k][lw] = MYO                                             # LV myocardium (RV wall -> bg)
         out[k][lv_cav] = LV_CAV                                      # LV cavity (3)
     return out
 
@@ -177,8 +187,13 @@ def load(path: str | Path):
     BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
     p = Path(path)
     vtu = p.with_suffix(".vtu")
-    m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
-    m.set_active_scalars(_tag_name(m), preference="cell")
+    try:
+        m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
+        m.set_active_scalars(_tag_name(m), preference="cell")
+    except (OSError, ValueError, KeyError, RuntimeError) as e:
+        # pyvista read/parse failures (missing/corrupt file, no region tag) surface as these — wrap as
+        # our domain error so callers catch MeshError, not a blanket Exception.
+        raise MeshError(f"cannot read mesh {p}: {e}") from e
     return m
 
 
@@ -205,7 +220,7 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
     (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
     ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
-    lvc, myo = mask == LV_CAV, mask == 2  # noqa: PLR2004 (2 = LV-myo label id)
+    lvc, myo = mask == LV_CAV, mask == MYO
     wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
     out = mask.copy()
     if lvc.any() and myo.any() and k != 0:
@@ -215,12 +230,12 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
             out[wall] = 2
             out[new_lvc] = LV_CAV
     if rv_k > 0 and (mask == 1).any():                       # abnormal RV: grow RV cavity into bg only
-        grown = binary_dilation(mask == 1, iterations=rv_k) & ~(out == 2) & ~(out == LV_CAV)  # noqa: PLR2004 (2 = LV-myo label id)
+        grown = binary_dilation(mask == RV, iterations=rv_k) & ~(out == MYO) & ~(out == LV_CAV)
         out[grown] = 1
     return out
 
 
-def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),  # noqa: PLR0913  offline pool builder — independent path/size inputs
+def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),  # noqa: PLR0913  KEEP? offline one-shot builder; args are independent pathology k-ranges (dcm/hcm/rv), no shared identity to bundle into a cfg. cf. build_pool below — a PoolBuildCfg would force two unlike builders together.
                          rv=(2, 6), seed: int = 0) -> tuple[Path, tuple]:
     """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
     HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
@@ -245,7 +260,7 @@ def _pool_worker(args) -> list[np.ndarray]:
     out = []
     try:
         vol = voxelize(load(mp), inplane=inplane)
-    except Exception:  # noqa: BLE001  a malformed mesh shouldnt kill the build
+    except MeshError:                                   # bad file / degenerate geometry -> skip this mesh
         return out
     for _ in range(max(1, scale_reps)):
         tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
@@ -258,13 +273,13 @@ def _pool_worker(args) -> list[np.ndarray]:
             # drop pure-apical myo-only slices (no cavity): the mesh contributes its whole apico-basal
             # stack, so apex slices (~all myo, no cavity) over-represent 11x vs real (19% vs 1.8%). Require
             # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
-            if min_cav_frac > 0 and int(((s == 1) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
+            if min_cav_frac > 0 and int(((s == RV) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
                 continue
             out.append(fit_square(s, size, 0).astype(np.uint8))
     return out
 
 
-def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,  # noqa: PLR0913  offline pool builder — independent path/size inputs
+def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,  # noqa: PLR0913  KEEP? offline one-shot mesh->pool builder called from tooling/CLI, not the hot path; params are independent voxelization scalars (inplane/min_fg/scale_reps/workers/min_cav_frac). Bundle into PoolBuildCfg if you'd rather (mrxcat.build_pool mirrors this) — flag it.
                inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
                seed: int = 0, workers: int = 0, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
     """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`

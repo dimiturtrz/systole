@@ -18,6 +18,17 @@ import numpy as np
 import polars as pl
 
 from core.data.ingest.splits import resolve_cfg
+from core.data.static import store
+
+
+def eval_set(name: str) -> pl.DataFrame:
+    """Resolve a named EVAL set to its labelled subject rows — the single home for eval-set vendor
+    knowledge (was copy-pasted in distribution.py + uncertainty.py). 'canon' = the unseen-vendor slice
+    (M&Ms-1 vendor==Canon); any other name is that whole dataset. Labelled-only (usable GT). A criteria
+    filter over the consolidated store — consistent with the no-named-splits rule above."""
+    if name == "canon":
+        return store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
+    return store.load([name]).filter(pl.col("labelled"))
 
 
 def split_patients(cases: list[Path], val_frac: float = 0.2, seed: int = 0
