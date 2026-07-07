@@ -60,7 +60,6 @@ def _main():
     d = TrainCfg().generator.data
     n_classes = len(CLASSES) + 1
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    names = ["bg"] + [nm for nm, _ in CLASSES.values()]
     print(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
     for vendor in ("Siemens", "Philips", "GE", "Canon"):
         df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))

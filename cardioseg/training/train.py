@@ -60,10 +60,10 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     — RNG, model, optimizer, per-seed artifact dir + registry entry — lives here; the read-only data
     (resident tensors, val, aux EF lanes) is shared, so N seeds cost 1×data + N×model, not N×both."""
     d = cfg.generator.data
-    device, pin, data_device = sh["device"], sh["pin"], sh["data_device"]
+    device, pin = sh["device"], sh["pin"]
     gen, Xva, Yva, aux = sh["gen"], sh["Xva"], sh["Yva"], sh["aux"]
-    train_df, val_df, test_df = sh["train_df"], sh["val_df"], sh["test_df"]
-    train_src, nb, n_train = sh["train_src"], sh["nb"], sh["n_train"]
+    val_df, test_df = sh["val_df"], sh["test_df"]
+    nb, n_train = sh["nb"], sh["n_train"]
 
     cfg.seed = seed                                        # this run's provenance (config / registry / tags)
     out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"

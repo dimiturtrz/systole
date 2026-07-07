@@ -8,7 +8,10 @@ shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
 import numpy as np
 
-from core.data.static.labels import CLASSES, FOREGROUND  # noqa: F401  (CLASSES re-exported for back-compat callers: validate/distribution/results)
+from core.data.static.labels import (  # noqa: F401  (CLASSES re-exported for back-compat callers: validate/distribution/results)
+    CLASSES,
+    FOREGROUND,
+)
 from core.types import Mask, Spacing
 
 try:
