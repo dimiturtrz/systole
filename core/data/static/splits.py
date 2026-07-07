@@ -22,13 +22,14 @@ from core.data.static import store
 
 
 def eval_set(name: str) -> pl.DataFrame:
-    """Resolve a named EVAL set to its labelled subject rows — the single home for eval-set vendor
-    knowledge (was copy-pasted in distribution.py + uncertainty.py). 'canon' = the unseen-vendor slice
-    (M&Ms-1 vendor==Canon); any other name is that whole dataset. Labelled-only (usable GT). A criteria
-    filter over the consolidated store — consistent with the no-named-splits rule above."""
+    """Resolve a named EVAL set to its labelled subject rows, EXPRESSED AS A SPLIT — it routes through
+    make_split's criteria and returns the TEST partition, so eval-set knowledge lives in the one split
+    mechanism (test_vendors/test_datasets) rather than a bespoke filter. 'canon' = the unseen-vendor
+    slice (test_vendors=['Canon'] over M&Ms-1); any other name = that whole dataset held out
+    (test_datasets=[name]). Single home for what was copy-pasted in distribution.py + uncertainty.py."""
     if name == "canon":
-        return store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
-    return store.load([name]).filter(pl.col("labelled"))
+        return make_split(store.load(["mnms1"]), test_vendors=("Canon",))[2]
+    return make_split(store.load([name]), test_datasets=(name,))[2]
 
 
 def split_patients(cases: list[Path], val_frac: float = 0.2, seed: int = 0
