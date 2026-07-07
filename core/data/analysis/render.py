@@ -20,11 +20,11 @@ def render_synth_vs_real(out_png: str | Path = ".staging/synth_diag.png", k: int
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
+
     from core.data.dynamic.dataset import load_to_gpu
-    from core.data.dynamic.synth import synthesize_from_labels
-    from core.data.dynamic.synth import SynthCfg
+    from core.data.dynamic.synth import SynthCfg, synthesize_from_labels
+    from core.data.static import splits, store
+    from core.hparams import TrainCfg
 
     torch.manual_seed(seed); np.random.seed(seed)
     d = TrainCfg().generator.data

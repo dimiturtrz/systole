@@ -4,8 +4,8 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from core.model import build_unet
 from cardioseg.evaluation.ensemble import ensemble_decompose
+from core.model import build_unet
 
 SIZE = 32
 

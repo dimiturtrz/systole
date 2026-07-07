@@ -3,7 +3,7 @@ Contract: render_heart is differentiable wrt acquisition; fit_acquisition recove
 synthetic target (round-trip, where flip-only IS identifiable)."""
 import torch
 
-from core.data.dynamic.inverse import render_heart, fit_acquisition
+from core.data.dynamic.inverse import fit_acquisition, render_heart
 
 N = 4  # 0 bg, 1 RV-cav, 2 myo, 3 LV-cav
 

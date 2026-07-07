@@ -89,6 +89,7 @@ def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
 
 if __name__ == "__main__":
     import argparse
+
     from core.data.static import store
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
     ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")

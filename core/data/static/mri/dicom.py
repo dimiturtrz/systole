@@ -30,7 +30,6 @@ def series_ids(dicom_dir: str | Path) -> list[str]:
 def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
     """Read ONE DICOM file -> (array [H,W], (row_mm, col_mm) in-plane spacing, meta tags). For datasets
     keyed by individual instances (e.g. SCD contours reference a specific slice/phase image), not a stack."""
-    import numpy as np
     import SimpleITK as sitk
     r = sitk.ImageFileReader()
     r.SetFileName(str(dcm_path))
@@ -53,7 +52,6 @@ def read_series(dicom_dir: str | Path, series_id: str | None = None) -> tuple[Vo
     series present, `series_id` picks one; default = the series with the most slices (the full stack).
     Slices are geometry-sorted. `meta` carries acquisition/demographic tags (vendor/field/TR/flip/…)
     when the header has them — the normalization hook, same as the NIfTI adapters' `meta()`."""
-    import numpy as np
     import SimpleITK as sitk
     d = str(dicom_dir)
     ids = series_ids(d)

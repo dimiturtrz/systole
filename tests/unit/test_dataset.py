@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from core.preprocessing.preprocess import fit_square
 from core.data.static.splits import split_patients
+from core.preprocessing.preprocess import fit_square
 
 
 def test_fit_square_pads_small_centred():

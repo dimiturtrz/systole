@@ -6,10 +6,13 @@ import numpy as np
 import pytest
 
 from core.data.static.mri.acdc import (
-    acdc_cases, load_ed_es, identify_lv_cavity, LV_CAVITY,
+    LV_CAVITY,
+    acdc_cases,
+    identify_lv_cavity,
+    load_ed_es,
 )
-from core.measure import ejection_fraction
 from core.evaluate import dice
+from core.measure import ejection_fraction
 
 _CASES = acdc_cases()
 needs_data = pytest.mark.skipif(not _CASES, reason="ACDC data not present (set CARDIAC_DATA_ROOT)")

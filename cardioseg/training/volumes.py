@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import torch
 
-from core.measure import voxel_volume_ml
 from core.data.static.labels import LV_CAV
+from core.measure import voxel_volume_ml
 
 
 def soft_lv_volume(probs: torch.Tensor, spacing, lv_label: int = LV_CAV) -> torch.Tensor:

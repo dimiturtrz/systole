@@ -11,7 +11,12 @@ import os
 from pathlib import Path
 
 from core.data.static.mri.base import (
-    DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
+    MNM_LABEL_MAP,
+    DatasetAdapter,
+    PatientData,
+    load_csv_info,
+    load_frames,
+    to_float,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2

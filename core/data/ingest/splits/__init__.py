@@ -9,8 +9,8 @@ A family = a class with `name` + `versions` (see core.data.ingest.split.Split). 
 """
 from __future__ import annotations
 
-from core.data.ingest.splits.static_main import StaticMain
 from core.data.ingest.splits.static_all import StaticAll
+from core.data.ingest.splits.static_main import StaticMain
 from core.data.ingest.splits.synth_main import SynthMain
 
 _FAMILIES = {c.name: c for c in (StaticMain, StaticAll, SynthMain)}

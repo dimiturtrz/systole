@@ -83,6 +83,7 @@ class StaticSource:
         """Per-slice class-validity [N,C] bool (labels.valid_row of each slice's dataset). None if every
         slice is full-label — keeps the full-label path mask-free (loss stays on the standard recipe)."""
         import torch
+
         from core.data.static.labels import valid_row
         ds = self._f.get_column("dataset").to_list()            # per-path dataset, aligned to paths()
         rows = [valid_row(ds[o], n_classes) for o in owners.tolist()]

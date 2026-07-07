@@ -10,18 +10,16 @@ ED->ES DEFORMATION. Those require a contraction model to generate ES from ED (fl
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 
-from .synth_fidelity import wasserstein1d       # reuse the W1 the color analysis uses
+from .synth_fidelity import wasserstein1d  # reuse the W1 the color analysis uses
 
 _RV, _MYO, _LVC = 1, 2, 3
 
 
 def geom_metrics(mask: np.ndarray) -> dict | None:
     """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
-    from scipy.ndimage import distance_transform_edt, binary_erosion
+    from scipy.ndimage import binary_erosion, distance_transform_edt
     fg = mask > 0
     if int(fg.sum()) < 40:
         return None
@@ -62,8 +60,11 @@ def compare(real_masks, synth_masks) -> dict:
 
 
 def _main():
-    import argparse, json
+    import argparse
+    import json
+
     from core.data.dynamic.anatomy import load_pool
+
     from .shape_coverage import _real_masks
     ap = argparse.ArgumentParser(description="Static geometry/biomarker panel: synth vs real (uy4d).")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")

@@ -15,7 +15,6 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-
 # Provenance is dataset knowledge -> it lives in the adapter (the PROCESS layer), not the raw data.
 # DSB 2015 was compiled by NIH + Children's National, scanned in the Washington DC area.
 CENTRE = "Children's National Medical Center / NIH"
@@ -83,8 +82,7 @@ def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
     is NOT the ~3ms per-frame bSSFP TR; captured as-recorded, but the bSSFP acquisition reference filters
     it (store.fit_acquisition_reference)."""
     from core.data.static.mri.dicom import read_image
-    from core.data.static.store import _norm_vendor
-    from core.data.static.store import _region_of
+    from core.data.static.store import _norm_vendor, _region_of
     case = Path(case)
     m = {"centre": CENTRE, "country": COUNTRY, "region": _region_of(COUNTRY)}
     sd = next(iter((case / "study").glob("sax_*")), None)
@@ -105,6 +103,7 @@ def build_kaggle_meta(split: str, root: str | Path | None = None) -> Path:
     read on demand (load_sax). This meta.csv makes Kaggle's location/vendor/acquisition part of the data
     cloud (fit_acquisition_reference reads the tr_ms column, bSSFP-filtered)."""
     import polars as pl
+
     from core.config import data_root
     ef = kaggle_ef(split, root)
     rows = [{"subject_id": c.name, "dataset": "kaggle", **kaggle_meta(c, ef)} for c in kaggle_cases(split, root)]

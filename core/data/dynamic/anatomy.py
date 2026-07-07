@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
+from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV  # 3
-from core.config import DEFAULT_SIZE, DEFAULT_INPLANE
 
 LV_ID, RV_ID = 1, 2                    # cell tag: LV / RV myocardium (rest = atria/vessels, dropped)
 _SENTINEL = -5.0                       # universal-coord sentinel guard (real values in [-1..1]; atria=-10)
@@ -83,7 +83,6 @@ def _sax_align(mesh):
 def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
     """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
     grid points that lie in the myocardium)."""
-    import pyvista as pv
     sub = mesh.threshold([region_id, region_id], scalars=tag)
     surf = sub.extract_surface().triangulate()
     sel = grid.select_enclosed_points(surf, tolerance=0.0, check_surface=False)
@@ -96,7 +95,8 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
     LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
     import pyvista as pv
-    from scipy.ndimage import binary_fill_holes, binary_closing, binary_dilation, label as cc_label
+    from scipy.ndimage import binary_closing, binary_dilation, binary_fill_holes
+    from scipy.ndimage import label as cc_label
     m = _sax_align(mesh)
     tn = _tag_name(m)
     x0, x1, y0, y1, z0, z1 = m.bounds

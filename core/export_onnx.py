@@ -16,9 +16,10 @@ import numpy as np
 import torch
 
 from core.config import FLAGSHIP_REF
-from core.model import load_run
-from core.preprocessing.preprocess import fit_square, SIZE
 from core.data.static import store
+from core.model import load_run
+from core.preprocessing.preprocess import SIZE, fit_square
+from core.registry import resolve
 
 PARITY_MIN = 99.0  # % argmax agreement required to ship the INT8 model (else keep FP32)
 OPSET = 17         # ONNX opset for export
@@ -64,7 +65,7 @@ def export(run: Path, verify_dir: Path, quantize: bool = True,
     print(f"exported {path}  {path.stat().st_size / 1e6:.1f} MB  parity {p32:.3f}%")
 
     if quantize:
-        from onnxruntime.quantization import quantize_dynamic, QuantType
+        from onnxruntime.quantization import QuantType, quantize_dynamic
 
         q = run / "model.int8.onnx"
         quantize_dynamic(str(path), str(q), weight_type=QuantType.QInt8)

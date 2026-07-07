@@ -34,6 +34,7 @@ class DynamicSource:
         """(X, Y, force_synth) resident tensors for this source's Generator. Zero-input: N = pool size,
         X = zeros, all force. Seeded: seed's real ++ synth-anatomy rows, force only the synth ones."""
         import torch
+
         from core.data.dynamic.anatomy import load_pool
         Ys = torch.as_tensor(load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
         Xsy = torch.zeros((Ys.shape[0], 1, size, size), device=device)                 # no real pixels

@@ -3,11 +3,11 @@ ONE paint path: bSSFP signal from tissue T1/T2/PD under swept TR/flip/field. Con
 z-scored image painted by tissue physics; deform invents anatomy; partition gives bg real shapes;
 target = real labels."""
 import math
+
 import torch
 
-from core.data.dynamic.synth import SynthCfg
-from core.data.dynamic.synth import synthesize_from_labels
-from core.data.dynamic.mri_physics import bssfp_signal, tissue_params, TISSUE
+from core.data.dynamic.mri_physics import TISSUE, bssfp_signal, tissue_params
+from core.data.dynamic.synth import SynthCfg, synthesize_from_labels
 
 N = 4  # canonical classes: 0 bg, 1 RV, 2 LV-myo, 3 LV-cav
 
@@ -125,8 +125,7 @@ def test_acquisition_derived_and_reference_override(tmp_path):
     """Acquisition is DERIVED from physics (contrast-optimal flip capped by SAR, TR floor, TE=TR/2), not
     tabulated: acquisition_for == derive_acquisition by field, flip within the SAR cap, 3T flip < 1.5T,
     field-invariant to vendor; a verified reference/ leaf overrides per (vendor, field)."""
-    from core.data.dynamic.mri_physics import (acquisition_for, derive_acquisition,
-                                               SAR_FLIP_CAP, _TR_MID)
+    from core.data.dynamic.mri_physics import _TR_MID, SAR_FLIP_CAP, acquisition_for, derive_acquisition
     tr15, te15, f15 = derive_acquisition(1.5)
     tr3, te3, f3 = derive_acquisition(3.0)
     assert (tr15, te15) == (_TR_MID, _TR_MID / 2.0)             # TR = cited-band mid, TE=TR/2 (derived)
@@ -147,7 +146,7 @@ def test_acquisition_derived_and_reference_override(tmp_path):
 def test_background_strategy_dispatch_and_zero_real():
     """make_background maps each bg_mode to its strategy (one rep per equivalence class); flat/procedural
     are ZERO-REAL (no real_img needed) and paint the whole FOV; partition/hybrid need a real image."""
-    from core.data.dynamic.synth import (make_background, FlatBg, ProceduralBg, PartitionBg, HybridBg)
+    from core.data.dynamic.synth import FlatBg, HybridBg, PartitionBg, ProceduralBg, make_background
     assert isinstance(make_background(SynthCfg(bg_mode="flat")), FlatBg)
     assert isinstance(make_background(SynthCfg(bg_mode="procedural")), ProceduralBg)
     assert isinstance(make_background(SynthCfg(bg_mode="partition")), PartitionBg)
@@ -176,7 +175,7 @@ def test_excise_heart_removes_the_heart():
 def test_acquisition_matched_is_fixed_randomized_is_not():
     """make_acquisition: matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
     vary per sample. One rep per acq_mode equivalence class."""
-    from core.data.dynamic.synth import make_acquisition, MatchedAcq, RandomizedAcq, LegacyAcq
+    from core.data.dynamic.synth import LegacyAcq, MatchedAcq, RandomizedAcq, make_acquisition
     cfg = SynthCfg(acq_mode="matched", match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0,
                    match_vendor="GE", fields=(1.5, 3.0), vendors=("Siemens", "GE"))
     assert isinstance(make_acquisition(cfg), MatchedAcq)

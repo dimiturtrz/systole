@@ -17,7 +17,11 @@ from pathlib import Path
 
 from core.config import data_root
 from core.data.static.mri.base import (
-    DatasetAdapter, MNM_LABEL_MAP, PatientData, load_csv_info, load_frames, to_float,
+    MNM_LABEL_MAP,
+    DatasetAdapter,
+    PatientData,
+    load_csv_info,
+    load_frames,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip

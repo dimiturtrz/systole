@@ -3,7 +3,7 @@ detection injected so it runs identically on any host. The leak this prevents: a
 on POSIX silently becoming a relative repo-local 'D:/' dir."""
 import pytest
 
-from core.paths import resolve_data_root, win_drive, mnt_drive, to_wsl, to_windows
+from core.paths import mnt_drive, resolve_data_root, to_windows, to_wsl, win_drive
 
 
 # --- detection ---

@@ -1,7 +1,8 @@
 """Kaggle DSB reader (core.data.static.mri.kaggle_dsb) — EF/regression, not seg. The pure core is the EF
 computation; the DICOM/CSV paths are integration (skipped without the data)."""
 import pytest
-from core.data.static.mri.kaggle_dsb import _ef, kaggle_ef, kaggle_cases
+
+from core.data.static.mri.kaggle_dsb import _ef, kaggle_cases, kaggle_ef
 
 
 def test_ef_computation():

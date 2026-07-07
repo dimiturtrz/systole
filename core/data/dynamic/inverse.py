@@ -82,6 +82,7 @@ def _main():
     (fit flip-only vs fit tr+flip from two inits -> same recon, different params = under-determined)."""
     import argparse
     from pathlib import Path
+
     import numpy as np
     ap = argparse.ArgumentParser(description="FIT probe: recover acquisition from a real scan (bd ixea).")
     ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")

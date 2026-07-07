@@ -25,8 +25,8 @@ from pathlib import Path
 
 import numpy as np
 
-from core.data.static.labels import LV_CAV  # 3
 from core.config import DEFAULT_SIZE
+from core.data.static.labels import LV_CAV  # 3
 
 # XCAT/MRXCAT label codes → our canonical {0 bg, 1 RV-cav, 2 LV-myo, 3 LV-cav}. Cardiac codes from MRXCAT2.0
 # `myLabels(LV_wall=1, RV_wall=2, LV_blood=5, RV_blood=6, Peri=50, Aorta=36)` (MakePhantom.py). Everything
@@ -89,6 +89,7 @@ def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | 
     its longest side hits `target_px`, then centre `fit_square` to `size` — heart-filling like the SSM
     pool (`anatomy._scale_to_target` intent), drop-in for the shared painter. None if ~empty."""
     from scipy.ndimage import zoom as _zoom
+
     from core.preprocessing.preprocess import fit_square
     ys, xs = np.where(s > 0)
     if ys.size == 0:
@@ -143,6 +144,7 @@ def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
     lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
     the SSM pool lacks, unlike `_heart_crop_scale` (heart-only). None if no heart."""
     from scipy.ndimage import zoom as _zoom
+
     from core.preprocessing.preprocess import fit_square
     heart = np.isin(s, (1, 2, 3))
     if not heart.any():

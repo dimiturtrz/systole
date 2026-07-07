@@ -2,8 +2,8 @@
 cohort, then any image maps onto it -> different-scanner intensity distributions align (strip vendor
 variance) while tissue ordering is preserved (piecewise-linear, monotonic)."""
 import numpy as np
-from core.preprocessing.nyul import (
-    image_landmarks, fit_standard, transform, LANDMARKS)
+
+from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks, transform
 
 
 def test_fit_standard_monotone_unit_range():

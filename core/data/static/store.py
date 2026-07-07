@@ -26,10 +26,10 @@ import numpy as np
 import polars as pl
 from pydantic import BaseModel, Field
 
-from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, _VALIDATE, data_root
-from core.preprocessing.n4 import N4Cfg
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
 from core.data.static.mri.pathology import harmonize
 from core.data.static.mri.registry import get_adapter
+from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
 
 
@@ -134,9 +134,10 @@ def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_IN
     """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
     it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks are
     stable). The standard is a normalization axis -> reference data, fit once, applied in preprocess."""
-    from core.preprocessing.preprocess import resample_inplane
-    from core.preprocessing.nyul import image_landmarks, fit_standard, LANDMARKS
     from omegaconf import OmegaConf
+
+    from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
+    from core.preprocessing.preprocess import resample_inplane
     names = SOURCE_DATASETS if names is None else names
     rows = []
     for name in names:
@@ -209,6 +210,7 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     so the whole domain-randomization sweep survives for everything we lack real values for."""
     import polars as pl
     from omegaconf import OmegaConf
+
     from core.data.static.reference import reference_dir
     base = Path(data_root("processed"))
     metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
@@ -326,8 +328,9 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
-        from core.obs import progress
         import logging
+
+        from core.obs import progress
         log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
         log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
@@ -386,6 +389,7 @@ def load_arrays(path: str | Path) -> dict:
 
 if __name__ == "__main__":
     import argparse
+
     from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")

@@ -11,9 +11,10 @@ from pathlib import Path
 import numpy as np
 
 from core.evaluate import CLASSES
+
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
-from core.inference import predict_volume, predict_volume_probs, predict_volume_members  # re-export
+from core.inference import predict_volume  # re-export
 
 CLASS_NAMES = {k: name for k, (name, _) in CLASSES.items()}   # single source: evaluate.CLASSES
 
@@ -30,11 +31,11 @@ def validate(
     `npz_paths` are consolidated-subject npz files from the data store (data/store.py) — each holds
     resampled+z-scored ed/es img+gt, spacing, group. Dataset-agnostic: labels are already canonical.
     """
+    from core.data.static.store import load_arrays
+    from core.evaluate import surface_distances, surface_metrics
     from core.measure import ejection_fraction
     from core.postprocess import largest_cc_per_class
-    from core.evaluate import surface_distances, surface_metrics
     from core.preprocessing.preprocess import stack_slices
-    from core.data.static.store import load_arrays
 
     inter = {c: 0.0 for c in CLASS_NAMES}
     denom = {c: 0.0 for c in CLASS_NAMES}

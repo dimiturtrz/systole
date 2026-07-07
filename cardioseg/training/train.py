@@ -12,16 +12,17 @@ import json
 import time
 from pathlib import Path
 
-from core.hparams import TrainCfg
 from core.data.static.labels import FOREGROUND
+from core.hparams import TrainCfg
+
 from ..tracking import track_run
 
 
 def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
     Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
-    import torch
     import numpy as np
+    import torch
 
     inter = {c: 0.0 for c in FOREGROUND}
     denom = {c: 0.0 for c in FOREGROUND}
@@ -44,12 +45,14 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     (resident tensors, val, aux EF lanes) is shared, so N seeds cost 1×data + N×model, not N×both."""
     import numpy as np
     import torch
-    from .losses import build_loss, uncertainty_weighted
-    from ..evaluation.validate import validate, summarize
-    from core.model import build_unet
+
     from core.data.static import splits
-    from core.obs import setup, progress
     from core.hparams import to_json
+    from core.model import build_unet
+    from core.obs import progress, setup
+
+    from ..evaluation.validate import summarize, validate
+    from .losses import build_loss, uncertainty_weighted
 
     d = cfg.generator.data
     device, pin, data_device = sh["device"], sh["pin"], sh["data_device"]
@@ -193,7 +196,8 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     # registry — the sole model store. alias='production' makes this the flagship.
     try:
         import mlflow
-        from core.registry import save_model, MODEL_NAME
+
+        from core.registry import MODEL_NAME, save_model
         rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
         split = "+".join(d.test_vendors) or "legacy"
         kind = "flagship" if alias == "production" else "candidate"
@@ -215,10 +219,11 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     sole store); `alias='production'` makes a run the flagship. Multi-seed needs a coded `--split`
     (legacy criteria splits key their partition on the seed, so they can't share one dataset)."""
     import torch
-    from core.model import resolve_device
+
     from core.data.dynamic.dataset import load_to_gpu
     from core.data.dynamic.generator import Generator
-    from core.data.static import store, splits
+    from core.data.static import splits, store
+    from core.model import resolve_device
     from core.obs import setup, timed
 
     d = cfg.generator.data

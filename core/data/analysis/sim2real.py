@@ -48,10 +48,12 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
 
 def _main():
     import argparse
+
     import polars as pl
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
+
     from core.data.dynamic.dataset import load_to_gpu
+    from core.data.static import splits, store
+    from core.hparams import TrainCfg
     from core.obs import setup
 
     ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import data_root, KNOWN_DATASETS
+from core.config import KNOWN_DATASETS, data_root
 from core.data.static.mri.registry import get_adapter
 
 _DATASETS = KNOWN_DATASETS

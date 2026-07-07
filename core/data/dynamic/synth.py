@@ -297,7 +297,7 @@ class RandomizedAcq(Acquisition):
     """Physics-bounded domain randomization: TR over the cited cine band, flip across the per-field
     SAR-bounded FWHM contrast range (derive_flip_range). Breadth, not the single optimal point."""
     def sample(self, b, cfg, dev):
-        from .mri_physics import derive_flip_range, TR_RANGE_MS
+        from .mri_physics import TR_RANGE_MS, derive_flip_range
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
         rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
         tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev)
@@ -345,7 +345,8 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     tissue too -> whole-FOV physical synth. `real_img` supplies those bg shapes (and the hybrid bg).
     """
     import math
-    from .mri_physics import bssfp_signal, tissue_params
+
+    from .mri_physics import bssfp_signal
 
     b = mask.shape[0]
     dev = mask.device
@@ -374,7 +375,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
-        from .mri_physics import blood_classes    # from physiological v/thk + derived TR (no magic fraction)
+        from .mri_physics import blood_classes  # from physiological v/thk + derived TR (no magic fraction)
         v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
         thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
         f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac

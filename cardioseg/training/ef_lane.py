@@ -18,10 +18,11 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from core.data.static.store import load_arrays
-from core.preprocessing.preprocess import fit_square
-from core.measure import label_volume_ml, voxel_volume_ml
 from core.data.static.labels import LV_CAV
+from core.data.static.store import load_arrays
+from core.measure import label_volume_ml, voxel_volume_ml
+from core.preprocessing.preprocess import fit_square
+
 from .volumes import vol_loss
 
 

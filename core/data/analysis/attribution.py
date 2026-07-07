@@ -98,13 +98,14 @@ def run_attribution(model, X: torch.Tensor, Y: torch.Tensor, n_classes: int, dev
 
 def _main():
     import argparse
-    from core.registry import resolve
-    from core.model import load_run
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
-    from core.data.dynamic.dataset import load_to_gpu
+
     from core.config import FLAGSHIP_REF
+    from core.data.dynamic.dataset import load_to_gpu
+    from core.data.static import splits, store
+    from core.hparams import TrainCfg
+    from core.model import load_run
     from core.obs import setup
+    from core.registry import resolve
 
     ap = argparse.ArgumentParser(description="Attribution diagnostic: confusion + saliency on a model.")
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")

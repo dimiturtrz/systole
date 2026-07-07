@@ -3,7 +3,7 @@ distributions compared synth-vs-real by W1. Contract: geom_metrics returns inter
 compare returns per-metric W1 that is ~0 for identical sets and grows when a metric shifts."""
 import numpy as np
 
-from core.data.analysis.static_compare import geom_metrics, compare
+from core.data.analysis.static_compare import compare, geom_metrics
 
 
 def _mask(lvc_r=4, myo_r=7, h=48, w=48):

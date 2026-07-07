@@ -12,7 +12,6 @@ Companion to attribution.py (what the MODEL learns) — this is what the DATA lo
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import torch
 
@@ -90,6 +89,7 @@ def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: 
     and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
     synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
     import numpy as np
+
     from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     Xr, Xs = X[:, 0].to(device), Xs[:, 0]
@@ -145,6 +145,7 @@ def variance_attribution(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, 
     pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
     generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
     import copy
+
     from core.data.dynamic.synth import synthesize_from_labels
     Xdev, Ydev = X[:, 0].to(device), Y.to(device)
     base = copy.deepcopy(cfg)
@@ -176,9 +177,9 @@ def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800
     σ ABOVE the band's max on a class = genuinely wider than any real vendor (candidate over-spread);
     WITHIN the band = just covering the vendor range (domain randomization working, not a defect).
     DIAGNOSTIC ONLY — never a tuning target (fitting synth to these = leaking real/test-vendor stats)."""
-    import numpy as np
     import polars as pl
     import torch
+
     from core.data.dynamic.dataset import load_to_gpu
     from core.data.static import splits
     per_vendor = {}
@@ -212,6 +213,7 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
     vendors comparable). Reuses `synth_real_distance` per subset — the pure metric stays the source."""
     import polars as pl
     import torch
+
     from core.data.dynamic.dataset import load_to_gpu
     from core.data.static import splits
     out = {}
@@ -233,9 +235,10 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
 
 def _main():
     import argparse
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
+
     from core.data.dynamic.dataset import load_to_gpu
+    from core.data.static import splits, store
+    from core.hparams import TrainCfg
     from core.model import resolve_device
     from core.obs import setup
 
@@ -253,9 +256,10 @@ def _main():
                     "sample-size-agnostic; bounds VRAM)")
     a = ap.parse_args()
     setup()
-    from core.hparams import apply_overrides
     import polars as pl
     import torch
+
+    from core.hparams import apply_overrides
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0

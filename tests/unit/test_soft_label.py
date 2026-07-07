@@ -6,8 +6,8 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("monai")
 
-from core.data.dynamic.augment import soften
 from cardioseg.training.losses import SoftDiceCE, build_loss
+from core.data.dynamic.augment import soften
 
 
 # --- soften: shape, channels sum to 1, σ=0 crisp, σ>0 soft at boundary / hard interior ---

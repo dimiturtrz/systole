@@ -24,15 +24,15 @@ import numpy as np
 import polars as pl
 from scipy.stats import gaussian_kde
 
-from core.model import load_run, resolve_device
-from core.registry import resolve
 from core.config import FLAGSHIP_REF
-from core.preprocessing.preprocess import stack_slices, SIZE
-from core.data.static import store, splits
+from core.data.static import splits, store
+from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
 from core.inference import predict_volume
-from core.measure import ejection_fraction, ef_statistics, LOA_Z
-from core.evaluate import surface_distances, surface_metrics, dice, CLASSES
+from core.measure import LOA_Z, ef_statistics, ejection_fraction
+from core.model import load_run, resolve_device
 from core.postprocess import largest_cc_per_class
+from core.preprocessing.preprocess import SIZE, stack_slices
+from core.registry import resolve
 
 
 def collect(run: Path, device: str, meta_rows):

@@ -8,8 +8,8 @@ of each class is the standard cheap clean-up (and what nnU-Net tests for, too).
 import numpy as np
 from scipy.ndimage import label as _cc_label
 
-from core.types import Mask
 from core.data.static.labels import FOREGROUND
+from core.types import Mask
 
 
 def largest_cc_binary(binary: np.ndarray) -> np.ndarray:

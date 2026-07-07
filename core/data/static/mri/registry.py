@@ -3,11 +3,11 @@
 Lifted out of training.train so every entrypoint (train, validate, distribution, exporters,
 the normalization parser) shares one source of truth.
 """
-from core.data.static.mri.base import DatasetAdapter
 from core.data.static.mri.acdc import AcdcAdapter
+from core.data.static.mri.base import DatasetAdapter
+from core.data.static.mri.cmrxmotion import CmrxMotionAdapter
 from core.data.static.mri.mnm2 import Mnm2Adapter
 from core.data.static.mri.mnms1 import Mnms1Adapter
-from core.data.static.mri.cmrxmotion import CmrxMotionAdapter
 from core.data.static.mri.scd import ScdAdapter
 
 _ADAPTERS: dict[str, DatasetAdapter] = {

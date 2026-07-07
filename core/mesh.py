@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from core.config import data_root
-from core.data.static.labels import CLASSES        # {label: (name, hexcolor)}
+from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
 from core.postprocess import largest_cc_binary
 
 MESH_MM = 2.5      # surface resample step (coarser than voxels -> fewer triangles, still smooth)

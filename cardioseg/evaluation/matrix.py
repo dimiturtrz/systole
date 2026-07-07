@@ -21,8 +21,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, EVAL_SOURCES
 from core.data.ingest.source import subject_keys
+from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
 
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
@@ -54,10 +54,10 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
     """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
     model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
     so npz match the weights."""
-    from core.registry import resolve as resolve_model
-    from core.model import load_run
-    from core.data.static import store
     from cardioseg.evaluation.validate import validate
+    from core.data.static import store
+    from core.model import load_run
+    from core.registry import resolve as resolve_model
 
     tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
     rows: list[dict] = []
@@ -93,6 +93,7 @@ def _print(rows: list[dict]):
 
 if __name__ == "__main__":
     import argparse
+
     from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="cross-domain generalization matrix over frozen TestSets")

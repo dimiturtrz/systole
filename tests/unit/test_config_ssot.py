@@ -1,7 +1,12 @@
 """SSOT guard: the single-sourced constants must stay equal to every consumer that reads them.
 If someone re-hardcodes a value, one of these fails (that's the point)."""
 from core.config import (
-    DEFAULT_SIZE, DEFAULT_INPLANE, KNOWN_DATASETS, FLAGSHIP_REF, flagship_model, flagship_dir,
+    DEFAULT_INPLANE,
+    DEFAULT_SIZE,
+    FLAGSHIP_REF,
+    KNOWN_DATASETS,
+    flagship_dir,
+    flagship_model,
 )
 from core.data.static.store import DataCfg
 

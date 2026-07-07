@@ -107,6 +107,7 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
 
     Healthy cohort (pathology contains 'normal') is also surfaced as normal_ranges.* for consumers."""
     import polars as pl
+
     from core.config import DEFAULT_INPLANE
     from core.data.static import store
     from core.measure import ejection_fraction
@@ -179,6 +180,7 @@ def build_real_levels(sources=None, inplane: float | None = None, per_case: int 
     cohort. Blood classes (RV=1, LV-cav=3) are the ones that carry the vendor-dependent gap."""
     import numpy as np
     import polars as pl
+
     from core.config import DEFAULT_INPLANE
     from core.data.static import store
     from core.data.static.labels import CLASSES
@@ -236,8 +238,8 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
     NORMALIZED: the machine reference table (attributes live once). Subjects hold the FK (vendor,
     field_T) in the store and JOIN here via `acquisition_for`; each vendor block is also the slot to
     drop a DICOM-mined per-vendor override later. (bd ex1 / 276.)"""
-    from core.data.dynamic.mri_physics import derive_acquisition, TR_RANGE_MS, SAR_FLIP_CAP
     from core.config import KNOWN_VENDORS
+    from core.data.dynamic.mri_physics import SAR_FLIP_CAP, TR_RANGE_MS, derive_acquisition
     tr15, te15, f15 = derive_acquisition(1.5)
     _, _, f30 = derive_acquisition(3.0)
     src = ("DERIVED: flip = argmax|S_blood-S_myo| (bSSFP signal eq + literature T1/T2), capped by SAR "

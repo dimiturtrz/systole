@@ -13,8 +13,8 @@ from pathlib import Path
 
 import polars as pl
 
-from core.data.ingest.source import StaticSource
 from core.data.dynamic.source import DynamicSource
+from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import SYNTH_MAIN_TEST
 

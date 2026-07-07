@@ -79,6 +79,7 @@ def coverage(real: np.ndarray, synth: np.ndarray) -> dict:
 
 def _main():
     import argparse
+
     from core.data.dynamic.anatomy import load_pool
     ap = argparse.ArgumentParser(description="Shape coverage: does generated anatomy encompass real? (uy4d)")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")

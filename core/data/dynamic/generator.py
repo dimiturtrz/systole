@@ -21,8 +21,8 @@ from core.config import _VALIDATE
 from core.data.static.store import DataCfg
 
 from .augment import AugCfg
-from .synth import SynthCfg
 from .pipeline import Batch, build_pipeline
+from .synth import SynthCfg
 
 
 class GeneratorCfg(BaseModel):

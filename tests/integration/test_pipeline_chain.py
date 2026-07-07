@@ -14,13 +14,17 @@ classes (upsample/downsample/identity; pad/crop; normal/zero/full/degenerate EF)
 import numpy as np
 import pytest
 
-from core.preprocessing.preprocess import resample_inplane, zscore
-from core.preprocessing.preprocess import fit_square
+from core.evaluate import (
+    assd,
+    dice,
+    hausdorff,
+    hd95,
+    surface_distances,
+    surface_metrics,
+)
 from core.inference import predict_volume
 from core.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
-from core.evaluate import (
-    dice, assd, hd95, hausdorff, surface_distances, surface_metrics,
-)
+from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
 
 
 def _cube(d, hw, half, label=3, value=None):

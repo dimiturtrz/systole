@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from core.postprocess import largest_cc_per_class, _CUCIM_LABEL
+from core.postprocess import _CUCIM_LABEL, largest_cc_per_class
 
 
 def _blob(mask, lab, z, y, x, r):
@@ -50,6 +50,7 @@ def test_gpu_cucim_matches_cpu_parity():
     """Linux GPU lane: the cucim largest-CC must give bit-identical output to the scipy CPU path.
     Skipped where cucim is absent (Windows); the scipy path is covered by the tests above."""
     from scipy.ndimage import label as cpu_label
+
     from core.data.static.labels import FOREGROUND
     rng = np.random.default_rng(0)
     m = np.zeros((6, 64, 64), np.uint8)

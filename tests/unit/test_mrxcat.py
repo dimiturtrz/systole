@@ -2,6 +2,7 @@
 to_canonical — verified geometrically on the bundled phantom (myo ring encloses LV-cav); here we pin
 the equivalence classes of the code→canonical mapping so a scheme change can't silently corrupt pools."""
 import numpy as np
+
 from core.data.dynamic.mrxcat import to_canonical
 
 
@@ -61,7 +62,8 @@ def test_fovbg_paints_wholefov_map():
     """Integration: bg_mode='mrxcat' paints an 8-class FOV tissue map (FovBg + named_tissue_params) with
     no bg invention — every class rendered by its tissue, image finite, heart target recoverable."""
     import torch
-    from core.data.dynamic.synth import synthesize_from_labels, SynthCfg
+
+    from core.data.dynamic.synth import SynthCfg, synthesize_from_labels
     fov = torch.zeros((2, 64, 64), dtype=torch.long)
     fov[:, 20:44, 20:44] = 6                              # muscle body
     fov[:, 24:40, 24:40] = 2                              # myo

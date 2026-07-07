@@ -22,10 +22,11 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from core.data.static.store import load_arrays
-from core.types import Slice2D
+
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
-from core.preprocessing.preprocess import fit_square, SIZE
+from core.preprocessing.preprocess import SIZE, fit_square
+from core.types import Slice2D
 
 
 class ACDCSliceDataset(Dataset):

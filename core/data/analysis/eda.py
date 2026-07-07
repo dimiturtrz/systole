@@ -17,8 +17,11 @@ from pathlib import Path
 import numpy as np
 
 from core.data.static.mri.acdc import (
-    DATA_ROOT, acdc_cases, identify_lv_cavity, load_ed_es,
+    DATA_ROOT,
+    acdc_cases,
+    load_ed_es,
 )
+from core.data.static.mri.base import identify_lv_cavity
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "_eda_out"
 

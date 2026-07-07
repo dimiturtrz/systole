@@ -68,8 +68,8 @@ def main():
     from core.config import FLAGSHIP_REF
     from core.data.static import store
     from core.model import load_run
+    from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
     from core.registry import resolve
-    from core.preprocessing.preprocess import fit_square, stack_slices, SIZE
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
@@ -118,7 +118,7 @@ def main():
 
     # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
     # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
-    from sklearn.metrics import roc_auc_score, average_precision_score
+    from sklearn.metrics import average_precision_score, roc_auc_score
     ent_all = np.concatenate(ents); wrong = 1.0 - correct
     base = float(wrong.mean())
     rocauc = float(roc_auc_score(wrong, ent_all))
