@@ -79,7 +79,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",  # noqa: PLR0913  low-level loader — independent inputs/options
+def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",  # noqa: PLR0913  KEEP? low-level loader, called with mostly-defaults across training/eval. size/device are placement config; frames/keep_empty/return_owners are small behavior flags. A LoadCfg would wrap 3 bools nobody sets together. (return_owners changing the return shape is a separate FBT smell — bd if you want it split off.)
                 frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False,
                 return_owners: bool = False):
     """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
