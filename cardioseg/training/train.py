@@ -16,6 +16,7 @@ from pathlib import Path
 import mlflow
 import numpy as np
 import torch
+from mlflow.exceptions import MlflowException
 
 from core.data.analysis.attribution import Attribution
 from core.data.dynamic.anatomy import load_pool
@@ -219,16 +220,20 @@ class SeedTrainer:
                        tags={"kind": kind, "split": split, "seed": seed})
             log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
 
+    # the realistic failure modes of the 4 artifact steps: file I/O (card write), torch/onnx + matplotlib
+    # (attribution, ONNX export -> RuntimeError/ValueError), mlflow registry (MlflowException). NOT just
+    # MlflowException — only the registry step is mlflow. A truly unexpected error propagates (surfaces the
+    # bug); the trained model.pth is already on disk by now, so nothing is lost either way.
+    _ARTIFACT_FAILURES = (OSError, RuntimeError, ValueError, MlflowException)
+
     @contextmanager
     def _artifact_step(self, name):
         """Run one post-training artifact step best-effort. By the time _finalize runs the model.pth is
         ALREADY saved, so a card / attribution / ONNX / registry hiccup (a missing optional dep, one bad
-        val slice, a locked mlflow db) must be logged and swallowed — never lose an hour-long trained run.
-        This is the ONE place a blanket except earns its keep: the steps are heterogeneous heavy 3rd-party
-        ops (matplotlib / torch.onnx / mlflow) with no shared failure type worth enumerating. KEEP?"""
+        val slice, a locked mlflow db) is logged and swallowed — the trained run is never lost."""
         try:
             yield
-        except Exception as e:  # noqa: BLE001  artifact tail, model already persisted — see docstring
+        except self._ARTIFACT_FAILURES as e:
             self.log.warning("%s skipped: %s", name, e)
 
 
