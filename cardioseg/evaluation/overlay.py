@@ -50,17 +50,17 @@ def _panel(ax, img, mask, title):
 
 
 def _case(model, path, size, device):
-    c = load_arrays(path)                                    # group already a plain py scalar
-    spacing = tuple(float(s) for s in c["spacing"])
-    pred_ed = largest_cc_per_class(predict_volume(model, c["ed_img"], size, device, tta=True))
-    pred_es = largest_cc_per_class(predict_volume(model, c["es_img"], size, device, tta=True))
-    gt_ed = stack_slices(c["ed_gt"], size)
-    img_ed = stack_slices(c["ed_img"], size, 0.0)
+    case = load_arrays(path)
+    spacing = tuple(float(s) for s in case["spacing"])
+    pred_ed = largest_cc_per_class(predict_volume(model, case["ed_img"], size, device, tta=True))
+    pred_es = largest_cc_per_class(predict_volume(model, case["es_img"], size, device, tta=True))
+    gt_ed = stack_slices(case["ed_gt"], size)
+    img_ed = stack_slices(case["ed_img"], size, 0.0)
     ef_p, _, _ = ejection_fraction(pred_ed, pred_es, spacing)
-    gt_es = stack_slices(c["es_gt"], size)
+    gt_es = stack_slices(case["es_gt"], size)
     ef_g, _, _ = ejection_fraction(gt_ed, gt_es, spacing)
     z = _mid_slice(gt_ed)
-    return dict(group=c.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
+    return dict(group=case.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
                 ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)
 
 

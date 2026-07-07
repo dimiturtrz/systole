@@ -100,22 +100,22 @@ class Evaluator:
         scores = _ClassScores()                                  # holds the Dice/boundary accumulators
         ef_rows = []
         for npz_path in npz_paths:
-            c = load_arrays(npz_path)                            # group already a plain py scalar
-            spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
+            case = load_arrays(npz_path)
+            spacing = tuple(float(s) for s in case["spacing"])   # per-patient (z,y,x)
             vols = {}
             for tag in ("ED", "ES"):
-                if f"{tag.lower()}_img" not in c:
+                if f"{tag.lower()}_img" not in case:
                     continue
-                pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device, tta=tta)
+                pred = predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
                     pred = largest_cc_per_class(pred)
-                gt = stack_slices(c[f"{tag.lower()}_gt"], size)
+                gt = stack_slices(case[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
                 ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
                 ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
-                ef_rows.append(dict(patient=Path(npz_path).stem, group=c.get("group"),
+                ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
         return scores.dice(), ef_rows, scores.surface()
 
