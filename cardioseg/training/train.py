@@ -227,7 +227,7 @@ class SeedTrainer:
             log.warning("registry save skipped: %s", e)
 
 
-def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):
+def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):  # noqa: PLR0913  one-off legacy-path builder — independent inputs
     """LEGACY criteria path (no coded --split): build the resident TRAIN tensors + shared Generator +
     val tensors. Optional synth-anatomy (Rodero SSM label maps; val/test stay REAL held-out): 'mix' =
     real + synth-anatomy UNION with synth rows force-painted (bd pwih); 'replace' = synth anatomy only,

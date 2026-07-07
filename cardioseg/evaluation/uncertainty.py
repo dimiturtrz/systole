@@ -178,7 +178,7 @@ def main():
     trk.end()
 
 
-def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
+def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913  plotting helper — independent inputs
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

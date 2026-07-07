@@ -110,7 +110,7 @@ def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | 
     return fit_square(crop, size, 0).astype(np.uint8)
 
 
-def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
+def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,  # noqa: PLR0913  offline pool builder — independent path/size inputs
                min_fg: int = 40, min_cav_frac: float = 0.05, seed: int = 0) -> tuple[Path, tuple]:
     """Every `*.vti` in `vti_dir` → canonical label volume → SAX slices → heart-crop+scale-to-real →
     `fit_square` to `size` → stacked label pool, saved to `out_path` (npz `slices` [N,size,size] uint8 —
@@ -212,7 +212,7 @@ def place_heart_in_fov(fov: np.ndarray, heart: np.ndarray) -> np.ndarray:
     return out
 
 
-def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,
+def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,  # noqa: PLR0913  offline pool builder — independent path/size inputs
                        size: int = DEFAULT_SIZE, scale: float = 3.0, seed: int = 0) -> tuple[Path, tuple]:
     """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
     into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.

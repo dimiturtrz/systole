@@ -68,7 +68,7 @@ def resolve(ref: str = PRODUCTION) -> Path:
     return inner if (inner / "model.pth").exists() else dst
 
 
-def save_model(staging_dir, *, run_name: str, params: dict | None = None,
+def save_model(staging_dir, *, run_name: str, params: dict | None = None,  # noqa: PLR0913  already keyword-only (*); legit registry inputs
                alias: str | None = None, description: str | None = None,
                tags: dict | None = None, run_id: str | None = None) -> str:
     """Log a trained model's artifacts (everything in `staging_dir`: model.pth/config.json/onnx/card)

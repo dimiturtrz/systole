@@ -120,7 +120,7 @@ class SynthCfg(BaseModel):
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
 
 
-def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> torch.Tensor:
+def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> torch.Tensor:  # noqa: PLR0913  geometry params (b,h,w,amp,steps — independent)
     """DIFFEOMORPHIC (topology-preserving) elastic warp as a grid_sample grid [B,H,W,2]. A coarse 5x5
     velocity field (U[-amp,amp], bicubic-upsampled) is INTEGRATED by scaling-and-squaring so the map
     stays invertible — it can't fold/tear the anatomy. The old `ident + disp` (non-integrated) folds at

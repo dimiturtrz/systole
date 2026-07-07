@@ -220,7 +220,7 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     return out
 
 
-def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),
+def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),  # noqa: PLR0913  offline pool builder — independent path/size inputs
                          rv=(2, 6), seed: int = 0) -> tuple[Path, tuple]:
     """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
     HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
@@ -264,7 +264,7 @@ def _pool_worker(args) -> list[np.ndarray]:
     return out
 
 
-def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
+def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,  # noqa: PLR0913  offline pool builder — independent path/size inputs
                inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
                seed: int = 0, workers: int = 0, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
     """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
