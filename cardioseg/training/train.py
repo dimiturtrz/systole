@@ -55,167 +55,176 @@ def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
 
-def _train_loop(sh: dict, cfg: TrainCfg, model, opt, scaler, loss_fn, partial: bool, log_sig, log, trk):
-    """The epoch loop for one seed — a long but LINEAR procedure (the training step, by nature): each
-    epoch forward/loss/backward over the resident batches (+ the EF aux-lane nudge folded into one seg
-    step), then a fast batched val-Dice for early stopping. Returns the best-val `state_dict` (or None).
-    Data comes via `sh` (shared, read-only); only the per-seed trainables are passed explicitly."""
-    gen, aux, Xva, Yva = sh["gen"], sh["aux"], sh["Xva"], sh["Yva"]
-    nb, pin, device = sh["nb"], sh["pin"], sh["device"]
-    best_dice, best_state, bad = -1.0, None, 0
-    fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
-    for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
-        t0 = time.perf_counter()
-        model.train()
-        if hasattr(loss_fn, "epoch"):
-            loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
-        tot = 0.0
-        perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
-        for bi in progress(range(nb), f"epoch {ep}", total=nb):
-            idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
-            x, yt, valid = gen.batch(idx, pin)                  # collapsed batch (+ partial-label mask)
-            opt.zero_grad(set_to_none=True)
-            with torch.autocast("cuda", enabled=pin):
-                loss = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
-            scaler.scale(loss).backward()
-            scaler.step(opt)
-            scaler.update()
-            tot += loss.item()
-        if aux and ep >= cfg.ef_warmup:
-            # EF/volume-consistency NUDGE: fold the aux lanes INTO one seg gradient step (not a separate
-            # vote) — seg's dense signal keeps the direction, the lanes only bend the cavity volume.
-            # Fixed λ nudge (seg dominant) or learned Kendall balance (log_sig); seg stays dominant.
-            auxs = [l for l in (lane.loss(model, amp=pin) for lane in aux) if l is not None]
-            if auxs:
+class SeedTrainer:
+    """Trains + evaluates + registers ONE seed on the shared resident data `sh` (built once by
+    train_seg). Holds the seed's OWN state (model/optimizer/loss/tracker/output dir); the read-only
+    shared data (resident tensors, val, aux EF lanes) comes via `sh`. Construct per seed, call .run().
+    N seeds cost 1xdata + Nxmodel. (bd 01fh: former _train_loop/_finalize threaded ~10 args -> methods.)"""
+
+    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool):
+        self.cfg, self.seed, self.sh, self.alias, self.quick = cfg, seed, sh, alias, quick
+        self.d = cfg.generator.data
+        self.device, self.pin, self.gen, self.aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
+        cfg.seed = seed
+        self.out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"
+        self.out.mkdir(parents=True, exist_ok=True)
+        self.log = setup(self.out / "train.log")
+        to_json(cfg, self.out / "config.json")
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        self.model = build_unet(cfg.model).to(self.device)
+        self.partial, self.loss_fn = self._build_loss()
+        self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
+        split_tag = self.d.split or ("+".join(self.d.test_vendors) or "legacy")
+        self.trk = track_run("cardioseg", self.out.name, run_dir=self.out,
+                             params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
+                             tags={"split": split_tag, "seed": seed})
+        self.log_sig = None
+        if cfg.ef_learn and self.aux:
+            self.log_sig = torch.zeros(1 + len(self.aux), device=self.device, requires_grad=True)
+            self.opt.add_param_group({"params": [self.log_sig]})
+
+    def _build_loss(self):
+        """PARTIAL-LABEL mask -> PartialLabelDiceCE; soft-label -> SoftDiceCE; else the configured loss."""
+        gen = self.gen
+        partial = getattr(gen, "valid", None) is not None
+        if partial:
+            self.log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
+                          int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
+            return partial, PartialLabelDiceCE()
+        if self.cfg.generator.aug.soft_label_sigma > 0:
+            return partial, SoftDiceCE()
+        return partial, build_loss(self.cfg.loss)
+
+    def run(self):
+        """train loop -> eval (val + held-out test) -> save -> finalize (artifacts+registry unless quick)."""
+        best_state = self._train_loop()
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+        results = self._evaluate()
+        self._save(results)
+        if self.quick:
+            self.log.info("quick mode: skipping model card / attribution / ONNX / registry")
+        else:
+            self._finalize()
+        self.trk.end()
+        return self.model, results
+
+    def _train_loop(self):
+        """The epoch loop for one seed — a long but LINEAR procedure (the training step, by nature): each
+        epoch forward/loss/backward over the resident batches (+ the EF aux-lane nudge folded into one seg
+        step), then a fast batched val-Dice for early stopping. Returns the best-val `state_dict` (or None)."""
+        cfg, model, opt, scaler, loss_fn = self.cfg, self.model, self.opt, self.scaler, self.loss_fn
+        partial, log_sig, log, trk = self.partial, self.log_sig, self.log, self.trk
+        gen, aux, Xva, Yva = self.gen, self.aux, self.sh["Xva"], self.sh["Yva"]
+        nb, pin, device = self.sh["nb"], self.pin, self.device
+        best_dice, best_state, bad = -1.0, None, 0
+        fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
+        for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
+            t0 = time.perf_counter()
+            model.train()
+            if hasattr(loss_fn, "epoch"):
+                loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
+            tot = 0.0
+            perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
+            for bi in progress(range(nb), f"epoch {ep}", total=nb):
+                idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
+                x, yt, valid = gen.batch(idx, pin)                  # collapsed batch (+ partial-label mask)
                 opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", enabled=pin):
-                    seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
-                loss_j = (uncertainty_weighted([seg, *auxs], list(log_sig)) if log_sig is not None
-                          else seg + cfg.ef_lambda * sum(auxs))     # learned Kendall | fixed nudge
-                scaler.scale(loss_j).backward()
+                    loss = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
+                scaler.scale(loss).backward()
                 scaler.step(opt)
                 scaler.update()
-        vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
-        improved = vd > best_dice + 1e-4
-        if improved:
-            best_dice, bad = vd, 0
-            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-        else:
-            bad += 1
-        dt = time.perf_counter() - t0
-        log.info("epoch %2d  train_loss %.4f  val_dice %.4f%s  (%.1fs, %.1f batch/s)",
-                 ep, tot / nb, vd, " *" if improved else "", dt, nb / dt)
-        trk.metric("train_loss", tot / nb, step=ep); trk.metric("val_dice", vd, step=ep)
-        if bad >= cfg.patience:
-            log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
-            break
-    trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
-    return best_state
+                tot += loss.item()
+            if aux and ep >= cfg.ef_warmup:
+                # EF/volume-consistency NUDGE: fold the aux lanes INTO one seg gradient step (not a separate
+                # vote) — seg's dense signal keeps the direction, the lanes only bend the cavity volume.
+                # Fixed λ nudge (seg dominant) or learned Kendall balance (log_sig); seg stays dominant.
+                auxs = [l for l in (lane.loss(model, amp=pin) for lane in aux) if l is not None]
+                if auxs:
+                    opt.zero_grad(set_to_none=True)
+                    with torch.autocast("cuda", enabled=pin):
+                        seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
+                    loss_j = (uncertainty_weighted([seg, *auxs], list(log_sig)) if log_sig is not None
+                              else seg + cfg.ef_lambda * sum(auxs))     # learned Kendall | fixed nudge
+                    scaler.scale(loss_j).backward()
+                    scaler.step(opt)
+                    scaler.update()
+            vd = _val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
+            improved = vd > best_dice + 1e-4
+            if improved:
+                best_dice, bad = vd, 0
+                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            else:
+                bad += 1
+            dt = time.perf_counter() - t0
+            log.info("epoch %2d  train_loss %.4f  val_dice %.4f%s  (%.1fs, %.1f batch/s)",
+                     ep, tot / nb, vd, " *" if improved else "", dt, nb / dt)
+            trk.metric("train_loss", tot / nb, step=ep); trk.metric("val_dice", vd, step=ep)
+            if bad >= cfg.patience:
+                log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
+                break
+        trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
+        return best_state
 
+    def _evaluate(self) -> dict:
+        """VALIDATION + HELD-OUT TEST: one Evaluator, score val + the criteria test split, summarize."""
+        model, device, d, log = self.model, self.device, self.d, self.log
+        test_df = self.sh["test_df"]
+        log.info("===== VALIDATION =====")
+        ev = Evaluator(model, device, EvalCfg(size=d.size))         # state (model/device/size) once; call many
+        dice_per_class, ef_rows, surf = ev.validate(splits.paths(self.sh["val_df"]))
+        results = {"val": summarize(dice_per_class, ef_rows, surf)}
+        if len(test_df):                                            # held-out test = the criteria split
+            log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
+                     list(d.test_datasets), list(d.test_vendors), len(test_df))
+            tdice, tef, tsurf = ev.validate(splits.paths(test_df))
+            results["test"] = summarize(tdice, tef, tsurf)
+        return results
 
-def _finalize(sh: dict, cfg: TrainCfg, out, model, results: dict, alias: str | None, seed: int, log, trk):
-    """The non-quick artifact tail: build model card + attribution + ONNX (each best-effort, logged on
-    failure), then register the COMPLETE set (model.pth + config + metrics + onnx + card) to the mlflow
-    registry — the sole model store. alias='production' makes this the flagship."""
-    Xva, Yva, val_df, device = sh["Xva"], sh["Yva"], sh["val_df"], sh["device"]
-    d = cfg.generator.data
-    try:
-        generate(out)
-        log.info("wrote %s/MODEL_CARD.md", out)
-    except Exception as e:  # noqa: BLE001  best-effort artifact step
-        log.warning("model card skipped: %s", e)
-    try:                                                   # attribution diagnostic (confusion + saliency)
-        s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
-        log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
-    except Exception as e:  # noqa: BLE001  best-effort artifact step
-        log.warning("attribution skipped: %s", e)
-    try:
-        export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
-    except Exception as e:  # noqa: BLE001  best-effort artifact step
-        log.warning("ONNX export skipped: %s", e)
-    try:
-        rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
-        split = "+".join(d.test_vendors) or "legacy"
-        kind = "flagship" if alias == "production" else "candidate"
-        save_model(out, run_name=out.name, run_id=rid, alias=alias,
-                   description=f"{out.name} · split={split} · seed={seed}",
-                   tags={"kind": kind, "split": split, "seed": seed})
-        log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
-    except Exception as e:  # noqa: BLE001  best-effort artifact step
-        log.warning("registry save skipped: %s", e)
+    def _save(self, results: dict):
+        """Persist model.pth + metrics.json, then log the final per-axis summary to the tracker."""
+        model, out, cfg, val_df = self.model, self.out, self.cfg, self.sh["val_df"]
+        torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
+        meta = {"config": cfg.model_dump(), "n_train": self.sh["n_train"], "n_val": len(val_df),
+                "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
+        (out / "metrics.json").write_text(json.dumps(meta, indent=2))
+        self.log.info("saved model + config + metrics -> %s/", out)
+        self.trk.summary(results)                               # final per-axis dice/EF (metrics in the run)
 
-
-def _train_one_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool):
-    """Train + eval + register ONE seed on the shared resident data `sh` (built once by train_seg).
-    Orchestrates: setup -> `_train_loop` -> eval (val + held-out test) -> save -> `_finalize`
-    (artifacts + registry). Seed-dependent state (RNG, model, optimizer, per-seed dir + registry entry)
-    lives here; the read-only data (resident tensors, val, aux EF lanes) is shared, so N seeds cost
-    1×data + N×model, not N×both."""
-    d = cfg.generator.data
-    device, pin, gen, aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
-    val_df, test_df, n_train = sh["val_df"], sh["test_df"], sh["n_train"]
-
-    cfg.seed = seed                                        # this run's provenance (config / registry / tags)
-    out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"
-    out.mkdir(parents=True, exist_ok=True)
-    log = setup(out / "train.log")
-    to_json(cfg, out / "config.json")                     # full provenance, written up front
-    torch.manual_seed(seed)
-    np.random.seed(seed)                                  # augmentation uses global np.random
-
-    model = build_unet(cfg.model).to(device)
-    # Loss selection. PARTIAL-LABEL (the train source carries a per-slice valid mask, e.g. SCD LV-only)
-    # overrides -> PartialLabelDiceCE (handles soft yt + the [B,C] mask). Else soft-label -> SoftDiceCE;
-    # else the configured (MONAI) loss. Full-label runs are untouched (partial=False).
-    partial = getattr(gen, "valid", None) is not None
-    if partial:
-        loss_fn = PartialLabelDiceCE()
-        log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
-                 int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
-    elif cfg.generator.aug.soft_label_sigma > 0:
-        loss_fn = SoftDiceCE()
-    else:
-        loss_fn = build_loss(cfg.loss)
-    opt = torch.optim.Adam(model.parameters(), cfg.lr)
-    scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
-    split_tag = d.split or ("+".join(d.test_vendors) or "legacy")
-    trk = track_run("cardioseg", out.name, run_dir=out,
-                    params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
-                    tags={"split": split_tag, "seed": seed})
-    # ef_learn: learn the seg-vs-aux balance (Kendall, one log-var per term) instead of a fixed λ. A
-    # plain guard — the only real asymmetry is that the log-vars need registering as optimizer params.
-    log_sig = None
-    if cfg.ef_learn and aux:
-        log_sig = torch.zeros(1 + len(aux), device=device, requires_grad=True)
-        opt.add_param_group({"params": [log_sig]})
-
-    best_state = _train_loop(sh, cfg, model, opt, scaler, loss_fn, partial, log_sig, log, trk)
-    if best_state is not None:
-        model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
-
-    log.info("===== VALIDATION =====")
-    ev = Evaluator(model, device, EvalCfg(size=d.size))         # state (model/device/size) once; call many
-    dice_per_class, ef_rows, surf = ev.validate(splits.paths(val_df))
-    results = {"val": summarize(dice_per_class, ef_rows, surf)}
-    if len(test_df):                                            # held-out test = the criteria split
-        log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
-                 list(d.test_datasets), list(d.test_vendors), len(test_df))
-        tdice, tef, tsurf = ev.validate(splits.paths(test_df))
-        results["test"] = summarize(tdice, tef, tsurf)
-
-    torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
-    meta = {"config": cfg.model_dump(), "n_train": n_train, "n_val": len(val_df),
-            "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
-    (out / "metrics.json").write_text(json.dumps(meta, indent=2))
-    log.info("saved model + config + metrics -> %s/", out)
-    trk.summary(results)                                    # final per-axis dice/EF (metrics in the run)
-
-    if quick:                                               # experiment sweep: skip the artifact tail
-        log.info("quick mode: skipping model card / attribution / ONNX / registry")
-    else:
-        _finalize(sh, cfg, out, model, results, alias, seed, log, trk)
-    trk.end()
-    return model, results
+    def _finalize(self):
+        """The non-quick artifact tail: build model card + attribution + ONNX (each best-effort, logged on
+        failure), then register the COMPLETE set (model.pth + config + metrics + onnx + card) to the mlflow
+        registry — the sole model store. alias='production' makes this the flagship."""
+        model, out, log = self.model, self.out, self.log
+        Xva, Yva, val_df, device = self.sh["Xva"], self.sh["Yva"], self.sh["val_df"], self.device
+        cfg, d, alias, seed = self.cfg, self.d, self.alias, self.seed
+        try:
+            generate(out)
+            log.info("wrote %s/MODEL_CARD.md", out)
+        except Exception as e:  # noqa: BLE001  best-effort artifact step
+            log.warning("model card skipped: %s", e)
+        try:                                                   # attribution diagnostic (confusion + saliency)
+            s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
+            log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
+        except Exception as e:  # noqa: BLE001  best-effort artifact step
+            log.warning("attribution skipped: %s", e)
+        try:
+            export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
+        except Exception as e:  # noqa: BLE001  best-effort artifact step
+            log.warning("ONNX export skipped: %s", e)
+        try:
+            rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
+            split = "+".join(d.test_vendors) or "legacy"
+            kind = "flagship" if alias == "production" else "candidate"
+            save_model(out, run_name=out.name, run_id=rid, alias=alias,
+                       description=f"{out.name} · split={split} · seed={seed}",
+                       tags={"kind": kind, "split": split, "seed": seed})
+            log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
+        except Exception as e:  # noqa: BLE001  best-effort artifact step
+            log.warning("registry save skipped: %s", e)
 
 
 def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):
@@ -256,7 +265,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
 def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seeds=None):
     """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
     list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
-    ONCE and shared across seeds (`_train_one_seed` does the per-seed work) — N seeds cost 1×data + N×model,
+    ONCE and shared across seeds (`SeedTrainer` does the per-seed work) — N seeds cost 1×data + N×model,
     no per-seed disk reload or VRAM duplication. Artifacts register to the mlflow model registry (the
     sole store); `alias='production'` makes a run the flagship. Multi-seed needs a coded `--split`
     (legacy criteria splits key their partition on the seed, so they can't share one dataset)."""
@@ -331,12 +340,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
         log.info("aux lane: %s (%d items cached)", type(lane).__name__, lane.n)
 
     # Everything above is seed-invariant (coded split + resident tensors + aux). Hand the shared bundle
-    # to _train_one_seed per seed — each builds its own model/optimizer/artifacts on the SAME data.
+    # to a SeedTrainer per seed — each builds its own model/optimizer/artifacts on the SAME data.
     sh = {"device": device, "pin": pin, "data_device": data_device, "gen": gen, "Xva": Xva, "Yva": Yva,
           "train_df": train_df, "val_df": val_df, "test_df": test_df, "train_src": train_src,
           "aux": aux, "nb": nb, "n_train": n_train, "base_out": base_out, "single": len(seeds) == 1}
     log.info("shared data ready — training %d seed(s): %s", len(seeds), seeds)
-    res = [_train_one_seed(cfg, s, sh, alias, quick) for s in seeds]
+    res = [SeedTrainer(cfg, s, sh, alias, quick).run() for s in seeds]
     return res[0] if len(seeds) == 1 else res
 
 
