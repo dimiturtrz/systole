@@ -19,6 +19,7 @@ from pathlib import Path
 
 import matplotlib
 import torch
+from captum.attr import Saliency
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -63,13 +64,9 @@ def _render(model, X, Y, pred, device, out_png: Path, n_classes: int, k: int = 4
     good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n_classes))][:k]
     if not good:
         good = list(range(min(k, Y.shape[0])))
-    try:
-        from captum.attr import Saliency
-        def _fwd(x):
-            return model(x).sum(dim=(2, 3))               # spatial-sum logits -> [B,C] for attribution
-        sal = Saliency(_fwd)
-    except Exception:
-        sal = None
+    def _fwd(x):
+        return model(x).sum(dim=(2, 3))                   # spatial-sum logits -> [B,C] for attribution
+    sal = Saliency(_fwd)
 
     rows = 4 if sal is not None else 3
     fig, ax = plt.subplots(rows, len(good), figsize=(3 * len(good), 3 * rows), squeeze=False)

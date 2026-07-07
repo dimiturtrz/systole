@@ -16,9 +16,13 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 
-from core.data.dynamic.anatomy import load_pool
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+from core.data.dynamic.anatomy import load_pool  # noqa: E402
 
 # canonical labels: 1 RV-cav, 2 LV-myo, 3 LV-cav (0 bg)
 _RV, _MYO, _LVC = 1, 2, 3
@@ -96,19 +100,13 @@ def _main():
     U = np.concatenate([R, S])
     _, _, vt = np.linalg.svd(U - U.mean(0), full_matrices=False)
     pr, ps = (R - U.mean(0)) @ vt[:2].T, (S - U.mean(0)) @ vt[:2].T
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(6, 6))
-        plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
-        plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
-        plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
-        out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
-        plt.savefig(out, dpi=110, bbox_inches="tight")
-        print(f"wrote {out}")
-    except ImportError:
-        print("(matplotlib not available — skipped scatter)")
+    plt.figure(figsize=(6, 6))
+    plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
+    plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
+    plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
+    out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
+    plt.savefig(out, dpi=110, bbox_inches="tight")
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":

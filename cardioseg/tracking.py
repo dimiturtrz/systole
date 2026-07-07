@@ -1,6 +1,6 @@
 """Optional MLflow experiment tracking — Phase 1: local file backend, runs/ stays canonical.
 
-A thin, GUARDED layer: if mlflow is absent or CARDIOSEG_NO_MLFLOW is set, every call is a no-op, so
+mlflow is a required dep; the only opt-out is CARDIOSEG_NO_MLFLOW, which makes every call a no-op so
 training/scoring never depend on it. It's the cross-run comparison UI (`mlflow ui`), not the source of
 truth — runs/<name>/{config,metrics}.json + RESULTS.json remain authoritative.
 
@@ -13,18 +13,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import mlflow
+import mlflow.pytorch
+
 _ROOT = Path(__file__).resolve().parents[1]
 _MLRUNS = _ROOT / "mlruns"                          # artifact store (default root)
 _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"   # metadata + registry (file store deprecated)
 
 
 def _mlflow():
-    """The mlflow module if tracking is enabled, else None (absent dep or opt-out env)."""
+    """The mlflow module if tracking is enabled, else None (CARDIOSEG_NO_MLFLOW opt-out)."""
     if os.environ.get("CARDIOSEG_NO_MLFLOW"):
-        return None
-    try:
-        import mlflow
-    except ImportError:
         return None
     return mlflow
 
@@ -82,7 +81,6 @@ class _Live:
         """Log the torch model + register a version (catalog). `alias` (e.g. 'production') points at it;
         `description`/`version_tags` make the auto-numbered version readable. Guarded."""
         try:
-            import mlflow.pytorch
             mlflow.pytorch.log_model(model, name="model", registered_model_name=registered_name)
             c = self._m.tracking.MlflowClient()
             v = str(max(int(mv.version) for mv in c.search_model_versions(f"name='{registered_name}'")))

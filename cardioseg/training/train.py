@@ -24,6 +24,7 @@ from core.data.dynamic.synth import excise_heart
 from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
 from core.data.static import splits, store
 from core.data.static.labels import FOREGROUND
+from core.export_onnx import export
 from core.hparams import TrainCfg, apply_overrides, to_json
 from core.model import build_unet, resolve_device
 from core.obs import progress, setup, timed
@@ -185,10 +186,7 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     except Exception as e:
         log.warning("attribution skipped: %s", e)
     try:
-        from core.export_onnx import export
         export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
-    except ImportError:
-        log.info("ONNX export skipped (pip install .[export] for onnxruntime)")
     except Exception as e:
         log.warning("ONNX export skipped: %s", e)
 
