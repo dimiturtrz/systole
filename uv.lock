@@ -355,47 +355,37 @@ name = "cardioseg"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "captum" },
     { name = "matplotlib" },
+    { name = "mlflow" },
     { name = "monai" },
     { name = "nibabel" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "omegaconf" },
+    { name = "onnx" },
+    { name = "onnxruntime" },
     { name = "polars" },
+    { name = "psutil" },
     { name = "pydantic" },
+    { name = "pynvml" },
+    { name = "pyvista" },
     { name = "scikit-image" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "simpleitk" },
     { name = "torch" },
     { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
 all = [
-    { name = "captum" },
-    { name = "mlflow" },
     { name = "nnunetv2" },
-    { name = "onnx" },
-    { name = "onnxruntime" },
     { name = "opencv-python-headless" },
-    { name = "psutil" },
-    { name = "pynvml" },
     { name = "pytest" },
-    { name = "pyvista" },
-    { name = "simpleitk" },
 ]
 dev = [
     { name = "pytest" },
-]
-diag = [
-    { name = "captum" },
-]
-dicom = [
-    { name = "simpleitk" },
-]
-export = [
-    { name = "onnx" },
-    { name = "onnxruntime" },
 ]
 gpu = [
     { name = "cucim-cu13", marker = "sys_platform == 'linux'" },
@@ -404,61 +394,41 @@ gpu = [
 mrxcat = [
     { name = "opencv-python-headless" },
 ]
-n4 = [
-    { name = "simpleitk" },
-]
 nnunet = [
     { name = "nnunetv2" },
-]
-track = [
-    { name = "mlflow" },
-    { name = "psutil" },
-    { name = "pynvml" },
-]
-viz = [
-    { name = "pyvista" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "captum", marker = "extra == 'all'" },
-    { name = "captum", marker = "extra == 'diag'" },
+    { name = "captum" },
     { name = "cucim-cu13", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "cupy-cuda13x", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "matplotlib" },
-    { name = "mlflow", marker = "extra == 'all'" },
-    { name = "mlflow", marker = "extra == 'track'" },
+    { name = "mlflow" },
     { name = "monai", specifier = ">=1.5" },
     { name = "nibabel" },
     { name = "nnunetv2", marker = "extra == 'all'", specifier = ">=2.5" },
     { name = "nnunetv2", marker = "extra == 'nnunet'", specifier = ">=2.5" },
     { name = "numpy" },
     { name = "omegaconf" },
-    { name = "onnx", marker = "extra == 'all'" },
-    { name = "onnx", marker = "extra == 'export'" },
-    { name = "onnxruntime", marker = "extra == 'all'" },
-    { name = "onnxruntime", marker = "extra == 'export'" },
+    { name = "onnx" },
+    { name = "onnxruntime" },
     { name = "opencv-python-headless", marker = "extra == 'all'" },
     { name = "opencv-python-headless", marker = "extra == 'mrxcat'" },
     { name = "polars" },
-    { name = "psutil", marker = "extra == 'all'" },
-    { name = "psutil", marker = "extra == 'track'" },
+    { name = "psutil" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pynvml", marker = "extra == 'all'" },
-    { name = "pynvml", marker = "extra == 'track'" },
+    { name = "pynvml" },
     { name = "pytest", marker = "extra == 'all'" },
     { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pyvista", marker = "extra == 'all'" },
-    { name = "pyvista", marker = "extra == 'viz'" },
+    { name = "pyvista" },
     { name = "scikit-image" },
     { name = "scipy" },
-    { name = "simpleitk", marker = "extra == 'all'" },
-    { name = "simpleitk", marker = "extra == 'dicom'" },
-    { name = "simpleitk", marker = "extra == 'n4'" },
+    { name = "simpleitk" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "tqdm" },
 ]
-provides-extras = ["dev", "n4", "dicom", "export", "viz", "nnunet", "track", "diag", "mrxcat", "gpu", "all"]
+provides-extras = ["dev", "nnunet", "mrxcat", "gpu", "all"]
 
 [[package]]
 name = "certifi"
