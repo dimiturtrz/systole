@@ -176,12 +176,17 @@ def _bsa(height, weight):
         return None
 
 
+# age-band cut points (years) for demographic stratification
+_AGE_45, _AGE_60, _AGE_75 = 45, 60, 75
+
+
 def _age_band(age):
     try:
         a = float(age)
     except (TypeError, ValueError):
         return None
-    return "<45" if a < 45 else "45-60" if a < 60 else "60-75" if a < 75 else "75+"
+    return ("<45" if a < _AGE_45 else "45-60" if a < _AGE_60
+            else "60-75" if a < _AGE_75 else "75+")
 
 
 def _norm_vendor(v):
@@ -203,6 +208,12 @@ def _is_labelled(arrays: dict) -> bool:
     return all(ok)
 
 
+# cine bSSFP TR sanity gate (ms): reject mixed-sequence DICOM (GRE/segmented cine, TR ~39 ms)
+_MIN_BSSFP_TR_MS, _MAX_BSSFP_TR_MS = 2.0, 6.0
+_FIELD_1P5T = 1.5           # tesla; nominal low-field
+_FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T flip bucket
+
+
 def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     """Aggregate REAL DICOM acquisition (TR/TE/flip) from the built stores into per-(vendor,field)
     reference values -> reference/acquisition.yaml (verified: DICOM-measured). This is the DAG COMPOSE:
@@ -221,7 +232,7 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     # segmented cine / GRE, TR ~39 ms) must NOT feed the bSSFP-derivation override — filter it out.
     tr = pl.col("tr_ms").cast(pl.Float64, strict=False)
     real = df.filter(pl.col("tr_ms").is_not_null() & pl.col("vendor").is_not_null()
-                     & (tr >= 2.0) & (tr <= 6.0))
+                     & (tr >= _MIN_BSSFP_TR_MS) & (tr <= _MAX_BSSFP_TR_MS))
     # normalize field to a float so "1.5" and "1.500000" (DICOM formatting) are ONE group, not two
     real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
     acq: dict[str, dict] = {}
@@ -232,7 +243,7 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
                           "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
         e = acq.setdefault(str(vendor), {})
         e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))
-        near15 = abs(float(field) - 1.5) < 0.6 if field else True
+        near15 = abs(float(field) - _FIELD_1P5T) < _FIELD_1P5T_TOL if field else True
         e["flip_deg_1p5t" if near15 else "flip_deg_3t"] = leaf(med("flip_deg"))
     out = reference_dir() / "acquisition.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)

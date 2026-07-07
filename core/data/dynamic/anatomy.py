@@ -41,6 +41,11 @@ log = logging.getLogger("cardioseg.anatomy")
 LV_ID, RV_ID = 1, 2                    # cell tag: LV / RV myocardium (rest = atria/vessels, dropped)
 _SENTINEL = -5.0                       # universal-coord sentinel guard (real values in [-1..1]; atria=-10)
 
+_PARALLEL_EPS = 1e-6                    # |sin| below this -> axis already ~parallel to +z (no rotation)
+_APEX_Z_FRAC = 0.15                    # apico-basal coord Z below this = apical band (apex centroid)
+_BASE_Z_FRAC = 0.85                    # apico-basal coord Z above this = basal band (base centroid)
+_ZOOM_NOOP_EPS = 1e-3                  # |scale factor - 1| below this -> skip the rescale (no-op)
+
 
 def _tag_name(mesh) -> str:
     """The per-cell region-tag array. Two Rodero packagings: real-patient cohort (4590294) tags it
@@ -57,7 +62,7 @@ def _rot_to_z(axis: np.ndarray) -> np.ndarray:
     axis = axis / (np.linalg.norm(axis) + 1e-9)
     z = np.array([0.0, 0.0, 1.0])
     v = np.cross(axis, z); s = np.linalg.norm(v); c = float(np.dot(axis, z))
-    if s < 1e-6:
+    if s < _PARALLEL_EPS:
         return np.eye(3)
     vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
     return np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))
@@ -73,8 +78,8 @@ def _sax_align(mesh):
     if "Z.dat" in mesh.point_data:
         Z = np.asarray(mesh.point_data["Z.dat"])
         valid = (Z >= 0.0) & (Z <= 1.0)                   # ventricular points only (atria = -10 sentinel)
-        apex = pts[valid & (Z < 0.15)].mean(0)
-        base = pts[valid & (Z > 0.85)].mean(0)
+        apex = pts[valid & (Z < _APEX_Z_FRAC)].mean(0)
+        base = pts[valid & (Z > _BASE_Z_FRAC)].mean(0)
         axis = base - apex
         R = _rot_to_z(axis)
         origin = apex
@@ -124,7 +129,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
         lw, rw = lv[k], rv[k]
-        if lw.sum() < 8:
+        if lw.sum() < 8:  # noqa: PLR2004 (min LV-wall px for a usable slice)
             continue
         lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
         # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
@@ -162,7 +167,7 @@ def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
     zs, ys, xs = np.where(fg)
     cur = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1
     f = target_px / max(cur, 1)
-    if abs(f - 1.0) < 1e-3:
+    if abs(f - 1.0) < _ZOOM_NOOP_EPS:
         return vol
     return _zoom(vol, (1.0, f, f), order=0)           # in-plane only; slices (z) untouched
 
@@ -200,7 +205,7 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
     (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
     ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
-    lvc, myo = mask == LV_CAV, mask == 2
+    lvc, myo = mask == LV_CAV, mask == 2  # noqa: PLR2004 (2 = LV-myo label id)
     wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
     out = mask.copy()
     if lvc.any() and myo.any() and k != 0:
@@ -210,7 +215,7 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
             out[wall] = 2
             out[new_lvc] = LV_CAV
     if rv_k > 0 and (mask == 1).any():                       # abnormal RV: grow RV cavity into bg only
-        grown = binary_dilation(mask == 1, iterations=rv_k) & ~(out == 2) & ~(out == LV_CAV)
+        grown = binary_dilation(mask == 1, iterations=rv_k) & ~(out == 2) & ~(out == LV_CAV)  # noqa: PLR2004 (2 = LV-myo label id)
         out[grown] = 1
     return out
 

@@ -38,6 +38,9 @@ from .anatomy import REAL_SIZE_PX, load_pool
 
 log = logging.getLogger("cardioseg.mrxcat")
 
+_ZOOM_NOOP_EPS = 1e-3    # |scale factor - 1| below this -> skip the rescale (no-op)
+_MIN_HEART_PX = 40       # min heart (class 1/2/3) px for a FOV slice to be a usable background
+
 # XCAT/MRXCAT label codes → our canonical {0 bg, 1 RV-cav, 2 LV-myo, 3 LV-cav}. Cardiac codes from MRXCAT2.0
 # `myLabels(LV_wall=1, RV_wall=2, LV_blood=5, RV_blood=6, Peri=50, Aorta=36)` (MakePhantom.py). Everything
 # else (RV wall = no canonical RV-myo class, skeletal muscle, blood 7/8, air/liver/fat/bone, aorta, peri…)
@@ -102,7 +105,7 @@ def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | 
         return None
     crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
     f = target_px / max(max(crop.shape), 1)
-    if abs(f - 1.0) > 1e-3:
+    if abs(f - 1.0) > _ZOOM_NOOP_EPS:
         crop = _zoom(crop, f, order=0)
     return fit_square(crop, size, 0).astype(np.uint8)
 
@@ -219,7 +222,7 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
         fov = to_tissue_map(load_vti_labels(vp))
         for k in range(fov.shape[0]):
-            if int(np.isin(fov[k], (1, 2, 3)).sum()) >= 40:
+            if int(np.isin(fov[k], (1, 2, 3)).sum()) >= _MIN_HEART_PX:
                 w = _fov_window(fov[k], size, scale)
                 if w is not None:
                     bgs.append(w)

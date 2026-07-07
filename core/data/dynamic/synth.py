@@ -262,7 +262,7 @@ class FovBg(Background):
         return named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
 
     def seg_target(self, mask):
-        return mask.where(mask <= 3, torch.zeros_like(mask))  # FOV classes 4..7 (organs) → bg; heart 1..3 kept
+        return mask.where(mask <= 3, torch.zeros_like(mask))  # noqa: PLR2004  FOV 4..7 (organs)→bg; heart 1..3 kept
 
 
 # bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
@@ -335,6 +335,9 @@ def make_acquisition(cfg: SynthCfg) -> Acquisition:
         return _ACQ_REGISTRY[cfg.acq_mode]()
     except KeyError:
         raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}") from None
+
+
+_MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the conv
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
@@ -419,7 +422,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     # --- random Gaussian blur (resolution variation); single σ per call (varies every batch) ---
     bl_lo, bl_hi = cfg.blur
     sigma = float(torch.rand(1, device=dev) * (bl_hi - bl_lo) + bl_lo)
-    if sigma > 0.05:
+    if sigma > _MIN_BLUR_SIGMA:
         k = _gaussian_kernel(sigma).to(dev)
         k = k.view(1, 1, *k.shape)
         img = F.conv2d(img, k, padding=k.shape[-1] // 2)

@@ -75,7 +75,7 @@ class HausdorffERLoss:
         with torch.autocast(device_type=logits.device.type, enabled=False):
             prob = logits.float().softmax(1)
             c = prob.shape[1]
-            tgt = y[:, 0] if y.dim() == 4 else y                  # [B,H,W]
+            tgt = y[:, 0] if y.dim() == 4 else y                  # noqa: PLR2004  [B,H,W]
             onehot = F.one_hot(tgt.long(), c).permute(0, 3, 1, 2).float()
             if not self.include_background:
                 prob, onehot = prob[:, 1:], onehot[:, 1:]
@@ -155,11 +155,11 @@ class PartialLabelDiceCE:
         B, C = logits.shape[:2]
         with torch.autocast(device_type=logits.device.type, enabled=False):
             logits = logits.float()
-            if target.dim() == 4 and target.shape[1] == C:            # soft [B,C,H,W]
+            if target.dim() == 4 and target.shape[1] == C:            # noqa: PLR2004  soft [B,C,H,W]
                 oh = target.float()
                 cls = oh.argmax(1)                                    # [B,H,W] dominant class (pixel validity)
             else:                                                     # hard labels
-                cls = (target[:, 0] if target.dim() == 4 else target).long()
+                cls = (target[:, 0] if target.dim() == 4 else target).long()  # noqa: PLR2004  rank check
                 oh = F.one_hot(cls, C).permute(0, 3, 1, 2).float()
             if valid is None:
                 valid = torch.ones(B, C, dtype=torch.bool, device=logits.device)

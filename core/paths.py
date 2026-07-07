@@ -50,13 +50,13 @@ def win_drive(raw: str) -> str | None:
     """Lowercase drive letter if `raw` is a Windows drive path ('D:/x' -> 'd'), else None.
     Uses PureWindowsPath so it detects a drive even when called on POSIX."""
     drive = PureWindowsPath(raw).drive            # 'D:' for 'D:/x'; '' for a posix path
-    return drive[0].lower() if len(drive) == 2 and drive[1] == ":" else None
+    return drive[0].lower() if len(drive) == 2 and drive[1] == ":" else None  # noqa: PLR2004 ('D:' is 2 chars)
 
 
 def mnt_drive(raw: str) -> str | None:
     """Lowercase drive letter if `raw` is a WSL mount path ('/mnt/d/x' -> 'd'), else None."""
     parts = PurePosixPath(raw).parts              # ('/', 'mnt', 'd', 'x')
-    if len(parts) >= 3 and parts[1] == "mnt" and len(parts[2]) == 1 and parts[2].isalpha():
+    if len(parts) >= 3 and parts[1] == "mnt" and len(parts[2]) == 1 and parts[2].isalpha():  # noqa: PLR2004 ('/mnt/d/...' >= 3 parts)
         return parts[2].lower()
     return None
 

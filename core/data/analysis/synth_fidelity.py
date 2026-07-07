@@ -32,6 +32,9 @@ log = logging.getLogger("cardioseg.synth_fidelity")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
+_MIN_DPRIME_PTS = 50    # fewer sample points than this -> d'/std estimate too unstable (SD noisy)
+_MIN_VENDOR_SUBJECTS = 100  # skip a vendor with fewer real subjects when building spread bands
+
 
 def wasserstein1d(a: torch.Tensor, b: torch.Tensor, q: int = 100) -> float:
     """1-D Wasserstein-1 (earth-mover) distance between two samples via quantile differences:
@@ -82,7 +85,7 @@ _PAIRS = [(2, 3), (2, 1), (2, 0), (1, 3), (1, 0), (3, 0)]     # (myo,cav)(myo,rv
 
 def dprime(a: torch.Tensor, b: torch.Tensor) -> float:
     """Separability of two 1-D samples. |mean diff| / pooled SD; nan if either < 50 pts (SD unstable)."""
-    if a.numel() < 50 or b.numel() < 50:
+    if a.numel() < _MIN_DPRIME_PTS or b.numel() < _MIN_DPRIME_PTS:
         return float("nan")
     denom = (0.5 * (a.var() + b.var())).sqrt()
     return float((a.mean() - b.mean()).abs() / denom) if float(denom) > 0 else float("nan")
@@ -134,13 +137,13 @@ _KNOB_OFF = {"jitter": {"jitter": 0.0}, "texture": {"texture": 0.0}, "noise": {"
 def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
     """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
     xr, yr = x1c.reshape(-1), ym.reshape(-1)
-    pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > 50 else float("nan")
+    pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > _MIN_DPRIME_PTS else float("nan")
               for c in range(n_classes)}
     ps = {c: [] for c in range(n_classes)}
     for i in range(x1c.shape[0]):
         xi, yi = x1c[i].reshape(-1), ym[i].reshape(-1)
         for c in range(n_classes):
-            if int((yi == c).sum()) > 50:
+            if int((yi == c).sum()) > _MIN_DPRIME_PTS:
                 ps[c].append(float(xi[yi == c].std()))
     perslice = {c: round(float(np.nanmean(v)), 3) if v else float("nan") for c, v in ps.items()}
     return {"pooled": {_NAMES[c]: round(pooled[c], 3) for c in range(n_classes)},
@@ -187,7 +190,7 @@ def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800
         sub = meta.filter(pl.col("vendor") == v)
         X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
         n = int(X.shape[0])
-        if n < 100:
+        if n < _MIN_VENDOR_SUBJECTS:
             continue
         if n > max_per_vendor:
             g = torch.Generator().manual_seed(0)

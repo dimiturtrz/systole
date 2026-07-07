@@ -53,6 +53,10 @@ def _smooth3d(v, sigma: float):
     return x[0, 0]
 
 
+_MIN_FG_VOXELS = 16   # too few positive voxels to estimate a bias field -> return uncorrected
+_RANGE_EPS = 1e-6     # log-intensity range below this -> histogram is degenerate, stop iterating
+
+
 def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",
            iters: int = 8, bins: int = 200, fwhm: float = 0.15) -> Volume:
     """N4 bias-field correction in pure torch (runs on `device`; CUDA = fast, no custom kernels).
@@ -64,7 +68,7 @@ def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",
     """
     x = torch.as_tensor(vol, dtype=torch.float32, device=device)
     pos = x[x > 0]
-    if pos.numel() < 16:
+    if pos.numel() < _MIN_FG_VOXELS:
         return vol.astype("float32")
     mask = x > 0.1 * pos.mean()                                 # crude foreground (air ~ 0)
     logx = torch.log(torch.clamp(x, min=1e-6))
@@ -75,7 +79,7 @@ def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",
         u = logx - field
         um = u[mask]
         lo, hi = float(um.min()), float(um.max())
-        if hi - lo < 1e-6:
+        if hi - lo < _RANGE_EPS:
             break
         centers = torch.linspace(lo, hi, bins, device=device)
         h = torch.histc(um, bins=bins, min=lo, max=hi)

@@ -105,7 +105,7 @@ def plot_kde(dists, out: Path, label: str):
     xs = np.linspace(0, xmax, 400)
     for cl, (name, color) in CLASSES.items():
         sd = np.concatenate([d for d in dists[cl] if d.size])
-        if sd.size < 2:
+        if sd.size < 2:  # noqa: PLR2004 (KDE needs >=2 points)
             continue
         m = surface_metrics(sd)
         ax.plot(xs, gaussian_kde(sd)(xs), color=color, lw=2,
@@ -152,7 +152,7 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
 
     # upright distribution outline on top
     xs = np.linspace(x_lo, x_hi, 200)
-    if diff.size >= 2 and np.std(diff) > 0:
+    if diff.size >= 2 and np.std(diff) > 0:  # noqa: PLR2004 (KDE needs >=2 points)
         k = gaussian_kde(diff)(xs)
         axk.fill_between(xs, 0, k, color="#7a9bff", alpha=0.35)
         axk.plot(xs, k, color="#3b5bbf", lw=1.5)
@@ -210,7 +210,7 @@ def plot_strata(rows, key, out: Path, label: str):
     """Two panels: per-group mean Dice (bars) + per-group EF MAE (bars), n annotated,
     small-n groups hatched. The 'where does it fail' figure."""
     g = _groups(rows, key)
-    if len(g) < 2:
+    if len(g) < 2:  # noqa: PLR2004 (need >=2 groups to plot strata)
         return
     groups = list(g)
     mean_dice = [np.mean([r["dice"][c] for r in g[gr] for c in CLASSES if "dice" in r]) for gr in groups]

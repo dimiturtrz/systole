@@ -31,13 +31,15 @@ log = logging.getLogger("cardioseg.shape_coverage")
 # canonical labels: 1 RV-cav, 2 LV-myo, 3 LV-cav (0 bg)
 _RV, _MYO, _LVC = 1, 2, 3
 
+_MIN_FG_PX = 40   # below this many foreground px a 2D label map is ~empty -> skip (shape stats unstable)
+
 
 def shape_features(mask: np.ndarray) -> np.ndarray | None:
     """Interpretable SHAPE-only descriptors for one 2D label map, or None if ~empty. Scale/position-
     invariant where sensible so it compares generated vs real anatomy, not framing artifacts."""
     fg = mask > 0
     n = int(fg.sum())
-    if n < 40:
+    if n < _MIN_FG_PX:
         return None
     rv, myo, lvc = (mask == _RV).sum(), (mask == _MYO).sum(), (mask == _LVC).sum()
     ys, xs = np.where(fg)

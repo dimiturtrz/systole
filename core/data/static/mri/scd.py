@@ -112,7 +112,7 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
         ocf = ic.with_name(ic.name.replace("icontour", "ocontour"))
         epi = _read_contour(ocf) if ocf.exists() else None
         mask = _rasterize(endo, epi, img.shape)
-        by_slice[loc].append({"loc": loc, "area": int((mask == 3).sum()), "img": img, "mask": mask, "px": (sy, sx)})
+        by_slice[loc].append({"loc": loc, "area": int((mask == 3).sum()), "img": img, "mask": mask, "px": (sy, sx)})  # noqa: PLR2004 (3 = LV-cav label id)
 
     if not by_slice:
         return out

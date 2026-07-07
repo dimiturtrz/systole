@@ -23,6 +23,7 @@ from core.types import Image, Slice2D, Spacing, Volume
 TARGET_INPLANE = DEFAULT_INPLANE
 SIZE = DEFAULT_SIZE                          # square grid the 2D model runs on (== DataCfg.size)
 ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
+_MIN_ANCHOR_PX = 50                          # min blood/air px to trust the two-point anchor (else z-score)
 
 
 def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
@@ -53,7 +54,7 @@ def blood_anchor(img: Image, gt, blood=(1, 3), eps: float = ZSCORE_EPS) -> Image
     spread vs z-score (bd h8k). Blood level is per-volume; falls back to z-score if blood/air absent.
     ORACLE when `gt` is ground truth (upper bound); at inference a coarse blood/air seg estimates it."""
     bm = np.isin(gt, blood); am = gt == 0
-    if int(bm.sum()) < 50 or int(am.sum()) < 50:
+    if int(bm.sum()) < _MIN_ANCHOR_PX or int(am.sum()) < _MIN_ANCHOR_PX:
         return zscore(img)                                   # no anchor available -> safe fallback
     b = float(img[bm].mean()); a = float(np.median(img[am]))
     return (img - a) / ((b - a) + eps)

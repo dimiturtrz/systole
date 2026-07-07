@@ -28,11 +28,14 @@ log = logging.getLogger("cardioseg.static_compare")
 
 _RV, _MYO, _LVC = 1, 2, 3
 
+_MIN_FG_PX = 40      # below this many foreground px a 2D label map is ~empty -> skip
+_MIN_LVC_PX = 20     # below this many LV-cavity px sphericity is too noisy to report
+
 
 def geom_metrics(mask: np.ndarray) -> dict | None:
     """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
     fg = mask > 0
-    if int(fg.sum()) < 40:
+    if int(fg.sum()) < _MIN_FG_PX:
         return None
     rv, myo, lvc = mask == _RV, mask == _MYO, mask == _LVC
     a_rv, a_myo, a_lvc = int(rv.sum()), int(myo.sum()), int(lvc.sum())
@@ -41,7 +44,7 @@ def geom_metrics(mask: np.ndarray) -> dict | None:
     dt = distance_transform_edt(myo)
     m["myo_thickness"] = float(dt[myo].mean() * 2.0) if a_myo else 0.0   # over myo pixels only (px)
     # LV-cavity SPHERICITY (2D roundness): 4πA / P²  (1 = perfect circle). P ≈ boundary-pixel count.
-    if a_lvc >= 20:
+    if a_lvc >= _MIN_LVC_PX:
         per = int((lvc & ~binary_erosion(lvc)).sum())
         m["lvc_sphericity"] = float(4 * np.pi * a_lvc / (per * per)) if per else 0.0
     else:

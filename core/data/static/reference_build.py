@@ -27,6 +27,8 @@ from core.obs import setup
 
 log = logging.getLogger("cardioseg.reference_build")
 
+_MIN_LEVEL_PX = 50   # min pooled px for a per-vendor per-class intensity level to be recorded
+
 # --- generator: derive reference ranges from the consolidated store (the "data is scarce -> trace
 #     every number to a cohort" path). Computed from GROUND TRUTH, so model-independent + reproducible. ---
 
@@ -143,7 +145,7 @@ def build_real_levels(sources=None, inplane: float | None = None, per_case: int 
     for v, per_cls in sorted(acc.items()):
         base = f"processed/{paramkey}, vendor={v}, n_cases={counts[v]}"
         out["real_class_levels"][v] = {names[lbl]: _level_entry(px, base)
-                                       for lbl, px in sorted(per_cls.items()) if len(px) >= 50}
+                                       for lbl, px in sorted(per_cls.items()) if len(px) >= _MIN_LEVEL_PX}
 
     base_dir = Path(out_dir) if out_dir is not None else reference_dir()
     base_dir.mkdir(parents=True, exist_ok=True)

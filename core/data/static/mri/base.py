@@ -73,7 +73,7 @@ def load_nifti(path: str | Path, frame: int | None = None) -> tuple[Volume, Spac
     `frame` to extract one time-index ([x,y,z,t] -> [D,H,W]); 3D inputs ignore `frame`."""
     img = nib.load(str(path))
     arr = np.asanyarray(img.dataobj)          # NIfTI is x,y,z (,t)
-    if frame is not None and arr.ndim == 4:
+    if frame is not None and arr.ndim == 4:  # noqa: PLR2004 (4D cine: x,y,z,t)
         arr = arr[..., frame]
     arr = np.transpose(arr, (2, 1, 0))        # -> z,y,x (D,H,W)
     zx, zy, zz = img.header.get_zooms()[:3]

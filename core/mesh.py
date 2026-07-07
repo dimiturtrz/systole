@@ -30,6 +30,9 @@ log = logging.getLogger("cardioseg.mesh")
 MESH_MM = 2.5      # surface resample step (coarser than voxels -> fewer triangles, still smooth)
 DECIMATE = 0.7     # fraction of triangles to drop (smaller files)
 
+_MIN_CHAMBER_VOXELS = 8   # below this a chamber is absent/tiny -> skip meshing
+_ISO_LEVEL = 0.5          # marching-cubes iso-surface level on the resampled soft mask
+
 
 def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
                     decimate: float = DECIMATE):
@@ -37,13 +40,13 @@ def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
     largest-CC -> isotropic linear resample (no z-staircase) -> zero-pad (cap open base/apex) ->
     marching cubes -> Taubin smooth -> decimate -> oriented normals."""
     binary = largest_cc_binary(mask == label)
-    if binary.sum() < 8:
+    if binary.sum() < _MIN_CHAMBER_VOXELS:
         return None
     soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)
-    if soft.max() < 0.5:
+    if soft.max() < _ISO_LEVEL:
         return None
     soft = np.pad(soft, 1, mode="constant")
-    verts, faces, _, _ = marching_cubes(soft, level=0.5, spacing=(iso, iso, iso))
+    verts, faces, _, _ = marching_cubes(soft, level=_ISO_LEVEL, spacing=(iso, iso, iso))
     verts = verts[:, [2, 1, 0]]                              # (z,y,x) -> (x,y,z)
     fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
     mesh = pv.PolyData(verts, fp).smooth_taubin(n_iter=24, pass_band=0.05)
@@ -58,7 +61,7 @@ def export_glb(mask: np.ndarray, spacing, path: str | Path, iso: float = MESH_MM
     for label, (_name, color) in CLASSES.items():
         mesh = chamber_surface(mask, label, spacing, iso)
         if mesh is not None:
-            pl.add_mesh(mesh, color=color, opacity=0.55 if label == 2 else 1.0, smooth_shading=True)
+            pl.add_mesh(mesh, color=color, opacity=0.55 if label == 2 else 1.0, smooth_shading=True)  # noqa: PLR2004 (2 = LV-myo label id)
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     pl.export_gltf(str(path)); pl.close()
     return path
