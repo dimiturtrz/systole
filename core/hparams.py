@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 from core.config import _VALIDATE
 from core.data.dynamic.augment import AugCfg
 from core.data.dynamic.generator import GeneratorCfg
-from core.data.dynamic.synth import ACQ_VARIANTS, SynthCfg
+from core.data.dynamic.synth import ACQ_VARIANTS, BG_VARIANTS, SynthCfg
 from core.data.static.store import DataCfg
 from core.losses import (
     LOSS_VARIANTS,
@@ -119,7 +119,7 @@ def _coerce(val: str, cur):
 
 
 # discriminator field name -> {tag: variant cls}, for --set switching of a union field's variant.
-_UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": ACQ_VARIANTS}
+_UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": {**ACQ_VARIANTS, **BG_VARIANTS}}
 
 
 def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:

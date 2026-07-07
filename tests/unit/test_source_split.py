@@ -101,12 +101,13 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
 
     from core.data.dynamic.generator import GeneratorCfg
     from core.data.dynamic.source import DynamicSource
+    from core.data.dynamic.synth import ProceduralBgCfg
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
     cfg = GeneratorCfg()
-    orig_bg = cfg.synth.bg_mode
-    gen = DynamicSource(pool="p", bg_mode="procedural", synth_p=1.0).train_gen(8, "cpu", cfg, 4)
-    assert cfg.synth.bg_mode == orig_bg                        # passed cfg UNTOUCHED (no poke)
-    assert gen.cfg.synth.bg_mode == "procedural"               # engine got the override on its copy
+    orig_bg = cfg.synth.bg.mode
+    gen = DynamicSource(pool="p", bg=ProceduralBgCfg(), synth_p=1.0).train_gen(8, "cpu", cfg, 4)
+    assert cfg.synth.bg.mode == orig_bg                        # passed cfg UNTOUCHED (no poke)
+    assert gen.cfg.synth.bg.mode == "procedural"               # engine got the override on its copy
     assert bool(gen.force_synth.all())                         # zero-input -> all rows force-painted
 
 
@@ -147,10 +148,10 @@ def test_static_main_registered_with_locked_testset():
 
 
 def test_synth_main_registered_with_locked_testset():
-    from core.data.ingest.splits.synth_main import POOL, ZERO_REAL_BG
+    from core.data.ingest.splits.synth_main import POOL
     from core.data.ingest.testsets import SYNTH_MAIN_TEST
     assert "synth_main" in list_splits()
     d = load_split("synth_main").versions["1.0.0"]
     assert d.train is not None                                 # explicit dynamic train (not complement)
-    assert POOL and ZERO_REAL_BG                               # named constants, not bare literals
+    assert POOL                                                # named constant, not a bare literal
     assert SYNTH_MAIN_TEST.lock.startswith("sha256:") and len(SYNTH_MAIN_TEST.lock) > 20

@@ -85,6 +85,64 @@ AnyAcqCfg = Annotated[LegacyAcqCfg | RandomizedAcqCfg | MatchedAcqCfg, Field(dis
 ACQ_VARIANTS = {c.model_fields["mode"].default: c for c in (LegacyAcqCfg, RandomizedAcqCfg, MatchedAcqCfg)}
 
 
+# Background strategy union: each variant BUILDS its Background (cfg.bg.build()), holding its own params.
+class BackgroundCfg(BaseModel):
+    """FOV-extension / bg-painting strategy cfg. Subclass build() returns the Background."""
+    model_config = _VALIDATE
+
+    def build(self) -> "Background":
+        raise NotImplementedError
+
+
+class FlatBgCfg(BackgroundCfg):
+    """Single background tissue tier."""
+    mode: Literal["flat"] = "flat"
+
+    def build(self):
+        return FlatBg()
+
+
+class ProceduralBgCfg(BackgroundCfg):
+    """Random-field organ blobs bucketized into bg tissue tiers (zero-real whole-FOV)."""
+    mode: Literal["procedural"] = "procedural"
+    bg_tiers: int = Field(6, ge=2)                  # distinct bg tissue tiers (params interpolated)
+    bg_blobs: int = Field(6, ge=2)                  # coarse random-field grid (smaller = bigger organ blobs)
+
+    def build(self):
+        return ProceduralBg(self.bg_tiers, self.bg_blobs)
+
+
+class PartitionBgCfg(BackgroundCfg):
+    """Real per-slice intensity partitioned into bg tiers (real SHAPES, painted by tissue)."""
+    mode: Literal["partition"] = "partition"
+    bg_tiers: int = Field(6, ge=2)
+
+    def build(self):
+        return PartitionBg(self.bg_tiers)
+
+
+class HybridBgCfg(BackgroundCfg):
+    """Paint heart on flat bg; composite the real (heart-excised) background back in."""
+    mode: Literal["hybrid"] = "hybrid"
+
+    def build(self):
+        return HybridBg()
+
+
+class MrxcatBgCfg(BackgroundCfg):
+    """Whole-FOV MRXCAT tissue map (mask IS the 8-class FOV; paint all tissues)."""
+    mode: Literal["mrxcat"] = "mrxcat"
+
+    def build(self):
+        return FovBg()
+
+
+AnyBgCfg = Annotated[FlatBgCfg | ProceduralBgCfg | PartitionBgCfg | HybridBgCfg | MrxcatBgCfg,
+                     Field(discriminator="mode")]
+BG_VARIANTS = {c.model_fields["mode"].default: c
+               for c in (FlatBgCfg, ProceduralBgCfg, PartitionBgCfg, HybridBgCfg, MrxcatBgCfg)}
+
+
 class SynthCfg(BaseModel):
     """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
     Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
@@ -97,15 +155,25 @@ class SynthCfg(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _lift_acq(cls, v):
-        """Back-compat: old config.json had flat `acq_mode` + `match_*`; fold them into the `acq` union."""
-        if isinstance(v, dict) and "acq" not in v and "acq_mode" in v:
+    def _lift_legacy(cls, v):
+        """Back-compat: old config.json had flat acq_mode/match_* and bg_mode/bg_tiers/bg_blobs; fold them
+        into the `acq` / `bg` discriminated unions so pre-refactor configs (registered models) still load."""
+        if not isinstance(v, dict):
+            return v
+        if "acq" not in v and "acq_mode" in v:
             v = dict(v)
             acq: dict = {"mode": v.pop("acq_mode")}
             for k in ("match_field", "match_tr_ms", "match_flip_deg", "match_vendor"):
                 if k in v:
                     acq[k] = v.pop(k)
             v["acq"] = acq
+        if "bg" not in v and "bg_mode" in v:
+            v = dict(v)
+            bg: dict = {"mode": v.pop("bg_mode")}
+            for k in ("bg_tiers", "bg_blobs"):
+                if k in v:
+                    bg[k] = v.pop(k)
+            v["bg"] = bg
         return v
     synth_p: float = Field(0.5, ge=0, le=1)         # fraction of in-batch samples replaced by synth.
     #                                                DEFAULT 0.5 = the MINIMUM synthetic share in training
@@ -146,17 +214,7 @@ class SynthCfg(BaseModel):
     #                                                slice (position-varying) — the source of f's spread.
     slice_mm: tuple[float, float] = (6.0, 8.0)     # cine slice thickness (mm), SCMR standardized 6-8mm
     acq: AnyAcqCfg = Field(default_factory=LegacyAcqCfg)   # scanner-settings strategy (legacy/randomized/matched)
-    # --- background (bg_mode selects a Background STRATEGY; see make_background) ---
-    bg_mode: str = "partition"                      # one of: "flat" (single bg tissue) | "procedural"
-    #                                                (SYNTHETIC random-field organ blobs, ZERO-REAL) |
-    #                                                "partition" (split a REAL image's intensity into bg
-    #                                                tiers = real SHAPES) | "hybrid" (paste synth heart
-    #                                                into a REAL image). partition/hybrid need real_img
-    #                                                with its heart EXCISED (excise_heart) or a DIFFERENT
-    #                                                heart survives unlabeled (bd mirs).
-    bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
-    bg_blobs: int = Field(6, ge=2)                   # procedural bg: coarse random-field grid (smaller=bigger
-    #                                                organ blobs); upsampled+bucketized into bg_tiers regions
+    bg: AnyBgCfg = Field(default_factory=PartitionBgCfg)   # FOV/bg strategy (flat/procedural/partition/hybrid/mrxcat)
     # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
     pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
     kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
@@ -310,21 +368,6 @@ class FovBg(Background):
         return mask.where(mask <= 3, torch.zeros_like(mask))  # noqa: PLR2004  FOV 4..7 (organs)→bg; heart 1..3 kept
 
 
-# bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
-_BG_REGISTRY = {
-    "flat":       lambda cfg: FlatBg(),
-    "procedural": lambda cfg: ProceduralBg(cfg.bg_tiers, cfg.bg_blobs),
-    "partition":  lambda cfg: PartitionBg(cfg.bg_tiers),
-    "hybrid":     lambda cfg: HybridBg(),
-    "mrxcat":     lambda cfg: FovBg(),
-}
-
-
-def make_background(cfg: SynthCfg) -> Background:
-    try:
-        return _BG_REGISTRY[cfg.bg_mode](cfg)
-    except KeyError:
-        raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}") from None
 
 
 class Acquisition(ABC):
@@ -396,7 +439,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
-    bg = make_background(cfg)                        # bg STRATEGY (flat/procedural/partition/hybrid)
+    bg = cfg.bg.build()                              # bg STRATEGY (flat/procedural/partition/hybrid/mrxcat)
     if cfg.deform > 0 and not bg.keeps_heart_aligned:   # hybrid keeps heart aligned with the real hole
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",

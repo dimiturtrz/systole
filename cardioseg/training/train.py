@@ -252,18 +252,18 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
             force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
                                      torch.ones(Ys.shape[0], dtype=torch.bool, device=data_device)])
             log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
-                     cfg.generator.synth.bg_mode)
+                     cfg.generator.synth.bg.mode)
         else:                                                        # "replace": synth anatomy ONLY
             Ytr = Ys
             cfg.generator.synth.synth_p = 1.0
-            if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
+            if cfg.generator.synth.bg.mode in ("flat", "procedural", "mrxcat"):
                 Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
-                log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg_mode)
+                log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg.mode)
             else:                                                    # Rodero heart on real bg (excised)
                 Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
                 Xr = excise_heart(Xr, Yr)
                 Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg_mode)
+                log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
     else:
         Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
     Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)

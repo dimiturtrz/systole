@@ -18,18 +18,17 @@ import torch
 
 from core.data.dynamic import anatomy as _anatomy
 from core.data.dynamic.generator import Generator
+from core.data.dynamic.synth import AnyBgCfg, ProceduralBgCfg
 from core.data.ingest.source import Source
-
-DEFAULT_POOL_BG = "procedural"          # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
 
 
 class DynamicSource:
     kind = "dynamic"
 
-    def __init__(self, pool: str, bg_mode: str = DEFAULT_POOL_BG, synth_p: float = 1.0,
+    def __init__(self, pool: str, bg: AnyBgCfg | None = None, synth_p: float = 1.0,
                  seed: Source | None = None, note: str = ""):
         self.pool = str(pool)
-        self.bg_mode = bg_mode
+        self.bg = bg or ProceduralBgCfg()      # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
         self.synth_p = synth_p
         self.seed = seed
         self._note = note
@@ -51,10 +50,10 @@ class DynamicSource:
         """The source's own batch engine. The painter (bg_mode) + synth fraction ride on a COPY of the
         generator cfg — no global mutation. force_synth is internal (never in the public interface)."""
         X, Y, fs = self._resident(size, device)
-        synth = gen_cfg.synth.model_copy(update={"bg_mode": self.bg_mode, "synth_p": self.synth_p})
+        synth = gen_cfg.synth.model_copy(update={"bg": self.bg, "synth_p": self.synth_p})
         cfg = gen_cfg.model_copy(update={"synth": synth})
         return Generator(cfg, X, Y, n_classes, device, force_synth=fs)
 
     def provenance(self) -> dict:
-        return {"kind": self.kind, "pool": self.pool, "bg_mode": self.bg_mode, "synth_p": self.synth_p,
+        return {"kind": self.kind, "pool": self.pool, "bg": self.bg.mode, "synth_p": self.synth_p,
                 "note": self._note, "seed": (self.seed.provenance() if self.seed else None)}
