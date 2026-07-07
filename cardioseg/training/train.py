@@ -55,55 +55,16 @@ def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
 
-def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool):
-    """Train ONE seed on the shared resident data `sh` (built once by train_seg). Seed-dependent state
-    — RNG, model, optimizer, per-seed artifact dir + registry entry — lives here; the read-only data
-    (resident tensors, val, aux EF lanes) is shared, so N seeds cost 1×data + N×model, not N×both."""
-    d = cfg.generator.data
-    device, pin = sh["device"], sh["pin"]
-    gen, Xva, Yva, aux = sh["gen"], sh["Xva"], sh["Yva"], sh["aux"]
-    val_df, test_df = sh["val_df"], sh["test_df"]
-    nb, n_train = sh["nb"], sh["n_train"]
-
-    cfg.seed = seed                                        # this run's provenance (config / registry / tags)
-    out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"
-    out.mkdir(parents=True, exist_ok=True)
-    log = setup(out / "train.log")
-    to_json(cfg, out / "config.json")                     # full provenance, written up front
-    torch.manual_seed(seed)
-    np.random.seed(seed)                                  # augmentation uses global np.random
-
-    model = build_unet(cfg.model).to(device)
-    # Loss selection. PARTIAL-LABEL (the train source carries a per-slice valid mask, e.g. SCD LV-only)
-    # overrides -> PartialLabelDiceCE (handles soft yt + the [B,C] mask). Else soft-label -> SoftDiceCE;
-    # else the configured (MONAI) loss. Full-label runs are untouched (partial=False).
-    soft_sigma = cfg.generator.aug.soft_label_sigma
-    partial = getattr(gen, "valid", None) is not None
-    if partial:
-        loss_fn = PartialLabelDiceCE()
-        log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
-                 int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
-    elif soft_sigma > 0:
-        loss_fn = SoftDiceCE()
-    else:
-        loss_fn = build_loss(cfg.loss)
-    opt = torch.optim.Adam(model.parameters(), cfg.lr)
-    scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
-
-    # cfg.epochs is a ceiling — early stopping keeps the best-val checkpoint and bails on plateau.
+def _train_loop(sh: dict, cfg: TrainCfg, model, opt, scaler, loss_fn, partial: bool, log_sig, log, trk):
+    """The epoch loop for one seed — a long but LINEAR procedure (the training step, by nature): each
+    epoch forward/loss/backward over the resident batches (+ the EF aux-lane nudge folded into one seg
+    step), then a fast batched val-Dice for early stopping. Returns the best-val `state_dict` (or None).
+    Data comes via `sh` (shared, read-only); only the per-seed trainables are passed explicitly."""
+    gen, aux, Xva, Yva = sh["gen"], sh["aux"], sh["Xva"], sh["Yva"]
+    nb, pin, device = sh["nb"], sh["pin"], sh["device"]
     best_dice, best_state, bad = -1.0, None, 0
-    split_tag = d.split or ("+".join(d.test_vendors) or "legacy")
-    trk = track_run("cardioseg", out.name, run_dir=out,
-                    params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
-                    tags={"split": split_tag, "seed": seed})
-    # ef_learn: learn the seg-vs-aux balance (Kendall, one log-var per term) instead of a fixed λ. A
-    # plain guard — the only real asymmetry is that the log-vars need registering as optimizer params.
-    log_sig = None
-    if cfg.ef_learn and aux:
-        log_sig = torch.zeros(1 + len(aux), device=device, requires_grad=True)
-        opt.add_param_group({"params": [log_sig]})
     fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
-    for ep in range(cfg.epochs):
+    for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
         t0 = time.perf_counter()
         model.train()
         if hasattr(loss_fn, "epoch"):
@@ -149,32 +110,15 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
             log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
             break
     trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
-    if best_state is not None:
-        model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
+    return best_state
 
-    log.info("===== VALIDATION =====")
-    dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), d.size, device)
-    results = {"val": summarize(dice_per_class, ef_rows, surf)}
 
-    # held-out test = the criteria split (datasets/vendors held out)
-    if len(test_df):
-        log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
-                 list(d.test_datasets), list(d.test_vendors), len(test_df))
-        tdice, tef, tsurf = validate(model, splits.paths(test_df), d.size, device)
-        results["test"] = summarize(tdice, tef, tsurf)
-
-    torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
-    meta = {"config": cfg.model_dump(), "n_train": n_train, "n_val": len(val_df),
-            "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
-    (out / "metrics.json").write_text(json.dumps(meta, indent=2))
-    log.info("saved model + config + metrics -> %s/", out)
-
-    trk.summary(results)                                    # final per-axis dice/EF (metrics in the run)
-    if quick:                                               # experiment sweep: skip the artifact tail
-        log.info("quick mode: skipping model card / attribution / ONNX / registry")
-        trk.end()
-        return model, results
-    # build the rest of the artifacts into staging (card + onnx) BEFORE registering the complete set.
+def _finalize(sh: dict, cfg: TrainCfg, out, model, results: dict, alias: str | None, seed: int, log, trk):
+    """The non-quick artifact tail: build model card + attribution + ONNX (each best-effort, logged on
+    failure), then register the COMPLETE set (model.pth + config + metrics + onnx + card) to the mlflow
+    registry — the sole model store. alias='production' makes this the flagship."""
+    Xva, Yva, val_df, device = sh["Xva"], sh["Yva"], sh["val_df"], sh["device"]
+    d = cfg.generator.data
     try:
         generate(out)
         log.info("wrote %s/MODEL_CARD.md", out)
@@ -189,9 +133,6 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
         export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
     except Exception as e:
         log.warning("ONNX export skipped: %s", e)
-
-    # register the COMPLETE artifact set (model.pth + config + metrics + onnx + card) to the mlflow
-    # registry — the sole model store. alias='production' makes this the flagship.
     try:
         rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
         split = "+".join(d.test_vendors) or "legacy"
@@ -202,14 +143,119 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
         log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
     except Exception as e:
         log.warning("registry save skipped: %s", e)
+
+
+def _train_one_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool):
+    """Train + eval + register ONE seed on the shared resident data `sh` (built once by train_seg).
+    Orchestrates: setup -> `_train_loop` -> eval (val + held-out test) -> save -> `_finalize`
+    (artifacts + registry). Seed-dependent state (RNG, model, optimizer, per-seed dir + registry entry)
+    lives here; the read-only data (resident tensors, val, aux EF lanes) is shared, so N seeds cost
+    1×data + N×model, not N×both."""
+    d = cfg.generator.data
+    device, pin, gen, aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
+    val_df, test_df, n_train = sh["val_df"], sh["test_df"], sh["n_train"]
+
+    cfg.seed = seed                                        # this run's provenance (config / registry / tags)
+    out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"
+    out.mkdir(parents=True, exist_ok=True)
+    log = setup(out / "train.log")
+    to_json(cfg, out / "config.json")                     # full provenance, written up front
+    torch.manual_seed(seed)
+    np.random.seed(seed)                                  # augmentation uses global np.random
+
+    model = build_unet(cfg.model).to(device)
+    # Loss selection. PARTIAL-LABEL (the train source carries a per-slice valid mask, e.g. SCD LV-only)
+    # overrides -> PartialLabelDiceCE (handles soft yt + the [B,C] mask). Else soft-label -> SoftDiceCE;
+    # else the configured (MONAI) loss. Full-label runs are untouched (partial=False).
+    partial = getattr(gen, "valid", None) is not None
+    if partial:
+        loss_fn = PartialLabelDiceCE()
+        log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
+                 int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
+    elif cfg.generator.aug.soft_label_sigma > 0:
+        loss_fn = SoftDiceCE()
+    else:
+        loss_fn = build_loss(cfg.loss)
+    opt = torch.optim.Adam(model.parameters(), cfg.lr)
+    scaler = torch.amp.GradScaler("cuda", enabled=pin)   # mixed precision
+    split_tag = d.split or ("+".join(d.test_vendors) or "legacy")
+    trk = track_run("cardioseg", out.name, run_dir=out,
+                    params={**cfg.model_dump(), "n_train": n_train, "n_val": len(val_df)},
+                    tags={"split": split_tag, "seed": seed})
+    # ef_learn: learn the seg-vs-aux balance (Kendall, one log-var per term) instead of a fixed λ. A
+    # plain guard — the only real asymmetry is that the log-vars need registering as optimizer params.
+    log_sig = None
+    if cfg.ef_learn and aux:
+        log_sig = torch.zeros(1 + len(aux), device=device, requires_grad=True)
+        opt.add_param_group({"params": [log_sig]})
+
+    best_state = _train_loop(sh, cfg, model, opt, scaler, loss_fn, partial, log_sig, log, trk)
+    if best_state is not None:
+        model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
+
+    log.info("===== VALIDATION =====")
+    dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), d.size, device)
+    results = {"val": summarize(dice_per_class, ef_rows, surf)}
+    if len(test_df):                                            # held-out test = the criteria split
+        log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
+                 list(d.test_datasets), list(d.test_vendors), len(test_df))
+        tdice, tef, tsurf = validate(model, splits.paths(test_df), d.size, device)
+        results["test"] = summarize(tdice, tef, tsurf)
+
+    torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
+    meta = {"config": cfg.model_dump(), "n_train": n_train, "n_val": len(val_df),
+            "val_patients": val_df.get_column("subject_id").to_list(), "results": results}
+    (out / "metrics.json").write_text(json.dumps(meta, indent=2))
+    log.info("saved model + config + metrics -> %s/", out)
+    trk.summary(results)                                    # final per-axis dice/EF (metrics in the run)
+
+    if quick:                                               # experiment sweep: skip the artifact tail
+        log.info("quick mode: skipping model card / attribution / ONNX / registry")
+    else:
+        _finalize(sh, cfg, out, model, results, alias, seed, log, trk)
     trk.end()
     return model, results
+
+
+def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):
+    """LEGACY criteria path (no coded --split): build the resident TRAIN tensors + shared Generator +
+    val tensors. Optional synth-anatomy (Rodero SSM label maps; val/test stay REAL held-out): 'mix' =
+    real + synth-anatomy UNION with synth rows force-painted (bd pwih); 'replace' = synth anatomy only,
+    painted on a ZERO/procedural bg or on excised-real bg. Returns (gen, Xva, Yva)."""
+    d = cfg.generator.data
+    force_synth = None
+    if d.anatomy_pool:
+        Ys = torch.as_tensor(load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
+        if d.anatomy_mode == "mix":
+            Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+            Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
+            Xtr = torch.cat([Xr, Xsy]); Ytr = torch.cat([Yr, Ys])
+            force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
+                                     torch.ones(Ys.shape[0], dtype=torch.bool, device=data_device)])
+            log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
+                     cfg.generator.synth.bg_mode)
+        else:                                                        # "replace": synth anatomy ONLY
+            Ytr = Ys
+            cfg.generator.synth.synth_p = 1.0
+            if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
+                Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
+                log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg_mode)
+            else:                                                    # Rodero heart on real bg (excised)
+                Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                Xr = excise_heart(Xr, Yr)
+                Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
+                log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg_mode)
+    else:
+        Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+    Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
+    gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
+    return gen, Xva, Yva
 
 
 def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seeds=None):
     """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
     list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
-    ONCE and shared across seeds (`_run_seed` does the per-seed work) — N seeds cost 1×data + N×model,
+    ONCE and shared across seeds (`_train_one_seed` does the per-seed work) — N seeds cost 1×data + N×model,
     no per-seed disk reload or VRAM duplication. Artifacts register to the mlflow model registry (the
     sole store); `alias='production'` makes a run the flagship. Multi-seed needs a coded `--split`
     (legacy criteria splits key their partition on the seed, so they can't share one dataset)."""
@@ -269,37 +315,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
             gen = train_src.train_gen(d.size, data_device, cfg.generator, cfg.model.out_channels)
             Xva, Yva = val_src.resident(d.size, data_device)
         else:
-            # LEGACY criteria path: build resident tensors (+ inline anatomy) and the shared Generator.
-            force_synth = None
-            if d.anatomy_pool:
-                # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
-                Ys = torch.as_tensor(load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
-                if d.anatomy_mode == "mix":
-                    # AUGMENTATION (bd pwih): REAL train + synth-anatomy UNION; synth rows force-painted.
-                    Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-                    Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
-                    Xtr = torch.cat([Xr, Xsy]); Ytr = torch.cat([Yr, Ys])
-                    force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
-                                          torch.ones(Ys.shape[0], dtype=torch.bool, device=data_device)])
-                    log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
-                             cfg.generator.synth.bg_mode)
-                else:                                                        # "replace": synth anatomy ONLY
-                    Ytr = Ys
-                    cfg.generator.synth.synth_p = 1.0
-                    if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
-                        Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
-                        log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0],
-                                 cfg.generator.synth.bg_mode)
-                    else:                                                    # Rodero heart on real bg (excised)
-                        Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-                        Xr = excise_heart(Xr, Yr)
-                        Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                        log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0],
-                                 cfg.generator.synth.bg_mode)
-            else:
-                Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-            Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
-            gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
+            gen, Xva, Yva = _legacy_resident(cfg, train_df, val_df, data_device, device, log)
     nb = max(1, gen.X.shape[0] // cfg.batch)
     log.info("engine train=%s | slices: %d train / %d val / %d test-subj (resident %s, compute %s)",
              (train_src.kind if train_src else "legacy"), gen.X.shape[0], Xva.shape[0], len(test_df),
@@ -314,12 +330,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
         log.info("aux lane: %s (%d items cached)", type(lane).__name__, lane.n)
 
     # Everything above is seed-invariant (coded split + resident tensors + aux). Hand the shared bundle
-    # to _run_seed per seed — each builds its own model/optimizer/artifacts on the SAME data.
+    # to _train_one_seed per seed — each builds its own model/optimizer/artifacts on the SAME data.
     sh = {"device": device, "pin": pin, "data_device": data_device, "gen": gen, "Xva": Xva, "Yva": Yva,
           "train_df": train_df, "val_df": val_df, "test_df": test_df, "train_src": train_src,
           "aux": aux, "nb": nb, "n_train": n_train, "base_out": base_out, "single": len(seeds) == 1}
     log.info("shared data ready — training %d seed(s): %s", len(seeds), seeds)
-    res = [_run_seed(cfg, s, sh, alias, quick) for s in seeds]
+    res = [_train_one_seed(cfg, s, sh, alias, quick) for s in seeds]
     return res[0] if len(seeds) == 1 else res
 
 
