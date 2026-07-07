@@ -12,15 +12,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 
 import numpy as np
 import torch
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
 from core.data.dynamic.anatomy import load_pool
+from core.obs import setup
 
 from .shape_coverage import _real_masks
 from .synth_fidelity import wasserstein1d  # reuse the W1 the color analysis uses
+
+log = logging.getLogger("cardioseg.static_compare")
 
 _RV, _MYO, _LVC = 1, 2, 3
 
@@ -70,10 +74,11 @@ def _main():
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
     a = ap.parse_args()
+    setup()
     res = compare(_real_masks(a.real), load_pool(a.pool))
-    print(json.dumps(res, indent=2))
+    log.info(json.dumps(res, indent=2))
     worst = max(res, key=lambda k: res[k]["w1"])
-    print(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
+    log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
 
 
 if __name__ == "__main__":

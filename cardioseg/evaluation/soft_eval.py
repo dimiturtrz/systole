@@ -13,6 +13,7 @@ clean number.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -25,10 +26,13 @@ from core.hparams import from_json
 from core.inference import predict_volume_probs
 from core.measure import ef_statistics, expected_volume_ml, label_volume_ml
 from core.model import resolve_device
+from core.obs import setup
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
 from core.run import load_run
+
+log = logging.getLogger("cardioseg.soft_eval")
 
 
 def _val(run: Path):
@@ -75,16 +79,17 @@ def evaluate(run: Path):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
     a = ap.parse_args()
     arr, e = evaluate(resolve(a.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
-    print(f"\n=== {a.run}  (n={len(arr)}) ===")
-    print(f"ECE: {e:.4f}")
+    log.info(f"\n=== {a.run}  (n={len(arr)}) ===")
+    log.info(f"ECE: {e:.4f}")
     for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
         s = ef_statistics(gt, pred)
-        print(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
+        log.info(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
 
 
 if __name__ == "__main__":

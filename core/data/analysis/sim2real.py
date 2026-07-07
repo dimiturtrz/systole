@@ -13,6 +13,7 @@ acquisition calibration is NOT the fidelity lever (the gap is composition/z-norm
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 
 import polars as pl
@@ -24,6 +25,8 @@ from core.data.static import splits, store
 from core.data.static.labels import CLASSES
 from core.hparams import TrainCfg
 from core.obs import setup
+
+log = logging.getLogger("cardioseg.sim2real")
 
 
 def _standardize(v: torch.Tensor) -> torch.Tensor:
@@ -60,7 +63,7 @@ def _main():
     d = TrainCfg().generator.data
     n_classes = len(CLASSES) + 1
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    print(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
+    log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
     for vendor in ("Siemens", "Philips", "GE", "Canon"):
         df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
         if df.height == 0:
@@ -69,7 +72,7 @@ def _main():
         real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
         b = fit_acquisition(real, n_classes)
         real_z = [round(v, 2) for v in _standardize(real).tolist()]
-        print(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
+        log.info(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
               f"{b['residual']:.4f} | real {real_z} synth {b['synth_z']}")
 
 

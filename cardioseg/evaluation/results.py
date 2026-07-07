@@ -10,6 +10,7 @@ no hand-copy; refresh by re-running that baseline's score.py.
 """
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import mlflow
@@ -23,7 +24,10 @@ from core.evaluate import CLASSES, surface_metrics
 from core.hparams import from_json
 from core.measure import ef_statistics
 from core.model import resolve_device
+from core.obs import setup
 from core.registry import _DB_URI, _run_id_for, resolve
+
+log = logging.getLogger("cardioseg.results")
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 
@@ -81,6 +85,7 @@ def build(run: Path) -> dict:
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
@@ -88,7 +93,7 @@ def main():
     res = build(resolve(a.run))
     Path(a.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
-    print(f"wrote {a.out}: " + " · ".join(
+    log.info(f"wrote {a.out}: " + " · ".join(
         f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)

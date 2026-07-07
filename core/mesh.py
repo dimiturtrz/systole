@@ -12,6 +12,7 @@ Ref: Lorensen & Cline (marching cubes) 1987.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +22,10 @@ from skimage.measure import marching_cubes
 
 from core.config import data_root
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
+from core.obs import setup
 from core.postprocess import largest_cc_binary
+
+log = logging.getLogger("cardioseg.mesh")
 
 MESH_MM = 2.5      # surface resample step (coarser than voxels -> fewer triangles, still smooth)
 DECIMATE = 0.7     # fraction of triangles to drop (smaller files)
@@ -88,6 +92,7 @@ def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"
 def _main():
     """Export chamber meshes for one consolidated subject npz. Location layering: default is
     <data>/meshes/ (config — the paths.yaml data root); --out overrides per invocation (argv)."""
+    setup()
     ap = argparse.ArgumentParser(description="Export chamber meshes (GLB + STL) from a subject npz.")
     ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
     ap.add_argument("--frame", default="ed", choices=["ed", "es"])
@@ -99,7 +104,7 @@ def _main():
     mask, spacing = z[f"{a.frame}_gt"], tuple(float(s) for s in z["spacing"])
     subject = a.subject or Path(a.npz).stem
     out = export_meshes(mask, spacing, subject, tuple(a.formats), root=a.out)
-    print(f"wrote {a.formats} for {subject} -> {out}")
+    log.info(f"wrote {a.formats} for {subject} -> {out}")
 
 
 if __name__ == "__main__":

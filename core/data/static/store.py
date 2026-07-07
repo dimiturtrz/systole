@@ -38,6 +38,8 @@ from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
 from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case, resample_inplane
 
+log = logging.getLogger("cardioseg.store")
+
 
 class DataCfg(BaseModel):
     """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
@@ -323,7 +325,6 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
-        log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
         log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -399,20 +400,20 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.fit_nyul:
         std = fit_nyul_standard(args.names, inplane=args.inplane)
-        print(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
+        log.info(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
         raise SystemExit
     if args.fit_acq:
         acq = fit_acquisition_reference()
-        print(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
+        log.info(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
         raise SystemExit
     if args.migrate_meta:
         paths = migrate_meta(args.names)
-        print(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
+        log.info(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
         for p in paths:
-            print(f"  {p}")
+            log.info(f"  {p}")
         raise SystemExit
     df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
-    print(f"\n=== data cloud: {len(df)} subjects ===")
-    print(df.group_by("dataset").agg(pl.len().alias("n"),
+    log.info(f"\n=== data cloud: {len(df)} subjects ===")
+    log.info(df.group_by("dataset").agg(pl.len().alias("n"),
           pl.col("labelled").sum().alias("labelled")).sort("dataset"))
-    print(df.group_by("vendor").agg(pl.len().alias("n")).sort("n", descending=True))
+    log.info(df.group_by("vendor").agg(pl.len().alias("n")).sort("n", descending=True))

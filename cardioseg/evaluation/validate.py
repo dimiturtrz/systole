@@ -6,6 +6,7 @@ EF uses each patient's own spacing. Note EF is a volume *ratio*, so a constant
 spacing cancels; the per-patient spacing matters once absolute volumes (mL) are
 reported, and is the honest thing to carry through regardless.
 """
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,8 @@ from core.inference import predict_volume  # re-export
 from core.measure import ejection_fraction
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import stack_slices
+
+log = logging.getLogger("cardioseg.validate")
 
 CLASS_NAMES = {k: name for k, (name, _) in CLASSES.items()}   # single source: evaluate.CLASSES
 
@@ -78,27 +81,27 @@ def validate(
 
 def summarize(dice_per_class, ef_rows, surf_per_class=None):
     """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
-    print("\n=== VAL Dice (per class, pooled over slices) ===")
+    log.info("\n=== VAL Dice (per class, pooled over slices) ===")
     for cl, name in CLASS_NAMES.items():
-        print(f"  {name:7} (label {cl}): {dice_per_class[cl]:.3f}")
+        log.info(f"  {name:7} (label {cl}): {dice_per_class[cl]:.3f}")
     mean_dice = float(np.nanmean([dice_per_class[c] for c in CLASS_NAMES]))
-    print(f"  mean: {mean_dice:.3f}")
+    log.info(f"  mean: {mean_dice:.3f}")
 
     if surf_per_class:
-        print("\n=== VAL boundary (median over volumes, mm) ===")
+        log.info("\n=== VAL boundary (median over volumes, mm) ===")
         for cl, name in CLASS_NAMES.items():
-            print(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
+            log.info(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
 
-    print("\n=== VAL EF: GT vs predicted ===")
+    log.info("\n=== VAL EF: GT vs predicted ===")
     errs = []
     for r in ef_rows:
         d = abs(r["ef_gt"] - r["ef_pred"])
         errs.append(d)
-        print(f"  {r['patient']:11} {str(r['group']):5}  GT {r['ef_gt']:5.1f}%  "
-              f"pred {r['ef_pred']:5.1f}%  |d| {d:4.1f}")
+        log.info(f"  {r['patient']:11} {str(r['group']):5}  GT {r['ef_gt']:5.1f}%  "
+                 f"pred {r['ef_pred']:5.1f}%  |d| {d:4.1f}")
     ef_mae = float(np.mean(errs)) if errs else float("nan")
     if errs:
-        print(f"  EF MAE = {ef_mae:.1f}%  (n={len(errs)})")
+        log.info(f"  EF MAE = {ef_mae:.1f}%  (n={len(errs)})")
 
     return {
         "dice": {CLASS_NAMES[c]: dice_per_class[c] for c in CLASS_NAMES},

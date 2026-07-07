@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import logging
 
 import numpy as np
 import polars as pl
@@ -26,6 +27,8 @@ from core.data.static.labels import CLASSES
 from core.hparams import TrainCfg, apply_overrides
 from core.model import resolve_device
 from core.obs import setup
+
+log = logging.getLogger("cardioseg.synth_fidelity")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
@@ -248,7 +251,7 @@ def _main():
     sc, nc = cfg.generator.synth, cfg.model.out_channels
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     if a.mode == "distance" and a.by_vendor:
-        print(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
+        log.info(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
         return
     # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
     # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
@@ -269,7 +272,7 @@ def _main():
         s["real_vendor_bands"] = real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
     else:
         s = synth_real_distance(X, Y, sc, nc, device)
-    print(json.dumps(s, indent=2))
+    log.info(json.dumps(s, indent=2))
 
 
 if __name__ == "__main__":

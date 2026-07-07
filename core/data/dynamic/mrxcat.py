@@ -22,6 +22,7 @@ whole-FOV coverage, painted by the shared engine.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -30,9 +31,12 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV  # 3
+from core.obs import setup
 from core.preprocessing.preprocess import fit_square
 
 from .anatomy import REAL_SIZE_PX, load_pool
+
+log = logging.getLogger("cardioseg.mrxcat")
 
 # XCAT/MRXCAT label codes → our canonical {0 bg, 1 RV-cav, 2 LV-myo, 3 LV-cav}. Cardiac codes from MRXCAT2.0
 # `myLabels(LV_wall=1, RV_wall=2, LV_blood=5, RV_blood=6, Peri=50, Aorta=36)` (MakePhantom.py). Everything
@@ -229,6 +233,7 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
 
 def _main():
     """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
+    setup()
     ap = argparse.ArgumentParser(description="MRXCAT .vti → canonical label sanity probe (bd hpy).")
     ap.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
     a = ap.parse_args()
@@ -236,7 +241,7 @@ def _main():
     raw = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     canon = to_canonical(vol)
     cc = {int(c): int((canon == c).sum()) for c in np.unique(canon)}
-    print(f"vti {vol.shape}\nraw label counts: {raw}\ncanonical (0bg 1RV 2myo 3LVcav): {cc}")
+    log.info(f"vti {vol.shape}\nraw label counts: {raw}\ncanonical (0bg 1RV 2myo 3LVcav): {cc}")
 
 
 if __name__ == "__main__":

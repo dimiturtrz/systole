@@ -12,6 +12,7 @@ Usage:
     python -m core.data.static.mri.eda --patient patient001
 """
 import argparse
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -26,6 +27,9 @@ from core.data.static.mri.acdc import (
     load_ed_es,
 )
 from core.data.static.mri.base import identify_lv_cavity
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.eda")
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "_eda_out"
 
@@ -33,17 +37,17 @@ OUT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "_eda_out"
 def summarize_patient(patient_dir):
     d = load_ed_es(patient_dir)
     sp = d["spacing"]
-    print(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
+    log.info(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
     for tag in ("ED", "ES"):
         if tag not in d:
             continue
         img, gt = d[tag]["img"], d[tag]["gt"]
         anis = max(sp) / min(sp)
         lv, scores = identify_lv_cavity(gt)
-        print(f"  {tag}: shape={img.shape} spacing(z,y,x)="
+        log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
               f"{tuple(round(float(s),2) for s in sp)} mm  anisotropy={anis:.1f}x")
-        print(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
-        print(f"      myo-enclosure score={ {k: round(v,2) for k,v in scores.items()} }"
+        log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
+        log.info(f"      myo-enclosure score={ {k: round(v,2) for k,v in scores.items()} }"
               f"  -> LV cavity = label {lv}")
     return d
 
@@ -67,7 +71,7 @@ def save_viz(patient_dir, d, out_png):
             ax.axis("off")
     fig.tight_layout()
     fig.savefig(out_png, dpi=90)
-    print(f"  saved {out_png}")
+    log.info(f"  saved {out_png}")
 
 
 def main():
@@ -76,11 +80,12 @@ def main():
     ap.add_argument("--n", type=int, default=3)
     ap.add_argument("--root", default=None)
     args = ap.parse_args()
+    setup()
 
     cases = acdc_cases(args.root)
-    print(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
+    log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
     if not cases:
-        print("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
+        log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
         return
     if args.patient:
         cases = [c for c in cases if c.name == args.patient] or cases[:1]

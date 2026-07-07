@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,8 @@ from core.data.ingest.splits import resolve_cfg
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
 from core.data.static import store
 from core.obs import setup
+
+log = logging.getLogger("cardioseg.matrix")
 
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
@@ -85,10 +88,10 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
 
 
 def _print(rows: list[dict]):
-    print(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
+    log.info(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
     for r in rows:
         flag = "OOD " if r.get("ood") else ("LEAK" if r.get("ood") is False else "?   ")
-        print(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
+        log.info(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
               f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
 
 
@@ -105,4 +108,4 @@ if __name__ == "__main__":
     _print(rows)
     if a.out:
         Path(a.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-        print(f"\nwrote {a.out}")
+        log.info(f"\nwrote {a.out}")

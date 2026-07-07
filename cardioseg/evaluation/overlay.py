@@ -7,6 +7,7 @@ ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact sh
     uv run python -m cardioseg.evaluation.overlay --run runs/gen
 """
 import argparse
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -24,9 +25,12 @@ from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import ejection_fraction
 from core.model import build_unet
+from core.obs import setup
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import stack_slices
 from core.registry import resolve
+
+log = logging.getLogger("cardioseg.overlay")
 
 # 0 bg transparent, 1 RV blue, 2 myo green, 3 LV-cav red
 _CMAP = ListedColormap([(0, 0, 0, 0), (0.20, 0.45, 0.95, 0.55),
@@ -62,6 +66,7 @@ def _case(model, path, size, device):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
@@ -95,8 +100,8 @@ def main():
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(a.out, dpi=130)
-    print("wrote", a.out, "| clean", clean["name"], clean["group"],
-          "| hcm", hcm["name"], f"err {hcm['ef_err']:.1f}")
+    log.info(f"wrote {a.out} | clean {clean['name']} {clean['group']} "
+             f"| hcm {hcm['name']} err {hcm['ef_err']:.1f}")
 
 
 if __name__ == "__main__":

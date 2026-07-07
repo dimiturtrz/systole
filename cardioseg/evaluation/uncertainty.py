@@ -13,6 +13,7 @@ flagship has no dropout; TTA-variance is the no-cost uncertainty signal instead.
 """
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -28,11 +29,14 @@ from core.config import FLAGSHIP_REF
 from core.data.static import store
 from core.data.static.labels import overlay_cmap
 from core.inference import predict_volume_members
+from core.obs import setup
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 from core.registry import resolve
 from core.run import load_run
 
 from ..tracking import track_run
+
+log = logging.getLogger("cardioseg.uncertainty")
 
 
 def tta_uncertainty(model, vol_img, size, device):
@@ -74,6 +78,7 @@ def ece(conf, correct, n_bins=15):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
@@ -149,11 +154,11 @@ def main():
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
-    print(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
-          f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
-          f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
-          f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
-    print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
+    log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
+             f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
+             f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
+             f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
+    log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
     trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     ev = a.eval

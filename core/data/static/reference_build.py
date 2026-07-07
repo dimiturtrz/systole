@@ -5,6 +5,7 @@ and emit the machine-dimension acquisition table. Split out of reference.py so t
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,8 @@ from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference, reference_dir
 from core.measure import ejection_fraction
 from core.obs import setup
+
+log = logging.getLogger("cardioseg.reference_build")
 
 # --- generator: derive reference ranges from the consolidated store (the "data is scarce -> trace
 #     every number to a cohort" path). Computed from GROUND TRUTH, so model-independent + reproducible. ---
@@ -192,6 +195,7 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
 
 
 def _main():
+    setup()
     ap = argparse.ArgumentParser(description="Derive reference values from processed/ (ground truth + images).")
     ap.add_argument("--build", action="store_true", help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
     ap.add_argument("--real-levels", action="store_true", dest="real_levels",
@@ -202,30 +206,28 @@ def _main():
     a = ap.parse_args()
     if a.acquisition:
         p = build_acquisition()
-        print(f"wrote {p}")
+        log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
         for v in ("Siemens", "Philips", "GE", "Canon"):
             tr15, te15, f15 = acquisition_for(v, 1.5, ref)
             _, _, f30 = acquisition_for(v, 3.0, ref)
-            print(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
+            log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
     elif a.build:
-        setup()
         p = build_from_store(sources=a.sources)
-        print(f"wrote {p}")
+        log.info(f"wrote {p}")
         ref = Reference()
         ef = ref.provenance("normal_ranges", "ef_normal")
         if ef:
-            print(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
+            log.info(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
     elif a.real_levels:
-        setup()
         p = build_real_levels(sources=a.sources)
-        print(f"wrote {p}")
+        log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
         for v in ("Siemens", "Philips", "GE", "Canon"):
             cav = ref.provenance("real_class_levels", v, "LV-cav")
             rv = ref.provenance("real_class_levels", v, "RV")
             if cav:
-                print(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
+                log.info(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
     else:
         ap.print_help()
 

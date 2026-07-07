@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -23,6 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from core.data.dynamic.anatomy import load_pool  # noqa: E402
+from core.obs import setup  # noqa: E402
+
+log = logging.getLogger("cardioseg.shape_coverage")
 
 # canonical labels: 1 RV-cav, 2 LV-myo, 3 LV-cav (0 bg)
 _RV, _MYO, _LVC = 1, 2, 3
@@ -91,9 +95,10 @@ def _main():
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
     ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
     a = ap.parse_args()
+    setup()
     real = _feats_from_masks(_real_masks(a.real))
     synth = _feats_from_masks(load_pool(a.pool))
-    print(json.dumps(coverage(real, synth), indent=2))
+    log.info(json.dumps(coverage(real, synth), indent=2))
     # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
     mu, sd = real.mean(0), real.std(0) + 1e-9
     R, S = (real - mu) / sd, (synth - mu) / sd
@@ -106,7 +111,7 @@ def _main():
     plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
     out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
     plt.savefig(out, dpi=110, bbox_inches="tight")
-    print(f"wrote {out}")
+    log.info(f"wrote {out}")
 
 
 if __name__ == "__main__":

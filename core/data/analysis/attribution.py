@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -32,6 +33,8 @@ from core.hparams import TrainCfg  # noqa: E402
 from core.obs import setup  # noqa: E402
 from core.registry import resolve  # noqa: E402
 from core.run import load_run  # noqa: E402
+
+log = logging.getLogger("cardioseg.attribution")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
@@ -114,7 +117,7 @@ def _main():
     va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
     X, Y = load_to_gpu(splits.paths(va), d.size, device)
     s = run_attribution(model, X, Y, (cfg.model.out_channels if cfg else 4), device, a.out or run_dir)
-    print(json.dumps(s, indent=2))
+    log.info(json.dumps(s, indent=2))
 
 
 if __name__ == "__main__":

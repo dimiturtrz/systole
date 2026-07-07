@@ -11,6 +11,7 @@ it — the gap is how much reducible headroom the weak estimate was hiding.
     python -m cardioseg.evaluation.ensemble --runs runs/gen runs/seed1 runs/seed2 runs/seed3 --eval canon
 """
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,7 @@ from core.data.static.labels import FOREGROUND
 from core.inference import predict_volume_probs
 from core.measure import ejection_fraction
 from core.model import resolve_device
+from core.obs import setup
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
@@ -29,6 +31,8 @@ from core.run import load_run
 
 from ..tracking import start
 from .uncertainty import tta_uncertainty
+
+log = logging.getLogger("cardioseg.ensemble")
 
 
 def ensemble_decompose(models, vol_img, size, device):
@@ -102,6 +106,7 @@ def _headroom(models, df, size, device):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
@@ -120,7 +125,7 @@ def main():
         sgl = ensemble_score(models[:1], df, SIZE, device)      # single (gen)
         ef_red, tf_red = _headroom(models, df, SIZE, device)
         dd = ens["dice_mean"] - sgl["dice_mean"]
-        print(f"axis {ax} (n={len(df)}, K={len(models)}): "
+        log.info(f"axis {ax} (n={len(df)}, K={len(models)}): "
               f"Dice ensemble {ens['dice_mean']} vs single {sgl['dice_mean']} ({dd:+.3f}) | "
               f"EF MAE {ens['ef_mae']} vs {sgl['ef_mae']} | reducible {ef_red:.0%} (ensemble) / {tf_red:.0%} (TTA)")
         trk.metric(f"{ax}_dice_ensemble", ens["dice_mean"]); trk.metric(f"{ax}_dice_single", sgl["dice_mean"])

@@ -20,6 +20,7 @@ but the digital-twin needs multi-acquisition input; one-frame heart fit is degen
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 from pathlib import Path
 
@@ -28,7 +29,11 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+from core.obs import setup
+
 from .mri_physics import bssfp_signal, tissue_params
+
+log = logging.getLogger("cardioseg.inverse")
 
 
 def render_heart(seg: torch.Tensor, tr: torch.Tensor, flip_deg: torch.Tensor, n_classes: int,
@@ -84,6 +89,7 @@ def fit_acquisition(real_img: torch.Tensor, seg: torch.Tensor, n_classes: int, f
 def _main():
     """Fit acquisition to one real ACDC slice (given its GT) and report recon + the identifiability check
     (fit flip-only vs fit tr+flip from two inits -> same recon, different params = under-determined)."""
+    setup()
     ap = argparse.ArgumentParser(description="FIT probe: recover acquisition from a real scan (bd ixea).")
     ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
     ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")
@@ -100,11 +106,11 @@ def _main():
     flip_only = fit_acquisition(ti, tg, n, field=a.field, fit_params=("flip",))
     both_a = fit_acquisition(ti, tg, n, field=a.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
     both_b = fit_acquisition(ti, tg, n, field=a.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
-    print(f"slice {k}  n_classes {n}")
-    print(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
-    print(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
-    print(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
-    print("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
+    log.info(f"slice {k}  n_classes {n}")
+    log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
+    log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
+    log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
+    log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
     if a.out or True:
         heart = (tg[0] > 0).numpy()
         def show(t):
@@ -116,7 +122,7 @@ def _main():
         montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
         out = a.out or (str(Path(a.npz).with_suffix("")) + "_fit.png")
         Image.fromarray(montage).save(out)
-        print(f"  wrote {out}  (real | recon, heart region)")
+        log.info(f"  wrote {out}  (real | recon, heart region)")
 
 
 if __name__ == "__main__":

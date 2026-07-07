@@ -14,6 +14,7 @@ pyvista + vtk are the `viz` extra (imported lazily). ED-only, CT-derived (see bd
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -32,7 +33,10 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV  # 3
+from core.obs import setup
 from core.preprocessing.preprocess import fit_square
+
+log = logging.getLogger("cardioseg.anatomy")
 
 LV_ID, RV_ID = 1, 2                    # cell tag: LV / RV myocardium (rest = atria/vessels, dropped)
 _SENTINEL = -5.0                       # universal-coord sentinel guard (real values in [-1..1]; atria=-10)
@@ -295,6 +299,7 @@ def load_pool(path: str | Path) -> np.ndarray:
 
 def _main():
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
+    setup()
     ap = argparse.ArgumentParser(description="Rodero mesh -> SAX 3-class label volume (bd 1vl).")
     ap.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
     ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
@@ -302,7 +307,7 @@ def _main():
     a = ap.parse_args()
     vol = voxelize(load(a.mesh), inplane=a.inplane)
     counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
-    print(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
+    log.info(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
     D = vol.shape[0]
     ks = [int(D * f) for f in (0.3, 0.45, 0.6, 0.75)]            # mid-ventricular slices
     cmap = np.array([[0, 0, 0], [91, 141, 239], [255, 202, 91], [239, 83, 80]], np.uint8)
@@ -310,7 +315,7 @@ def _main():
     montage = np.concatenate(tiles, axis=1)
     out = a.out or (str(Path(a.mesh).with_suffix("")) + "_sax.png")
     Image.fromarray(montage).save(out)
-    print(f"wrote {out}  (slices {ks})")
+    log.info(f"wrote {out}  (slices {ks})")
 
 
 if __name__ == "__main__":

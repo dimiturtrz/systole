@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 
@@ -31,10 +32,13 @@ from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
 from core.inference import predict_volume
 from core.measure import LOA_Z, ef_statistics, ejection_fraction
 from core.model import resolve_device
+from core.obs import setup
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
 from core.run import load_run
+
+log = logging.getLogger("cardioseg.distribution")
 
 
 def collect(run: Path, device: str, meta_rows):
@@ -183,11 +187,11 @@ def strata_table(rows, key) -> dict:
     g = _groups(rows, key)
     if not g:
         return {}
-    print(f"\n=== stratified by {key} ===")
+    log.info(f"\n=== stratified by {key} ===")
     # GT-EF mean given alongside MAE: EF is a ratio, so absolute MAE isn't comparable across groups
     # with different cavity sizes (small-cavity HCM amplifies a fixed volume error). Dice is the
     # range-independent segmentation-quality metric; read MAE *with* the GT-EF context.
-    print(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'gtEF':>5} {'EF MAE':>7} {'bias':>6}")
+    log.info(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'gtEF':>5} {'EF MAE':>7} {'bias':>6}")
     out = {}
     for grp, rs in g.items():
         d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
@@ -195,7 +199,7 @@ def strata_table(rows, key) -> dict:
         mae, bias, gt_ef = s["mae"], s["bias"], s["mean_gt"]
         mean_d = float(np.mean(list(d.values())))
         flag = "  (small n)" if len(rs) < SMALL_N else ""
-        print(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
+        log.info(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
               f"{gt_ef:>4.0f}% {mae:>6.1f}% {bias:>+5.1f}%{flag}")
         out[grp] = {"n": len(rs), "dice": {CLASSES[c][0]: float(d[c]) for c in CLASSES},
                     "dice_mean": mean_d, "gt_ef_mean": gt_ef, "ef_mae": mae, "ef_bias": bias}
@@ -234,6 +238,7 @@ def plot_strata(rows, key, out: Path, label: str):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
     ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
@@ -261,12 +266,12 @@ def main():
     plot_kde(dists, out / "boundary_kde.png", label)
     bias, sd = plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
 
-    print(f"=== per-class surface metrics (pooled){label} ===")
+    log.info(f"=== per-class surface metrics (pooled){label} ===")
     for cl, (name, _) in CLASSES.items():
         pooled = np.concatenate([d for d in dists[cl] if d.size])
         m = surface_metrics(pooled)
-        print(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-    print(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
+        log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
+    log.info(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
 
     # --- stratified (only axes with >1 group present) ---
     strata = {}
@@ -275,7 +280,7 @@ def main():
             strata[key] = strata_table(rows, key)
             plot_strata(rows, key, out / f"strata_{key}.png", label)
     (out / "stratified.json").write_text(json.dumps(strata, indent=2))
-    print(f"\nplots + stratified.json -> {out}")
+    log.info(f"\nplots + stratified.json -> {out}")
 
 
 def lo_hi(bias, sd):
