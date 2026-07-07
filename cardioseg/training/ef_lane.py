@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
-from core.data.static.store import load_arrays
-from core.preprocessing.preprocess import fit_square
-from core.measure import label_volume_ml, voxel_volume_ml
 from core.data.static.labels import LV_CAV
+from core.data.static.mri.kaggle_dsb import kaggle_cases, kaggle_ef, load_sax
+from core.data.static.store import load_arrays
+from core.measure import label_volume_ml, voxel_volume_ml
+from core.preprocessing.preprocess import fit_square
+
 from .volumes import vol_loss
 
 
@@ -97,7 +100,6 @@ class KaggleEF:
 
     def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,
                  lv_label: int = LV_CAV, seed: int = 0):
-        from core.data.static.mri.kaggle_dsb import load_sax
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
         self.X, self.LP, self.ef = [], [], []          # [L*P,1,H,W] GPU / (L,P) / EF%
         for j in np.random.RandomState(seed).permutation(len(cases)):
@@ -124,7 +126,6 @@ class KaggleEF:
     def loss(self, model, delta: float = 0.1, amp: bool = True):
         if self.n == 0:
             return None
-        import torch.nn.functional as F
         idx = [int(i) for i in torch.randperm(self.n)[:self.k]]
         xs = [self.X[i].to(self.device, non_blocking=True) for i in idx]   # ship sampled cines to GPU
         sizes = [x.shape[0] for x in xs]
@@ -132,7 +133,7 @@ class KaggleEF:
             pix = model(torch.cat(xs)).softmax(1)[:, self.lv].float().sum((1, 2))
         ed_stacks, es_stacks, ls, tgt = [], [], [], []
         off = 0
-        for gx, i, sz in zip(xs, idx, sizes):                            # gx = the GPU-resident cine
+        for gx, i, sz in zip(xs, idx, sizes, strict=True):                            # gx = the GPU-resident cine
             L, P = self.LP[i]
             pv = pix[off:off + sz].view(L, P).sum(0); off += sz          # [P] cavity vol / phase
             X = gx.view(L, P, 1, self.size, self.size)
@@ -154,7 +155,6 @@ def build_aux(cfg, splits, train_df, size: int, device: str, is_static: bool) ->
         return []
     lanes: list = [VolConsistency(splits.paths(train_df), size, device, cfg.ef_subjects)]
     if cfg.ef_kaggle:
-        from core.data.static.mri.kaggle_dsb import kaggle_cases, kaggle_ef
         lanes.append(KaggleEF(kaggle_cases("train"), kaggle_ef("train"), size, device,
                               cfg.ef_kaggle_subjects, seed=cfg.seed))
     return lanes

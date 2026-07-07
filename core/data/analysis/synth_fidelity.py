@@ -11,14 +11,29 @@ Companion to attribution.py (what the MODEL learns) — this is what the DATA lo
 """
 from __future__ import annotations
 
+import argparse
+import copy
 import json
-from pathlib import Path
+import logging
 
+import numpy as np
+import polars as pl
 import torch
 
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.synth import synthesize_from_labels
+from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.hparams import TrainCfg, apply_overrides
+from core.model import resolve_device
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.synth_fidelity")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
+
+_MIN_DPRIME_PTS = 50    # fewer sample points than this -> d'/std estimate too unstable (SD noisy)
+_MIN_VENDOR_SUBJECTS = 100  # skip a vendor with fewer real subjects when building spread bands
 
 
 def wasserstein1d(a: torch.Tensor, b: torch.Tensor, q: int = 100) -> float:
@@ -37,7 +52,6 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
     """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
     SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
     (z-units) + the mean and worst class — the break localized."""
-    from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
     ym = Y.reshape(-1).cpu()
@@ -71,7 +85,7 @@ _PAIRS = [(2, 3), (2, 1), (2, 0), (1, 3), (1, 0), (3, 0)]     # (myo,cav)(myo,rv
 
 def dprime(a: torch.Tensor, b: torch.Tensor) -> float:
     """Separability of two 1-D samples. |mean diff| / pooled SD; nan if either < 50 pts (SD unstable)."""
-    if a.numel() < 50 or b.numel() < 50:
+    if a.numel() < _MIN_DPRIME_PTS or b.numel() < _MIN_DPRIME_PTS:
         return float("nan")
     denom = (0.5 * (a.var() + b.var())).sqrt()
     return float((a.mean() - b.mean()).abs() / denom) if float(denom) > 0 else float("nan")
@@ -89,8 +103,6 @@ def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: 
     """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
     and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
     synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
-    import numpy as np
-    from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     Xr, Xs = X[:, 0].to(device), Xs[:, 0]
     ym = Y.to(device)
@@ -124,15 +136,14 @@ _KNOB_OFF = {"jitter": {"jitter": 0.0}, "texture": {"texture": 0.0}, "noise": {"
 
 def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
     """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
-    import numpy as np
     xr, yr = x1c.reshape(-1), ym.reshape(-1)
-    pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > 50 else float("nan")
+    pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > _MIN_DPRIME_PTS else float("nan")
               for c in range(n_classes)}
     ps = {c: [] for c in range(n_classes)}
     for i in range(x1c.shape[0]):
         xi, yi = x1c[i].reshape(-1), ym[i].reshape(-1)
         for c in range(n_classes):
-            if int((yi == c).sum()) > 50:
+            if int((yi == c).sum()) > _MIN_DPRIME_PTS:
                 ps[c].append(float(xi[yi == c].std()))
     perslice = {c: round(float(np.nanmean(v)), 3) if v else float("nan") for c, v in ps.items()}
     return {"pooled": {_NAMES[c]: round(pooled[c], 3) for c in range(n_classes)},
@@ -144,8 +155,6 @@ def variance_attribution(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, 
     """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
     pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
     generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
-    import copy
-    from core.data.dynamic.synth import synthesize_from_labels
     Xdev, Ydev = X[:, 0].to(device), Y.to(device)
     base = copy.deepcopy(cfg)
     if field is not None:
@@ -176,17 +185,12 @@ def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800
     σ ABOVE the band's max on a class = genuinely wider than any real vendor (candidate over-spread);
     WITHIN the band = just covering the vendor range (domain randomization working, not a defect).
     DIAGNOSTIC ONLY — never a tuning target (fitting synth to these = leaking real/test-vendor stats)."""
-    import numpy as np
-    import polars as pl
-    import torch
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits
     per_vendor = {}
     for v in sorted(meta.get_column("vendor").unique().to_list()):
         sub = meta.filter(pl.col("vendor") == v)
         X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
         n = int(X.shape[0])
-        if n < 100:
+        if n < _MIN_VENDOR_SUBJECTS:
             continue
         if n > max_per_vendor:
             g = torch.Generator().manual_seed(0)
@@ -210,10 +214,6 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
     is enough. Thin vendors (< min_slices) are skipped (W1 noisy on tiny samples); large vendors are
     random-subsampled to max_slices (W1 is sample-size-agnostic, and it bounds GPU memory + makes
     vendors comparable). Reuses `synth_real_distance` per subset — the pure metric stays the source."""
-    import polars as pl
-    import torch
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits
     out = {}
     for v in sorted(meta.get_column("vendor").unique().to_list()):
         sub = meta.filter(pl.col("vendor") == v)
@@ -232,13 +232,6 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
 
 
 def _main():
-    import argparse
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.model import resolve_device
-    from core.obs import setup
-
     ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real intensity analysis. "
                                  "distance=W1 faithfulness | separability=d' distinguishability | "
                                  "variance=per-knob spread attribution vs real (all on VAL, test untouched).")
@@ -253,9 +246,6 @@ def _main():
                     "sample-size-agnostic; bounds VRAM)")
     a = ap.parse_args()
     setup()
-    from core.hparams import apply_overrides
-    import polars as pl
-    import torch
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0
@@ -264,7 +254,7 @@ def _main():
     sc, nc = cfg.generator.synth, cfg.model.out_channels
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     if a.mode == "distance" and a.by_vendor:
-        print(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
+        log.info(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
         return
     # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
     # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
@@ -285,7 +275,7 @@ def _main():
         s["real_vendor_bands"] = real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
     else:
         s = synth_real_distance(X, Y, sc, nc, device)
-    print(json.dumps(s, indent=2))
+    log.info(json.dumps(s, indent=2))
 
 
 if __name__ == "__main__":

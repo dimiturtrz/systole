@@ -9,8 +9,9 @@ A family = a class with `name` + `versions` (see core.data.ingest.split.Split). 
 """
 from __future__ import annotations
 
-from core.data.ingest.splits.static_main import StaticMain
+from core.data.ingest.split import resolve
 from core.data.ingest.splits.static_all import StaticAll
+from core.data.ingest.splits.static_main import StaticMain
 from core.data.ingest.splits.synth_main import SynthMain
 
 _FAMILIES = {c.name: c for c in (StaticMain, StaticAll, SynthMain)}
@@ -35,6 +36,5 @@ def parse_ref(ref: str) -> tuple[str, str | None]:
 def resolve_cfg(d, meta):
     """Resolve a DataCfg's coded split (`d.split`) over `meta` -> Resolution(train, val, test, …).
     The one place the name@version parse + load_split + resolve dance lives."""
-    from core.data.ingest.split import resolve
     name, ver = parse_ref(d.split)
     return resolve(load_split(name), meta, ver)

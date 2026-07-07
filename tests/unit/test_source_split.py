@@ -3,11 +3,10 @@ test_lock drift guard. StaticMain's real-data parity vs the old xvendor split is
 (scripts/_lock_static_main.py: 495/150/147, identical subject sets); here we lock the mechanism.
 """
 import polars as pl
-import pytest
 
 from core.data.ingest.source import StaticSource, ids_hash
-from core.data.ingest.split import SplitDef, resolve, _complement, _latest
-from core.data.ingest.splits import load_split, list_splits
+from core.data.ingest.split import SplitDef, _complement, _latest, resolve
+from core.data.ingest.splits import list_splits, load_split
 
 V = pl.col
 
@@ -69,7 +68,9 @@ def test_static_source_resident_is_raw_real(monkeypatch):
 
 
 def test_dynamic_resident_zero_input_force_paints_all(monkeypatch):
-    import numpy as np, torch
+    import numpy as np
+    import torch
+
     from core.data.dynamic.source import DynamicSource
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
     X, Y, fs = DynamicSource(pool="p")._resident(8, "cpu")
@@ -78,7 +79,9 @@ def test_dynamic_resident_zero_input_force_paints_all(monkeypatch):
 
 
 def test_dynamic_resident_seeded_is_composite(monkeypatch):
-    import numpy as np, torch
+    import numpy as np
+    import torch
+
     from core.data.dynamic.source import DynamicSource
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
 
@@ -95,8 +98,9 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
     """The refactor's whole point: a DynamicSource configures its OWN engine via a cfg COPY — it must
     NOT mutate the passed generator cfg (the old bg_mode/synth_p poke)."""
     import numpy as np
-    from core.data.dynamic.source import DynamicSource
+
     from core.data.dynamic.generator import GeneratorCfg
+    from core.data.dynamic.source import DynamicSource
     monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
     cfg = GeneratorCfg()
     orig_bg = cfg.synth.bg_mode
@@ -123,6 +127,7 @@ def test_static_source_valid_mask_none_when_all_full():
 
 def test_generator_batch_slices_valid():
     import torch
+
     from core.data.dynamic.generator import Generator, GeneratorCfg
     from core.data.dynamic.synth import SynthCfg
     N = 4

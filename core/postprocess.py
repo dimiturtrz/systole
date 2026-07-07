@@ -8,8 +8,8 @@ of each class is the standard cheap clean-up (and what nnU-Net tests for, too).
 import numpy as np
 from scipy.ndimage import label as _cc_label
 
-from core.types import Mask
 from core.data.static.labels import FOREGROUND
+from core.types import Mask
 
 
 def largest_cc_binary(binary: np.ndarray) -> np.ndarray:
@@ -28,8 +28,8 @@ def _gpu_cc():
     """cucim GPU connected-components (the linux GPU lane) if importable, else None -> scipy CPU.
     Detected once at import — a single capability gate, no per-call branching beyond the dispatch."""
     try:
-        import cupy  # noqa: F401
-        from cucim.skimage.measure import label
+        import cupy  # noqa: F401, PLC0415
+        from cucim.skimage.measure import label  # noqa: PLC0415
         return label
     except Exception:
         return None
@@ -40,7 +40,7 @@ _CUCIM_LABEL = _gpu_cc()
 
 def _largest_cc_gpu(mask: Mask, labels) -> Mask:
     """GPU largest-CC via cupy + cucim (linux lane). Same result as the scipy path; back to numpy."""
-    import cupy as cp
+    import cupy as cp  # noqa: PLC0415
     m = cp.asarray(mask)
     out = cp.zeros_like(m)
     for lab in labels:

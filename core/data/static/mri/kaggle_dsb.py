@@ -15,6 +15,11 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+import polars as pl
+
+from core.config import data_root
+from core.data.static.mri.dicom import read_image, read_series
+from core.data.static.store import _norm_vendor, _region_of
 
 # Provenance is dataset knowledge -> it lives in the adapter (the PROCESS layer), not the raw data.
 # DSB 2015 was compiled by NIH + Children's National, scanned in the Washington DC area.
@@ -23,7 +28,6 @@ COUNTRY = "USA"
 
 
 def _base(root: str | Path | None = None) -> Path:
-    from core.config import data_root
     return Path(root) if root else Path(data_root("raw")) / "kaggle_dsb2015"
 
 
@@ -65,7 +69,6 @@ def load_sax(case: str | Path) -> list[tuple]:
     """SAX cine of one case: list of (volume [phases,H,W], spacing (z,y,x), meta) — one entry per `sax_*`
     series (slice location), sorted apex→base by SliceLocation. Each series is the ~30-phase cine loop at
     that slice. Uses `dicom.read_series`; broken/odd series skipped."""
-    from core.data.static.mri.dicom import read_series
     rows = []
     for sd in sorted((Path(case) / "study").glob("sax_*")):
         try:
@@ -82,9 +85,6 @@ def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
     from a sample SAX DICOM + the EF target. NB Kaggle is MIXED sequences (segmented cine/GRE) -> its TR
     is NOT the ~3ms per-frame bSSFP TR; captured as-recorded, but the bSSFP acquisition reference filters
     it (store.fit_acquisition_reference)."""
-    from core.data.static.mri.dicom import read_image
-    from core.data.static.store import _norm_vendor
-    from core.data.static.store import _region_of
     case = Path(case)
     m = {"centre": CENTRE, "country": COUNTRY, "region": _region_of(COUNTRY)}
     sd = next(iter((case / "study").glob("sax_*")), None)
@@ -104,8 +104,6 @@ def build_kaggle_meta(split: str, root: str | Path | None = None) -> Path:
     acquisition + EF target). NO image npz — Kaggle is EF-at-scale, images stay pristine in raw and are
     read on demand (load_sax). This meta.csv makes Kaggle's location/vendor/acquisition part of the data
     cloud (fit_acquisition_reference reads the tr_ms column, bSSFP-filtered)."""
-    import polars as pl
-    from core.config import data_root
     ef = kaggle_ef(split, root)
     rows = [{"subject_id": c.name, "dataset": "kaggle", **kaggle_meta(c, ef)} for c in kaggle_cases(split, root)]
     out = Path(data_root("processed")) / "kaggle" / split

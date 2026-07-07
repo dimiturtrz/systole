@@ -9,16 +9,23 @@ under the run dir. Gated by argmax parity vs PyTorch on a real patient; if a con
 from __future__ import annotations
 
 import argparse
+import logging
 import shutil
 from pathlib import Path
 
 import numpy as np
+import onnxruntime as ort
 import torch
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
-from core.model import load_run
-from core.preprocessing.preprocess import fit_square, SIZE
 from core.data.static import store
+from core.obs import setup
+from core.preprocessing.preprocess import SIZE, fit_square
+from core.registry import resolve
+from core.run import load_run
+
+log = logging.getLogger("cardioseg.export_onnx")
 
 PARITY_MIN = 99.0  # % argmax agreement required to ship the INT8 model (else keep FP32)
 OPSET = 17         # ONNX opset for export
@@ -31,8 +38,6 @@ def load_model(run: Path):
 
 def parity(model, onnx_path: Path, npz_path) -> float:
     """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
-    import onnxruntime as ort
-
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     case = store.load_arrays(npz_path)
     imgs = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in case["ed_img"]])
@@ -61,24 +66,23 @@ def export(run: Path, verify_dir: Path, quantize: bool = True,
         dynamo=False,  # legacy exporter -> single self-contained .onnx (no .data sidecar)
     )
     p32 = parity(model, path, verify_dir)
-    print(f"exported {path}  {path.stat().st_size / 1e6:.1f} MB  parity {p32:.3f}%")
+    log.info(f"exported {path}  {path.stat().st_size / 1e6:.1f} MB  parity {p32:.3f}%")
 
     if quantize:
-        from onnxruntime.quantization import quantize_dynamic, QuantType
-
         q = run / "model.int8.onnx"
         quantize_dynamic(str(path), str(q), weight_type=QuantType.QInt8)
         pq = parity(model, q, verify_dir)
-        print(f"quantized {q}  {q.stat().st_size / 1e6:.1f} MB  parity {pq:.3f}%")
+        log.info(f"quantized {q}  {q.stat().st_size / 1e6:.1f} MB  parity {pq:.3f}%")
         if pq >= parity_min:
             shutil.copyfile(q, path)
-            print(f"-> model.onnx is INT8 (parity {pq:.2f}% >= {parity_min}%)")
+            log.info(f"-> model.onnx is INT8 (parity {pq:.2f}% >= {parity_min}%)")
         else:
-            print(f"-> kept FP32 (int8 parity {pq:.2f}% < {parity_min}%)")
+            log.info(f"-> kept FP32 (int8 parity {pq:.2f}% < {parity_min}%)")
     return path
 
 
 def main() -> None:
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
     ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")

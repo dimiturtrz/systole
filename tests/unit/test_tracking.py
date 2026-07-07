@@ -1,5 +1,5 @@
 """Tracking is optional + guarded — disabled -> no-op handle that never raises; config flattens."""
-from cardioseg.tracking import start, _flat, _Noop
+from cardioseg.tracking import _flat, _Noop, start
 
 
 def test_flat_nested():

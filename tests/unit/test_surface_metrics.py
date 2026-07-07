@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 
-from core.evaluate import surface_distances, surface_metrics, hausdorff, hd95, assd
+from core.evaluate import assd, hausdorff, hd95, surface_distances, surface_metrics
 
 
 def _square(n=30, lo=10, hi=20, shift=0, label=3):

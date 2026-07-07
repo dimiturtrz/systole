@@ -5,12 +5,15 @@ the heavy bg/fg imbalance. Both are *region* losses — blind to a thin boundary
 cavity over-segmentation that drives the EF bias). `dice_ce_hd` adds a Hausdorff-DT boundary term,
 ramped in over a warmup (HD losses diverge if applied from epoch 0), to attack that directly.
 """
+import torch
+import torch.nn.functional as F
+from monai.losses import DiceCELoss, DiceLoss, HausdorffDTLoss, TverskyLoss
+
 from core.hparams import LossCfg
 
 
 def dice_ce_loss(to_onehot_y=True, softmax=True, **kw):
     """MONAI compound Dice + CE for integer label maps (0/1/2/3)."""
-    from monai.losses import DiceCELoss
     return DiceCELoss(to_onehot_y=to_onehot_y, softmax=softmax, **kw)
 
 
@@ -23,7 +26,6 @@ class DiceCEHD:
     """
 
     def __init__(self, hd_weight: float = 0.01, warmup: int = 15, ramp: int = 5):
-        from monai.losses import DiceCELoss, HausdorffDTLoss
         self.dce = DiceCELoss(to_onehot_y=True, softmax=True)
         self.hd = HausdorffDTLoss(to_onehot_y=True, softmax=True, include_background=False)
         self.hd_weight, self.warmup, self.ramp, self.epoch = hd_weight, warmup, ramp, 0
@@ -42,7 +44,6 @@ class DiceCETversky:
     epoch 0, no warmup, as fast as Dice (unlike Hausdorff-DT, which is CPU-bound on Windows)."""
 
     def __init__(self, alpha: float = 0.3, beta: float = 0.7, lam: float = 1.0):
-        from monai.losses import DiceCELoss, TverskyLoss
         self.dce = DiceCELoss(to_onehot_y=True, softmax=True)
         self.tv = TverskyLoss(to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
         self.lam = lam
@@ -65,19 +66,16 @@ class HausdorffERLoss:
     """
 
     def __init__(self, alpha: float = 2.0, erosions: int = 10, include_background: bool = False):
-        import torch
         self.alpha, self.erosions, self.include_background = alpha, erosions, include_background
         self._cross = torch.tensor([[0., 1., 0.], [1., 1., 1.], [0., 1., 0.]]) * 0.2  # sum=1
 
     def __call__(self, logits, y):
-        import torch
-        import torch.nn.functional as F
         # Force fp32 for the whole loss: under AMP autocast, F.conv2d would re-cast to fp16 and the
         # min-max renormalize's 1e-8 clamp underflows to 0 -> divide-by-zero -> NaN.
         with torch.autocast(device_type=logits.device.type, enabled=False):
             prob = logits.float().softmax(1)
             c = prob.shape[1]
-            tgt = y[:, 0] if y.dim() == 4 else y                  # [B,H,W]
+            tgt = y[:, 0] if y.dim() == 4 else y                  # noqa: PLR2004  [B,H,W]
             onehot = F.one_hot(tgt.long(), c).permute(0, 3, 1, 2).float()
             if not self.include_background:
                 prob, onehot = prob[:, 1:], onehot[:, 1:]
@@ -126,13 +124,10 @@ class SoftDiceCE:
     (log_softmax + the channel sum are fp16-unsafe)."""
 
     def __init__(self, include_background: bool = True, lambda_dice: float = 1.0, lambda_ce: float = 1.0):
-        from monai.losses import DiceLoss
         self.dice = DiceLoss(softmax=True, to_onehot_y=False, include_background=include_background)
         self.ld, self.lce = lambda_dice, lambda_ce
 
     def __call__(self, logits, target):
-        import torch
-        import torch.nn.functional as F
         with torch.autocast(device_type=logits.device.type, enabled=False):
             logits, target = logits.float(), target.float()
             ce = -(target * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
@@ -157,16 +152,14 @@ class PartialLabelDiceCE:
         self.ld, self.lce, self.eps = lambda_dice, lambda_ce, eps
 
     def __call__(self, logits, target, valid=None):
-        import torch
-        import torch.nn.functional as F
         B, C = logits.shape[:2]
         with torch.autocast(device_type=logits.device.type, enabled=False):
             logits = logits.float()
-            if target.dim() == 4 and target.shape[1] == C:            # soft [B,C,H,W]
+            if target.dim() == 4 and target.shape[1] == C:            # noqa: PLR2004  soft [B,C,H,W]
                 oh = target.float()
                 cls = oh.argmax(1)                                    # [B,H,W] dominant class (pixel validity)
             else:                                                     # hard labels
-                cls = (target[:, 0] if target.dim() == 4 else target).long()
+                cls = (target[:, 0] if target.dim() == 4 else target).long()  # noqa: PLR2004  rank check
                 oh = F.one_hot(cls, C).permute(0, 3, 1, 2).float()
             if valid is None:
                 valid = torch.ones(B, C, dtype=torch.bool, device=logits.device)
@@ -188,8 +181,7 @@ def uncertainty_weighted(loss_terms, log_vars):
     stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
     scale-free (paired with the dimensionless vol_loss). Pass the learnable log-vars as parameters in
     the optimizer."""
-    import torch
-    return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars))
+    return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
 
 
 def build_loss(cfg: LossCfg | None = None):

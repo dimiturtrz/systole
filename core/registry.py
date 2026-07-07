@@ -6,7 +6,7 @@ store the state_dict + config as artifacts (NOT a pickled mlflow.pytorch model) 
 robust across torch/monai versions: rebuild the arch from config, load_state_dict.
 
 `resolve(ref)` downloads a version's artifacts to a local cache dir and returns that dir — so every
-existing dir-consumer (`core.model.load_run`, `results.build`, modelcard, export) works UNCHANGED on
+existing dir-consumer (`core.run.load_run`, `results.build`, modelcard, export) works UNCHANGED on
 the cached dir. `ref` = alias ('production') | version number | run-id.
 
     from core.registry import resolve, save_model
@@ -15,8 +15,9 @@ the cached dir. `ref` = alias ('production') | version number | run-id.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+import mlflow
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"
@@ -26,7 +27,6 @@ PRODUCTION = "production"                               # the flagship alias
 
 
 def _mlflow():
-    import mlflow
     mlflow.set_tracking_uri(_DB_URI)
     return mlflow
 
@@ -41,7 +41,7 @@ def _run_id_for(ref: str) -> str:
     # alias (e.g. 'production')
     try:
         return c.get_model_version_by_alias(MODEL_NAME, ref).run_id
-    except Exception:
+    except Exception:  # noqa: S110  — alias miss -> fall through to version / run-id resolution
         pass
     # explicit version number
     if str(ref).isdigit():
@@ -52,9 +52,8 @@ def _run_id_for(ref: str) -> str:
 
 def resolve(ref: str = PRODUCTION) -> Path:
     """Download the model version's artifacts to a cache dir and return it (a dir with model.pth +
-    config.json + …, ready for core.model.load_run). ref = alias | version | run-id — OR an existing
+    config.json + …, ready for core.run.load_run). ref = alias | version | run-id — OR an existing
     dir (returned as-is, so callers can pass a path too)."""
-    import mlflow
     p = Path(ref)
     if (p / "model.pth").exists():                     # already a dir (back-compat / explicit path)
         return p

@@ -14,6 +14,8 @@ Approximate — fine for domain randomization.
 """
 from __future__ import annotations
 
+import math
+
 import torch
 
 # tissue -> field (Tesla) -> (T1 ms, T2 ms, PD). Two fields = the cross-vendor relaxation axis.
@@ -26,6 +28,7 @@ TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
     "muscle":     {1.5: (1010.0,  35.0, 0.75), 3.0: (1420.0,  32.0, 0.75)},
 }
 FIELDS: tuple[float, ...] = (1.5, 3.0)
+_FIELD_1P5T = 1.5                            # tesla; the low-field column (else use the 3T flip value)
 
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
 _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
@@ -59,7 +62,6 @@ def _contrast_optimal_flip(field: float, tr_ms: float) -> float:
     """Flip (deg, integer sweep) maximizing |S_blood - S_myo| bSSFP contrast at `field`, from the TISSUE
     T1/T2 table. Cine targets blood-myocardium contrast; this DERIVES the flip that maximizes it rather
     than quoting a routine-protocol value (which is SNR-, not contrast-, optimized)."""
-    import math
     bt1, bt2, bpd = _params("blood", field)
     mt1, mt2, mpd = _params("myocardium", field)
     a = torch.arange(1.0, 91.0)
@@ -85,7 +87,6 @@ def derive_flip_range(field: float) -> tuple[float, float]:
     half-maximum convention on the contrast curve + the SAR ceiling) — no arbitrary fraction of the cap.
     Sampling across this band gives contrast DIVERSITY (measured: the single contrast-optimal point
     trains WORSE — fidelity != training value, bd 276). Field-driven; contrast-optimal sits inside it."""
-    import math
     f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
     bt1, bt2, bpd = _params("blood", f)
     mt1, mt2, mpd = _params("myocardium", f)
@@ -109,7 +110,7 @@ def acquisition_for(vendor: str | None, field: float = 1.5, ref=None) -> tuple[f
         f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
         o_tr = ref.get("acquisition", vendor, "tr_ms")
         o_te = ref.get("acquisition", vendor, "te_ms")
-        o_fl = ref.get("acquisition", vendor, "flip_deg_1p5t" if f == 1.5 else "flip_deg_3t")
+        o_fl = ref.get("acquisition", vendor, "flip_deg_1p5t" if f == _FIELD_1P5T else "flip_deg_3t")
         tr = float(o_tr) if o_tr is not None else tr
         te = float(o_te) if o_te is not None else te
         fl = float(o_fl) if o_fl is not None else fl

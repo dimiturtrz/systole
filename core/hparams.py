@@ -21,12 +21,12 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
+from core.data.dynamic.augment import AugCfg
+from core.data.dynamic.generator import GeneratorCfg
+from core.data.dynamic.synth import SynthCfg
+from core.data.static.store import DataCfg
 from core.model import ModelCfg
 from core.preprocessing.n4 import N4Cfg
-from core.data.static.store import DataCfg
-from core.data.dynamic.augment import AugCfg
-from core.data.dynamic.synth import SynthCfg
-from core.data.dynamic.generator import GeneratorCfg
 
 # Config classes now live with the class they configure (ModelCfg→core.model, AugCfg→augment,
 # SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator). Re-exported here

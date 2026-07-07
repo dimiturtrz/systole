@@ -15,14 +15,24 @@ Task per TestSet: seg4 -> all three classes; seg_lv (SCD, no RV in GT) -> myo+ca
 """
 from __future__ import annotations
 
+import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
-from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, EVAL_SOURCES
+from cardioseg.evaluation import validate as validate_mod
+from core import registry as registry_mod
+from core import run as run_mod
 from core.data.ingest.source import subject_keys
+from core.data.ingest.splits import resolve_cfg
+from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
+from core.data.static import store
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.matrix")
 
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
@@ -39,7 +49,6 @@ def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
     d = cfg.generator.data
     in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
     if getattr(d, "split", ""):
-        from core.data.ingest.splits import resolve_cfg
         r = resolve_cfg(d, in_sources)
         seen = set(r.val.subjects())                            # val is always a real StaticSource
         if getattr(r.train, "kind", "static") == "static":
@@ -54,15 +63,10 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
     """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
     model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
     so npz match the weights."""
-    from core.registry import resolve as resolve_model
-    from core.model import load_run
-    from core.data.static import store
-    from cardioseg.evaluation.validate import validate
-
     tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
     rows: list[dict] = []
     for ref in model_refs:
-        model, cfg, device = load_run(resolve_model(ref))
+        model, cfg, device = run_mod.load_run(registry_mod.resolve(ref))
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
@@ -71,7 +75,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
             src = ts.source(meta)                        # lock-checked; raises on drift
             paths, subj = src.paths(), set(src.subjects())
             ood = None if seen is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(seen)
-            dice, ef_rows, _ = validate(model, paths, size, device, tta=tta)
+            dice, ef_rows, _ = validate_mod.validate(model, paths, size, device, tta=tta)
             classes = _LV_ONLY if ts.task == "seg_lv" else tuple(dice)
             dmean = float(np.nanmean([dice[c] for c in classes]))
             ef_mae = (float(np.mean([abs(r["ef_gt"] - r["ef_pred"]) for r in ef_rows]))
@@ -84,16 +88,14 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
 
 
 def _print(rows: list[dict]):
-    print(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
+    log.info(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
     for r in rows:
         flag = "OOD " if r.get("ood") else ("LEAK" if r.get("ood") is False else "?   ")
-        print(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
+        log.info(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
               f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
 
 
 if __name__ == "__main__":
-    import argparse
-    from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="cross-domain generalization matrix over frozen TestSets")
     ap.add_argument("--models", nargs="+", required=True, help="registry refs (alias|version|run-id)")
@@ -106,4 +108,4 @@ if __name__ == "__main__":
     _print(rows)
     if a.out:
         Path(a.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-        print(f"\nwrote {a.out}")
+        log.info(f"\nwrote {a.out}")

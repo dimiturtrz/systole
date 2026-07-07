@@ -6,7 +6,9 @@ and the viewer (cardioview). Pure: model + array in, prediction out; no data-sto
 K-member ensemble for the aleatoric/epistemic (BALD) split.
 """
 import numpy as np
+import torch
 
+from core.preprocessing.preprocess import fit_square
 from core.types import Volume
 
 _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
@@ -14,7 +16,6 @@ _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (ident
 
 def _stack_slices(vol_img: Volume, size: int) -> np.ndarray:
     """Square-fit every slice of a [D, H, W] volume -> [D, size, size] float array (model input grid)."""
-    from core.preprocessing.preprocess import fit_square
     return np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
 
 
@@ -22,8 +23,6 @@ def predict_volume_members(model, vol_img: Volume, size: int, device: str):
     """Run the 4 TTA flips and keep them as a cheap K-member ensemble for uncertainty decomposition.
     Returns (pred uint8 [D,size,size], mean_softmax [D,C,size,size], members [K,D,C,size,size]) on
     `device`. The members enable the aleatoric/epistemic (BALD) split; mean is their average."""
-    import torch
-
     model.eval()
     xs = _stack_slices(vol_img, size)
     with torch.no_grad():
@@ -51,8 +50,6 @@ def predict_volume(model, vol_img: Volume, size: int, device: str, tta: bool = F
 
     `tta=True` averages over the 4 in-plane flips (delegates to predict_volume_probs); `tta=False`
     is a single batched forward. argmax of the flip-sum == argmax of the mean, so results match."""
-    import torch
-
     if tta:
         pred, _ = predict_volume_probs(model, vol_img, size, device)
         return pred

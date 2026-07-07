@@ -12,11 +12,21 @@ acquisition calibration is NOT the fidelity lever (the gap is composition/z-norm
 """
 from __future__ import annotations
 
+import argparse
+import logging
 import math
 
+import polars as pl
 import torch
 
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.hparams import TrainCfg
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.sim2real")
 
 
 def _standardize(v: torch.Tensor) -> torch.Tensor:
@@ -28,7 +38,6 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
     """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
     real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
     Standardized so it fits the CONTRAST SHAPE (bSSFP scale is arbitrary)."""
-    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
     real_z = _standardize(real_means)
     trs = torch.linspace(*tr_grid[:2], int(tr_grid[2]))
     fls = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
@@ -47,13 +56,6 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
 
 
 def _main():
-    import argparse
-    import polars as pl
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.obs import setup
-
     ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")
     ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
     a = ap.parse_args()
@@ -61,8 +63,7 @@ def _main():
     d = TrainCfg().generator.data
     n_classes = len(CLASSES) + 1
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    names = ["bg"] + [nm for nm, _ in CLASSES.values()]
-    print(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
+    log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
     for vendor in ("Siemens", "Philips", "GE", "Canon"):
         df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
         if df.height == 0:
@@ -71,7 +72,7 @@ def _main():
         real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
         b = fit_acquisition(real, n_classes)
         real_z = [round(v, 2) for v in _standardize(real).tolist()]
-        print(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
+        log.info(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
               f"{b['residual']:.4f} | real {real_z} synth {b['synth_z']}")
 
 

@@ -11,8 +11,11 @@ on-disk processed/<dataset>/<paramkey>/ layout + caching.
 from pathlib import Path
 
 import numpy as np
+from scipy.ndimage import zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
+from core.preprocessing.n4 import N4Cfg, n4_bias
+from core.preprocessing.nyul import transform as nyul_transform
 from core.types import Image, Slice2D, Spacing, Volume
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
@@ -20,6 +23,7 @@ from core.types import Image, Slice2D, Spacing, Volume
 TARGET_INPLANE = DEFAULT_INPLANE
 SIZE = DEFAULT_SIZE                          # square grid the 2D model runs on (== DataCfg.size)
 ZSCORE_EPS = 1e-6                            # guards div-by-zero on a flat (all-air) volume
+_MIN_ANCHOR_PX = 50                          # min blood/air px to trust the two-point anchor (else z-score)
 
 
 def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
@@ -49,11 +53,10 @@ def blood_anchor(img: Image, gt, blood=(1, 3), eps: float = ZSCORE_EPS) -> Image
     thing) instead of z-score's FOV-sensitive mean/std. Measured to halve cross-vendor tissue-level
     spread vs z-score (bd h8k). Blood level is per-volume; falls back to z-score if blood/air absent.
     ORACLE when `gt` is ground truth (upper bound); at inference a coarse blood/air seg estimates it."""
-    import numpy as _np
-    bm = _np.isin(gt, blood); am = gt == 0
-    if int(bm.sum()) < 50 or int(am.sum()) < 50:
+    bm = np.isin(gt, blood); am = gt == 0
+    if int(bm.sum()) < _MIN_ANCHOR_PX or int(am.sum()) < _MIN_ANCHOR_PX:
         return zscore(img)                                   # no anchor available -> safe fallback
-    b = float(img[bm].mean()); a = float(_np.median(img[am]))
+    b = float(img[bm].mean()); a = float(np.median(img[am]))
     return (img - a) / ((b - a) + eps)
 
 
@@ -72,8 +75,6 @@ def resample_inplane(
     are preserved — a 2D-model convention on anisotropic cardiac data. Masks use
     order=0 to keep labels integer.
     """
-    from scipy.ndimage import zoom
-
     zsp, ysp, xsp = spacing
     fy, fx = ysp / target_inplane, xsp / target_inplane
     order = 0 if is_mask else 1
@@ -108,11 +109,9 @@ def preprocess_case(
         img, isp = resample_inplane(d[tag]["img"], sp, target_inplane, is_mask=False)
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
-            from core.preprocessing.n4 import N4Cfg, n4_bias
             p = n4_params or N4Cfg()
             img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
         if nyul_standard is not None:
-            from core.preprocessing.nyul import transform as nyul_transform
             img = nyul_transform(img, np.asarray(nyul_standard))
         out[f"{tag.lower()}_img"] = blood_anchor(img, gt) if norm == "blood" else zscore(img)
         out[f"{tag.lower()}_gt"] = gt

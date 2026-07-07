@@ -10,20 +10,32 @@ ED->ES DEFORMATION. Those require a contraction model to generate ES from ED (fl
 """
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
+import json
+import logging
 
 import numpy as np
+import torch
+from scipy.ndimage import binary_erosion, distance_transform_edt
 
-from .synth_fidelity import wasserstein1d       # reuse the W1 the color analysis uses
+from core.data.dynamic.anatomy import load_pool
+from core.obs import setup
+
+from .shape_coverage import _real_masks
+from .synth_fidelity import wasserstein1d  # reuse the W1 the color analysis uses
+
+log = logging.getLogger("cardioseg.static_compare")
 
 _RV, _MYO, _LVC = 1, 2, 3
+
+_MIN_FG_PX = 40      # below this many foreground px a 2D label map is ~empty -> skip
+_MIN_LVC_PX = 20     # below this many LV-cavity px sphericity is too noisy to report
 
 
 def geom_metrics(mask: np.ndarray) -> dict | None:
     """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
-    from scipy.ndimage import distance_transform_edt, binary_erosion
     fg = mask > 0
-    if int(fg.sum()) < 40:
+    if int(fg.sum()) < _MIN_FG_PX:
         return None
     rv, myo, lvc = mask == _RV, mask == _MYO, mask == _LVC
     a_rv, a_myo, a_lvc = int(rv.sum()), int(myo.sum()), int(lvc.sum())
@@ -32,7 +44,7 @@ def geom_metrics(mask: np.ndarray) -> dict | None:
     dt = distance_transform_edt(myo)
     m["myo_thickness"] = float(dt[myo].mean() * 2.0) if a_myo else 0.0   # over myo pixels only (px)
     # LV-cavity SPHERICITY (2D roundness): 4πA / P²  (1 = perfect circle). P ≈ boundary-pixel count.
-    if a_lvc >= 20:
+    if a_lvc >= _MIN_LVC_PX:
         per = int((lvc & ~binary_erosion(lvc)).sum())
         m["lvc_sphericity"] = float(4 * np.pi * a_lvc / (per * per)) if per else 0.0
     else:
@@ -50,7 +62,6 @@ def _dist(masks) -> dict:
 
 def compare(real_masks, synth_masks) -> dict:
     """Per-metric W1(real, synth) + real/synth medians — the geometry/biomarker panel."""
-    import torch
     R, S = _dist(real_masks), _dist(synth_masks)
     out = {}
     for k in R:
@@ -62,17 +73,15 @@ def compare(real_masks, synth_masks) -> dict:
 
 
 def _main():
-    import argparse, json
-    from core.data.dynamic.anatomy import load_pool
-    from .shape_coverage import _real_masks
     ap = argparse.ArgumentParser(description="Static geometry/biomarker panel: synth vs real (uy4d).")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
     a = ap.parse_args()
+    setup()
     res = compare(_real_masks(a.real), load_pool(a.pool))
-    print(json.dumps(res, indent=2))
+    log.info(json.dumps(res, indent=2))
     worst = max(res, key=lambda k: res[k]["w1"])
-    print(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
+    log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
 
 
 if __name__ == "__main__":

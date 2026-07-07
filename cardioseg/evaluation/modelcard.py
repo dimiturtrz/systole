@@ -14,10 +14,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 from core.data.static.labels import CLASS_NAMES
+from core.data.static.reference import Reference
+from core.obs import setup
 from core.registry import resolve
+
+log = logging.getLogger("cardioseg.modelcard")
 
 _ORDER = tuple(reversed(CLASS_NAMES))  # display order: LV-cav, LV-myo, RV
 
@@ -41,7 +46,6 @@ def _reference_section() -> list[str]:
     present; omitted entirely when absent (graceful fallback — the card still generates on a fresh
     clone with no <data>/reference/). Shows provenance regardless of verified, but only verified
     values would actually be used by consumers."""
-    from core.data.static.reference import Reference
     ref = Reference()
     if not ref.present():
         return []
@@ -117,10 +121,11 @@ def generate(run_dir: str | Path) -> Path:
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
     a = ap.parse_args()
-    print("wrote", generate(resolve(a.run)))
+    log.info(f"wrote {generate(resolve(a.run))}")
 
 
 if __name__ == "__main__":

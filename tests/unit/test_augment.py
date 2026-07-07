@@ -3,8 +3,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from core.data.dynamic.augment import augment_batch
-from core.data.dynamic.augment import AugCfg
+from core.data.dynamic.augment import AugCfg, augment_batch
 
 # everything off except (toggled) bias — flip is always-on, so isolate via same-seed bias on/off
 _NO_INTENSITY = dict(rot_deg=0.0, scale=(1.0, 1.0), translate=0.0, gamma_p=0.0, blur_p=0.0,

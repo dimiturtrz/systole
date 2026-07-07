@@ -3,7 +3,12 @@ import numpy as np
 import pytest
 
 from core.data.static.mri.base import (
-    to_float, apply_label_map, load_csv_info, load_nifti, load_frames, MNM_LABEL_MAP,
+    MNM_LABEL_MAP,
+    apply_label_map,
+    load_csv_info,
+    load_frames,
+    load_nifti,
+    to_float,
 )
 
 

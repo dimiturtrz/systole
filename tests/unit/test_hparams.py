@@ -4,8 +4,8 @@ are the value (cardiac-seg-8y9)."""
 import pytest
 from pydantic import ValidationError
 
-from core.hparams import TrainCfg, apply_overrides, to_json, from_json
 from core.data.dynamic.augment import AugCfg
+from core.hparams import TrainCfg, apply_overrides, from_json, to_json
 
 
 # --- accept: valid defaults + roundtrip ---

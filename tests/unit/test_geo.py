@@ -1,6 +1,6 @@
 """Geographic provenance tests (equivalence classes): country->continent SSOT + the M&Ms-1
 centre-code map that turns the raw '1'-'5' codes into queryable country/site."""
-from core.data.static.geo import continent_of, COUNTRY_CONTINENT
+from core.data.static.geo import COUNTRY_CONTINENT, continent_of
 from core.data.static.mri.mnms1 import CENTRES
 
 

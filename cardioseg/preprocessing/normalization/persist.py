@@ -9,12 +9,16 @@ small paper-cited layer is hand-curated (and visibly flagged verified / unverifi
     python -m cardioseg.preprocessing.normalization.persist            # all
 """
 import argparse
+import logging
 from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import data_root, KNOWN_DATASETS
+from core.config import KNOWN_DATASETS, data_root
 from core.data.static.mri.registry import get_adapter
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.persist")
 
 _DATASETS = KNOWN_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"
@@ -46,7 +50,7 @@ def persist_meta(dataset: str) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     OmegaConf.save(OmegaConf.create({"dataset": dataset, "n": len(subjects),
                                      "paper_layer": paper, "subjects": subjects}), out)
-    print(f"{dataset}: {len(subjects)} subjects -> {out}")
+    log.info(f"{dataset}: {len(subjects)} subjects -> {out}")
     return out
 
 
@@ -57,6 +61,7 @@ def load_meta(dataset: str):
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
     a = ap.parse_args()

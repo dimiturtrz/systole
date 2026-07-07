@@ -18,6 +18,8 @@ import sys
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 
 class _AppendHandler(logging.Handler):
     """Opens the file, writes the line, closes — every emit. Immune to logging.shutdown() closing a
@@ -72,10 +74,6 @@ class timed:
 
 
 def progress(iterable, desc: str, total: int | None = None, every: float = 5.0):
-    """tqdm if available (degrades gracefully in non-tty), else a no-op passthrough.
+    """tqdm progress bar (degrades gracefully in non-tty).
     `every` = min seconds between bar refreshes so file logs stay readable."""
-    try:
-        from tqdm import tqdm
-        return tqdm(iterable, desc=desc, total=total, mininterval=every, dynamic_ncols=True)
-    except ImportError:
-        return iterable
+    return tqdm(iterable, desc=desc, total=total, mininterval=every, dynamic_ncols=True)

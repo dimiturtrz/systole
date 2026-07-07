@@ -4,12 +4,24 @@ blobs, cartoon backgrounds, blood-too-bright). Saves a PNG grid. Companion to sy
 and sim2real (per-vendor fit)."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 import torch
 
-from core.data.static.labels import CLASSES
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+from core.data.dynamic.dataset import load_to_gpu  # noqa: E402
+from core.data.dynamic.synth import SynthCfg, synthesize_from_labels  # noqa: E402
+from core.data.static import splits, store  # noqa: E402
+from core.data.static.labels import CLASSES  # noqa: E402
+from core.hparams import TrainCfg  # noqa: E402
+from core.obs import setup  # noqa: E402
+
+log = logging.getLogger("cardioseg.render")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
@@ -17,15 +29,6 @@ _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 def render_synth_vs_real(out_png: str | Path = ".staging/synth_diag.png", k: int = 4, seed: int = 0):
     """Load k real val slices (all heart classes present), generate synth from their masks, save a grid
     (real | mask | synth-flat | synth-partition) + print per-class real-vs-synth intensity stats."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from core.hparams import TrainCfg
-    from core.data.static import store, splits
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.dynamic.synth import synthesize_from_labels
-    from core.data.dynamic.synth import SynthCfg
-
     torch.manual_seed(seed); np.random.seed(seed)
     d = TrainCfg().generator.data
     n = len(CLASSES) + 1
@@ -47,11 +50,12 @@ def render_synth_vs_real(out_png: str | Path = ".staging/synth_diag.png", k: int
                 ax[r, c].set_ylabel(name)
     out_png = Path(out_png); out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
-    print(f"wrote {out_png}\nPER-CLASS mean±std (z), real vs synth-partition:")
+    log.info(f"wrote {out_png}\nPER-CLASS mean±std (z), real vs synth-partition:")
     for c in range(n):
         rm, sm = X[:, 0][Y == c], Sp[:, 0][Y == c]
-        print(f"  {_NAMES[c]:8} real {rm.mean():+.2f}±{rm.std():.2f}   synth {sm.mean():+.2f}±{sm.std():.2f}")
+        log.info(f"  {_NAMES[c]:8} real {rm.mean():+.2f}±{rm.std():.2f}   synth {sm.mean():+.2f}±{sm.std():.2f}")
 
 
 if __name__ == "__main__":
+    setup()
     render_synth_vs_real()

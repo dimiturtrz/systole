@@ -12,12 +12,26 @@ numpy-only (SVD for PCA); no sklearn/umap dependency.
 """
 from __future__ import annotations
 
+import argparse
+import json
+import logging
 from pathlib import Path
 
+import matplotlib
 import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+from core.data.dynamic.anatomy import load_pool  # noqa: E402
+from core.obs import setup  # noqa: E402
+
+log = logging.getLogger("cardioseg.shape_coverage")
 
 # canonical labels: 1 RV-cav, 2 LV-myo, 3 LV-cav (0 bg)
 _RV, _MYO, _LVC = 1, 2, 3
+
+_MIN_FG_PX = 40   # below this many foreground px a 2D label map is ~empty -> skip (shape stats unstable)
 
 
 def shape_features(mask: np.ndarray) -> np.ndarray | None:
@@ -25,7 +39,7 @@ def shape_features(mask: np.ndarray) -> np.ndarray | None:
     invariant where sensible so it compares generated vs real anatomy, not framing artifacts."""
     fg = mask > 0
     n = int(fg.sum())
-    if n < 40:
+    if n < _MIN_FG_PX:
         return None
     rv, myo, lvc = (mask == _RV).sum(), (mask == _MYO).sum(), (mask == _LVC).sum()
     ys, xs = np.where(fg)
@@ -78,36 +92,28 @@ def coverage(real: np.ndarray, synth: np.ndarray) -> dict:
 
 
 def _main():
-    import argparse
-    from core.data.dynamic.anatomy import load_pool
     ap = argparse.ArgumentParser(description="Shape coverage: does generated anatomy encompass real? (uy4d)")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
     ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
     a = ap.parse_args()
+    setup()
     real = _feats_from_masks(_real_masks(a.real))
     synth = _feats_from_masks(load_pool(a.pool))
-    import json
-    print(json.dumps(coverage(real, synth), indent=2))
+    log.info(json.dumps(coverage(real, synth), indent=2))
     # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
     mu, sd = real.mean(0), real.std(0) + 1e-9
     R, S = (real - mu) / sd, (synth - mu) / sd
     U = np.concatenate([R, S])
     _, _, vt = np.linalg.svd(U - U.mean(0), full_matrices=False)
     pr, ps = (R - U.mean(0)) @ vt[:2].T, (S - U.mean(0)) @ vt[:2].T
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(6, 6))
-        plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
-        plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
-        plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
-        out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
-        plt.savefig(out, dpi=110, bbox_inches="tight")
-        print(f"wrote {out}")
-    except ImportError:
-        print("(matplotlib not available — skipped scatter)")
+    plt.figure(figsize=(6, 6))
+    plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
+    plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
+    plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
+    out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
+    plt.savefig(out, dpi=110, bbox_inches="tight")
+    log.info(f"wrote {out}")
 
 
 if __name__ == "__main__":

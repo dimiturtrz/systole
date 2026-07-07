@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import SimpleITK as sitk
+
 from core.types import Spacing, Volume
 
 # DICOM tags we surface for the reference/normalization store (mirrors what the NIfTI adapters carry).
@@ -23,15 +25,12 @@ _TAGS = {"0008|0070": "vendor", "0008|1090": "scanner", "0008|0080": "institutio
 
 def series_ids(dicom_dir: str | Path) -> list[str]:
     """The GDCM series UIDs present in `dicom_dir` (a SAX cine directory usually holds several)."""
-    import SimpleITK as sitk
     return list(sitk.ImageSeriesReader.GetGDCMSeriesIDs(str(dicom_dir)))
 
 
 def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
     """Read ONE DICOM file -> (array [H,W], (row_mm, col_mm) in-plane spacing, meta tags). For datasets
     keyed by individual instances (e.g. SCD contours reference a specific slice/phase image), not a stack."""
-    import numpy as np
-    import SimpleITK as sitk
     r = sitk.ImageFileReader()
     r.SetFileName(str(dcm_path))
     r.LoadPrivateTagsOn()
@@ -43,7 +42,7 @@ def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
         try:
             if r.HasMetaDataKey(tag):
                 meta[name] = r.GetMetaData(tag).strip()
-        except Exception:
+        except Exception:  # noqa: S110  — optional DICOM tag; skip if absent/unreadable
             pass
     return arr, (sy, sx), meta
 
@@ -53,8 +52,6 @@ def read_series(dicom_dir: str | Path, series_id: str | None = None) -> tuple[Vo
     series present, `series_id` picks one; default = the series with the most slices (the full stack).
     Slices are geometry-sorted. `meta` carries acquisition/demographic tags (vendor/field/TR/flip/…)
     when the header has them — the normalization hook, same as the NIfTI adapters' `meta()`."""
-    import numpy as np
-    import SimpleITK as sitk
     d = str(dicom_dir)
     ids = series_ids(d)
     if not ids:

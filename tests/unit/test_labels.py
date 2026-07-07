@@ -1,7 +1,7 @@
 """Canonical-label SSOT tests: the derived sets must stay consistent with CLASSES + the enum."""
 import numpy as np
 
-from core.data.static.labels import Label, CLASSES, FOREGROUND, LV_CAV, CLASS_NAMES, overlay_cmap
+from core.data.static.labels import CLASS_NAMES, CLASSES, FOREGROUND, LV_CAV, Label, overlay_cmap
 
 
 def test_enum_values():

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from matplotlib.colors import ListedColormap, to_rgb
+
 
 class Label(IntEnum):
     """The canonical label integers."""
@@ -57,8 +59,6 @@ def valid_row(dataset: str, n_classes: int = 4) -> list[bool]:
 def overlay_cmap(alpha: float = 0.5):
     """Matplotlib ListedColormap for a label overlay: background transparent, each
     foreground class its CLASSES color at `alpha`. Index i == label i (vmin=0, vmax=3)."""
-    from matplotlib.colors import ListedColormap, to_rgb
-
     colors = [(0.0, 0.0, 0.0, 0.0)]  # label 0 = background, fully transparent
     for lab in FOREGROUND:
         colors.append((*to_rgb(CLASSES[lab][1]), alpha))

@@ -1,0 +1,49 @@
+name: ci
+
+# Gate for the dev -> main flow: `tests` + `lint` must pass on every PR (and on pushes to dev/main).
+# Enforced as required status checks via branch protection on main (merge blocked until green).
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # ENFORCED (blocks the merge): the rules already at zero on shipped code — this catches
+      # REGRESSION (a new unused import / undefined name / unsorted imports / lazy import fails CI).
+      # Ratchet: add each in-progress family's code to --select as it reaches zero
+      # (T201, FBT, PLR2004, BLE001, S110, PLR0912/0913/0915, C901, B, E501). bd cardiac-seg-l79o.
+      - name: Lint — enforced (shipped code, clean rules)
+        run: uvx ruff@0.15.13 check core cardioseg --select F,I,B,S110,T201,PLR2004,PLC0415
+      # ADVISORY (never blocks): full curated config over the whole tree — surfaces the families still
+      # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
+      - name: Lint — advisory full (non-blocking)
+        run: uvx ruff@0.15.13 check . --statistics || true
+      # ADVISORY: `ruff format` not applied yet (bd i851) — shows the pending reformat, does not block.
+      - name: Format — advisory (non-blocking)
+        run: uvx ruff@0.15.13 format --check . || true
+
+  tests:
+    runs-on: ubuntu-latest
+    # no dataset on the runner -> point the data root at an empty POSIX dir so the data-gated tests
+    # skip cleanly (adapters glob an absent raw/ -> no subjects -> pytest.skip) instead of erroring on
+    # a missing paths.yaml. A plain POSIX path needs no Windows->mount translation, so resolve_data_root
+    # uses it as-is.
+    env:
+      CARDIAC_DATA: /tmp/cardiac-nodata
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies (locked, + dev extra for pytest)
+        run: uv sync --frozen --extra dev
+      - name: Unit tests
+        run: uv run pytest tests/unit -q

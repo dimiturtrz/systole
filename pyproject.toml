@@ -18,26 +18,63 @@ dependencies = [
     # torch >=2.7 required for NVIDIA Blackwell (sm_120, RTX 5090). The CUDA build comes from the
     # PyTorch index (see [tool.uv.sources] below), NOT plain PyPI (which is CPU). Verified: 2.10+cu130.
     "torch>=2.7",
+    # Promoted from extras (2026-07-07): imported at module top, NOT lazy. Everything here runs in the
+    # normal train/eval/export flow; there's no light non-torch consumer to protect, so lazy imports
+    # were just laziness. Only the GPU lane (cupy/cucim) stays optional — it's platform-conditional.
+    "SimpleITK",                     # N4 + DICOM I/O (preprocessing/n4, data/static/mri/dicom)
+    "onnx", "onnxruntime",           # ONNX export + argmax parity (core/export_onnx; cardioview handoff)
+    "pyvista",                       # 3D mesh/volume render (core/mesh, data/dynamic/{anatomy,mrxcat})
+    "mlflow", "psutil", "pynvml",    # experiment tracking + model registry (the store); psutil/pynvml = system metrics
+    "captum",                        # attribution saliency diagnostic (data/analysis/attribution)
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
-n4 = ["SimpleITK"]            # N4 bias-field correction (preprocess n4=True).
-dicom = ["SimpleITK"]        # DICOM I/O (core/data/static/mri/dicom.py, scd adapter). SimpleITK/GDCM reader; `uv run --extra dicom …` (plain `uv run` drops optional extras)
-export = ["onnx", "onnxruntime"]   # ONNX export (torch.onnx needs `onnx`) + parity check (core/export_onnx.py)
-viz = ["pyvista"]            # cardioview: 3D volume/mesh rendering (VTK)
-nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet); kept out of core on purpose
-track = ["mlflow", "psutil", "pynvml"]   # experiment tracking + registry (the model store); psutil+pynvml for system (GPU/CPU/mem) metrics — without them mlflow start_run hard-fails when system-metrics logging is enabled
-diag = ["captum"]   # attribution diagnostic (evaluation/attribution.py): saliency = what the model attends to. confusion runs without it
-mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: run the vendored MRXCAT2.0 warper (external/mrxcat2) to generate phantom label pools. The one dep our env lacks (vtk/scipy/torch/imageio already in core/viz); NOT a runtime dep — we consume its output masks + paint with our own engine (core/data/dynamic/mrxcat.py)
-# GPU lane (LINUX-only by marker — cucim/cupy ship no Windows wheels). On Windows these silently
-# resolve to nothing; the code falls back to scipy/CPU via a single capability gate. Install on
-# linux with `uv sync --extra gpu`.
+nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
+mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
+# GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
+# The code branches on availability (single capability gate), scipy/CPU fallback on Windows. Install
+# on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["SimpleITK", "onnx", "onnxruntime", "pyvista", "nnunetv2>=2.5", "mlflow", "psutil", "pynvml", "captum", "opencv-python-headless", "pytest"]
+all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
+# catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
+# style. Escape hatch is per-line `# noqa: <code>`, used sparingly. `ty`/type-checking is a separate,
+# later axis (bd rp8l).
+[tool.ruff]
+line-length = 120
+extend-exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
+
+[tool.ruff.lint]
+select = [
+    "F",        # pyflakes — unused imports/vars, undefined names (real bugs)
+    "B",        # bugbear — likely bugs (mutable defaults, raise-without-from, zip-without-strict)
+    "E501",     # line-too-long only (NOT E701/E702 — the `a; b` / `if x: y` compaction stays)
+    "I",        # isort — import ordering (autofix)
+    "T201",     # print — logging is the rule
+    "FBT",      # boolean-trap — bools must be keyword-only (f(amp=True), def f(*, amp=...))
+    "BLE001",   # blind except — broad `except Exception` swallows real bugs
+    "S110",     # try-except-pass — silent swallow (worse than BLE)
+    "C901",     # mccabe complexity — enforces the low-ifs / strategy-pattern rule
+    "PLR0912",  # too-many-branches — same
+    "PLR0913",  # too-many-arguments — nudges toward config objects (the repo's pattern)
+    "PLR0915",  # too-many-statements — split it
+    "PLR2004",  # magic-value-comparison — name the constant
+    "PLC0415",  # import-outside-top-level — imports go to the top (optional deps: top-level try/except)
+]
+# OFF by decision: D* (docstrings not mandated), ANN* (annotations = the deferred type axis), N*
+# (ML convention: capital X/Y/N tensors), RUF00x (our → × λ math unicode is intentional), E701/E702
+# (compaction kept), TRY/EM/SIM/UP (opinionated churn), NPY002 (legacy np.random KEPT — modernizing to
+# Generator changes the RNG stream, breaking seed-comparability with existing runs).
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
+"tests/**" = ["PLR2004", "FBT"]       # literal fixtures + bool test flags are fine in tests
+"cardioseg/tracking.py" = ["S110"]    # best-effort telemetry: mlflow errors must never break training
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

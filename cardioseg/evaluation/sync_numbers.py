@@ -10,8 +10,13 @@ Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep tho
 (where the drift happened) are now generated.
 """
 import json
+import logging
 import re
 from pathlib import Path
+
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.sync_numbers")
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 R = json.loads((ROOT / "cardioseg/RESULTS.json").read_text())
@@ -103,6 +108,7 @@ TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
 
 
 def main():
+    setup()
     total = 0
     for f in TARGETS:
         p = ROOT / f
@@ -114,8 +120,8 @@ def main():
                 total += 1
         if txt != orig:
             p.write_text(txt)
-            print(f"  updated {f}")
-    print(f"synced {total} blocks from cardioseg/RESULTS.json")
+            log.info(f"  updated {f}")
+    log.info(f"synced {total} blocks from cardioseg/RESULTS.json")
 
 
 if __name__ == "__main__":

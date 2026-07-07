@@ -96,6 +96,9 @@ def soften(mask: torch.Tensor, sigma: float, n_classes: int) -> torch.Tensor:
     return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
 
 
+_FLIP_PROB = 0.5   # per-sample probability of a horizontal / vertical flip
+
+
 def augment_batch(
     img: torch.Tensor,
     mask: torch.Tensor,
@@ -116,8 +119,8 @@ def augment_batch(
     # --- geometric: per-sample affine (inverse map, as grid_sample expects) ---
     ang = (torch.rand(b, device=dev) * 2 - 1) * (rot_deg * math.pi / 180.0)
     inv = 1.0 / (torch.rand(b, device=dev) * (scale[1] - scale[0]) + scale[0])  # 1/scale
-    fx = torch.where(torch.rand(b, device=dev) < 0.5, -1.0, 1.0)               # horizontal flip
-    fy = torch.where(torch.rand(b, device=dev) < 0.5, -1.0, 1.0)               # vertical flip
+    fx = torch.where(torch.rand(b, device=dev) < _FLIP_PROB, -1.0, 1.0)        # horizontal flip
+    fy = torch.where(torch.rand(b, device=dev) < _FLIP_PROB, -1.0, 1.0)        # vertical flip
     cos, sin = torch.cos(ang), torch.sin(ang)
     theta = torch.zeros(b, 2, 3, device=dev, dtype=dt)
     theta[:, 0, 0] = fx * cos * inv

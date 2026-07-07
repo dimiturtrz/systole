@@ -2,6 +2,7 @@
 GLB needs an OpenGL context (smoke at call time, not unit-tested)."""
 import numpy as np
 import pytest
+
 from core.mesh import chamber_surface, export_stl
 
 pytest.importorskip("pyvista")

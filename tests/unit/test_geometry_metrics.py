@@ -5,9 +5,9 @@ math, not a model. Real-data behaviour is covered by tests/integration.
 """
 import numpy as np
 
-from core.data.static.mri.acdc import identify_lv_cavity, LV_CAVITY, LV_MYO, RV_CAVITY
-from core.measure import voxel_volume_ml, label_volume_ml, ejection_fraction, expected_volume_ml
+from core.data.static.mri.base import LV_CAVITY, LV_MYO, RV_CAVITY, identify_lv_cavity
 from core.evaluate import dice, hausdorff
+from core.measure import ejection_fraction, expected_volume_ml, label_volume_ml, voxel_volume_ml
 
 
 def test_expected_volume_equals_count_when_binary():

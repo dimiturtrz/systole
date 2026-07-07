@@ -11,12 +11,15 @@ TestSets) consume these — one freeze mechanism, one home. Drift (the store gre
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
 
 from core.data.ingest.source import StaticSource
+
+log = logging.getLogger("cardioseg.testsets")
 
 V = pl.col
 
@@ -89,7 +92,10 @@ def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
 
 if __name__ == "__main__":
     import argparse
+
     from core.data.static import store
+    from core.obs import setup
+    setup()
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
     ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
     ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
@@ -97,11 +103,11 @@ if __name__ == "__main__":
     fresh = compute_locks(store.load(EVAL_SOURCES))
     if a.freeze:
         _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
-        print(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
+        log.info(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
     else:                                                        # --check (default)
         drift = {n: (h, _LOCKS.get(n, "")) for n, h in fresh.items() if h != _LOCKS.get(n, "")}
         if drift:
             for n, (now, was) in drift.items():
-                print(f"DRIFT {n}: lockfile {was[:19]}… != store {now[:19]}…")
+                log.warning(f"DRIFT {n}: lockfile {was[:19]}… != store {now[:19]}…")
             raise SystemExit(1)
-        print(f"OK — {len(fresh)} TestSet locks match the store")
+        log.info(f"OK — {len(fresh)} TestSet locks match the store")

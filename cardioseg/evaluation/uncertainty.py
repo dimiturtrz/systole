@@ -13,9 +13,30 @@ flagship has no dropout; TTA-variance is the no-cost uncertainty signal instead.
 """
 import argparse
 import json
+import logging
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
+import polars as pl
+from scipy.ndimage import binary_erosion
+from sklearn.metrics import average_precision_score, roc_auc_score
+
+from core.config import FLAGSHIP_REF
+from core.data.static import store
+from core.data.static.labels import overlay_cmap
+from core.inference import predict_volume_members
+from core.obs import setup
+from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
+from core.registry import resolve
+from core.run import load_run
+
+from ..tracking import track_run
+
+log = logging.getLogger("cardioseg.uncertainty")
 
 
 def tta_uncertainty(model, vol_img, size, device):
@@ -27,8 +48,6 @@ def tta_uncertainty(model, vol_img, size, device):
         epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
     NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
     here is a lower-bound proxy, not deep-ensemble gold."""
-    from core.inference import predict_volume_members
-
     pred, mean, members = predict_volume_members(model, vol_img, size, device)  # mean [D,C,H,W]; members [K,D,C,H,W]
     logc = np.log(mean.shape[1])
     total = -(mean * (mean + 1e-12).log()).sum(1) / logc                        # H[mean]
@@ -40,7 +59,6 @@ def tta_uncertainty(model, vol_img, size, device):
 
 def _boundary(mask):
     """1-voxel boundary band of the foreground (per slice)."""
-    from scipy.ndimage import binary_erosion
     fg = mask > 0
     return fg & ~binary_erosion(fg, iterations=1)
 
@@ -49,7 +67,7 @@ def ece(conf, correct, n_bins=15):
     """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram."""
     edges = np.linspace(0, 1, n_bins + 1)
     e, bins = 0.0, []
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
         m = (conf > lo) & (conf <= hi)
         if m.sum() == 0:
             continue
@@ -60,17 +78,7 @@ def ece(conf, correct, n_bins=15):
 
 
 def main():
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import polars as pl
-
-    from core.config import FLAGSHIP_REF
-    from core.data.static import store
-    from core.model import load_run
-    from core.registry import resolve
-    from core.preprocessing.preprocess import fit_square, stack_slices, SIZE
-
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
@@ -118,7 +126,6 @@ def main():
 
     # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
     # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
-    from sklearn.metrics import roc_auc_score, average_precision_score
     ent_all = np.concatenate(ents); wrong = 1.0 - correct
     base = float(wrong.mean())
     rocauc = float(roc_auc_score(wrong, ent_all))
@@ -139,7 +146,7 @@ def main():
     # reliability diagram
     fig, ax = plt.subplots(figsize=(4.5, 4.5))
     if bins:
-        cs, as_, _ = zip(*bins)
+        cs, as_, _ = zip(*bins, strict=True)
         ax.plot([0, 1], [0, 1], "--", color="#999", lw=1)
         ax.plot(cs, as_, "o-", color="#5b8def")
     ax.set_xlabel("confidence (max softmax)"); ax.set_ylabel("accuracy")
@@ -147,13 +154,12 @@ def main():
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
-    print(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
-          f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
-          f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
-          f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
-    print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
+    log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
+             f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
+             f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
+             f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
+    log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
-    from ..tracking import track_run
     trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     ev = a.eval
     trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
@@ -163,7 +169,6 @@ def main():
 
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
-    from core.data.static.labels import overlay_cmap
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

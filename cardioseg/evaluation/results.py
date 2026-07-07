@@ -10,19 +10,24 @@ no hand-copy; refresh by re-running that baseline's score.py.
 """
 import argparse
 import json
+import logging
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import polars as pl
 
+from cardioseg.evaluation.distribution import _pooled, collect, strata_table
 from core.config import FLAGSHIP_REF
-from core.registry import resolve
-from core.data.static import store, splits
+from core.data.static import splits, store
+from core.evaluate import CLASSES, surface_metrics
 from core.hparams import from_json
-from core.model import resolve_device
-from cardioseg.evaluation.distribution import collect, _pooled, strata_table
 from core.measure import ef_statistics
-from core.evaluate import surface_metrics, CLASSES
+from core.model import resolve_device
+from core.obs import setup
+from core.registry import _DB_URI, _run_id_for, resolve
+
+log = logging.getLogger("cardioseg.results")
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 
@@ -80,6 +85,7 @@ def build(run: Path) -> dict:
 
 
 def main():
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
@@ -87,13 +93,11 @@ def main():
     res = build(resolve(a.run))
     Path(a.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
-    print(f"wrote {a.out}: " + " · ".join(
+    log.info(f"wrote {a.out}: " + " · ".join(
         f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
     try:
-        import mlflow
-        from core.registry import _run_id_for, _DB_URI
         mlflow.set_tracking_uri(_DB_URI)
         with mlflow.start_run(run_id=_run_id_for(a.run)):
             for ax, v in f.items():
@@ -101,7 +105,7 @@ def main():
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
                 mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
             mlflow.log_artifact(a.out)
-    except Exception:
+    except Exception:  # noqa: S110  — best-effort mlflow logging; never break scoring
         pass
 
 

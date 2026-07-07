@@ -3,10 +3,9 @@ COLLAPSED (image, target) batches from resident real tensors — real / synth / 
 priors, augment and soften already applied. The train loop only calls batch()."""
 import torch
 
-from core.data.dynamic.generator import GeneratorCfg
-from core.data.dynamic.synth import SynthCfg
 from core.data.dynamic.augment import AugCfg
-from core.data.dynamic.generator import Generator
+from core.data.dynamic.generator import Generator, GeneratorCfg
+from core.data.dynamic.synth import SynthCfg
 
 N = 4
 

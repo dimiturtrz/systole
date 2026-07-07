@@ -18,19 +18,27 @@ missing), then returns one polars frame over all requested datasets. Splits are 
 """
 from __future__ import annotations
 
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import polars as pl
+from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
-from core.config import DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, _VALIDATE, data_root
-from core.preprocessing.n4 import N4Cfg
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
+from core.data.static.geo import COUNTRY_CONTINENT
 from core.data.static.mri.pathology import harmonize
 from core.data.static.mri.registry import get_adapter
-from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
+from core.data.static.reference import Reference, reference_dir
+from core.obs import progress
+from core.preprocessing.n4 import N4Cfg
+from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
+from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case, resample_inplane
+
+log = logging.getLogger("cardioseg.store")
 
 
 class DataCfg(BaseModel):
@@ -125,7 +133,6 @@ def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
 
 def _nyul_ref_path() -> Path:
-    from core.data.static.reference import reference_dir
     return reference_dir() / "nyul.yaml"
 
 
@@ -134,9 +141,6 @@ def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_IN
     """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
     it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks are
     stable). The standard is a normalization axis -> reference data, fit once, applied in preprocess."""
-    from core.preprocessing.preprocess import resample_inplane
-    from core.preprocessing.nyul import image_landmarks, fit_standard, LANDMARKS
-    from omegaconf import OmegaConf
     names = SOURCE_DATASETS if names is None else names
     rows = []
     for name in names:
@@ -159,7 +163,6 @@ def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_IN
 
 def load_nyul_standard() -> "np.ndarray | None":
     """The fitted Nyúl standard from reference/nyul.yaml, or None if absent (then nyul can't run)."""
-    from core.data.static.reference import Reference
     v = Reference().get("nyul", "standard")
     return np.asarray(v, dtype=np.float64) if v is not None else None
 
@@ -173,12 +176,17 @@ def _bsa(height, weight):
         return None
 
 
+# age-band cut points (years) for demographic stratification
+_AGE_45, _AGE_60, _AGE_75 = 45, 60, 75
+
+
 def _age_band(age):
     try:
         a = float(age)
     except (TypeError, ValueError):
         return None
-    return "<45" if a < 45 else "45-60" if a < 60 else "60-75" if a < 75 else "75+"
+    return ("<45" if a < _AGE_45 else "45-60" if a < _AGE_60
+            else "60-75" if a < _AGE_75 else "75+")
 
 
 def _norm_vendor(v):
@@ -200,6 +208,12 @@ def _is_labelled(arrays: dict) -> bool:
     return all(ok)
 
 
+# cine bSSFP TR sanity gate (ms): reject mixed-sequence DICOM (GRE/segmented cine, TR ~39 ms)
+_MIN_BSSFP_TR_MS, _MAX_BSSFP_TR_MS = 2.0, 6.0
+_FIELD_1P5T = 1.5           # tesla; nominal low-field
+_FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T flip bucket
+
+
 def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     """Aggregate REAL DICOM acquisition (TR/TE/flip) from the built stores into per-(vendor,field)
     reference values -> reference/acquisition.yaml (verified: DICOM-measured). This is the DAG COMPOSE:
@@ -207,9 +221,6 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
     real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
     so the whole domain-randomization sweep survives for everything we lack real values for."""
-    import polars as pl
-    from omegaconf import OmegaConf
-    from core.data.static.reference import reference_dir
     base = Path(data_root("processed"))
     metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
     if not metas:
@@ -221,18 +232,18 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     # segmented cine / GRE, TR ~39 ms) must NOT feed the bSSFP-derivation override — filter it out.
     tr = pl.col("tr_ms").cast(pl.Float64, strict=False)
     real = df.filter(pl.col("tr_ms").is_not_null() & pl.col("vendor").is_not_null()
-                     & (tr >= 2.0) & (tr <= 6.0))
+                     & (tr >= _MIN_BSSFP_TR_MS) & (tr <= _MAX_BSSFP_TR_MS))
     # normalize field to a float so "1.5" and "1.500000" (DICOM formatting) are ONE group, not two
     real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
     acq: dict[str, dict] = {}
     for (vendor, field), g in real.group_by(["vendor", "_field"]):
-        med = lambda c: round(float(g[c].cast(pl.Float64).median()), 3)
+        med = lambda c, g=g: round(float(g[c].cast(pl.Float64).median()), 3)
         based = f"{g.height} DICOM subjects @{field}T"
-        leaf = lambda v: {"value": v, "source": "DICOM-measured", "based_on": based,
+        leaf = lambda v, based=based: {"value": v, "source": "DICOM-measured", "based_on": based,
                           "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
         e = acq.setdefault(str(vendor), {})
         e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))
-        near15 = abs(float(field) - 1.5) < 0.6 if field else True
+        near15 = abs(float(field) - _FIELD_1P5T) < _FIELD_1P5T_TOL if field else True
         e["flip_deg_1p5t" if near15 else "flip_deg_3t"] = leaf(med("flip_deg"))
     out = reference_dir() / "acquisition.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -286,7 +297,6 @@ def migrate_meta(names: list[str] | None = None) -> list[Path]:
     — NO image reload (sidecar parse only). Run after adding a metadata column or fixing an adapter's
     meta() (e.g. SCD now carrying centre/country/scanner). Every processed/<name>/<paramkey>/ of a
     REGISTERED adapter is refreshed; unregistered dirs (anatomy pools etc.) skipped. `names` filters."""
-    from core.data.static.mri.registry import get_adapter
     base = Path(data_root("processed"))
     out: list[Path] = []
     for meta_csv in sorted(base.glob("*/*/meta.csv")):
@@ -326,9 +336,6 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
-        from core.obs import progress
-        import logging
-        log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
         log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -365,7 +372,6 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         frames.append(df)
     cloud = pl.concat(frames, how="vertical_relaxed")
     # continent is DERIVED from country (SSOT in data/geo) — queryable column, never hand-stored.
-    from core.data.static.geo import COUNTRY_CONTINENT
     return cloud.with_columns(
         pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 
@@ -386,6 +392,7 @@ def load_arrays(path: str | Path) -> dict:
 
 if __name__ == "__main__":
     import argparse
+
     from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")
@@ -404,20 +411,20 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.fit_nyul:
         std = fit_nyul_standard(args.names, inplane=args.inplane)
-        print(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
+        log.info(f"fit Nyúl standard -> {_nyul_ref_path()}\n  {[round(float(v), 3) for v in std]}")
         raise SystemExit
     if args.fit_acq:
         acq = fit_acquisition_reference()
-        print(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
+        log.info(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
         raise SystemExit
     if args.migrate_meta:
         paths = migrate_meta(args.names)
-        print(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
+        log.info(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
         for p in paths:
-            print(f"  {p}")
+            log.info(f"  {p}")
         raise SystemExit
     df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
-    print(f"\n=== data cloud: {len(df)} subjects ===")
-    print(df.group_by("dataset").agg(pl.len().alias("n"),
+    log.info(f"\n=== data cloud: {len(df)} subjects ===")
+    log.info(df.group_by("dataset").agg(pl.len().alias("n"),
           pl.col("labelled").sum().alias("labelled")).sort("dataset"))
-    print(df.group_by("vendor").agg(pl.len().alias("n")).sort("n", descending=True))
+    log.info(df.group_by("vendor").agg(pl.len().alias("n")).sort("n", descending=True))

@@ -5,9 +5,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from cardioseg.training.volumes import soft_lv_volume, soft_ef
-from core.measure import label_volume_ml, ejection_fraction
+from cardioseg.training.volumes import soft_ef, soft_lv_volume
 from core.data.static.labels import LV_CAV
+from core.measure import ejection_fraction, label_volume_ml
 
 SP = (10.0, 1.5, 1.5)                                  # (z,y,x) mm
 

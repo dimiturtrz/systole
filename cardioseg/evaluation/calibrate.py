@@ -12,18 +12,29 @@ not the unseen-vendor test — i.e. post-hoc calibration is itself domain-shift-
 """
 import argparse
 import json
-from pathlib import Path
+import logging
 
 import numpy as np
+import polars as pl
+import torch
+
+from core.config import FLAGSHIP_REF
+from core.data.ingest.splits import resolve_cfg
+from core.data.static import splits, store
+from core.obs import setup
+from core.preprocessing.preprocess import fit_square, stack_slices
+from core.registry import resolve
+from core.run import load_run
+
+from ..tracking import track_run
+from .uncertainty import ece
+
+log = logging.getLogger("cardioseg.calibrate")
 
 
 def _gather(model, paths, size, device, per_vol=4000, seed=0):
     """Foreground (logits[N,C], labels[N]) over the given subjects (single forward, no TTA),
     subsampled to ~per_vol voxels/volume — plenty for a 1-param fit + ECE, bounded memory."""
-    import torch
-    from core.data.static import store
-    from core.preprocessing.preprocess import fit_square, stack_slices
-
     rng = np.random.RandomState(seed)
     L, Y = [], []
     model.eval()
@@ -49,7 +60,6 @@ def _gather(model, paths, size, device, per_vol=4000, seed=0):
 
 def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
     """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
-    import torch
     z = torch.tensor(logits, dtype=torch.float32, device=device)
     y = torch.tensor(labels, dtype=torch.long, device=device)
     logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
@@ -68,7 +78,6 @@ def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu")
 
 def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
     """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
-    from .uncertainty import ece
     z = logits / T
     z = z - z.max(1, keepdims=True)
     p = np.exp(z); p /= p.sum(1, keepdims=True)
@@ -77,14 +86,7 @@ def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
 
 
 def main():
-    import torch
-    import polars as pl
-    from core.data.static import store, splits
-    from core.hparams import from_json
-    from core.model import load_run
-    from core.registry import resolve
-    from core.config import FLAGSHIP_REF
-
+    setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     a = ap.parse_args()
@@ -93,7 +95,6 @@ def main():
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
     if getattr(d, "split", ""):                           # coded split -> its resolved val/test
-        from core.data.ingest.splits import resolve_cfg
         r = resolve_cfg(d, meta)
         val, test = r.val.frame, r.test.frame
     else:
@@ -108,19 +109,18 @@ def main():
     for v in d.test_vendors:                         # report each test vendor separately
         axes[v] = test.filter(pl.col("vendor") == v)
     report = {"T": round(T, 3), "axes": {}}
-    print(f"fitted T = {T:.3f} on val (n={len(val)})")
+    log.info(f"fitted T = {T:.3f} on val (n={len(val)})")
     for name, df in axes.items():
         if not len(df):
             continue
         lg, lb = (val_logits, val_labels) if name == "val" else _gather(model, splits.paths(df), size, device)
         e0, e1 = _ece_at(lg, lb, 1.0), _ece_at(lg, lb, T)
         report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
-        print(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")
+        log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")
     (run / "plots").mkdir(parents=True, exist_ok=True)
     (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
-    print(f"-> {run}/plots/calibration.json")
+    log.info(f"-> {run}/plots/calibration.json")
 
-    from ..tracking import track_run
     trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     trk.metric("temp_T", T)
     for name, ax in report["axes"].items():

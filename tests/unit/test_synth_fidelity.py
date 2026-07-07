@@ -1,7 +1,8 @@
 """Synth fidelity eval (core.data.analysis.synth_fidelity). The testable cores are wasserstein1d —
 the per-class synth-vs-real distance metric — and dprime, the separability (distinguishability) metric."""
 import torch
-from core.data.analysis.synth_fidelity import wasserstein1d, dprime
+
+from core.data.analysis.synth_fidelity import dprime, wasserstein1d
 
 
 def test_w1_zero_for_identical():
@@ -43,9 +44,12 @@ def test_dprime_tiny_sample_is_nan():
 def test_fit_acquisition_reproduces_own_contrast():
     """sim2real fit: bSSFP can reproduce a contrast it itself generated -> ~0 residual (expressiveness
     sanity; the real residual on real data is the physics gap, e.g. RV/cav flow)."""
-    import math, torch
-    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+    import math
+
+    import torch
+
     from core.data.analysis.sim2real import fit_acquisition
+    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
     n = 4
     t1, t2, pd = tissue_params(n, 0, 1.5, "cpu")
     target = bssfp_signal(t1, t2, pd, torch.tensor(3.0), torch.tensor(50 * math.pi / 180))[1:n]

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("torch")
-from cardioseg.evaluation.calibrate import fit_temperature, _ece_at
+from cardioseg.evaluation.calibrate import _ece_at, fit_temperature
 
 
 def _overconfident(n=3000, c=3, acc=0.7, seed=0):
