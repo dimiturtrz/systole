@@ -184,19 +184,21 @@ def uncertainty_weighted(loss_terms, log_vars):
     return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
 
 
+# kind -> builder(cfg). Register a new loss by adding a row, not by extending an if-chain.
+_LOSSES = {
+    "dice_ce": lambda cfg: dice_ce_loss(),
+    "dice_ce_tversky": lambda cfg: DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda),
+    "dice_ce_her": lambda cfg: DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp),
+    "dice_ce_hd": lambda cfg: DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp),
+}
+
+
 def build_loss(cfg: LossCfg | None = None):
-    """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
-    an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
+    """Loss callable from a LossCfg (dispatched via `_LOSSES`). Returns an object with __call__(logits, y)
+    and a `.epoch` attribute the train loop updates each epoch (HD-warmup losses use it, others ignore)."""
     cfg = cfg or LossCfg()
-    if cfg.kind == "dice_ce":
-        loss = dice_ce_loss()
-    elif cfg.kind == "dice_ce_tversky":
-        loss = DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda)
-    elif cfg.kind == "dice_ce_her":
-        loss = DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp)
-    elif cfg.kind == "dice_ce_hd":
-        loss = DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp)
-    else:
-        raise ValueError(f"unknown loss {cfg.kind!r} (dice_ce | dice_ce_tversky | dice_ce_her | dice_ce_hd)")
-    loss.epoch = 0    # uniform interface: the train loop sets .epoch each epoch (HD-warmup losses use it, others ignore)
+    if cfg.kind not in _LOSSES:
+        raise ValueError(f"unknown loss {cfg.kind!r} (known: {', '.join(_LOSSES)})")
+    loss = _LOSSES[cfg.kind](cfg)
+    loss.epoch = 0
     return loss
