@@ -22,40 +22,14 @@ from core.config import FLAGSHIP_REF
 from core.data.ingest.splits import resolve_cfg
 from core.data.static import splits, store
 from core.obs import setup
-from core.preprocessing.preprocess import fit_square, stack_slices
 from core.registry import resolve
 from core.run import load_run
 
 from ..tracking import track_run
 from .uncertainty import ece
+from .validate import EvalCfg, Evaluator
 
 log = logging.getLogger("cardioseg.calibrate")
-
-
-def _gather(model, paths, size, device, per_vol=4000, seed=0):
-    """Foreground (logits[N,C], labels[N]) over the given subjects (single forward, no TTA),
-    subsampled to ~per_vol voxels/volume — plenty for a 1-param fit + ECE, bounded memory."""
-    rng = np.random.RandomState(seed)
-    L, Y = [], []
-    model.eval()
-    for p in paths:
-        c = store.load_arrays(p)
-        for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
-                continue
-            xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in c[f"{tag}_img"]])
-            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.int64)
-            with torch.no_grad():
-                logits = model(torch.from_numpy(xs)[:, None].to(device))   # [D,C,H,W]
-            logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
-            y = gt.reshape(-1)
-            pred = logits.argmax(1)
-            fg = (y > 0) | (pred > 0)
-            idx = np.where(fg)[0]
-            if idx.size > per_vol:
-                idx = rng.choice(idx, per_vol, replace=False)
-            L.append(logits[idx]); Y.append(y[idx])
-    return np.concatenate(L), np.concatenate(Y)
 
 
 def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
@@ -100,9 +74,8 @@ def main():
     else:
         _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-    size = d.size
-
-    val_logits, val_labels = _gather(model, splits.paths(val), size, device)
+    ev = Evaluator(model, device, EvalCfg(size=d.size))   # state (model/device/size) once; call many
+    val_logits, val_labels = ev.gather(splits.paths(val))
     T = fit_temperature(val_logits, val_labels, device)
 
     axes = {"val": val}
@@ -113,7 +86,7 @@ def main():
     for name, df in axes.items():
         if not len(df):
             continue
-        lg, lb = (val_logits, val_labels) if name == "val" else _gather(model, splits.paths(df), size, device)
+        lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.paths(df))
         e0, e1 = _ece_at(lg, lb, 1.0), _ece_at(lg, lb, T)
         report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
         log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")

@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import torch
 from pydantic import BaseModel
 
 from core.config import _VALIDATE
@@ -21,7 +22,7 @@ from core.evaluate import CLASSES, surface_distances, surface_metrics
 from core.inference import predict_volume  # re-export
 from core.measure import ejection_fraction
 from core.postprocess import largest_cc_per_class
-from core.preprocessing.preprocess import SIZE, stack_slices
+from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 
 log = logging.getLogger("cardioseg.validate")
 
@@ -93,6 +94,33 @@ class Evaluator:
                                "assd": float(np.median(surf[cl]["assd"])) if surf[cl]["assd"] else float("nan")}
                           for cl in CLASS_NAMES}
         return dice_per_class, ef_rows, surf_per_class
+
+    def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
+        """Foreground (logits[N,C], labels[N]) over subjects — single forward, NO TTA/postproc —
+        subsampled to ~per_vol voxels/volume (bounded memory, plenty for a 1-param temperature fit +
+        ECE). For calibration. (Was calibrate._gather(model, paths, size, device, …); model/size/device
+        are now state.)"""
+        size = self.cfg.size
+        rng = np.random.RandomState(seed)
+        L, Y = [], []
+        self.model.eval()
+        for p in npz_paths:
+            c = load_arrays(p)
+            for tag in ("ed", "es"):
+                if f"{tag}_img" not in c:
+                    continue
+                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in c[f"{tag}_img"]])
+                gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.int64)
+                with torch.no_grad():
+                    logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
+                logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
+                y = gt.reshape(-1)
+                pred = logits.argmax(1)
+                idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
+                if idx.size > per_vol:
+                    idx = rng.choice(idx, per_vol, replace=False)
+                L.append(logits[idx]); Y.append(y[idx])
+        return np.concatenate(L), np.concatenate(Y)
 
 
 def summarize(dice_per_class, ef_rows, surf_per_class=None):
