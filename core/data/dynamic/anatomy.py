@@ -245,7 +245,7 @@ def _pool_worker(args) -> list[np.ndarray]:
     out = []
     try:
         vol = voxelize(load(mp), inplane=inplane)
-    except Exception:                                    # a malformed mesh shouldn't kill the whole build
+    except Exception:  # noqa: BLE001  a malformed mesh shouldnt kill the build
         return out
     for _ in range(max(1, scale_reps)):
         tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))

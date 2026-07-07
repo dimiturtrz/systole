@@ -282,7 +282,7 @@ def _write_meta(name: str, adapter, data_dir: Path, out: Path) -> Path:
             continue
         try:
             meta = adapter.meta(case)
-        except Exception:
+        except Exception:  # noqa: BLE001  adapter meta best-effort -> {}
             meta = {}
         arrays = dict(np.load(data_dir / f, allow_pickle=True))
         rows.append(_meta_row(name, case, arrays, meta, f))

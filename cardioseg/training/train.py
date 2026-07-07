@@ -122,16 +122,16 @@ def _finalize(sh: dict, cfg: TrainCfg, out, model, results: dict, alias: str | N
     try:
         generate(out)
         log.info("wrote %s/MODEL_CARD.md", out)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("model card skipped: %s", e)
     try:                                                   # attribution diagnostic (confusion + saliency)
         s = run_attribution(model, Xva, Yva, cfg.model.out_channels, device, out)
         log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("attribution skipped: %s", e)
     try:
         export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("ONNX export skipped: %s", e)
     try:
         rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
@@ -141,7 +141,7 @@ def _finalize(sh: dict, cfg: TrainCfg, out, model, results: dict, alias: str | N
                    description=f"{out.name} · split={split} · seed={seed}",
                    tags={"kind": kind, "split": split, "seed": seed})
         log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  best-effort artifact step
         log.warning("registry save skipped: %s", e)
 
 

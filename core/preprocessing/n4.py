@@ -123,5 +123,5 @@ def _n4_sitk(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
         log_field = corr.GetLogBiasFieldAsImage(img)    # but evaluate the field at full res
         out = img / sitk.Exp(log_field)
         return sitk.GetArrayFromImage(out).astype(np.float32)
-    except Exception:
-        return arr                                      # ITK hiccup -> pass through, never break the run
+    except RuntimeError:
+        return arr                                      # ITK hiccup (SimpleITK raises RuntimeError) -> pass through

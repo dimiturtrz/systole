@@ -41,7 +41,7 @@ def _run_id_for(ref: str) -> str:
     # alias (e.g. 'production')
     try:
         return c.get_model_version_by_alias(MODEL_NAME, ref).run_id
-    except Exception:  # noqa: S110  — alias miss -> fall through to version / run-id resolution
+    except Exception:  # noqa: S110, BLE001  — alias miss -> fall through to version / run-id resolution
         pass
     # explicit version number
     if str(ref).isdigit():
