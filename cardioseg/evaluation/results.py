@@ -106,8 +106,8 @@ def main():
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
                 mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
             mlflow.log_artifact(a.out)
-    except MlflowException as e:   # db locked / run gone / tracking-uri unreachable — logging is a side
-        log.warning("mlflow metric logging skipped: %s", e)   # channel; scoring (already written to a.out) must not break on it
+    except MlflowException as e:
+        log.warning("mlflow metric logging skipped: %s", e)
 
 
 if __name__ == "__main__":
