@@ -111,7 +111,7 @@ def _region_of(country):
     return _REGION.get(country) if country else None
 
 
-def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cfg | None = None,
+def param_key(inplane: float = TARGET_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
               nyul: bool = False, norm: str = "zscore") -> str:
     """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
     too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
@@ -127,9 +127,9 @@ def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cf
     return key
 
 
-def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
+def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
                 n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params, nyul, norm)
+    return Path(data_root("processed")) / dataset / param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
 
 
 def _nyul_ref_path() -> Path:
@@ -312,7 +312,7 @@ def migrate_meta(names: list[str] | None = None) -> list[Path]:
     return out
 
 
-def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
+def build(name: str, inplane: float = TARGET_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
           n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False,
           nyul: bool = False, nyul_standard=None, norm: str = "zscore") -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
@@ -321,7 +321,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa:
     (ThreadPool — resample/N4 release the GIL). `nyul`+`nyul_standard` apply Nyúl harmonization
     (qfz) to a separate _nyul cache. Returns the processed dir.
     """
-    out = dataset_dir(name, inplane, n4, n4_params, nyul, norm)
+    out = dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
     data_dir = out / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     adapter = get_adapter(name)
@@ -346,7 +346,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa:
     return out
 
 
-def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
+def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE, *,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
          n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None,
          nyul: bool = False, norm: str = "zscore") -> pl.DataFrame:
     """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
@@ -360,7 +360,7 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE, 
                            "python -m core.data.static.store --fit-nyul")
     frames = []
     for name in names:
-        out = dataset_dir(name, inplane, n4, n4_params, nyul, norm)
+        out = dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
         if not (out / "meta.csv").exists():
             build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul,
                   nyul_standard=std, norm=norm)

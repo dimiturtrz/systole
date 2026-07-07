@@ -63,7 +63,7 @@ class Generator:
         """Whether synth painting can fire this Generator (synth_p>0, or any forced-synth row)."""
         return self.cfg.synth.synth_p > 0 or (self.force_synth is not None and bool(self.force_synth.any()))
 
-    def batch(self, idx: torch.Tensor, pin: bool = False):
+    def batch(self, idx: torch.Tensor, *, pin: bool = False):
         """Collapsed batch for the resident indices: build the Batch, run it through the pipeline
         (index real -> synth replace -> augment -> soften), return (x, yt, valid). `valid` is None
         unless the source is partial-label (then [B,C] for the loss)."""

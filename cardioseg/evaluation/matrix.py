@@ -35,7 +35,7 @@ _LV_ONLY = (2, 3)                                        # seg_lv reports myo + 
 
 
 def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
-                 tta: bool = True) -> list[dict]:
+                 *, tta: bool = True) -> list[dict]:
     """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
     model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
     so npz match the weights."""

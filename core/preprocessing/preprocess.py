@@ -67,7 +67,7 @@ def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
 
 
 def resample_inplane(
-    arr: Volume, spacing: Spacing, target_inplane: float = TARGET_INPLANE, is_mask: bool = False
+    arr: Volume, spacing: Spacing, target_inplane: float = TARGET_INPLANE, *, is_mask: bool = False
 ) -> tuple[Volume, Spacing]:
     """Resample H,W (not D) of a [D, H, W] array to target_inplane mm.
 
@@ -86,7 +86,7 @@ def resample_inplane(
 
 
 def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
-    patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE,
+    patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE, *,
     n4: bool = False, n4_params=None, nyul_standard=None, norm: str = "zscore",
 ) -> dict:
     """Load + resample + (N4) + (Nyúl) + z-score one subject's ED/ES. PURE (no disk I/O).

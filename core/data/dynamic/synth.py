@@ -341,7 +341,7 @@ _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the con
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
-                           real_img: torch.Tensor | None = None, return_meta: bool = False):
+                           real_img: torch.Tensor | None = None, *, return_meta: bool = False):
     # noqa above: a LINEAR bSSFP-signal pipeline — each `if cfg.<effect>` (deform / inflow / blood_scale /
     # flow / b0 banding / partial-volume) is an OPTIONAL physical effect applied in sequence, not control
     # complexity. The steps are interdependent (mu/sg/oh threaded through), so splitting would fragment one

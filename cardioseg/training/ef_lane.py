@@ -40,7 +40,7 @@ def _zscore(s):
     return (s - s.mean()) / (s.std() + 1e-6)
 
 
-def _cav_volume(model, stacks, sizes, lv: int, amp: bool) -> torch.Tensor:
+def _cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
     """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
     by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
     owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)
@@ -78,15 +78,15 @@ class VolConsistency:
         self.edv_gt = torch.tensor(edv_gt, device=device)
         self.esv_gt = torch.tensor(esv_gt, device=device)
 
-    def loss(self, model, delta: float = 0.1, amp: bool = True):
+    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
         idx = torch.randperm(self.n, device=self.device)[:self.k]
         sizes, vox = self.counts[idx], self.vox[idx]
         ed = torch.cat([self.ed[int(i)] for i in idx])                  # [ΣDi,1,H,W]
         es = torch.cat([self.es[int(i)] for i in idx])
-        edv = _cav_volume(model, ed, sizes, self.lv, amp) * vox         # [K] soft EDV (mL)
-        esv = _cav_volume(model, es, sizes, self.lv, amp) * vox
+        edv = _cav_volume(model, ed, sizes, self.lv, amp=amp) * vox     # [K] soft EDV (mL)
+        esv = _cav_volume(model, es, sizes, self.lv, amp=amp) * vox
         return vol_loss(edv, esv, self.edv_gt[idx], self.esv_gt[idx], delta)
 
 
@@ -123,7 +123,7 @@ class KaggleEF:
             self.ef.append(float(t["ef"]))
         self.n = len(self.X)
 
-    def loss(self, model, delta: float = 0.1, amp: bool = True):
+    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
         idx = [int(i) for i in torch.randperm(self.n)[:self.k]]
@@ -141,13 +141,13 @@ class KaggleEF:
             es_stacks.append(X[:, int(pv.argmin())])
             ls.append(L); tgt.append(self.ef[i])
         ls = torch.tensor(ls, device=self.device)
-        ed = _cav_volume(model, torch.cat(ed_stacks), ls, self.lv, amp)  # [K] ED cavity vol (px)
-        es = _cav_volume(model, torch.cat(es_stacks), ls, self.lv, amp)
+        ed = _cav_volume(model, torch.cat(ed_stacks), ls, self.lv, amp=amp)  # [K] ED cavity vol (px)
+        es = _cav_volume(model, torch.cat(es_stacks), ls, self.lv, amp=amp)
         ef_pred = (ed - es) / ed.clamp_min(1e-6) * 100.0                 # [K] EF% (spacing cancels)
         return F.huber_loss(ef_pred / 100, ef_pred.new_tensor(tgt) / 100, delta=delta)
 
 
-def build_aux(cfg, splits, train_df, device: str, is_static: bool) -> list:
+def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
     """Assemble the active auxiliary lanes from a TrainCfg. Empty list when the EF lane is off or the
     train source isn't static (EDV/ESV need labeled patient frames). The train loop iterates the list;
     it never inspects cfg.ef_* itself. `size` is config (cfg.generator.data.size), not an arg."""

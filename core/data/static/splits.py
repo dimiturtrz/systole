@@ -22,7 +22,7 @@ from core.data.ingest.splits import resolve_cfg
 from core.data.static import store
 
 
-def eval_set(name: str, holdout: bool = False, seed: int = 0) -> pl.DataFrame:
+def eval_set(name: str, *, holdout: bool = False, seed: int = 0) -> pl.DataFrame:
     """Resolve a named EVAL set to its labelled subject rows, EXPRESSED AS A SPLIT — it routes through
     make_split's criteria and returns the TEST partition, so eval-set knowledge lives in the one split
     mechanism (test_vendors/test_datasets) rather than a bespoke filter. 'canon' = the unseen-vendor
