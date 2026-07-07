@@ -54,10 +54,10 @@ class ACDCSliceDataset(Dataset):
         self.frames = frames
         self.augment = augment
         for pi, p in enumerate(progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
-            c = load_arrays(p)
+            case = load_arrays(p)
             for tag in frames:
-                img = c.get(f"{tag.lower()}_img")        # [D, H, W]
-                gt = c.get(f"{tag.lower()}_gt")          # [D, H, W]
+                img = case.get(f"{tag.lower()}_img")     # [D, H, W]
+                gt = case.get(f"{tag.lower()}_gt")       # [D, H, W]
                 if img is None:
                     continue
                 for z in range(img.shape[0]):

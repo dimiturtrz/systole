@@ -57,11 +57,11 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
     by_path: dict[str, dict[str, list]] = {}
     datasets: dict[str, set] = {}
     for r in df.iter_rows(named=True):
-        c = store.load_arrays(r["path"])
-        if "ed_gt" not in c or "es_gt" not in c:
+        case = store.load_arrays(r["path"])
+        if "ed_gt" not in case or "es_gt" not in case:
             continue
-        sp = tuple(float(s) for s in c["spacing"])
-        ef, edv, esv = ejection_fraction(c["ed_gt"], c["es_gt"], sp)
+        sp = tuple(float(s) for s in case["spacing"])
+        ef, edv, esv = ejection_fraction(case["ed_gt"], case["es_gt"], sp)
         path = (r.get("pathology") or "unknown")
         g = by_path.setdefault(path, {"ef": [], "edv": [], "esv": []})
         g["ef"].append(ef); g["edv"].append(edv); g["esv"].append(esv)
@@ -125,13 +125,13 @@ def build_real_levels(sources=None, inplane: float | None = None, per_case: int 
     counts: dict[str, int] = {}
     for r in df.iter_rows(named=True):
         v = r.get("vendor") or "unknown"
-        c = store.load_arrays(r["path"])
+        case = store.load_arrays(r["path"])
         for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
+            if f"{tag}_img" not in case:
                 continue
-            img = np.asarray(c[f"{tag}_img"], np.float32)
+            img = np.asarray(case[f"{tag}_img"], np.float32)
             img = (img - img.mean()) / (img.std() + 1e-6)          # per-volume z-score
-            gt = np.asarray(c[f"{tag}_gt"])
+            gt = np.asarray(case[f"{tag}_gt"])
             per_cls = acc.setdefault(v, {})
             for lbl in names:
                 px = img[gt == lbl]

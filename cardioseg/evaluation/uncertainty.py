@@ -84,12 +84,12 @@ def _collect_uncertainty(model, df, device, out, eval_name):
     confs, corrects, ents, ales, epis, bnd_u, int_u, cases = [], [], [], [], [], [], [], []
     saved = False
     for r in df.iter_rows(named=True):
-        c = store.load_arrays(r["path"])
+        case = store.load_arrays(r["path"])
         for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
+            if f"{tag}_img" not in case:
                 continue
-            pred, ent, conf, ale, epi = tta_uncertainty(model, c[f"{tag}_img"], SIZE, device)
-            gt = stack_slices(c[f"{tag}_gt"], SIZE, dtype=np.uint8)
+            pred, ent, conf, ale, epi = tta_uncertainty(model, case[f"{tag}_img"], SIZE, device)
+            gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
             fg = (pred > 0) | (gt > 0)
             confs.append(conf[fg]); corrects.append((pred == gt)[fg]); ents.append(ent[fg])
             ales.append(ale[fg]); epis.append(epi[fg])
@@ -101,7 +101,7 @@ def _collect_uncertainty(model, df, device, out, eval_name):
                 if inte.any(): int_u.append(ent[z][inte].mean())
             if not saved and eval_name == "acdc" and tag == "ed":  # one overlay PNG
                 z = int(np.argmax([(g > 0).sum() for g in gt]))
-                _save_overlay(c[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", fit_square, SIZE, plt)
+                _save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", fit_square, SIZE, plt)
                 saved = True
     return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 

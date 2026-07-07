@@ -129,12 +129,12 @@ class Evaluator:
         L, Y = [], []
         self.model.eval()
         for p in npz_paths:
-            c = load_arrays(p)
+            case = load_arrays(p)
             for tag in ("ed", "es"):
-                if f"{tag}_img" not in c:
+                if f"{tag}_img" not in case:
                     continue
-                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in c[f"{tag}_img"]])
-                gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.int64)
+                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
+                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
