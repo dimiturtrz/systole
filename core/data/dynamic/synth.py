@@ -341,7 +341,7 @@ _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the con
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
-                           real_img: torch.Tensor | None = None, return_meta: bool = False):
+                           real_img: torch.Tensor | None = None, *, return_meta: bool = False):
     # noqa above: a LINEAR bSSFP-signal pipeline — each `if cfg.<effect>` (deform / inflow / blood_scale /
     # flow / b0 banding / partial-volume) is an OPTIONAL physical effect applied in sequence, not control
     # complexity. The steps are interdependent (mu/sg/oh threaded through), so splitting would fragment one
@@ -384,7 +384,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
-        v = torch.rand(b, 1, device=dev)         # from physiological v/thk + derived TR (no magic fraction) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
+        v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
         thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
         f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
         s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite

@@ -63,7 +63,7 @@ class SeedTrainer:
     shared data (resident tensors, val, aux EF lanes) comes via `sh`. Construct per seed, call .run().
     N seeds cost 1xdata + Nxmodel. (bd 01fh: former _train_loop/_finalize threaded ~10 args -> methods.)"""
 
-    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool):
+    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):
         self.cfg, self.seed, self.sh, self.alias, self.quick = cfg, seed, sh, alias, quick
         self.d = cfg.generator.data
         self.device, self.pin, self.gen, self.aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
@@ -90,7 +90,7 @@ class SeedTrainer:
     def _build_loss(self):
         """PARTIAL-LABEL mask -> PartialLabelDiceCE; soft-label -> SoftDiceCE; else the configured loss."""
         gen = self.gen
-        partial = getattr(gen, "valid", None) is not None
+        partial = gen.valid is not None
         if partial:
             self.log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
                           int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
@@ -132,7 +132,7 @@ class SeedTrainer:
             perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
             for bi in progress(range(nb), f"epoch {ep}", total=nb):
                 idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
-                x, yt, valid = gen.batch(idx, pin)                  # collapsed batch (+ partial-label mask)
+                x, yt, valid = gen.batch(idx, pin=pin)              # collapsed batch (+ partial-label mask)
                 opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", enabled=pin):
                     loss = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
@@ -272,7 +272,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     return gen, Xva, Yva
 
 
-def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seeds=None):
+def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):
     """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
     list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
     ONCE and shared across seeds (`SeedTrainer` does the per-seed work) — N seeds cost 1×data + N×model,
@@ -345,7 +345,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     # Auxiliary EF lanes (GPU-resident, built ONCE and shared across seeds) — a list the epoch loop
     # iterates, so it never branches on cfg.ef_*. Empty when the lane is off / train source isn't static.
     aux = build_aux(cfg, splits, train_df, device,
-                    train_src is not None and train_src.kind == "static")
+                    is_static=train_src is not None and train_src.kind == "static")
     for lane in aux:
         log.info("aux lane: %s (%d items cached)", type(lane).__name__, lane.n)
 
@@ -355,7 +355,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
           "train_df": train_df, "val_df": val_df, "test_df": test_df, "train_src": train_src,
           "aux": aux, "nb": nb, "n_train": n_train, "base_out": base_out, "single": len(seeds) == 1}
     log.info("shared data ready — training %d seed(s): %s", len(seeds), seeds)
-    res = [SeedTrainer(cfg, s, sh, alias, quick).run() for s in seeds]
+    res = [SeedTrainer(cfg, s, sh, alias, quick=quick).run() for s in seeds]
     return res[0] if len(seeds) == 1 else res
 
 

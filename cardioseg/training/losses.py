@@ -12,7 +12,7 @@ from monai.losses import DiceCELoss, DiceLoss, HausdorffDTLoss, TverskyLoss
 from core.hparams import LossCfg
 
 
-def dice_ce_loss(to_onehot_y=True, softmax=True, **kw):
+def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
     """MONAI compound Dice + CE for integer label maps (0/1/2/3)."""
     return DiceCELoss(to_onehot_y=to_onehot_y, softmax=softmax, **kw)
 
@@ -65,7 +65,7 @@ class HausdorffERLoss:
     for thin near-boundary over-fill (use Tversky for that).
     """
 
-    def __init__(self, alpha: float = 2.0, erosions: int = 10, include_background: bool = False):
+    def __init__(self, alpha: float = 2.0, erosions: int = 10, *, include_background: bool = False):
         self.alpha, self.erosions, self.include_background = alpha, erosions, include_background
         self._cross = torch.tensor([[0., 1., 0.], [1., 1., 1.], [0., 1., 0.]]) * 0.2  # sum=1
 
@@ -123,7 +123,7 @@ class SoftDiceCE:
     Reduces to the standard hard Dice+CE when the target is one-hot (sigma->0). fp32 under autocast
     (log_softmax + the channel sum are fp16-unsafe)."""
 
-    def __init__(self, include_background: bool = True, lambda_dice: float = 1.0, lambda_ce: float = 1.0):
+    def __init__(self, *, include_background: bool = True, lambda_dice: float = 1.0, lambda_ce: float = 1.0):
         self.dice = DiceLoss(softmax=True, to_onehot_y=False, include_background=include_background)
         self.ld, self.lce = lambda_dice, lambda_ce
 

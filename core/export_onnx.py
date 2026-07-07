@@ -52,7 +52,7 @@ def parity(model, onnx_path: Path, npz_path) -> float:
     return 100 * agree / total
 
 
-def export(run: Path, verify_dir: Path, quantize: bool = True,
+def export(run: Path, verify_dir: Path, *, quantize: bool = True,
            opset: int = OPSET, parity_min: float = PARITY_MIN) -> Path:
     """Write run/model.onnx from run/model.pth; INT8-quantize if it keeps parity. Returns the path."""
     run = Path(run)

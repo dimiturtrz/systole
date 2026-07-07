@@ -44,7 +44,7 @@ class Reference:
     leaf is present AND (strict) verified; otherwise `default`. Missing store → every get() is the
     default, so callers fall back to the per-scan path with no branching."""
 
-    def __init__(self, strict: bool = True, root: str | Path | None = None):
+    def __init__(self, *, strict: bool = True, root: str | Path | None = None):
         self.strict = strict
         self._d: dict = {}
         base = Path(root) if root is not None else reference_dir()

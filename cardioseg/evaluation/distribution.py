@@ -28,6 +28,7 @@ from scipy.stats import gaussian_kde
 from core.config import FLAGSHIP_REF
 from core.data.static import splits, store
 from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
+from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import LOA_Z, ef_statistics, ejection_fraction
 from core.model import resolve_device
@@ -244,14 +245,21 @@ def main():
                     help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
-    a = ap.parse_args()
-    run = resolve(a.run)
+    args = ap.parse_args()
+    run = resolve(args.run)
     device = resolve_device()
 
-    # eval set = a split over the consolidated store; eval_set owns the canon/holdout special-cases
-    df = splits.eval_set(a.eval, holdout=a.holdout, seed=a.seed)
-    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(df)})"
-    rows = collect(run, device, df.iter_rows(named=True))
+    df = splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
+    # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
+    d_model = from_json(run / "config.json").generator.data
+    trained = splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
+    kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
+    n_excl = len(df) - len(kept)
+    if n_excl:
+        log.warning("excluded %d/%d '%s' subjects the model TRAINED on — leak-free distribution (bd h9bz)",
+                    n_excl, len(df), args.eval)
+    label = f" ({args.eval}{', held-out' if args.holdout else ''}, n={len(kept)})"
+    rows = collect(run, device, kept)
     dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
 
     out = run / "plots"

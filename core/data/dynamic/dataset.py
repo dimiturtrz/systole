@@ -44,6 +44,7 @@ class ACDCSliceDataset(Dataset):
         npz_paths: list[str | Path],
         size: int = SIZE,
         frames: tuple[str, ...] = ("ED", "ES"),
+        *,
         keep_empty: bool = False,
         augment: bool = False,
     ):

@@ -45,7 +45,7 @@ def predict_volume_probs(model, vol_img: Volume, size: int, device: str):
     return pred, mean
 
 
-def predict_volume(model, vol_img: Volume, size: int, device: str, tta: bool = False) -> Volume:
+def predict_volume(model, vol_img: Volume, size: int, device: str, *, tta: bool = False) -> Volume:
     """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
 
     `tta=True` averages over the 4 in-plane flips (delegates to predict_volume_probs); `tta=False`

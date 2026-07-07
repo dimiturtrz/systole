@@ -21,15 +21,12 @@ import logging
 from pathlib import Path
 
 import numpy as np
-import polars as pl
 
 from cardioseg.evaluation.validate import EvalCfg, Evaluator
 from core import registry as registry_mod
 from core import run as run_mod
-from core.data.ingest.source import subject_keys
-from core.data.ingest.splits import resolve_cfg
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
-from core.data.static import store
+from core.data.static import splits, store
 from core.obs import setup
 
 log = logging.getLogger("cardioseg.matrix")
@@ -37,29 +34,8 @@ log = logging.getLogger("cardioseg.matrix")
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
 
-def _seen_keys(cfg, meta: pl.DataFrame) -> set[str] | None:
-    """The real subjects the model SAW (train ∪ val) — the honest basis for the OOD/leak flag (a val
-    subject IS seen; early-stopping touched it). Restricted to the model's OWN `sources`. None if
-    unknowable. Reconstruction is a coded filter either way, no split_from_cfg:
-      - new coded split (cfg.data.split): resolve -> train (if static) ∪ val Sources. A DYNAMIC train
-        contributes no real subjects, so a synth-trained model's SEEN = its real val only.
-      - old criteria: SEEN = labelled ∩ sources − test (test_datasets/test_vendors)."""
-    if cfg is None:
-        return None
-    d = cfg.generator.data
-    in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
-    if getattr(d, "split", ""):
-        r = resolve_cfg(d, in_sources)
-        seen = set(r.val.subjects())                            # val is always a real StaticSource
-        if getattr(r.train, "kind", "static") == "static":
-            seen |= set(r.train.subjects())
-        return {f"{a}\t{b}" for a, b in seen}
-    test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
-    return subject_keys(in_sources.filter(pl.col("labelled") & ~test))
-
-
 def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
-                 tta: bool = True) -> list[dict]:
+                 *, tta: bool = True) -> list[dict]:
     """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
     model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
     so npz match the weights."""
@@ -70,7 +46,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
-        seen = _seen_keys(cfg, meta)
+        seen = splits.seen_keys(d, meta) if d else None      # subjects the model saw (train∪val); None = unknowable
         for ts in tsets:
             src = ts.source(meta)                        # lock-checked; raises on drift
             paths, subj = src.paths(), set(src.subjects())

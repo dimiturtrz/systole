@@ -42,10 +42,10 @@ class EvalCfg(BaseModel):
 class _ClassScores:
     """Running per-class Dice numerator/denominator + per-volume boundary distances. Holds the three
     accumulators as its OWN state, so scoring a volume is `.add(pred, gt, spacing)` — no dict-threading
-    through a 6-arg helper. `.dice()` / `.surface()` finalize. (The per-class loop in `.add` is 3
-    iterations of vectorized numpy + one HD95 each; it does NOT drive wall-time — the forward pass in
-    predict_volume dominates. Vectorizing the Dice half over classes is tracked as bd cardiac-seg-8fux;
-    HD95 stays per-label.)"""
+    through a 6-arg helper. `.dice()` / `.surface()` finalize. Dice is computed one-hot over all classes
+    at once (bd cardiac-seg-8fux); only HD95 stays per-label (a distance transform per class)."""
+
+    _CLS = np.fromiter(CLASS_NAMES, dtype=int)                           # [C] foreground label ids (1,2,3)
 
     def __init__(self):
         self.inter = {c: 0.0 for c in CLASS_NAMES}
@@ -54,11 +54,17 @@ class _ClassScores:
 
     def add(self, pred, gt, spacing):
         """Fold one predicted volume into the accumulators."""
-        for cl in CLASS_NAMES:
-            p, g = pred == cl, gt == cl
-            self.inter[cl] += 2.0 * np.logical_and(p, g).sum()
-            self.denom[cl] += p.sum() + g.sum()
-            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
+        # Dice numerator/denominator for ALL classes in one shot: one-hot pred/gt to [...,C] and reduce
+        # over the spatial axes (no python class loop). 2*|P∩G| and |P|+|G| per class.
+        axes = tuple(range(pred.ndim))
+        P = pred[..., None] == self._CLS                                 # [...,C] bool one-hot
+        G = gt[..., None] == self._CLS
+        inter_c = 2.0 * np.logical_and(P, G).sum(axis=axes)              # [C]
+        denom_c = P.sum(axis=axes) + G.sum(axis=axes)                    # [C]
+        for i, cl in enumerate(CLASS_NAMES):
+            self.inter[cl] += float(inter_c[i])
+            self.denom[cl] += float(denom_c[i])
+            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if sd.size:
                 m = surface_metrics(sd)
                 self.surf[cl]["hd95"].append(m["hd95"]); self.surf[cl]["assd"].append(m["assd"])
