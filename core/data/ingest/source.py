@@ -62,7 +62,7 @@ class StaticSource:
 
     def subjects(self) -> list[tuple[str, str]]:
         return list(zip(self._f.get_column("dataset").to_list(),
-                        (str(s) for s in self._f.get_column("subject_id").to_list())))
+                        (str(s) for s in self._f.get_column("subject_id").to_list()), strict=True))
 
     def ids_hash(self) -> str:
         return ids_hash(self.subjects())

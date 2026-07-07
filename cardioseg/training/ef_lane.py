@@ -133,7 +133,7 @@ class KaggleEF:
             pix = model(torch.cat(xs)).softmax(1)[:, self.lv].float().sum((1, 2))
         ed_stacks, es_stacks, ls, tgt = [], [], [], []
         off = 0
-        for gx, i, sz in zip(xs, idx, sizes):                            # gx = the GPU-resident cine
+        for gx, i, sz in zip(xs, idx, sizes, strict=True):                            # gx = the GPU-resident cine
             L, P = self.LP[i]
             pv = pix[off:off + sz].view(L, P).sum(0); off += sz          # [P] cavity vol / phase
             X = gx.view(L, P, 1, self.size, self.size)

@@ -224,9 +224,9 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
     acq: dict[str, dict] = {}
     for (vendor, field), g in real.group_by(["vendor", "_field"]):
-        med = lambda c: round(float(g[c].cast(pl.Float64).median()), 3)
+        med = lambda c, g=g: round(float(g[c].cast(pl.Float64).median()), 3)
         based = f"{g.height} DICOM subjects @{field}T"
-        leaf = lambda v: {"value": v, "source": "DICOM-measured", "based_on": based,
+        leaf = lambda v, based=based: {"value": v, "source": "DICOM-measured", "based_on": based,
                           "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
         e = acq.setdefault(str(vendor), {})
         e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))

@@ -44,6 +44,6 @@ def test_fit_needs_foreground():
     img = torch.randn(1, 1, 16, 16)
     try:
         fit_acquisition(img, seg, N)
-        assert False
+        raise AssertionError
     except ValueError:
         pass

@@ -63,7 +63,7 @@ def ece(conf, correct, n_bins=15):
     """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram."""
     edges = np.linspace(0, 1, n_bins + 1)
     e, bins = 0.0, []
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
         m = (conf > lo) & (conf <= hi)
         if m.sum() == 0:
             continue
@@ -141,7 +141,7 @@ def main():
     # reliability diagram
     fig, ax = plt.subplots(figsize=(4.5, 4.5))
     if bins:
-        cs, as_, _ = zip(*bins)
+        cs, as_, _ = zip(*bins, strict=True)
         ax.plot([0, 1], [0, 1], "--", color="#999", lw=1)
         ax.plot(cs, as_, "o-", color="#5b8def")
     ax.set_xlabel("confidence (max softmax)"); ax.set_ylabel("accuracy")

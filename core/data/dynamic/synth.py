@@ -279,7 +279,7 @@ def make_background(cfg: SynthCfg) -> Background:
     try:
         return _BG_REGISTRY[cfg.bg_mode](cfg)
     except KeyError:
-        raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}")
+        raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}") from None
 
 
 class Acquisition(ABC):
@@ -334,7 +334,7 @@ def make_acquisition(cfg: SynthCfg) -> Acquisition:
     try:
         return _ACQ_REGISTRY[cfg.acq_mode]()
     except KeyError:
-        raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}")
+        raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}") from None
 
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,

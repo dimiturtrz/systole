@@ -219,11 +219,11 @@ def plot_strata(rows, key, out: Path, label: str):
     for ax, vals, ylab, col, top in ((a1, mean_dice, "mean Dice", "#5b8def", 1.0),
                                      (a2, ef_mae, "EF MAE (%)", "#ef5350", max(ef_mae))):
         bars = ax.bar(x, vals, color=col, edgecolor="#333", linewidth=0.5)
-        for b, sm in zip(bars, small):
+        for b, sm in zip(bars, small, strict=True):
             if sm:
                 b.set_hatch("///"); b.set_alpha(0.55)
         ax.set_ylim(0, top * 1.22)   # headroom so the value/n labels clear the frame + title
-        for xi, v, n in zip(x, vals, ns):
+        for xi, v, n in zip(x, vals, ns, strict=True):
             ax.text(xi, v, f"{v:.2f}\nn={n}", ha="center", va="bottom", fontsize=8)
         ax.set_ylabel(ylab)
         ax.set_xticks(x); ax.set_xticklabels(groups, rotation=20, ha="right", fontsize=9)

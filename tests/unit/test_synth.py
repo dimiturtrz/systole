@@ -152,7 +152,7 @@ def test_background_strategy_dispatch_and_zero_real():
     assert isinstance(make_background(SynthCfg(bg_mode="partition")), PartitionBg)
     assert isinstance(make_background(SynthCfg(bg_mode="hybrid")), HybridBg)
     try:
-        make_background(SynthCfg(bg_mode="nope")); assert False
+        make_background(SynthCfg(bg_mode="nope")); raise AssertionError
     except ValueError:
         pass
     for m in ("flat", "procedural"):                             # zero-real: real_img=None must work

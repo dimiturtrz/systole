@@ -55,7 +55,6 @@ select = [
     "B",        # bugbear — likely bugs (mutable defaults, raise-without-from, zip-without-strict)
     "E501",     # line-too-long only (NOT E701/E702 — the `a; b` / `if x: y` compaction stays)
     "I",        # isort — import ordering (autofix)
-    "NPY002",   # legacy np.random — use the modern Generator API
     "T201",     # print — logging is the rule
     "FBT",      # boolean-trap — bools must be keyword-only (f(amp=True), def f(*, amp=...))
     "BLE001",   # blind except — broad `except Exception` swallows real bugs
@@ -69,11 +68,13 @@ select = [
 ]
 # OFF by decision: D* (docstrings not mandated), ANN* (annotations = the deferred type axis), N*
 # (ML convention: capital X/Y/N tensors), RUF00x (our → × λ math unicode is intentional), E701/E702
-# (compaction kept), TRY/EM/SIM/UP (opinionated churn).
+# (compaction kept), TRY/EM/SIM/UP (opinionated churn), NPY002 (legacy np.random KEPT — modernizing to
+# Generator changes the RNG stream, breaking seed-comparability with existing runs).
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
 "tests/**" = ["PLR2004", "FBT"]       # literal fixtures + bool test flags are fine in tests
+"cardioseg/tracking.py" = ["S110"]    # best-effort telemetry: mlflow errors must never break training
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

@@ -100,7 +100,7 @@ def main():
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
                 mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
             mlflow.log_artifact(a.out)
-    except Exception:
+    except Exception:  # noqa: S110  — best-effort mlflow logging; never break scoring
         pass
 
 
