@@ -5,7 +5,7 @@ import torch
 
 from core.data.dynamic.augment import AugCfg
 from core.data.dynamic.generator import Generator, GeneratorCfg
-from core.data.dynamic.synth import SynthCfg
+from core.data.dynamic.synth import FlatBgCfg, SynthCfg
 
 N = 4
 
@@ -53,7 +53,7 @@ def test_synth_changes_the_image():
     """Same indices, pure-synth vs pure-real -> different pixels (the image was invented, not loaded).
     Aug uses global RNG, so seed both identically to isolate the synth difference."""
     g_real, _, _ = _gen(0.0)
-    g_syn, _, _ = _gen(1.0, bg_mode="flat")
+    g_syn, _, _ = _gen(1.0, bg=FlatBgCfg())
     idx = torch.arange(4)
     torch.manual_seed(0); xr, _, _ = g_real.batch(idx)
     torch.manual_seed(0); xs, _, _ = g_syn.batch(idx)
@@ -74,7 +74,7 @@ def test_force_synth_paints_flagged_rows_at_synth_p0():
     non-flagged real rows pass through untouched. synth_on must be True despite synth_p=0."""
     X, Y = _resident(n=8)
     force = torch.zeros(8, dtype=torch.bool); force[4:] = True     # last 4 = synth-anatomy rows
-    cfg = GeneratorCfg(synth=SynthCfg(synth_p=0.0, bg_mode="flat"),
+    cfg = GeneratorCfg(synth=SynthCfg(synth_p=0.0, bg=FlatBgCfg()),
                        aug=AugCfg(rot_deg=0.0, scale=(1.0, 1.0), translate=0.0, gamma_p=0.0,
                                   blur_p=0.0, contrast=(1.0, 1.0), noise=0.0, bias_p=0.0))
     gen = Generator(cfg, X, Y, N, "cpu", force_synth=force)

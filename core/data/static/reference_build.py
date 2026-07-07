@@ -57,11 +57,11 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
     by_path: dict[str, dict[str, list]] = {}
     datasets: dict[str, set] = {}
     for r in df.iter_rows(named=True):
-        c = store.load_arrays(r["path"])
-        if "ed_gt" not in c or "es_gt" not in c:
+        case = store.load_arrays(r["path"])
+        if "ed_gt" not in case or "es_gt" not in case:
             continue
-        sp = tuple(float(s) for s in c["spacing"])
-        ef, edv, esv = ejection_fraction(c["ed_gt"], c["es_gt"], sp)
+        sp = tuple(float(s) for s in case["spacing"])
+        ef, edv, esv = ejection_fraction(case["ed_gt"], case["es_gt"], sp)
         path = (r.get("pathology") or "unknown")
         g = by_path.setdefault(path, {"ef": [], "edv": [], "esv": []})
         g["ef"].append(ef); g["edv"].append(edv); g["esv"].append(esv)
@@ -125,13 +125,13 @@ def build_real_levels(sources=None, inplane: float | None = None, per_case: int 
     counts: dict[str, int] = {}
     for r in df.iter_rows(named=True):
         v = r.get("vendor") or "unknown"
-        c = store.load_arrays(r["path"])
+        case = store.load_arrays(r["path"])
         for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
+            if f"{tag}_img" not in case:
                 continue
-            img = np.asarray(c[f"{tag}_img"], np.float32)
+            img = np.asarray(case[f"{tag}_img"], np.float32)
             img = (img - img.mean()) / (img.std() + 1e-6)          # per-volume z-score
-            gt = np.asarray(c[f"{tag}_gt"])
+            gt = np.asarray(case[f"{tag}_gt"])
             per_cls = acc.setdefault(v, {})
             for lbl in names:
                 px = img[gt == lbl]
@@ -196,6 +196,42 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
     return path_out
 
 
+_VENDORS = ("Siemens", "Philips", "GE", "Canon")
+
+
+def _mode_acquisition(args):
+    p = build_acquisition()
+    log.info(f"wrote {p}")
+    ref = Reference(root=p.parent)
+    for v in _VENDORS:
+        tr15, te15, f15 = acquisition_for(v, 1.5, ref)
+        _, _, f30 = acquisition_for(v, 3.0, ref)
+        log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
+
+
+def _mode_build(args):
+    p = build_from_store(sources=args.sources)
+    log.info(f"wrote {p}")
+    ef = Reference().provenance("normal_ranges", "ef_normal")
+    if ef:
+        log.info(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
+
+
+def _mode_real_levels(args):
+    p = build_real_levels(sources=args.sources)
+    log.info(f"wrote {p}")
+    ref = Reference(root=p.parent)
+    for v in _VENDORS:
+        cav = ref.provenance("real_class_levels", v, "LV-cav")
+        rv = ref.provenance("real_class_levels", v, "RV")
+        if cav:
+            log.info(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
+
+
+# flag -> handler; add a mode by adding a row, not an elif
+_MODES = {"acquisition": _mode_acquisition, "build": _mode_build, "real_levels": _mode_real_levels}
+
+
 def _main():
     setup()
     ap = argparse.ArgumentParser(description="Derive reference values from processed/ (ground truth + images).")
@@ -205,33 +241,12 @@ def _main():
     ap.add_argument("--acquisition", action="store_true",
                     help="emit <data>/reference/acquisition.yaml (machine dimension from committed paper priors)")
     ap.add_argument("--sources", nargs="*", default=None)
-    a = ap.parse_args()
-    if a.acquisition:
-        p = build_acquisition()
-        log.info(f"wrote {p}")
-        ref = Reference(root=p.parent)
-        for v in ("Siemens", "Philips", "GE", "Canon"):
-            tr15, te15, f15 = acquisition_for(v, 1.5, ref)
-            _, _, f30 = acquisition_for(v, 3.0, ref)
-            log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
-    elif a.build:
-        p = build_from_store(sources=a.sources)
-        log.info(f"wrote {p}")
-        ref = Reference()
-        ef = ref.provenance("normal_ranges", "ef_normal")
-        if ef:
-            log.info(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
-    elif a.real_levels:
-        p = build_real_levels(sources=a.sources)
-        log.info(f"wrote {p}")
-        ref = Reference(root=p.parent)
-        for v in ("Siemens", "Philips", "GE", "Canon"):
-            cav = ref.provenance("real_class_levels", v, "LV-cav")
-            rv = ref.provenance("real_class_levels", v, "RV")
-            if cav:
-                log.info(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
-    else:
+    args = ap.parse_args()
+    handler = next((h for flag, h in _MODES.items() if getattr(args, flag)), None)
+    if handler is None:
         ap.print_help()
+    else:
+        handler(args)
 
 
 if __name__ == "__main__":

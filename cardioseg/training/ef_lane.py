@@ -61,16 +61,16 @@ class VolConsistency:
         self.ed, self.es = [], []                       # per-subject [Di,1,H,W] GPU stacks (aligned)
         edv_gt, esv_gt, vox = [], [], []
         for p in npz_paths:
-            c = load_arrays(p)
-            if "ed_img" not in c or "es_img" not in c:
+            case = load_arrays(p)
+            if "ed_img" not in case or "es_img" not in case:
                 continue
-            spacing = tuple(float(s) for s in c["spacing"])
-            edv = label_volume_ml(c["ed_gt"], lv_label, spacing)
-            esv = label_volume_ml(c["es_gt"], lv_label, spacing)
+            spacing = tuple(float(s) for s in case["spacing"])
+            edv = label_volume_ml(case["ed_gt"], lv_label, spacing)
+            esv = label_volume_ml(case["es_gt"], lv_label, spacing)
             if edv <= 0:
                 continue
-            self.ed.append(_stack(c["ed_img"], size, device))
-            self.es.append(_stack(c["es_img"], size, device))
+            self.ed.append(_stack(case["ed_img"], size, device))
+            self.es.append(_stack(case["es_img"], size, device))
             edv_gt.append(edv); esv_gt.append(esv); vox.append(voxel_volume_ml(spacing))
         self.n = len(self.ed)
         self.counts = torch.tensor([t.shape[0] for t in self.ed], device=device)

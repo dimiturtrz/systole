@@ -28,6 +28,7 @@ from core.data.static import splits, store
 from core.data.static.labels import FOREGROUND
 from core.export_onnx import export
 from core.hparams import TrainCfg, apply_overrides, to_json
+from core.losses import PartialLabelDiceCE, SoftDiceCE, uncertainty_weighted
 from core.model import build_unet, resolve_device
 from core.obs import progress, setup, timed
 from core.registry import MODEL_NAME, save_model
@@ -36,7 +37,6 @@ from ..evaluation.modelcard import generate
 from ..evaluation.validate import EvalCfg, Evaluator, summarize
 from ..tracking import track_run
 from .ef_lane import build_aux
-from .losses import PartialLabelDiceCE, SoftDiceCE, build_loss, uncertainty_weighted
 
 
 def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
@@ -97,7 +97,7 @@ class SeedTrainer:
             return partial, PartialLabelDiceCE()
         if self.cfg.generator.aug.soft_label_sigma > 0:
             return partial, SoftDiceCE()
-        return partial, build_loss(self.cfg.loss)
+        return partial, self.cfg.loss.build()
 
     def run(self):
         """train loop -> eval (val + held-out test) -> save -> finalize (artifacts+registry unless quick)."""
@@ -126,8 +126,7 @@ class SeedTrainer:
         for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
             t0 = time.perf_counter()
             model.train()
-            if hasattr(loss_fn, "epoch"):
-                loss_fn.epoch = ep                             # drives the HD-warmup ramp (dice_ce_hd)
+            loss_fn.epoch = ep                                 # drives the HD-warmup ramp (dice_ce_hd); no-op for others
             tot = 0.0
             perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
             for bi in progress(range(nb), f"epoch {ep}", total=nb):
@@ -253,18 +252,18 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
             force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
                                      torch.ones(Ys.shape[0], dtype=torch.bool, device=data_device)])
             log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
-                     cfg.generator.synth.bg_mode)
+                     cfg.generator.synth.bg.mode)
         else:                                                        # "replace": synth anatomy ONLY
             Ytr = Ys
             cfg.generator.synth.synth_p = 1.0
-            if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
+            if cfg.generator.synth.bg.mode in ("flat", "procedural", "mrxcat"):
                 Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
-                log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg_mode)
+                log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg.mode)
             else:                                                    # Rodero heart on real bg (excised)
                 Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
                 Xr = excise_heart(Xr, Yr)
                 Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg_mode)
+                log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
     else:
         Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
     Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
@@ -299,7 +298,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
     srcs = list(d.sources)
     if d.split:
-        srcs = list(getattr(load_split(parse_ref(d.split)[0]), "sources", None) or d.sources)
+        srcs = list(load_split(parse_ref(d.split)[0]).sources or d.sources)
     with timed(log, "store.load + split"):
         meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
@@ -386,25 +385,25 @@ if __name__ == "__main__":
                     help="deep cfg overrides, e.g. generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5")
     ap.add_argument("--quick", action="store_true",
                     help="experiment sweep: train + eval only, skip ONNX/INT8/attribution/registry (~2x faster)")
-    a = ap.parse_args()
+    args = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
-        name = a.split.split("@", 1)[0]
+    if args.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
+        name = args.split.split("@", 1)[0]
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
-        cfg.generator.data.split = a.split
+        cfg.generator.data.split = args.split
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
-        if getattr(a, attr) is not None:
-            setattr(cfg, attr, getattr(a, attr))
-    if a.n4:
+        if getattr(args, attr) is not None:
+            setattr(cfg, attr, getattr(args, attr))
+    if args.n4:
         cfg.generator.data.n4 = True
-    if a.ef_learn:
+    if args.ef_learn:
         cfg.ef_learn = True
-    if a.ef_kaggle:
+    if args.ef_kaggle:
         cfg.ef_kaggle = True
-    if a.out:
-        cfg.out_dir = a.out
-    apply_overrides(cfg, a.overrides)
-    seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else None
-    train_seg(cfg, alias=a.alias, quick=a.quick, seeds=seeds)
+    if args.out:
+        cfg.out_dir = args.out
+    apply_overrides(cfg, args.overrides)
+    seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
+    train_seg(cfg, alias=args.alias, quick=args.quick, seeds=seeds)

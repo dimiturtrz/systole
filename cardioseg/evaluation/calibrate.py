@@ -63,8 +63,8 @@ def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
-    a = ap.parse_args()
-    run = resolve(a.run)
+    args = ap.parse_args()
+    run = resolve(args.run)
     model, cfg, device = load_run(run)
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)

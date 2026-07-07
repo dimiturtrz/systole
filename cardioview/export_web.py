@@ -137,55 +137,68 @@ def run(patients, source, model, device, model_name):
 
 
 def run_animate(patients, model, device, model_name, stride=1):
-    """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry."""
+    """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry, per patient."""
     held = heldout_set(model_name)
     for p in patients:
-        pdir = patient_dir(p)  # p may be an ID or a full path
-        name = pdir.name
-        vol, spacing = load_4d(pdir, name)
-        rspacing = (spacing[0], 1.5, 1.5)
-        frames_t = list(range(0, vol.shape[0], stride))
-        masks = {}
-        grays = {}
-        for k, t in enumerate(frames_t):
-            img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, 1.5)[0])
-            masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device, tta=True))
-            grays[k] = square_stack(img)  # [D,SIZE,SIZE] grayscale aligned with the mask
-        # slice view: crop to the heart bbox over the whole cine (+margin) -> a compact loaf, not
-        # giant mostly-empty FOV planes. Same crop every frame so the stack is stable.
-        union = np.zeros((SIZE, SIZE), bool)
-        for k in masks:
-            union |= (masks[k] > 0).any(axis=0)
-        ys, xs = np.where(union)
-        M = 14
-        r0, r1, c0, c1 = ((max(0, int(ys.min()) - M), min(SIZE, int(ys.max()) + M + 1),
-                           max(0, int(xs.min()) - M), min(SIZE, int(xs.max()) + M + 1))
-                          if ys.size else (0, SIZE, 0, SIZE))
-        slice_files = []
-        for k in range(len(frames_t)):
-            sfn = f"{name}_f{k:02d}_slices.png"
-            save_strip(grays[k][:, r0:r1, c0:c1], masks[k][:, r0:r1, c0:c1], OUT / sfn)
-            slice_files.append(sfn)
-        crop_masks, iso = shared_crop(masks, rspacing)
-        files = []
-        for k in range(len(frames_t)):
-            fn = f"{name}_f{k:02d}_pred.gltf"
-            export_glb(crop_masks[k], rspacing, OUT / fn)
-            files.append(fn)
-        edi, esi = frame_indices(pdir)
-        ed_k = nearest_index(frames_t, edi)
-        es_k = nearest_index(frames_t, esi)
-        ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-        case = preprocess_case(pdir, loader=load_ed_es)
-        gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
-        entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
-                     pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
-                     frames=files, ed_idx=ed_k, es_idx=es_k,
-                     glb={"ED": files[ed_k], "ES": files[es_k]},
-                     slices=slice_files, sliceD=int(masks[0].shape[0]))
-        upsert_manifest(entry, model_name)
-        print(f"  {name:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
-              f"EF {entry['pred']['ef']}% (GT {gt.get('ef')}%)")
+        _animate_patient(p, model, device, model_name, held, stride)
+
+
+def _segment_cine(pdir, name, model, device, stride):
+    """Segment every strided cine frame -> (frames_t, masks{k}, grays{k} aligned, rspacing)."""
+    vol, spacing = load_4d(pdir, name)
+    rspacing = (spacing[0], 1.5, 1.5)
+    frames_t = list(range(0, vol.shape[0], stride))
+    masks, grays = {}, {}
+    for k, t in enumerate(frames_t):
+        img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, 1.5)[0])
+        masks[k] = largest_cc_per_class(predict_volume(model, img, SIZE, device, tta=True))
+        grays[k] = square_stack(img)
+    return frames_t, masks, grays, rspacing
+
+
+def _heart_bbox(masks, margin=14):
+    """In-plane (r0,r1,c0,c1) of the heart union over the whole cine (+margin) — one stable crop."""
+    union = np.zeros((SIZE, SIZE), bool)
+    for k in masks:
+        union |= (masks[k] > 0).any(axis=0)
+    ys, xs = np.where(union)
+    if not ys.size:
+        return 0, SIZE, 0, SIZE
+    return (max(0, int(ys.min()) - margin), min(SIZE, int(ys.max()) + margin + 1),
+            max(0, int(xs.min()) - margin), min(SIZE, int(xs.max()) + margin + 1))
+
+
+def _animate_patient(p, model, device, model_name, held, stride):
+    """One patient: segment the cine, write per-frame slice strips + chamber glbs, upsert the entry."""
+    pdir = patient_dir(p)
+    name = pdir.name
+    frames_t, masks, grays, rspacing = _segment_cine(pdir, name, model, device, stride)
+    r0, r1, c0, c1 = _heart_bbox(masks)
+    slice_files = []
+    for k in range(len(frames_t)):
+        sfn = f"{name}_f{k:02d}_slices.png"
+        save_strip(grays[k][:, r0:r1, c0:c1], masks[k][:, r0:r1, c0:c1], OUT / sfn)
+        slice_files.append(sfn)
+    crop_masks, iso = shared_crop(masks, rspacing)
+    files = []
+    for k in range(len(frames_t)):
+        fn = f"{name}_f{k:02d}_pred.gltf"
+        export_glb(crop_masks[k], rspacing, OUT / fn)
+        files.append(fn)
+    edi, esi = frame_indices(pdir)
+    ed_k = nearest_index(frames_t, edi)
+    es_k = nearest_index(frames_t, esi)
+    ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
+    case = preprocess_case(pdir, loader=load_ed_es)
+    gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
+    entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
+                 pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
+                 frames=files, ed_idx=ed_k, es_idx=es_k,
+                 glb={"ED": files[ed_k], "ES": files[es_k]},
+                 slices=slice_files, sliceD=int(masks[0].shape[0]))
+    upsert_manifest(entry, model_name)
+    print(f"  {name:11} {str(case.get('group')):5} BEATING {len(files)} frames  "
+          f"EF {entry['pred']['ef']}% (GT {gt.get('ef')}%)")
 
 
 

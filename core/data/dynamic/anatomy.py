@@ -350,8 +350,8 @@ def _main():
     ap.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
     ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
     ap.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
-    a = ap.parse_args()
-    vol = voxelize(load(a.mesh), inplane=a.inplane)
+    args = ap.parse_args()
+    vol = voxelize(load(args.mesh), inplane=args.inplane)
     counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     log.info(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
     D = vol.shape[0]
@@ -359,7 +359,7 @@ def _main():
     cmap = np.array([[0, 0, 0], [91, 141, 239], [255, 202, 91], [239, 83, 80]], np.uint8)
     tiles = [cmap[vol[k]] for k in ks]
     montage = np.concatenate(tiles, axis=1)
-    out = a.out or (str(Path(a.mesh).with_suffix("")) + "_sax.png")
+    out = args.out or (str(Path(args.mesh).with_suffix("")) + "_sax.png")
     Image.fromarray(montage).save(out)
     log.info(f"wrote {out}  (slices {ks})")
 

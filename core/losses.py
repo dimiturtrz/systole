@@ -1,15 +1,24 @@
-"""Segmentation losses, built from a LossCfg (core.hparams).
+"""Segmentation losses + their config variants (one home, in core so a LossCfg can build its own loss).
 
 Baseline `dice_ce` (MONAI Dice+CE) is the cardiac standard: CE gives stable gradients, Dice handles
 the heavy bg/fg imbalance. Both are *region* losses — blind to a thin boundary over-fill (the ES
 cavity over-segmentation that drives the EF bias). `dice_ce_hd` adds a Hausdorff-DT boundary term,
 ramped in over a warmup (HD losses diverge if applied from epoch 0), to attack that directly.
+
+The loss is chosen by POLYMORPHISM, not a `kind` switch: each `*Cfg` variant owns a `build()` that
+instantiates ITS loss. `cfg.build()` — no factory, no registry, no if-chain. `kind` is only the
+pydantic discriminator that tags the variant in config.json.
 """
+from __future__ import annotations
+
+from typing import Annotated, Literal
+
 import torch
 import torch.nn.functional as F
 from monai.losses import DiceCELoss, DiceLoss, HausdorffDTLoss, TverskyLoss
+from pydantic import BaseModel, Field
 
-from core.hparams import LossCfg
+from core.config import _VALIDATE
 
 
 def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
@@ -184,16 +193,65 @@ def uncertainty_weighted(loss_terms, log_vars):
     return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
 
 
-def build_loss(cfg: LossCfg | None = None):
-    """Loss callable from a LossCfg. Returns an object with __call__(logits, y); dice_ce_hd also has
-    an `.epoch` attribute the train loop updates to drive the HD warmup ramp."""
-    cfg = cfg or LossCfg()
-    if cfg.kind == "dice_ce":
+# ── Loss config = a discriminated union; each variant BUILDS its own loss (polymorphism, no dispatch) ──
+class LossCfg(BaseModel):
+    """Base seg-loss cfg. `build()` is the template: subclasses implement `_build()` (construct their
+    loss); build() sets the uniform `.epoch` the train loop drives. Pick a loss by choosing the variant."""
+    model_config = _VALIDATE
+
+    def build(self):
+        loss = self._build()
+        loss.epoch = 0                                  # uniform interface (HD-warmup losses use it, others ignore)
+        return loss
+
+    def _build(self):
+        raise NotImplementedError
+
+
+class DiceCECfg(LossCfg):
+    """MONAI Dice+CE region baseline."""
+    kind: Literal["dice_ce"] = "dice_ce"
+
+    def _build(self):
         return dice_ce_loss()
-    if cfg.kind == "dice_ce_tversky":
-        return DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda)
-    if cfg.kind == "dice_ce_her":
-        return DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp)
-    if cfg.kind == "dice_ce_hd":
-        return DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp)
-    raise ValueError(f"unknown loss {cfg.kind!r} (dice_ce | dice_ce_tversky | dice_ce_her | dice_ce_hd)")
+
+
+class DiceCETverskyCfg(LossCfg):
+    """Dice+CE + Tversky FP-penalty (beta>alpha discourages over-seg)."""
+    kind: Literal["dice_ce_tversky"] = "dice_ce_tversky"
+    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FN weight
+    tversky_beta: float = Field(0.7, ge=0, le=1)   # FP weight (> alpha = punish over-seg)
+    tversky_lambda: float = Field(1.0, ge=0)
+
+    def _build(self):
+        return DiceCETversky(self.tversky_alpha, self.tversky_beta, self.tversky_lambda)
+
+
+class DiceCEHERCfg(LossCfg):
+    """Dice+CE + pure-GPU erosion-Hausdorff boundary term."""
+    kind: Literal["dice_ce_her"] = "dice_ce_her"
+    her_weight: float = Field(0.5, ge=0)
+    her_alpha: float = Field(2.0, ge=0)            # distance exponent ((k+1)^alpha per erosion level)
+    her_erosions: int = Field(10, ge=1)
+    her_warmup: int = Field(5, ge=0)
+    her_ramp: int = Field(5, ge=1)
+
+    def _build(self):
+        return DiceCEHER(self.her_weight, self.her_alpha, self.her_erosions, self.her_warmup, self.her_ramp)
+
+
+class DiceCEHDCfg(LossCfg):
+    """Dice+CE + Hausdorff-DT (CPU-bound on Windows: needs cucim = Linux-only)."""
+    kind: Literal["dice_ce_hd"] = "dice_ce_hd"
+    hd_weight: float = Field(0.01, ge=0)
+    hd_warmup: int = Field(15, ge=0)
+    hd_ramp: int = Field(5, ge=1)
+
+    def _build(self):
+        return DiceCEHD(hd_weight=self.hd_weight, warmup=self.hd_warmup, ramp=self.hd_ramp)
+
+
+AnyLossCfg = Annotated[DiceCECfg | DiceCETverskyCfg | DiceCEHERCfg | DiceCEHDCfg,
+                       Field(discriminator="kind")]
+LOSS_VARIANTS = {c.model_fields["kind"].default: c
+                 for c in (DiceCECfg, DiceCETverskyCfg, DiceCEHERCfg, DiceCEHDCfg)}

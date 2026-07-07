@@ -23,18 +23,13 @@ from core.data.static import store
 
 
 def eval_set(name: str, *, holdout: bool = False, seed: int = 0) -> pl.DataFrame:
-    """Resolve a named EVAL set to its labelled subject rows, EXPRESSED AS A SPLIT — it routes through
-    make_split's criteria and returns the TEST partition, so eval-set knowledge lives in the one split
-    mechanism (test_vendors/test_datasets) rather than a bespoke filter. 'canon' = the unseen-vendor
-    slice (test_vendors=['Canon'] over M&Ms-1); any other name = that whole dataset held out
-    (test_datasets=[name]). Single home for what was copy-pasted in distribution.py + uncertainty.py.
-
-    `holdout` (in-domain runs): carve the deterministic seed-0 0.2 val slice out of a whole-dataset set.
-    Owned HERE, not the caller — 'canon' is already a fixed vendor slice, so it's returned whole and the
-    carve doesn't apply (the caller must not need to special-case the name)."""
-    if name == "canon":
-        return make_split(store.load(["mnms1"]), test_vendors=("Canon",))[2]
-    df = make_split(store.load([name]), test_datasets=(name,))[2]
+    """Labelled rows for a named eval set. `name` matches (case-insensitive) the dataset OR the vendor
+    column, so 'acdc' (dataset) and 'canon'/'ge' (vendor) resolve through one path — no special-case.
+    `holdout` carves the seed-0 0.2 val slice (in-domain runs)."""
+    key = name.lower()
+    df = store.load(None).filter(
+        pl.col("labelled")
+        & ((pl.col("dataset").str.to_lowercase() == key) | (pl.col("vendor").str.to_lowercase() == key)))
     return patient_val(df, 0.2, seed)[1] if holdout else df
 
 

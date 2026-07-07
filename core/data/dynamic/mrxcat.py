@@ -242,8 +242,8 @@ def _main():
     setup()
     ap = argparse.ArgumentParser(description="MRXCAT .vti → canonical label sanity probe (bd hpy).")
     ap.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
-    a = ap.parse_args()
-    vol = load_vti_labels(a.vti)
+    args = ap.parse_args()
+    vol = load_vti_labels(args.vti)
     raw = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     canon = to_canonical(vol)
     cc = {int(c): int((canon == c).sum()) for c in np.unique(canon)}

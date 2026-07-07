@@ -99,9 +99,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
     ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
     ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
-    a = ap.parse_args()
+    args = ap.parse_args()
     fresh = compute_locks(store.load(EVAL_SOURCES))
-    if a.freeze:
+    if args.freeze:
         _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
         log.info(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
     else:                                                        # --check (default)

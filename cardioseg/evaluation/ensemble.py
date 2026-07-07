@@ -55,13 +55,13 @@ def ensemble_score(models, df, size, device):
     inter = {c: 0.0 for c in FOREGROUND}; den = {c: 0.0 for c in FOREGROUND}
     diffs = []
     for r in df.iter_rows(named=True):
-        c = store.load_arrays(r["path"]); sp = tuple(float(s) for s in c["spacing"])
+        case = store.load_arrays(r["path"]); sp = tuple(float(s) for s in case["spacing"])
         preds, gts = {}, {}
         for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
+            if f"{tag}_img" not in case:
                 continue
-            pred = largest_cc_per_class(ensemble_decompose(models, c[f"{tag}_img"], size, device)[0])
-            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.uint8)
+            pred = largest_cc_per_class(ensemble_decompose(models, case[f"{tag}_img"], size, device)[0])
+            gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
             preds[tag], gts[tag] = pred, gt
             for cl in FOREGROUND:
                 p, g = pred == cl, gt == cl
@@ -90,15 +90,15 @@ def _headroom(models, df, size, device):
     """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
     ea, ee, ta, te = [], [], [], []
     for r in df.iter_rows(named=True):
-        c = store.load_arrays(r["path"])
+        case = store.load_arrays(r["path"])
         for tag in ("ed", "es"):
-            if f"{tag}_img" not in c:
+            if f"{tag}_img" not in case:
                 continue
-            pred, _, ale, epi = ensemble_decompose(models, c[f"{tag}_img"], size, device)
-            gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.uint8)
+            pred, _, ale, epi = ensemble_decompose(models, case[f"{tag}_img"], size, device)
+            gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
             fg = (pred > 0) | (gt > 0)
             ea.append(ale[fg]); ee.append(epi[fg])
-            _, _, _, sa, se_ = tta_uncertainty(models[0], c[f"{tag}_img"], size, device)
+            _, _, _, sa, se_ = tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
             ta.append(sa[fg]); te.append(se_[fg])
     f = lambda al, ep: (float(np.concatenate(ep).mean()) /
                         max(float(np.concatenate(al).mean()) + float(np.concatenate(ep).mean()), 1e-9))
@@ -110,14 +110,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
-    a = ap.parse_args()
+    args = ap.parse_args()
     device = resolve_device()
-    loaded = [load_run(resolve(r), device) for r in a.runs]
+    loaded = [load_run(resolve(r), device) for r in args.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
     trk = start("cardioseg", f"ensemble-{len(models)}seed",
-                {"members": len(models), "runs": ",".join(Path(r).name for r in a.runs)})
-    for ax in a.eval:
+                {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+    for ax in args.eval:
         df = _eval_df(cfg, ax)
         if not len(df):
             continue

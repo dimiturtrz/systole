@@ -95,23 +95,23 @@ def _main():
     ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")
     ap.add_argument("--field", type=float, default=1.5)
     ap.add_argument("--out", default=None, help="montage PNG (real | recon)")
-    a = ap.parse_args()
-    d = np.load(a.npz)
+    args = ap.parse_args()
+    d = np.load(args.npz)
     img, gt = d["ed_img"], d["ed_gt"]
-    k = a.slice if a.slice is not None else int(np.argmax([(gt[i] > 0).sum() for i in range(gt.shape[0])]))
+    k = args.slice if args.slice is not None else int(np.argmax([(gt[i] > 0).sum() for i in range(gt.shape[0])]))
     ti = torch.as_tensor(img[k], dtype=torch.float32)[None, None]
     ti = (ti - ti.mean()) / ti.std().clamp_min(1e-6)               # z-score like the training input
     tg = torch.as_tensor(gt[k], dtype=torch.long)[None]
     n = int(gt.max()) + 1
-    flip_only = fit_acquisition(ti, tg, n, field=a.field, fit_params=("flip",))
-    both_a = fit_acquisition(ti, tg, n, field=a.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
-    both_b = fit_acquisition(ti, tg, n, field=a.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
+    flip_only = fit_acquisition(ti, tg, n, field=args.field, fit_params=("flip",))
+    both_a = fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
+    both_b = fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
     log.info(f"slice {k}  n_classes {n}")
     log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
     log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
     log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
     log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
-    if a.out or True:
+    if args.out or True:
         heart = (tg[0] > 0).numpy()
         def show(t):
             v = t[0, 0].numpy().copy()
@@ -120,7 +120,7 @@ def _main():
             v = np.clip((v + 2) / 4, 0, 1); v[~heart] = 0
             return (v * 255).astype(np.uint8)
         montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
-        out = a.out or (str(Path(a.npz).with_suffix("")) + "_fit.png")
+        out = args.out or (str(Path(args.npz).with_suffix("")) + "_fit.png")
         Image.fromarray(montage).save(out)
         log.info(f"  wrote {out}  (real | recon, heart region)")
 

@@ -53,8 +53,8 @@ def collect(run: Path, device: str, meta_rows):
 
     rows = []
     for r in meta_rows:
-        c = store.load_arrays(r["path"])
-        sp = tuple(float(s) for s in c["spacing"])
+        case = store.load_arrays(r["path"])
+        sp = tuple(float(s) for s in case["spacing"])
         ft = r.get("field_T")
         rec = {"patient": Path(r["path"]).stem,
                "pathology": r.get("pathology"), "vendor": r.get("vendor"),
@@ -66,10 +66,10 @@ def collect(run: Path, device: str, meta_rows):
         di_acc = {cl: [] for cl in CLASSES}
         for tag in ("ED", "ES"):
             k = tag.lower()
-            if f"{k}_img" not in c:
+            if f"{k}_img" not in case:
                 continue
-            pred = largest_cc_per_class(predict_volume(model, c[f"{k}_img"], SIZE, device, tta=True))
-            gt = stack_slices(c[f"{k}_gt"], SIZE, dtype=np.uint8)
+            pred = largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
+            gt = stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
             masks[tag] = (pred, gt)
             # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
             # made the boundary/Dice numbers optimistic.

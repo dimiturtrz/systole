@@ -23,36 +23,31 @@ from pydantic import BaseModel, Field, model_validator
 from core.config import _VALIDATE
 from core.data.dynamic.augment import AugCfg
 from core.data.dynamic.generator import GeneratorCfg
-from core.data.dynamic.synth import SynthCfg
+from core.data.dynamic.synth import ACQ_VARIANTS, BG_VARIANTS, SynthCfg
 from core.data.static.store import DataCfg
+from core.losses import (
+    LOSS_VARIANTS,
+    AnyLossCfg,
+    DiceCECfg,
+    DiceCEHDCfg,
+    DiceCEHERCfg,
+    DiceCETverskyCfg,
+    LossCfg,
+)
 from core.model import ModelCfg
 from core.preprocessing.n4 import N4Cfg
 
-# Config classes now live with the class they configure (ModelCfg→core.model, AugCfg→augment,
-# SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator). Re-exported here
-# so `from core.hparams import ModelCfg` etc. still resolves. LossCfg + TrainCfg stay the composition
-# root: LossCfg's builder is in cardioseg (core can't import it), TrainCfg is the whole-run root.
+# Config classes live with the class they configure (ModelCfg→core.model, AugCfg→augment,
+# SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator, LossCfg+variants→
+# core.losses so each cfg builds its own loss). Re-exported here so `from core.hparams import X` still
+# resolves. TrainCfg (whole-run composition root) stays here.
 __all__ = ["ModelCfg", "AugCfg", "SynthCfg", "N4Cfg", "DataCfg", "GeneratorCfg", "LossCfg",
+           "AnyLossCfg", "DiceCECfg", "DiceCETverskyCfg", "DiceCEHERCfg", "DiceCEHDCfg", "LOSS_VARIANTS",
            "TrainCfg", "apply_overrides", "to_json", "from_json"]
 
 
-class LossCfg(BaseModel):
-    """Segmentation loss. dice_ce = MONAI Dice+CE (region baseline). dice_ce_tversky adds an FP-penalty
-    (beta>alpha discourages over-seg). dice_ce_her adds a pure-GPU erosion-Hausdorff boundary term.
-    dice_ce_hd = Hausdorff-DT (CPU-bound on Windows: needs cucim = Linux-only)."""
-    model_config = _VALIDATE
-    kind: Literal["dice_ce", "dice_ce_tversky", "dice_ce_her", "dice_ce_hd"] = "dice_ce"
-    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FN weight
-    tversky_beta: float = Field(0.7, ge=0, le=1)   # FP weight (> alpha = punish over-seg)
-    tversky_lambda: float = Field(1.0, ge=0)
-    her_weight: float = Field(0.5, ge=0)
-    her_alpha: float = Field(2.0, ge=0)            # distance exponent ((k+1)^alpha per erosion level)
-    her_erosions: int = Field(10, ge=1)
-    her_warmup: int = Field(5, ge=0)
-    her_ramp: int = Field(5, ge=1)
-    hd_weight: float = Field(0.01, ge=0)
-    hd_warmup: int = Field(15, ge=0)
-    hd_ramp: int = Field(5, ge=1)
+# LossCfg (discriminated union) + variants live in core.losses, co-located with the loss classes so
+# each cfg can BUILD its own loss (cfg.build()). Imported above; re-exported for back-compat.
 
 
 class TrainCfg(BaseModel):
@@ -73,7 +68,7 @@ class TrainCfg(BaseModel):
 
     generator: GeneratorCfg = Field(default_factory=GeneratorCfg)
     model: ModelCfg = Field(default_factory=ModelCfg)
-    loss: LossCfg = Field(default_factory=LossCfg)
+    loss: AnyLossCfg = Field(default_factory=DiceCECfg)
     epochs: int = Field(128, ge=1)                 # ceiling; early stopping ends sooner
     batch: int = Field(64, ge=1)
     lr: float = Field(1e-3, gt=0)
@@ -123,12 +118,24 @@ def _coerce(val: str, cur):
     return val
 
 
+# discriminator field name -> {tag: variant cls}, for --set switching of a union field's variant.
+_UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": {**ACQ_VARIANTS, **BG_VARIANTS}}
+
+
 def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
     """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'data.test_vendors=(\"GE\",)').
     Each setattr is validated (validate_assignment) -> an out-of-bounds/typo value raises immediately."""
     for it in items or []:
         key, _, val = it.partition("=")
         *parents, leaf = key.strip().split(".")
+        # a discriminated-union field is chosen by its tag ('kind'/'mode'); a setattr can't cross variant
+        # types, so overriding the tag REBUILDS the whole variant on its container.
+        if leaf in _UNION_VARIANTS and parents:
+            container = cfg
+            for p in parents[:-1]:
+                container = getattr(container, p)
+            setattr(container, parents[-1], _UNION_VARIANTS[leaf][val.strip()]())
+            continue
         obj = cfg
         for p in parents:
             obj = getattr(obj, p)

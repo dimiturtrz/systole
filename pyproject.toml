@@ -65,9 +65,11 @@ select = [
     "PLR0915",  # too-many-statements — split it
     "PLR2004",  # magic-value-comparison — name the constant
     "PLC0415",  # import-outside-top-level — imports go to the top (optional deps: top-level try/except)
+    "RUF100",   # unused-noqa — a noqa that suppresses nothing (stale after a fix) gets removed
 ]
 # OFF by decision: D* (docstrings not mandated), ANN* (annotations = the deferred type axis), N*
-# (ML convention: capital X/Y/N tensors), RUF00x (our → × λ math unicode is intentional), E701/E702
+# (ML convention: capital X/Y/N tensors), RUF001-003 (our → × λ math unicode is intentional; RUF100 ON),
+# E701/E702
 # (compaction kept), TRY/EM/SIM/UP (opinionated churn), NPY002 (legacy np.random KEPT — modernizing to
 # Generator changes the RNG stream, breaking seed-comparability with existing runs).
 

@@ -52,18 +52,18 @@ def evaluate(run: Path):
     model, _, _ = load_run(run, dev)
     rows, conf_all, corr_all = [], [], []
     for r in _val(run).iter_rows(named=True):
-        c = store.load_arrays(r["path"])
-        if "ed_img" not in c or "es_img" not in c:
+        case = store.load_arrays(r["path"])
+        if "ed_img" not in case or "es_img" not in case:
             continue
-        sp = tuple(float(s) for s in c["spacing"])
+        sp = tuple(float(s) for s in case["spacing"])
         vols = {}
         for tag in ("ed", "es"):
-            _, mean = predict_volume_probs(model, c[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
+            _, mean = predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
             p = mean.float().cpu().numpy()
             blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
             hard = largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
             gate = hard == LV_CAV
-            gt = stack_slices(c[f"{tag}_gt"], SIZE, dtype=np.uint8)
+            gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
             vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),
                          "soft": expected_volume_ml(blood * gate, sp),
                          "gt": label_volume_ml(gt, LV_CAV, sp)}
@@ -82,10 +82,10 @@ def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
-    a = ap.parse_args()
-    arr, e = evaluate(resolve(a.run))
+    args = ap.parse_args()
+    arr, e = evaluate(resolve(args.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
-    log.info(f"\n=== {a.run}  (n={len(arr)}) ===")
+    log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
     log.info(f"ECE: {e:.4f}")
     for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
         s = ef_statistics(gt, pred)

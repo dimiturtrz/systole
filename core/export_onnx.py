@@ -90,9 +90,9 @@ def main() -> None:
     ap.add_argument("--opset", type=int, default=OPSET, help=f"ONNX opset (default {OPSET})")
     ap.add_argument("--parity-min", type=float, default=PARITY_MIN,
                     help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
-    a = ap.parse_args()
-    verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
-    export(resolve(a.run), verify, a.quantize, opset=a.opset, parity_min=a.parity_min)
+    args = ap.parse_args()
+    verify = args.verify if args.verify else store.load(["acdc"]).get_column("path")[0]
+    export(resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)
 
 
 if __name__ == "__main__":

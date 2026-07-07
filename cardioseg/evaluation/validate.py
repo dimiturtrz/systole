@@ -100,23 +100,22 @@ class Evaluator:
         scores = _ClassScores()                                  # holds the Dice/boundary accumulators
         ef_rows = []
         for npz_path in npz_paths:
-            c = load_arrays(npz_path)
-            c = {k: (c[k].item() if k == "group" and hasattr(c[k], "item") else c[k]) for k in c}
-            spacing = tuple(float(s) for s in c["spacing"])      # per-patient (z,y,x)
+            case = load_arrays(npz_path)
+            spacing = tuple(float(s) for s in case["spacing"])   # per-patient (z,y,x)
             vols = {}
             for tag in ("ED", "ES"):
-                if f"{tag.lower()}_img" not in c:
+                if f"{tag.lower()}_img" not in case:
                     continue
-                pred = predict_volume(model, c[f"{tag.lower()}_img"], size, device, tta=tta)
+                pred = predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
                     pred = largest_cc_per_class(pred)
-                gt = stack_slices(c[f"{tag.lower()}_gt"], size)
+                gt = stack_slices(case[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
                 ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
                 ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
-                ef_rows.append(dict(patient=Path(npz_path).stem, group=c.get("group"),
+                ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
         return scores.dice(), ef_rows, scores.surface()
 
@@ -130,12 +129,12 @@ class Evaluator:
         L, Y = [], []
         self.model.eval()
         for p in npz_paths:
-            c = load_arrays(p)
+            case = load_arrays(p)
             for tag in ("ed", "es"):
-                if f"{tag}_img" not in c:
+                if f"{tag}_img" not in case:
                     continue
-                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in c[f"{tag}_img"]])
-                gt = stack_slices(c[f"{tag}_gt"], size, dtype=np.int64)
+                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
+                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]

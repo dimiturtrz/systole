@@ -124,8 +124,8 @@ def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
-    a = ap.parse_args()
-    log.info(f"wrote {generate(resolve(a.run))}")
+    args = ap.parse_args()
+    log.info(f"wrote {generate(resolve(args.run))}")
 
 
 if __name__ == "__main__":

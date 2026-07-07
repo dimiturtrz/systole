@@ -79,9 +79,9 @@ if __name__ == "__main__":
                     help=f"TestSet names (default: the granular battery). known: {sorted(TESTSETS)}")
     ap.add_argument("--no-tta", action="store_true")
     ap.add_argument("--out", default=None, help="write rows to this json")
-    a = ap.parse_args()
-    rows = score_matrix(a.models, a.testsets, tta=not a.no_tta)
+    args = ap.parse_args()
+    rows = score_matrix(args.models, args.testsets, tta=not args.no_tta)
     _print(rows)
-    if a.out:
-        Path(a.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-        log.info(f"\nwrote {a.out}")
+    if args.out:
+        Path(args.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+        log.info(f"\nwrote {args.out}")

@@ -15,6 +15,7 @@ import polars as pl
 
 from core.config import data_root
 from core.data.dynamic.source import DynamicSource
+from core.data.dynamic.synth import ProceduralBgCfg
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import SYNTH_MAIN_TEST
@@ -29,7 +30,6 @@ V = pl.col
 #   BG:   'procedural' = whole-FOV synthetic organ field. The zero-real-input painter: it clears the
 #         flat-background 0.07 Dice wall (bd bwp) when there is NO real image to seed the background.
 POOL = "pool_1000_bal"
-ZERO_REAL_BG = "procedural"
 
 
 def _pool(name: str) -> str:
@@ -40,10 +40,11 @@ def _pool(name: str) -> str:
 
 class SynthMain:
     name = "synth_main"
+    sources = ()                        # synth train adds no real store sources
     versions = {
         "1.0.0": SplitDef(
-            train=lambda c: DynamicSource(pool=_pool(POOL), bg_mode=ZERO_REAL_BG,
-                                          note=f"Rodero {POOL}, zero-real {ZERO_REAL_BG} bg"),
+            train=lambda c: DynamicSource(pool=_pool(POOL), bg=ProceduralBgCfg(),
+                                          note=f"Rodero {POOL}, zero-real procedural bg"),
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
                                        "ACDC real val (held from test; synth val = 6rd7)"),
             test=lambda c: SYNTH_MAIN_TEST.source(c),            # all seg real minus ACDC val (642, locked)

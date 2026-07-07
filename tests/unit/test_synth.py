@@ -4,10 +4,18 @@ z-scored image painted by tissue physics; deform invents anatomy; partition give
 target = real labels."""
 import math
 
+import pytest
 import torch
 
 from core.data.dynamic.mri_physics import TISSUE, bssfp_signal, tissue_params
-from core.data.dynamic.synth import SynthCfg, synthesize_from_labels
+from core.data.dynamic.synth import (
+    FlatBgCfg,
+    HybridBgCfg,
+    PartitionBgCfg,
+    ProceduralBgCfg,
+    SynthCfg,
+    synthesize_from_labels,
+)
 
 N = 4  # canonical classes: 0 bg, 1 RV, 2 LV-myo, 3 LV-cav
 
@@ -23,7 +31,7 @@ def _mask(b=2, h=8, w=8):
 def _fixed(**kw):
     """A deterministic-contrast SynthCfg: single field, fixed TR/flip, no jitter/texture/corruption —
     so the paint is purely the bSSFP signal (for ordering assertions)."""
-    base = dict(synth_p=1.0, deform=0.0, bg_mode="flat", fields=(1.5,), tr_ms=(3.0, 3.0),
+    base = dict(synth_p=1.0, deform=0.0, bg=FlatBgCfg(), fields=(1.5,), tr_ms=(3.0, 3.0),
                 flip_deg=(45.0, 45.0), jitter=0.0, texture=0.0, bias_strength=0.0, blur=(0.0, 0.0),
                 noise=0.0, kspace=0.0)
     base.update(kw)
@@ -54,7 +62,7 @@ def test_tissue_params_field_shifts_and_bg_distinct():
 
 # --- generation ---
 def test_shape_and_zscore():
-    img, msk = synthesize_from_labels(_mask(), SynthCfg(synth_p=1.0, bg_mode="flat"), N)
+    img, msk = synthesize_from_labels(_mask(), SynthCfg(synth_p=1.0, bg=FlatBgCfg()), N)
     assert img.shape == (2, 1, 8, 8) and msk.shape == (2, 8, 8)
     assert torch.allclose(img.mean((1, 2, 3)), torch.zeros(2), atol=1e-4)
     assert torch.allclose(img.std((1, 2, 3)), torch.ones(2), atol=1e-1)
@@ -71,10 +79,10 @@ def test_paint_orders_by_physics():
 def test_deform_invents_anatomy():
     m = _mask()
     torch.manual_seed(1)
-    _, warped = synthesize_from_labels(m, SynthCfg(synth_p=1.0, deform=0.3, bg_mode="flat"), N)
+    _, warped = synthesize_from_labels(m, SynthCfg(synth_p=1.0, deform=0.3, bg=FlatBgCfg()), N)
     assert not torch.equal(warped, m)
     assert set(warped.unique().tolist()).issubset(set(range(N)))
-    _, same = synthesize_from_labels(m, SynthCfg(synth_p=1.0, deform=0.0, bg_mode="flat"), N)
+    _, same = synthesize_from_labels(m, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), N)
     assert torch.equal(same, m)
 
 
@@ -83,7 +91,7 @@ def test_partition_bg_structures_image_keeps_target():
     structure (>1 level), but the TARGET keeps only real labels (bg=0)."""
     Y = _mask()
     real = torch.randn(2, 1, 8, 8)
-    cfg = _fixed(bg_mode="partition", bg_tiers=4)
+    cfg = _fixed(bg=PartitionBgCfg(bg_tiers=4))
     torch.manual_seed(0)
     img, msk = synthesize_from_labels(Y, cfg, N, real_img=real)
     assert set(msk.unique().tolist()).issubset(set(range(N)))
@@ -104,7 +112,7 @@ def test_kspace_lowpass_changes_and_keeps_shape():
 
 
 def test_seed_deterministic():
-    cfg, m = SynthCfg(synth_p=1.0, bg_mode="flat"), _mask()
+    cfg, m = SynthCfg(synth_p=1.0, bg=FlatBgCfg()), _mask()
     torch.manual_seed(7); a, ma = synthesize_from_labels(m, cfg, N)
     torch.manual_seed(7); b, mb = synthesize_from_labels(m, cfg, N)
     assert torch.equal(a, b) and torch.equal(ma, mb)
@@ -144,19 +152,19 @@ def test_acquisition_derived_and_reference_override(tmp_path):
 
 
 def test_background_strategy_dispatch_and_zero_real():
-    """make_background maps each bg_mode to its strategy (one rep per equivalence class); flat/procedural
+    """Each bg variant builds its strategy (cfg.bg.build(); one rep per equivalence class); flat/procedural
     are ZERO-REAL (no real_img needed) and paint the whole FOV; partition/hybrid need a real image."""
-    from core.data.dynamic.synth import FlatBg, HybridBg, PartitionBg, ProceduralBg, make_background
-    assert isinstance(make_background(SynthCfg(bg_mode="flat")), FlatBg)
-    assert isinstance(make_background(SynthCfg(bg_mode="procedural")), ProceduralBg)
-    assert isinstance(make_background(SynthCfg(bg_mode="partition")), PartitionBg)
-    assert isinstance(make_background(SynthCfg(bg_mode="hybrid")), HybridBg)
-    try:
-        make_background(SynthCfg(bg_mode="nope")); raise AssertionError
-    except ValueError:
-        pass
-    for m in ("flat", "procedural"):                             # zero-real: real_img=None must work
-        img, _ = synthesize_from_labels(_mask(3), SynthCfg(bg_mode=m), N)
+    from pydantic import ValidationError
+
+    from core.data.dynamic.synth import FlatBg, HybridBg, PartitionBg, ProceduralBg
+    assert isinstance(FlatBgCfg().build(), FlatBg)
+    assert isinstance(ProceduralBgCfg().build(), ProceduralBg)
+    assert isinstance(PartitionBgCfg().build(), PartitionBg)
+    assert isinstance(HybridBgCfg().build(), HybridBg)
+    with pytest.raises(ValidationError):
+        SynthCfg(bg={"mode": "nope"})                            # no such union variant
+    for C in (FlatBgCfg, ProceduralBgCfg):                        # zero-real: real_img=None must work
+        img, _ = synthesize_from_labels(_mask(3), SynthCfg(bg=C()), N)
         assert img.shape == (3, 1, 8, 8) and torch.isfinite(img).all()
 
 
@@ -173,27 +181,34 @@ def test_excise_heart_removes_the_heart():
 
 
 def test_acquisition_matched_is_fixed_randomized_is_not():
-    """make_acquisition: matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
-    vary per sample. One rep per acq_mode equivalence class."""
-    from core.data.dynamic.synth import LegacyAcq, MatchedAcq, RandomizedAcq, make_acquisition
-    cfg = SynthCfg(acq_mode="matched", match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0,
-                   match_vendor="GE", fields=(1.5, 3.0), vendors=("Siemens", "GE"))
-    assert isinstance(make_acquisition(cfg), MatchedAcq)
-    fi, tr, fl, vi = make_acquisition(cfg).sample(8, cfg, "cpu")
+    """cfg.acq.build(): matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
+    vary per sample. One rep per acq variant."""
+    from core.data.dynamic.synth import (
+        LegacyAcq,
+        LegacyAcqCfg,
+        MatchedAcq,
+        MatchedAcqCfg,
+        RandomizedAcq,
+        RandomizedAcqCfg,
+    )
+    cfg = SynthCfg(acq=MatchedAcqCfg(match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0, match_vendor="GE"),
+                   fields=(1.5, 3.0), vendors=("Siemens", "GE"))
+    assert isinstance(cfg.acq.build(), MatchedAcq)
+    fi, tr, fl, vi = cfg.acq.build().sample(8, cfg, "cpu")
     assert (fi == 1).all() and (vi == 1).all()                     # field=3.0 idx1, vendor=GE idx1
     assert tr.unique().numel() == 1 and fl.unique().numel() == 1   # fixed, no spread
     assert abs(float(tr[0]) - 3.2) < 1e-4 and abs(float(fl[0]) - 45.0) < 1e-4
-    rc = SynthCfg(acq_mode="randomized")
-    assert isinstance(make_acquisition(rc), RandomizedAcq)
-    _, rtr, rfl, _ = make_acquisition(rc).sample(64, rc, "cpu")
+    rc = SynthCfg(acq=RandomizedAcqCfg())
+    assert isinstance(rc.acq.build(), RandomizedAcq)
+    _, rtr, rfl, _ = rc.acq.build().sample(64, rc, "cpu")
     assert rtr.unique().numel() > 1 and rfl.unique().numel() > 1    # randomized varies
-    assert isinstance(make_acquisition(SynthCfg(acq_mode="legacy")), LegacyAcq)
+    assert isinstance(SynthCfg(acq=LegacyAcqCfg()).acq.build(), LegacyAcq)
 
 
 def test_return_meta_emits_provenance():
     """return_meta=True -> synth carries per-sample provenance (vendor/field/tr/flip) so it flows the
     same harmonization path as real. Default stays a 2-tuple (callers unchanged)."""
-    cfg = SynthCfg(synth_p=1.0, bg_mode="flat", vendors=("Siemens", "GE"))
+    cfg = SynthCfg(synth_p=1.0, bg=FlatBgCfg(), vendors=("Siemens", "GE"))
     out2 = synthesize_from_labels(_mask(3), cfg, N)
     assert len(out2) == 2                                        # default unchanged
     img, msk, meta = synthesize_from_labels(_mask(3), cfg, N, return_meta=True)

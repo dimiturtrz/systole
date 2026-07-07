@@ -22,10 +22,11 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from typing import Annotated, Literal
 
 import torch
 import torch.nn.functional as F
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
 
@@ -42,6 +43,106 @@ from .mri_physics import (
 from .mrxcat import FOV_TISSUE
 
 
+# Acquisition strategy as a discriminated union: each variant BUILDS its Acquisition (cfg.acq.build()).
+# build() bodies resolve the strategy classes (defined lower) at call-time.
+class AcquisitionCfg(BaseModel):
+    """Per-sample scanner-settings strategy cfg. Subclass build() returns the Acquisition."""
+    model_config = _VALIDATE
+
+    def build(self) -> "Acquisition":
+        raise NotImplementedError
+
+
+class LegacyAcqCfg(AcquisitionCfg):
+    """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg)."""
+    mode: Literal["legacy"] = "legacy"
+
+    def build(self):
+        return LegacyAcq()
+
+
+class RandomizedAcqCfg(AcquisitionCfg):
+    """Physics-bounded domain randomization (derive_flip_range over the SAR-bounded band)."""
+    mode: Literal["randomized"] = "randomized"
+
+    def build(self):
+        return RandomizedAcq()
+
+
+class MatchedAcqCfg(AcquisitionCfg):
+    """Paint TO one target scanner — no randomization (bd 7pto)."""
+    mode: Literal["matched"] = "matched"
+    match_field: float = 1.5                        # target field (T; nearest in `fields`)
+    match_tr_ms: float = 3.0                        # target repetition time (ms)
+    match_flip_deg: float = 50.0                    # target flip angle (deg)
+    match_vendor: str = ""                          # target vendor tag ("" -> first of vendors)
+
+    def build(self):
+        return MatchedAcq(self.match_field, self.match_tr_ms, self.match_flip_deg, self.match_vendor)
+
+
+AnyAcqCfg = Annotated[LegacyAcqCfg | RandomizedAcqCfg | MatchedAcqCfg, Field(discriminator="mode")]
+ACQ_VARIANTS = {c.model_fields["mode"].default: c for c in (LegacyAcqCfg, RandomizedAcqCfg, MatchedAcqCfg)}
+
+
+# Background strategy union: each variant BUILDS its Background (cfg.bg.build()), holding its own params.
+class BackgroundCfg(BaseModel):
+    """FOV-extension / bg-painting strategy cfg. Subclass build() returns the Background."""
+    model_config = _VALIDATE
+
+    def build(self) -> "Background":
+        raise NotImplementedError
+
+
+class FlatBgCfg(BackgroundCfg):
+    """Single background tissue tier."""
+    mode: Literal["flat"] = "flat"
+
+    def build(self):
+        return FlatBg()
+
+
+class ProceduralBgCfg(BackgroundCfg):
+    """Random-field organ blobs bucketized into bg tissue tiers (zero-real whole-FOV)."""
+    mode: Literal["procedural"] = "procedural"
+    bg_tiers: int = Field(6, ge=2)                  # distinct bg tissue tiers (params interpolated)
+    bg_blobs: int = Field(6, ge=2)                  # coarse random-field grid (smaller = bigger organ blobs)
+
+    def build(self):
+        return ProceduralBg(self.bg_tiers, self.bg_blobs)
+
+
+class PartitionBgCfg(BackgroundCfg):
+    """Real per-slice intensity partitioned into bg tiers (real SHAPES, painted by tissue)."""
+    mode: Literal["partition"] = "partition"
+    bg_tiers: int = Field(6, ge=2)
+
+    def build(self):
+        return PartitionBg(self.bg_tiers)
+
+
+class HybridBgCfg(BackgroundCfg):
+    """Paint heart on flat bg; composite the real (heart-excised) background back in."""
+    mode: Literal["hybrid"] = "hybrid"
+
+    def build(self):
+        return HybridBg()
+
+
+class MrxcatBgCfg(BackgroundCfg):
+    """Whole-FOV MRXCAT tissue map (mask IS the 8-class FOV; paint all tissues)."""
+    mode: Literal["mrxcat"] = "mrxcat"
+
+    def build(self):
+        return FovBg()
+
+
+AnyBgCfg = Annotated[FlatBgCfg | ProceduralBgCfg | PartitionBgCfg | HybridBgCfg | MrxcatBgCfg,
+                     Field(discriminator="mode")]
+BG_VARIANTS = {c.model_fields["mode"].default: c
+               for c in (FlatBgCfg, ProceduralBgCfg, PartitionBgCfg, HybridBgCfg, MrxcatBgCfg)}
+
+
 class SynthCfg(BaseModel):
     """Physics-based synthetic-image generation from labels (SynthSeg-style, bd cardiac-seg-bgc/276).
     Discard real intensities; paint every class by the bSSFP SIGNAL EQUATION from its tissue T1/T2/PD
@@ -51,6 +152,29 @@ class SynthCfg(BaseModel):
     more); background gets real SHAPES via intensity partition, painted by tissue too. synth_p=0 -> off
     (pure real-image training). Refs: SynthSeg (Billot 2023); bSSFP Freeman–Hill."""
     model_config = _VALIDATE
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_legacy(cls, v):
+        """Back-compat: old config.json had flat acq_mode/match_* and bg_mode/bg_tiers/bg_blobs; fold them
+        into the `acq` / `bg` discriminated unions so pre-refactor configs (registered models) still load."""
+        if not isinstance(v, dict):
+            return v
+        if "acq" not in v and "acq_mode" in v:
+            v = dict(v)
+            acq: dict = {"mode": v.pop("acq_mode")}
+            for k in ("match_field", "match_tr_ms", "match_flip_deg", "match_vendor"):
+                if k in v:
+                    acq[k] = v.pop(k)
+            v["acq"] = acq
+        if "bg" not in v and "bg_mode" in v:
+            v = dict(v)
+            bg: dict = {"mode": v.pop("bg_mode")}
+            for k in ("bg_tiers", "bg_blobs"):
+                if k in v:
+                    bg[k] = v.pop(k)
+            v["bg"] = bg
+        return v
     synth_p: float = Field(0.5, ge=0, le=1)         # fraction of in-batch samples replaced by synth.
     #                                                DEFAULT 0.5 = the MINIMUM synthetic share in training
     #                                                (owner mandate): synth stays in the pipeline. Costs
@@ -89,29 +213,8 @@ class SynthCfg(BaseModel):
     #                                                (PMC9843884). The physical input to inflow, sampled per
     #                                                slice (position-varying) — the source of f's spread.
     slice_mm: tuple[float, float] = (6.0, 8.0)     # cine slice thickness (mm), SCMR standardized 6-8mm
-    # acq_mode selects an Acquisition STRATEGY (see make_acquisition):
-    #   "legacy"     = sample TR/flip from the cfg.tr_ms/flip_deg global ranges (old default).
-    #   "randomized" = TR/flip DERIVED from physics (derive_acquisition + derive_flip_range, sampled
-    #                  across the SAR-bounded band). Defensible/derived path (bd 276); ~matches but
-    #                  doesn't beat the empirical ranges on cross-vendor Dice (0.673 vs 0.701).
-    #   "matched"    = paint TO a single TARGET scanner (match_* below) instead of randomizing — for
-    #                  known-deployment-machine training + the match-vs-randomize test (bd 7pto).
-    acq_mode: str = "legacy"
-    match_field: float = 1.5                        # matched-acq target: field (T; nearest in `fields`)
-    match_tr_ms: float = 3.0                        # matched-acq target: repetition time (ms)
-    match_flip_deg: float = 50.0                    # matched-acq target: flip angle (deg)
-    match_vendor: str = ""                          # matched-acq target vendor tag ("" -> first of vendors)
-    # --- background (bg_mode selects a Background STRATEGY; see make_background) ---
-    bg_mode: str = "partition"                      # one of: "flat" (single bg tissue) | "procedural"
-    #                                                (SYNTHETIC random-field organ blobs, ZERO-REAL) |
-    #                                                "partition" (split a REAL image's intensity into bg
-    #                                                tiers = real SHAPES) | "hybrid" (paste synth heart
-    #                                                into a REAL image). partition/hybrid need real_img
-    #                                                with its heart EXCISED (excise_heart) or a DIFFERENT
-    #                                                heart survives unlabeled (bd mirs).
-    bg_tiers: int = Field(6, ge=2)                  # distinct background tissue tiers (params interpolated)
-    bg_blobs: int = Field(6, ge=2)                   # procedural bg: coarse random-field grid (smaller=bigger
-    #                                                organ blobs); upsampled+bucketized into bg_tiers regions
+    acq: AnyAcqCfg = Field(default_factory=LegacyAcqCfg)   # scanner-settings strategy (legacy/randomized/matched)
+    bg: AnyBgCfg = Field(default_factory=PartitionBgCfg)   # FOV/bg strategy (flat/procedural/partition/hybrid/mrxcat)
     # --- physical corruption chain (all diversity knobs; each a real acquisition effect) ---
     pv_sigma: float = Field(0.0, ge=0)             # partial-volume: blur the class-MEAN map (vox)
     kspace: float = Field(0.0, ge=0, le=1)         # k-space PSF: fraction of k-space kept (sinc + Gibbs)
@@ -265,21 +368,6 @@ class FovBg(Background):
         return mask.where(mask <= 3, torch.zeros_like(mask))  # noqa: PLR2004  FOV 4..7 (organs)→bg; heart 1..3 kept
 
 
-# bg_mode -> Background strategy. One registry lookup, no if/elif chain (code-style: strategy pattern).
-_BG_REGISTRY = {
-    "flat":       lambda cfg: FlatBg(),
-    "procedural": lambda cfg: ProceduralBg(cfg.bg_tiers, cfg.bg_blobs),
-    "partition":  lambda cfg: PartitionBg(cfg.bg_tiers),
-    "hybrid":     lambda cfg: HybridBg(),
-    "mrxcat":     lambda cfg: FovBg(),
-}
-
-
-def make_background(cfg: SynthCfg) -> Background:
-    try:
-        return _BG_REGISTRY[cfg.bg_mode](cfg)
-    except KeyError:
-        raise ValueError(f"unknown bg_mode {cfg.bg_mode!r}; known: {list(_BG_REGISTRY)}") from None
 
 
 class Acquisition(ABC):
@@ -314,27 +402,20 @@ class RandomizedAcq(Acquisition):
 
 
 class MatchedAcq(Acquisition):
-    """Paint TO one target scanner (cfg.match_*): fixed field (nearest available), TR, flip, vendor —
-    no randomization. For known-deployment training + the match-vs-randomize test (bd 7pto)."""
+    """Paint TO one target scanner (from MatchedAcqCfg): fixed field (nearest available), TR, flip,
+    vendor — no randomization. For known-deployment training + the match-vs-randomize test (bd 7pto)."""
+    def __init__(self, field: float, tr_ms: float, flip_deg: float, vendor: str):
+        self.field, self.tr_ms, self.flip_deg, self.vendor = field, tr_ms, flip_deg, vendor
+
     def sample(self, b, cfg, dev):
         fields = torch.tensor(cfg.fields, device=dev)
-        fidx = int(torch.argmin((fields - cfg.match_field).abs()))          # nearest available field
-        vidx = cfg.vendors.index(cfg.match_vendor) if cfg.match_vendor in cfg.vendors else 0
+        fidx = int(torch.argmin((fields - self.field).abs()))               # nearest available field
+        vidx = cfg.vendors.index(self.vendor) if self.vendor in cfg.vendors else 0
         fi = torch.full((b,), fidx, device=dev, dtype=torch.long)
         vi = torch.full((b,), vidx, device=dev, dtype=torch.long)
-        tr = torch.full((b, 1), float(cfg.match_tr_ms), device=dev)
-        fl = torch.full((b, 1), float(cfg.match_flip_deg), device=dev)
+        tr = torch.full((b, 1), float(self.tr_ms), device=dev)
+        fl = torch.full((b, 1), float(self.flip_deg), device=dev)
         return fi, tr, fl, vi
-
-
-_ACQ_REGISTRY = {"legacy": LegacyAcq, "randomized": RandomizedAcq, "matched": MatchedAcq}
-
-
-def make_acquisition(cfg: SynthCfg) -> Acquisition:
-    try:
-        return _ACQ_REGISTRY[cfg.acq_mode]()
-    except KeyError:
-        raise ValueError(f"unknown acq_mode {cfg.acq_mode!r}; known: {list(_ACQ_REGISTRY)}") from None
 
 
 _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the conv
@@ -342,10 +423,8 @@ _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the con
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
                            real_img: torch.Tensor | None = None, *, return_meta: bool = False):
-    # noqa above: a LINEAR bSSFP-signal pipeline — each `if cfg.<effect>` (deform / inflow / blood_scale /
-    # flow / b0 banding / partial-volume) is an OPTIONAL physical effect applied in sequence, not control
-    # complexity. The steps are interdependent (mu/sg/oh threaded through), so splitting would fragment one
-    # coherent signal model into helpers passing ~8 tensors — worse. Cohesive, kept whole by decision.
+    # complexity noqa above: a linear bSSFP pipeline of optional physical effects (mu/sg/oh threaded), not
+    # control-flow complexity — splitting would fragment one signal model into ~8-tensor helpers. Kept whole.
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
     mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
@@ -360,7 +439,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
-    bg = make_background(cfg)                        # bg STRATEGY (flat/procedural/partition/hybrid)
+    bg = cfg.bg.build()                              # bg STRATEGY (flat/procedural/partition/hybrid/mrxcat)
     if cfg.deform > 0 and not bg.keeps_heart_aligned:   # hybrid keeps heart aligned with the real hole
         grid = _deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
         mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
@@ -377,7 +456,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     t1s = torch.stack([p[0] for p in params]); t2s = torch.stack([p[1] for p in params])
     pds = torch.stack([p[2] for p in params])                               # [n_fields, n_paint]
     # acquisition STRATEGY: per-sample field/TR/flip/vendor (legacy ranges / physics-randomized / matched)
-    fi, tr, fl, vi = make_acquisition(cfg).sample(b, cfg, dev)
+    fi, tr, fl, vi = cfg.acq.build().sample(b, cfg, dev)
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
