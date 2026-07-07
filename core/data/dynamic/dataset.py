@@ -79,7 +79,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",
+def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",  # noqa: PLR0913  low-level loader — independent inputs/options
                 frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False,
                 return_owners: bool = False):
     """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).

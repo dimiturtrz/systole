@@ -21,7 +21,7 @@ jobs:
       # Ratchet: add each in-progress family's code to --select as it reaches zero
       # (T201, FBT, PLR2004, BLE001, S110, PLR0912/0913/0915, C901, B, E501). bd cardiac-seg-l79o.
       - name: Lint — enforced (shipped code, clean rules)
-        run: uvx ruff@0.15.13 check core cardioseg --select F,I,B,S110,BLE001,C901,PLR0912,PLR0915,T201,PLR2004,PLC0415
+        run: uvx ruff@0.15.13 check core cardioseg --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415
       # ADVISORY (never blocks): full curated config over the whole tree — surfaces the families still
       # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
       - name: Lint — advisory full (non-blocking)

@@ -42,7 +42,7 @@ class Generator:
     augments (real-pixel perturbation), and softens the target — returning (x [B,1,H,W], yt) ready for
     the model. synth_p=0 -> pure real; synth_p=1 -> pure synthetic; in between -> per-sample mix."""
 
-    def __init__(self, cfg: GeneratorCfg, X: torch.Tensor, Y: torch.Tensor,
+    def __init__(self, cfg: GeneratorCfg, X: torch.Tensor, Y: torch.Tensor,  # noqa: PLR0913  constructor init inputs (Generator holds the state)
                  n_classes: int, device: str, force_synth: torch.Tensor | None = None,
                  valid: torch.Tensor | None = None):
         self.cfg = cfg

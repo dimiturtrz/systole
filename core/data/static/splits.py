@@ -42,7 +42,7 @@ def patient_val(train: pl.DataFrame, val_frac: float = 0.2, seed: int = 0
     return shuffled[n_val:], shuffled[:n_val]
 
 
-def make_split(meta: pl.DataFrame, test_datasets=(), test_vendors=(), val_frac: float = 0.2,
+def make_split(meta: pl.DataFrame, test_datasets=(), test_vendors=(), val_frac: float = 0.2,  # noqa: PLR0913  low-level split primitive; config-object path is split_from_cfg(DataCfg)
                seed: int = 0, val_datasets=(), val_vendors=(), train_vendors=()
                ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """(train, val, test) from criteria. test = rows whose dataset ∈ test_datasets OR vendor ∈
