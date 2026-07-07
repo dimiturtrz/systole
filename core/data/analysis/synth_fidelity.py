@@ -23,6 +23,8 @@ from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.synth import synthesize_from_labels
 from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.hparams import TrainCfg, apply_overrides
+from core.model import resolve_device
 from core.obs import setup
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
@@ -238,8 +240,6 @@ def _main():
                     "sample-size-agnostic; bounds VRAM)")
     a = ap.parse_args()
     setup()
-    from core.hparams import TrainCfg, apply_overrides
-    from core.model import resolve_device
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0

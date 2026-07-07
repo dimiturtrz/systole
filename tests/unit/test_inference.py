@@ -8,7 +8,8 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from core.inference import predict_volume, predict_volume_members, predict_volume_probs
-from core.model import build_unet, load_run, resolve_device
+from core.model import build_unet, resolve_device
+from core.run import load_run
 
 SIZE = 32  # small grid; divisible by the 4 strides (2^4=16)
 

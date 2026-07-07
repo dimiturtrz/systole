@@ -30,10 +30,11 @@ from core.data.static import splits, store
 from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
 from core.inference import predict_volume
 from core.measure import LOA_Z, ef_statistics, ejection_fraction
-from core.model import load_run, resolve_device
+from core.model import resolve_device
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
+from core.run import load_run
 
 
 def collect(run: Path, device: str, meta_rows):

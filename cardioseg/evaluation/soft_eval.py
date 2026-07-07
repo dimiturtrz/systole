@@ -24,10 +24,11 @@ from core.data.static.labels import LV_CAV
 from core.hparams import from_json
 from core.inference import predict_volume_probs
 from core.measure import ef_statistics, expected_volume_ml, label_volume_ml
-from core.model import load_run, resolve_device
+from core.model import resolve_device
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
+from core.run import load_run
 
 
 def _val(run: Path):

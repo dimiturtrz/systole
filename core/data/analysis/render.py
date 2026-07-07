@@ -17,6 +17,7 @@ from core.data.dynamic.dataset import load_to_gpu  # noqa: E402
 from core.data.dynamic.synth import SynthCfg, synthesize_from_labels  # noqa: E402
 from core.data.static import splits, store  # noqa: E402
 from core.data.static.labels import CLASSES  # noqa: E402
+from core.hparams import TrainCfg  # noqa: E402
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
@@ -24,7 +25,6 @@ _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 def render_synth_vs_real(out_png: str | Path = ".staging/synth_diag.png", k: int = 4, seed: int = 0):
     """Load k real val slices (all heart classes present), generate synth from their masks, save a grid
     (real | mask | synth-flat | synth-partition) + print per-class real-vs-synth intensity stats."""
-    from core.hparams import TrainCfg
     torch.manual_seed(seed); np.random.seed(seed)
     d = TrainCfg().generator.data
     n = len(CLASSES) + 1

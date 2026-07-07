@@ -32,6 +32,7 @@ from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS
 from core.data.static.geo import COUNTRY_CONTINENT
 from core.data.static.mri.pathology import harmonize
 from core.data.static.mri.registry import get_adapter
+from core.data.static.reference import Reference, reference_dir
 from core.obs import progress
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
@@ -130,7 +131,6 @@ def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
 
 
 def _nyul_ref_path() -> Path:
-    from core.data.static.reference import reference_dir
     return reference_dir() / "nyul.yaml"
 
 
@@ -161,7 +161,6 @@ def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_IN
 
 def load_nyul_standard() -> "np.ndarray | None":
     """The fitted Nyúl standard from reference/nyul.yaml, or None if absent (then nyul can't run)."""
-    from core.data.static.reference import Reference
     v = Reference().get("nyul", "standard")
     return np.asarray(v, dtype=np.float64) if v is not None else None
 
@@ -209,7 +208,6 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
     real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
     so the whole domain-randomization sweep survives for everything we lack real values for."""
-    from core.data.static.reference import reference_dir
     base = Path(data_root("processed"))
     metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
     if not metas:

@@ -23,8 +23,8 @@ import numpy as np
 import polars as pl
 
 from cardioseg.evaluation import validate as validate_mod
-from core import model as model_mod
 from core import registry as registry_mod
+from core import run as run_mod
 from core.data.ingest.source import subject_keys
 from core.data.ingest.splits import resolve_cfg
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
@@ -63,7 +63,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
     tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
     rows: list[dict] = []
     for ref in model_refs:
-        model, cfg, device = model_mod.load_run(registry_mod.resolve(ref))
+        model, cfg, device = run_mod.load_run(registry_mod.resolve(ref))
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)

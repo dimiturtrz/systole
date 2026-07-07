@@ -20,9 +20,9 @@ import torch
 from core.config import FLAGSHIP_REF
 from core.data.ingest.splits import resolve_cfg
 from core.data.static import splits, store
-from core.model import load_run
 from core.preprocessing.preprocess import fit_square, stack_slices
 from core.registry import resolve
+from core.run import load_run
 
 from ..tracking import track_run
 from .uncertainty import ece

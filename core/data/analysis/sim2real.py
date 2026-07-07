@@ -22,6 +22,7 @@ from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
 from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.hparams import TrainCfg
 from core.obs import setup
 
 
@@ -52,7 +53,6 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
 
 
 def _main():
-    from core.hparams import TrainCfg
     ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")
     ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
     a = ap.parse_args()

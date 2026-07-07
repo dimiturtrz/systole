@@ -21,10 +21,11 @@ from core.data.static import splits, store
 from core.data.static.labels import FOREGROUND
 from core.inference import predict_volume_probs
 from core.measure import ejection_fraction
-from core.model import load_run, resolve_device
+from core.model import resolve_device
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
+from core.run import load_run
 
 from ..tracking import start
 from .uncertainty import tta_uncertainty

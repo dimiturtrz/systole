@@ -19,9 +19,9 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
 from core.data.static import store
-from core.model import load_run
 from core.preprocessing.preprocess import SIZE, fit_square
 from core.registry import resolve
+from core.run import load_run
 
 PARITY_MIN = 99.0  # % argmax agreement required to ship the INT8 model (else keep FP32)
 OPSET = 17         # ONNX opset for export

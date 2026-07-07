@@ -27,8 +27,10 @@ from core.config import FLAGSHIP_REF  # noqa: E402
 from core.data.dynamic.dataset import load_to_gpu  # noqa: E402
 from core.data.static import splits, store  # noqa: E402
 from core.data.static.labels import CLASSES  # noqa: E402
+from core.hparams import TrainCfg  # noqa: E402
 from core.obs import setup  # noqa: E402
 from core.registry import resolve  # noqa: E402
+from core.run import load_run  # noqa: E402
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
@@ -103,8 +105,6 @@ def run_attribution(model, X: torch.Tensor, Y: torch.Tensor, n_classes: int, dev
 
 
 def _main():
-    from core.hparams import TrainCfg
-    from core.model import load_run
     ap = argparse.ArgumentParser(description="Attribution diagnostic: confusion + saliency on a model.")
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")

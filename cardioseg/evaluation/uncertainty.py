@@ -28,9 +28,9 @@ from core.config import FLAGSHIP_REF
 from core.data.static import store
 from core.data.static.labels import overlay_cmap
 from core.inference import predict_volume_members
-from core.model import load_run
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 from core.registry import resolve
+from core.run import load_run
 
 from ..tracking import track_run
 
