@@ -21,10 +21,10 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
 
-from core.data.dynamic.anatomy import load_pool  # noqa: E402
-from core.obs import setup  # noqa: E402
+from core.data.dynamic.anatomy import load_pool
+from core.obs import setup
 
 log = logging.getLogger("cardioseg.shape_coverage")
 

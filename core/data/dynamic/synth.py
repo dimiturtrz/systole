@@ -380,10 +380,8 @@ _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the con
 
 def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
                            real_img: torch.Tensor | None = None, *, return_meta: bool = False):
-    # noqa above: a LINEAR bSSFP-signal pipeline — each `if cfg.<effect>` (deform / inflow / blood_scale /
-    # flow / b0 banding / partial-volume) is an OPTIONAL physical effect applied in sequence, not control
-    # complexity. The steps are interdependent (mu/sg/oh threaded through), so splitting would fragment one
-    # coherent signal model into helpers passing ~8 tensors — worse. Cohesive, kept whole by decision.
+    # complexity noqa above: a linear bSSFP pipeline of optional physical effects (mu/sg/oh threaded), not
+    # control-flow complexity — splitting would fragment one signal model into ~8-tensor helpers. Kept whole.
     """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
     mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).

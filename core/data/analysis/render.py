@@ -12,14 +12,14 @@ import numpy as np
 import torch
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
 
-from core.data.dynamic.dataset import load_to_gpu  # noqa: E402
-from core.data.dynamic.synth import SynthCfg, synthesize_from_labels  # noqa: E402
-from core.data.static import splits, store  # noqa: E402
-from core.data.static.labels import CLASSES  # noqa: E402
-from core.hparams import TrainCfg  # noqa: E402
-from core.obs import setup  # noqa: E402
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.synth import SynthCfg, synthesize_from_labels
+from core.data.static import splits, store
+from core.data.static.labels import CLASSES
+from core.hparams import TrainCfg
+from core.obs import setup
 
 log = logging.getLogger("cardioseg.render")
 
