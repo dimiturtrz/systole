@@ -4,7 +4,7 @@ targets accepted.
 """
 import torch
 
-from cardioseg.training.losses import PartialLabelDiceCE
+from core.losses import PartialLabelDiceCE
 
 FULL = torch.tensor([[True, True, True, True]])       # all classes valid
 SCD = torch.tensor([[False, False, True, True]])      # LV-only: bg + RV untrustworthy
@@ -56,7 +56,7 @@ def test_per_sample_mask_mixes_full_and_partial():
 
 
 def test_uncertainty_weighted_matches_kendall_formula():
-    from cardioseg.training.losses import uncertainty_weighted
+    from core.losses import uncertainty_weighted
     L1, L2 = torch.tensor(2.0), torch.tensor(4.0)
     s1, s2 = torch.tensor(0.5), torch.tensor(-0.3)
     got = uncertainty_weighted([L1, L2], [s1, s2])

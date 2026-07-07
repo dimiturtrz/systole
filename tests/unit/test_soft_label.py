@@ -6,7 +6,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("monai")
 
-from cardioseg.training.losses import SoftDiceCE, build_loss
+from core.losses import DiceCECfg, SoftDiceCE
 from core.data.dynamic.augment import soften
 
 
@@ -42,7 +42,7 @@ def test_softdicece_matches_hard_on_onehot():
     y = torch.randint(0, 4, (2, 8, 8))
     onehot = soften(y, sigma=0.0, n_classes=4)                 # crisp target
     soft = SoftDiceCE()(logits, onehot)
-    hard = build_loss()(logits, y[:, None])                    # MONAI DiceCELoss on int target
+    hard = DiceCECfg().build()(logits, y[:, None])                    # MONAI DiceCELoss on int target
     assert torch.isfinite(soft)
     assert abs(float(soft) - float(hard)) < 1e-4               # soft path == hard path at σ=0
 

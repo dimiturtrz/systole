@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -25,59 +25,29 @@ from core.data.dynamic.augment import AugCfg
 from core.data.dynamic.generator import GeneratorCfg
 from core.data.dynamic.synth import SynthCfg
 from core.data.static.store import DataCfg
+from core.losses import (
+    LOSS_VARIANTS,
+    AnyLossCfg,
+    DiceCECfg,
+    DiceCEHDCfg,
+    DiceCEHERCfg,
+    DiceCETverskyCfg,
+    LossCfg,
+)
 from core.model import ModelCfg
 from core.preprocessing.n4 import N4Cfg
 
-# Config classes now live with the class they configure (ModelCfg→core.model, AugCfg→augment,
-# SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator). Re-exported here
-# so `from core.hparams import ModelCfg` etc. still resolves. LossCfg + TrainCfg stay the composition
-# root: LossCfg's builder is in cardioseg (core can't import it), TrainCfg is the whole-run root.
+# Config classes live with the class they configure (ModelCfg→core.model, AugCfg→augment,
+# SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator, LossCfg+variants→
+# core.losses so each cfg builds its own loss). Re-exported here so `from core.hparams import X` still
+# resolves. TrainCfg (whole-run composition root) stays here.
 __all__ = ["ModelCfg", "AugCfg", "SynthCfg", "N4Cfg", "DataCfg", "GeneratorCfg", "LossCfg",
-           "DiceCECfg", "DiceCETverskyCfg", "DiceCEHERCfg", "DiceCEHDCfg", "LOSS_VARIANTS",
+           "AnyLossCfg", "DiceCECfg", "DiceCETverskyCfg", "DiceCEHERCfg", "DiceCEHDCfg", "LOSS_VARIANTS",
            "TrainCfg", "apply_overrides", "to_json", "from_json"]
 
 
-# Segmentation loss as a DISCRIMINATED UNION: each variant holds ONLY its own params. build_loss
-# (cardioseg) dispatches on the cfg TYPE. Old flat config.json still loads — extra fields are ignored.
-class DiceCECfg(BaseModel):
-    """MONAI Dice+CE region baseline."""
-    model_config = _VALIDATE
-    kind: Literal["dice_ce"] = "dice_ce"
-
-
-class DiceCETverskyCfg(BaseModel):
-    """Dice+CE + Tversky FP-penalty (beta>alpha discourages over-seg)."""
-    model_config = _VALIDATE
-    kind: Literal["dice_ce_tversky"] = "dice_ce_tversky"
-    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FN weight
-    tversky_beta: float = Field(0.7, ge=0, le=1)   # FP weight (> alpha = punish over-seg)
-    tversky_lambda: float = Field(1.0, ge=0)
-
-
-class DiceCEHERCfg(BaseModel):
-    """Dice+CE + pure-GPU erosion-Hausdorff boundary term."""
-    model_config = _VALIDATE
-    kind: Literal["dice_ce_her"] = "dice_ce_her"
-    her_weight: float = Field(0.5, ge=0)
-    her_alpha: float = Field(2.0, ge=0)            # distance exponent ((k+1)^alpha per erosion level)
-    her_erosions: int = Field(10, ge=1)
-    her_warmup: int = Field(5, ge=0)
-    her_ramp: int = Field(5, ge=1)
-
-
-class DiceCEHDCfg(BaseModel):
-    """Dice+CE + Hausdorff-DT (CPU-bound on Windows: needs cucim = Linux-only)."""
-    model_config = _VALIDATE
-    kind: Literal["dice_ce_hd"] = "dice_ce_hd"
-    hd_weight: float = Field(0.01, ge=0)
-    hd_warmup: int = Field(15, ge=0)
-    hd_ramp: int = Field(5, ge=1)
-
-
-LossCfg = Annotated[DiceCECfg | DiceCETverskyCfg | DiceCEHERCfg | DiceCEHDCfg,
-                    Field(discriminator="kind")]
-LOSS_VARIANTS = {c.model_fields["kind"].default: c
-                 for c in (DiceCECfg, DiceCETverskyCfg, DiceCEHERCfg, DiceCEHDCfg)}
+# LossCfg (discriminated union) + variants live in core.losses, co-located with the loss classes so
+# each cfg can BUILD its own loss (cfg.build()). Imported above; re-exported for back-compat.
 
 
 class TrainCfg(BaseModel):
@@ -98,7 +68,7 @@ class TrainCfg(BaseModel):
 
     generator: GeneratorCfg = Field(default_factory=GeneratorCfg)
     model: ModelCfg = Field(default_factory=ModelCfg)
-    loss: LossCfg = Field(default_factory=DiceCECfg)
+    loss: AnyLossCfg = Field(default_factory=DiceCECfg)
     epochs: int = Field(128, ge=1)                 # ceiling; early stopping ends sooner
     batch: int = Field(64, ge=1)
     lr: float = Field(1e-3, gt=0)

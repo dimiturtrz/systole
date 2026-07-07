@@ -28,6 +28,7 @@ from core.data.static import splits, store
 from core.data.static.labels import FOREGROUND
 from core.export_onnx import export
 from core.hparams import TrainCfg, apply_overrides, to_json
+from core.losses import PartialLabelDiceCE, SoftDiceCE, uncertainty_weighted
 from core.model import build_unet, resolve_device
 from core.obs import progress, setup, timed
 from core.registry import MODEL_NAME, save_model
@@ -36,7 +37,6 @@ from ..evaluation.modelcard import generate
 from ..evaluation.validate import EvalCfg, Evaluator, summarize
 from ..tracking import track_run
 from .ef_lane import build_aux
-from .losses import PartialLabelDiceCE, SoftDiceCE, build_loss, uncertainty_weighted
 
 
 def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
@@ -97,7 +97,7 @@ class SeedTrainer:
             return partial, PartialLabelDiceCE()
         if self.cfg.generator.aug.soft_label_sigma > 0:
             return partial, SoftDiceCE()
-        return partial, build_loss(self.cfg.loss)
+        return partial, self.cfg.loss.build()
 
     def run(self):
         """train loop -> eval (val + held-out test) -> save -> finalize (artifacts+registry unless quick)."""
