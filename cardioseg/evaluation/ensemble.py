@@ -110,14 +110,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
-    a = ap.parse_args()
+    args = ap.parse_args()
     device = resolve_device()
-    loaded = [load_run(resolve(r), device) for r in a.runs]
+    loaded = [load_run(resolve(r), device) for r in args.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
     trk = start("cardioseg", f"ensemble-{len(models)}seed",
-                {"members": len(models), "runs": ",".join(Path(r).name for r in a.runs)})
-    for ax in a.eval:
+                {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+    for ax in args.eval:
         df = _eval_df(cfg, ax)
         if not len(df):
             continue

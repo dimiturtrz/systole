@@ -247,34 +247,34 @@ def _main():
                     "not a tuning target)")
     ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
                     "sample-size-agnostic; bounds VRAM)")
-    a = ap.parse_args()
+    args = ap.parse_args()
     setup()
     cfg = TrainCfg()
-    apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
+    apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
     cfg.generator.synth.synth_p = 1.0
     device = resolve_device(None)
     d = cfg.generator.data
     sc, nc = cfg.generator.synth, cfg.model.out_channels
     fid = SynthFidelity(sc, nc, device, d.size)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    if a.mode == "distance" and a.by_vendor:
+    if args.mode == "distance" and args.by_vendor:
         log.info(json.dumps(fid.by_vendor(meta.filter(pl.col("labelled"))), indent=2))
         return
     # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
     # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
-    if a.val_only:
+    if args.val_only:
         real_df = splits.model_val(d, meta)          # coded split's val if set, else criteria
     else:
         real_df = meta.filter(pl.col("labelled"))
     X, Y = load_to_gpu(splits.paths(real_df), d.size, "cpu")
     n = int(X.shape[0])
-    if n > a.max_slices:
-        idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:a.max_slices]
+    if n > args.max_slices:
+        idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:args.max_slices]
         X, Y = X[idx], Y[idx]
-    if a.mode == "separability":
+    if args.mode == "separability":
         s = separability(X, Y, sc, nc, device)
-    elif a.mode == "variance":
-        fields = (None, 1.5, 3.0) if a.by_field else (None,)
+    elif args.mode == "variance":
+        fields = (None, 1.5, 3.0) if args.by_field else (None,)
         s = {str(f or "sweep"): fid.variance(X, Y, field=f) for f in fields}
         s["real_vendor_bands"] = real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
     else:

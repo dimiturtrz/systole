@@ -205,8 +205,8 @@ def _main():
     ap.add_argument("--acquisition", action="store_true",
                     help="emit <data>/reference/acquisition.yaml (machine dimension from committed paper priors)")
     ap.add_argument("--sources", nargs="*", default=None)
-    a = ap.parse_args()
-    if a.acquisition:
+    args = ap.parse_args()
+    if args.acquisition:
         p = build_acquisition()
         log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
@@ -214,15 +214,15 @@ def _main():
             tr15, te15, f15 = acquisition_for(v, 1.5, ref)
             _, _, f30 = acquisition_for(v, 3.0, ref)
             log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
-    elif a.build:
-        p = build_from_store(sources=a.sources)
+    elif args.build:
+        p = build_from_store(sources=args.sources)
         log.info(f"wrote {p}")
         ref = Reference()
         ef = ref.provenance("normal_ranges", "ef_normal")
         if ef:
             log.info(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
-    elif a.real_levels:
-        p = build_real_levels(sources=a.sources)
+    elif args.real_levels:
+        p = build_real_levels(sources=args.sources)
         log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
         for v in ("Siemens", "Philips", "GE", "Canon"):

@@ -90,22 +90,22 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
-    a = ap.parse_args()
-    res = build(resolve(a.run))
-    Path(a.out).write_text(json.dumps(res, indent=2))
+    args = ap.parse_args()
+    res = build(resolve(args.run))
+    Path(args.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
-    log.info(f"wrote {a.out}: " + " · ".join(
+    log.info(f"wrote {args.out}: " + " · ".join(
         f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
     try:
         mlflow.set_tracking_uri(_DB_URI)
-        with mlflow.start_run(run_id=_run_id_for(a.run)):
+        with mlflow.start_run(run_id=_run_id_for(args.run)):
             for ax, v in f.items():
                 mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
                 mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
-            mlflow.log_artifact(a.out)
+            mlflow.log_artifact(args.out)
     except MlflowException as e:
         log.warning("mlflow metric logging skipped: %s", e)
 

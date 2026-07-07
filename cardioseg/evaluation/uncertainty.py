@@ -124,15 +124,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
-    a = ap.parse_args()
-    run = resolve(a.run)
+    args = ap.parse_args()
+    run = resolve(args.run)
     model, _, device = load_run(run)
 
-    df = splits.eval_set(a.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
+    df = splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
 
     out = run / "plots"
     out.mkdir(parents=True, exist_ok=True)
-    confs, corrects, ents, ales, epis, bnd_u, int_u, cases = _collect_uncertainty(model, df, device, out, a.eval)
+    confs, corrects, ents, ales, epis, bnd_u, int_u, cases = _collect_uncertainty(model, df, device, out, args.eval)
 
     conf = np.concatenate(confs); correct = np.concatenate(corrects).astype(float)
     e, bins = ece(conf, correct)
@@ -167,7 +167,7 @@ def main():
     log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
     trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
-    ev = a.eval
+    ev = args.eval
     trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
     trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)
     trk.artifact(out / "uncertainty.json"); trk.artifact(out / "reliability.png")

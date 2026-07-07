@@ -64,8 +64,8 @@ def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
-    a = ap.parse_args()
-    for ds in (_DATASETS if a.dataset == "all" else [a.dataset]):
+    args = ap.parse_args()
+    for ds in (_DATASETS if args.dataset == "all" else [args.dataset]):
         persist_meta(ds)
 
 

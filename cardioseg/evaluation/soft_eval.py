@@ -82,10 +82,10 @@ def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
-    a = ap.parse_args()
-    arr, e = evaluate(resolve(a.run))
+    args = ap.parse_args()
+    arr, e = evaluate(resolve(args.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
-    log.info(f"\n=== {a.run}  (n={len(arr)}) ===")
+    log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
     log.info(f"ECE: {e:.4f}")
     for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
         s = ef_statistics(gt, pred)

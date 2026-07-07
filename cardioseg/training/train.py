@@ -385,25 +385,25 @@ if __name__ == "__main__":
                     help="deep cfg overrides, e.g. generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5")
     ap.add_argument("--quick", action="store_true",
                     help="experiment sweep: train + eval only, skip ONNX/INT8/attribution/registry (~2x faster)")
-    a = ap.parse_args()
+    args = ap.parse_args()
 
     cfg = TrainCfg()
-    if a.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
-        name = a.split.split("@", 1)[0]
+    if args.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
+        name = args.split.split("@", 1)[0]
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
-        cfg.generator.data.split = a.split
+        cfg.generator.data.split = args.split
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
-        if getattr(a, attr) is not None:
-            setattr(cfg, attr, getattr(a, attr))
-    if a.n4:
+        if getattr(args, attr) is not None:
+            setattr(cfg, attr, getattr(args, attr))
+    if args.n4:
         cfg.generator.data.n4 = True
-    if a.ef_learn:
+    if args.ef_learn:
         cfg.ef_learn = True
-    if a.ef_kaggle:
+    if args.ef_kaggle:
         cfg.ef_kaggle = True
-    if a.out:
-        cfg.out_dir = a.out
-    apply_overrides(cfg, a.overrides)
-    seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else None
-    train_seg(cfg, alias=a.alias, quick=a.quick, seeds=seeds)
+    if args.out:
+        cfg.out_dir = args.out
+    apply_overrides(cfg, args.overrides)
+    seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
+    train_seg(cfg, alias=args.alias, quick=args.quick, seeds=seeds)

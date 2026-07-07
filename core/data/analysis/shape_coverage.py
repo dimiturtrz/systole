@@ -96,10 +96,10 @@ def _main():
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
     ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
-    a = ap.parse_args()
+    args = ap.parse_args()
     setup()
-    real = _feats_from_masks(_real_masks(a.real))
-    synth = _feats_from_masks(load_pool(a.pool))
+    real = _feats_from_masks(_real_masks(args.real))
+    synth = _feats_from_masks(load_pool(args.pool))
     log.info(json.dumps(coverage(real, synth), indent=2))
     # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
     mu, sd = real.mean(0), real.std(0) + 1e-9
@@ -111,7 +111,7 @@ def _main():
     plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
     plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
     plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
-    out = a.out or (str(Path(a.pool).with_suffix("")) + "_shapecov.png")
+    out = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
     plt.savefig(out, dpi=110, bbox_inches="tight")
     log.info(f"wrote {out}")
 

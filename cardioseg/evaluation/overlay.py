@@ -69,9 +69,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
-    a = ap.parse_args()
+    args = ap.parse_args()
 
-    run = resolve(a.run)
+    run = resolve(args.run)
     cfg = from_json(run / "config.json")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_unet(cfg.model).to(device)
@@ -97,9 +97,9 @@ def main():
         _panel(axes[row, 2], c["img"], c["pred"], "prediction")
     fig.suptitle("Held-out ACDC — RV (blue) · LV-myo (green) · LV-cav (red)", fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(a.out, dpi=130)
-    log.info(f"wrote {a.out} | clean {clean['name']} {clean['group']} "
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(args.out, dpi=130)
+    log.info(f"wrote {args.out} | clean {clean['name']} {clean['group']} "
              f"| hcm {hcm['name']} err {hcm['ef_err']:.1f}")
 
 

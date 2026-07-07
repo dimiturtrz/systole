@@ -117,15 +117,15 @@ def _main():
     ap = argparse.ArgumentParser(description="Attribution diagnostic: confusion + saliency on a model.")
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
-    a = ap.parse_args()
+    args = ap.parse_args()
     setup()
-    run_dir = resolve(a.run)
+    run_dir = resolve(args.run)
     model, cfg, device = load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
     X, Y = load_to_gpu(splits.paths(va), d.size, device)
-    s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, a.out or run_dir)
+    s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, args.out or run_dir)
     log.info(json.dumps(s, indent=2))
 
 

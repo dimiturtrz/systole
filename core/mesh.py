@@ -102,12 +102,12 @@ def _main():
     ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
     ap.add_argument("--out", default=None, help="output root (default: <data>/meshes/ from paths.yaml)")
     ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
-    a = ap.parse_args()
-    z = np.load(a.npz, allow_pickle=True)
-    mask, spacing = z[f"{a.frame}_gt"], tuple(float(s) for s in z["spacing"])
-    subject = a.subject or Path(a.npz).stem
-    out = export_meshes(mask, spacing, subject, tuple(a.formats), root=a.out)
-    log.info(f"wrote {a.formats} for {subject} -> {out}")
+    args = ap.parse_args()
+    z = np.load(args.npz, allow_pickle=True)
+    mask, spacing = z[f"{args.frame}_gt"], tuple(float(s) for s in z["spacing"])
+    subject = args.subject or Path(args.npz).stem
+    out = export_meshes(mask, spacing, subject, tuple(args.formats), root=args.out)
+    log.info(f"wrote {args.formats} for {subject} -> {out}")
 
 
 if __name__ == "__main__":
