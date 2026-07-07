@@ -334,7 +334,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     n_train = gen.X.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
     # Auxiliary EF lanes (GPU-resident, built ONCE and shared across seeds) — a list the epoch loop
     # iterates, so it never branches on cfg.ef_*. Empty when the lane is off / train source isn't static.
-    aux = build_aux(cfg, splits, train_df, d.size, device,
+    aux = build_aux(cfg, splits, train_df, device,
                     train_src is not None and train_src.kind == "static")
     for lane in aux:
         log.info("aux lane: %s (%d items cached)", type(lane).__name__, lane.n)
