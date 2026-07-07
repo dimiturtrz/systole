@@ -39,6 +39,42 @@ class EvalCfg(BaseModel):
     tta: bool = True
 
 
+class _ClassScores:
+    """Running per-class Dice numerator/denominator + per-volume boundary distances. Holds the three
+    accumulators as its OWN state, so scoring a volume is `.add(pred, gt, spacing)` — no dict-threading
+    through a 6-arg helper. `.dice()` / `.surface()` finalize. (The per-class loop in `.add` is 3
+    iterations of vectorized numpy + one HD95 each; it does NOT drive wall-time — the forward pass in
+    predict_volume dominates. Vectorizing the Dice half over classes is tracked as bd cardiac-seg-8fux;
+    HD95 stays per-label.)"""
+
+    def __init__(self):
+        self.inter = {c: 0.0 for c in CLASS_NAMES}
+        self.denom = {c: 0.0 for c in CLASS_NAMES}
+        self.surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
+
+    def add(self, pred, gt, spacing):
+        """Fold one predicted volume into the accumulators."""
+        for cl in CLASS_NAMES:
+            p, g = pred == cl, gt == cl
+            self.inter[cl] += 2.0 * np.logical_and(p, g).sum()
+            self.denom[cl] += p.sum() + g.sum()
+            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
+            if sd.size:
+                m = surface_metrics(sd)
+                self.surf[cl]["hd95"].append(m["hd95"]); self.surf[cl]["assd"].append(m["assd"])
+
+    def dice(self) -> dict[int, float]:
+        return {cl: (self.inter[cl] / self.denom[cl] if self.denom[cl] else float("nan"))
+                for cl in CLASS_NAMES}
+
+    def surface(self) -> dict:
+        # median over volumes — robust report (HD95 already drops per-volume outliers; median across
+        # cases drops the odd failed volume too — "worst case decides, but report robust").
+        return {cl: {"hd95": float(np.median(self.surf[cl]["hd95"])) if self.surf[cl]["hd95"] else float("nan"),
+                     "assd": float(np.median(self.surf[cl]["assd"])) if self.surf[cl]["assd"] else float("nan")}
+                for cl in CLASS_NAMES}
+
+
 class Evaluator:
     """Scores a trained model over subject npz files. Holds the model + device + EvalCfg as STATE —
     construct once, call `.validate(paths)` on any subject set. (Replaces the old
@@ -48,22 +84,6 @@ class Evaluator:
     def __init__(self, model, device: str, cfg: EvalCfg | None = None):
         self.model, self.device, self.cfg = model, device, cfg or EvalCfg()
 
-    @staticmethod
-    def _accumulate(pred, gt, spacing, inter, denom, surf):  # noqa: PLR0913  KEEP? folds one volume into 3 running accumulators; they ARE the state being mutated, not bundle-able config
-        """Fold one predicted volume's per-class Dice numerator/denominator + boundary distances into the
-        running accumulators. NB re: the "triple for" — this class loop is exactly 3 iterations (RV/myo/
-        LV-cav) of *vectorized* numpy ops + one HD95 each; it does NOT drive wall-time. The forward pass in
-        predict_volume (and, secondarily, surface_distances' distance transform) dominates — de-nesting it
-        into a helper is for readability, not speed; the arithmetic here is negligible."""
-        for cl in CLASS_NAMES:
-            p, g = pred == cl, gt == cl
-            inter[cl] += 2.0 * np.logical_and(p, g).sum()
-            denom[cl] += p.sum() + g.sum()
-            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), this volume
-            if sd.size:
-                m = surface_metrics(sd)
-                surf[cl]["hd95"].append(m["hd95"]); surf[cl]["assd"].append(m["assd"])
-
     def validate(self, npz_paths) -> tuple[dict[int, float], list[dict], dict]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
         all val slices}. ef_rows: {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}. `npz_paths` are
@@ -71,9 +91,7 @@ class Evaluator:
         group; dataset-agnostic (canonical labels)."""
         model, device, size = self.model, self.device, self.cfg.size
         postproc, tta = self.cfg.postproc, self.cfg.tta
-        inter = {c: 0.0 for c in CLASS_NAMES}
-        denom = {c: 0.0 for c in CLASS_NAMES}
-        surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
+        scores = _ClassScores()                                  # holds the Dice/boundary accumulators
         ef_rows = []
         for npz_path in npz_paths:
             c = load_arrays(npz_path)
@@ -88,21 +106,13 @@ class Evaluator:
                     pred = largest_cc_per_class(pred)
                 gt = stack_slices(c[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
-                self._accumulate(pred, gt, spacing, inter, denom, surf)
+                scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
                 ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
                 ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
                 ef_rows.append(dict(patient=Path(npz_path).stem, group=c.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
-
-        dice_per_class = {cl: (inter[cl] / denom[cl] if denom[cl] else float("nan"))
-                          for cl in CLASS_NAMES}
-        # median over volumes — robust report (HD95 already drops per-volume outliers; median across
-        # cases drops the odd failed volume too — "worst case decides, but report robust").
-        surf_per_class = {cl: {"hd95": float(np.median(surf[cl]["hd95"])) if surf[cl]["hd95"] else float("nan"),
-                               "assd": float(np.median(surf[cl]["assd"])) if surf[cl]["assd"] else float("nan")}
-                          for cl in CLASS_NAMES}
-        return dice_per_class, ef_rows, surf_per_class
+        return scores.dice(), ef_rows, scores.surface()
 
     def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
         """Foreground (logits[N,C], labels[N]) over subjects — single forward, NO TTA/postproc —

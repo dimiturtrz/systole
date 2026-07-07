@@ -79,9 +79,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
 
-def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",  # noqa: PLR0913  KEEP? low-level loader, called with mostly-defaults across training/eval. size/device are placement config; frames/keep_empty/return_owners are small behavior flags. A LoadCfg would wrap 3 bools nobody sets together. (return_owners changing the return shape is a separate FBT smell — bd if you want it split off.)
-                frames: tuple[str, ...] = ("ED", "ES"), keep_empty: bool = False,
-                return_owners: bool = False):
+def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
     """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
 
     The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training
@@ -89,8 +87,11 @@ def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",  # noqa: PLR0
     (everything after setup runs on the GPU). The cardiac slice set fits VRAM easily (~3 GB at 256px
     on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
     (CI / no-GPU) — same index-batched loop, just on CPU. `return_owners` also returns a per-slice
-    LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask)."""
-    ds = ACDCSliceDataset(npz_paths, size=size, frames=frames, keep_empty=keep_empty)
+    LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask).
+
+    (frames/keep_empty are ACDCSliceDataset knobs no caller ever overrode here — dropped rather than
+    threaded as dead params; construct the dataset directly if you ever need them.)"""
+    ds = ACDCSliceDataset(npz_paths, size=size)
     if not ds.items:
         z = torch.zeros((0, size, size))
         empty = (z[:, None].to(device), z.to(torch.uint8).to(device))

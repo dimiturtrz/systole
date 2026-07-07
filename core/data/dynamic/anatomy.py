@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pyvista as pv
 from PIL import Image
+from pydantic import BaseModel
 from scipy.ndimage import (
     binary_closing,
     binary_dilation,
@@ -31,15 +32,39 @@ from scipy.ndimage import (
 from scipy.ndimage import label as cc_label
 from scipy.ndimage import zoom as _zoom
 
-from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
+from core.obs import setup
+from core.preprocessing.preprocess import fit_square
 
 
 class MeshError(Exception):
     """A mesh could not be read or voxelized into a usable label volume (bad file, degenerate
     geometry, no foreground). The pool builder skips these — one bad mesh must not kill the build."""
-from core.obs import setup
-from core.preprocessing.preprocess import fit_square
+
+
+class PoolBuildCfg(BaseModel):
+    """Voxelization + slice-selection knobs for `build_pool` (offline anatomy-pool build). Bundles what
+    were 7 loose args; each default is a measured/physical choice (see field comments), not a free knob."""
+    model_config = _VALIDATE
+    size: int = DEFAULT_SIZE
+    inplane: float = DEFAULT_INPLANE
+    min_fg: int = 40             # drop a SAX slice with fewer foreground px than this (near-empty apex/base)
+    scale_reps: int = 1          # independent real-size scale draws emitted per mesh
+    seed: int = 0
+    workers: int = 0             # 0 -> cpu_count-2
+    min_cav_frac: float = 0.05   # require cavity >= this fraction of fg (drops pure-apical myo-only slices)
+
+
+class PathologyPoolCfg(BaseModel):
+    """DCM / HCM / abnormal-RV remodel ranges for `build_pathology_pool`. Each is an inclusive U[lo,hi]
+    voxel radius for the morphological deform: dcm = LV-cav dilate, hcm = LV-cav erode, rv = RV grow."""
+    model_config = _VALIDATE
+    k_dcm: tuple[int, int] = (1, 6)
+    k_hcm: tuple[int, int] = (1, 4)
+    rv: tuple[int, int] = (2, 6)
+    seed: int = 0
+
 
 log = logging.getLogger("cardioseg.anatomy")
 
@@ -235,17 +260,18 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     return out
 
 
-def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),  # noqa: PLR0913  KEEP? offline one-shot builder; args are independent pathology k-ranges (dcm/hcm/rv), no shared identity to bundle into a cfg. cf. build_pool below — a PoolBuildCfg would force two unlike builders together.
-                         rv=(2, 6), seed: int = 0) -> tuple[Path, tuple]:
+def build_pathology_pool(pool: np.ndarray, out_path: str | Path,
+                         cfg: PathologyPoolCfg | None = None) -> tuple[Path, tuple]:
     """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
     HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
     The composite source covering the DCM/HCM/RV tail the SSM misses (bd vpn5/uch6)."""
-    rng = np.random.default_rng(seed)
+    cfg = cfg or PathologyPoolCfg()
+    rng = np.random.default_rng(cfg.seed)
     out = []
     for m in pool:
-        out.append(pathology_deform(m, k=int(rng.integers(k_dcm[0], k_dcm[1] + 1))))
-        out.append(pathology_deform(m, k=-int(rng.integers(k_hcm[0], k_hcm[1] + 1))))
-        out.append(pathology_deform(m, rv_k=int(rng.integers(rv[0], rv[1] + 1))))
+        out.append(pathology_deform(m, k=int(rng.integers(cfg.k_dcm[0], cfg.k_dcm[1] + 1))))
+        out.append(pathology_deform(m, k=-int(rng.integers(cfg.k_hcm[0], cfg.k_hcm[1] + 1))))
+        out.append(pathology_deform(m, rv_k=int(rng.integers(cfg.rv[0], cfg.rv[1] + 1))))
     arr = np.stack(out).astype(np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
@@ -279,24 +305,24 @@ def _pool_worker(args) -> list[np.ndarray]:
     return out
 
 
-def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,  # noqa: PLR0913  KEEP? offline one-shot mesh->pool builder called from tooling/CLI, not the hot path; params are independent voxelization scalars (inplane/min_fg/scale_reps/workers/min_cav_frac). Bundle into PoolBuildCfg if you'd rather (mrxcat.build_pool mirrors this) — flag it.
-               inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
-               seed: int = 0, workers: int = 0, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
-    """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
+def build_pool(mesh_dir: str | Path, out_path: str | Path,
+               cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple]:
+    """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `cfg.size`
     -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
     ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
     apex/base slices dropped. Each mesh is globally rescaled to a target max-bbox side sampled from the
-    real ACDC size distribution (REAL_SIZE_PX); `scale_reps` emits that many independent scale draws per
-    mesh. Meshes are voxelized in PARALLEL (`workers` processes; 0 -> cpu-2, the bottleneck is the
+    real ACDC size distribution (REAL_SIZE_PX); `cfg.scale_reps` emits that many independent scale draws
+    per mesh. Meshes are voxelized in PARALLEL (`cfg.workers` processes; 0 -> cpu-2, the bottleneck is the
     per-mesh select_enclosed_points on ~2M-cell tets) — embarrassingly parallel, deterministic."""
+    cfg = cfg or PoolBuildCfg()
     # discover meshes by STEM: prefer the binary .vtu (4.5x faster load; the ASCII .vtk is a redundant
     # duplicate and is pruned from storage), fall back to .vtk for a fresh, unconverted download.
     stems = {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtu")}
     stems |= {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtk")}
     meshes = sorted((s.with_suffix(".vtu") if s.with_suffix(".vtu").exists() else s.with_suffix(".vtk"))
                     for s in stems)
-    nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
-    jobs = [(str(mp), inplane, size, min_fg, scale_reps, min_cav_frac, seed + i)
+    nw = cfg.workers if cfg.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+    jobs = [(str(mp), cfg.inplane, cfg.size, cfg.min_fg, cfg.scale_reps, cfg.min_cav_frac, cfg.seed + i)
             for i, mp in enumerate(meshes)]
     slices: list[np.ndarray] = []
     if nw == 1 or len(jobs) <= 1:
@@ -306,7 +332,7 @@ def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_S
         with ProcessPoolExecutor(max_workers=nw) as ex:
             for part in ex.map(_pool_worker, jobs, chunksize=1):
                 slices.extend(part)
-    arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
+    arr = np.stack(slices) if slices else np.zeros((0, cfg.size, cfg.size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
     return out_path, arr.shape
