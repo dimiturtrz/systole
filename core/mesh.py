@@ -79,7 +79,7 @@ def export_stl(mask: np.ndarray, spacing, out_dir: str | Path, stem: str, iso: f
     return written
 
 
-def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"),
+def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
                   iso: float = MESH_MM, root: str | Path | None = None) -> Path:
     """Write chamber meshes for one subject to <data>/meshes/<subject>/ (or `root`). GLB (colored
     scene) + STL (per chamber) by default. Returns the subject dir."""

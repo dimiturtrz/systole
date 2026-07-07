@@ -57,7 +57,7 @@ _MIN_FG_VOXELS = 16   # too few positive voxels to estimate a bias field -> retu
 _RANGE_EPS = 1e-6     # log-intensity range below this -> histogram is degenerate, stop iterating
 
 
-def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",
+def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",  # noqa: PLR0913  ITK N4 params (independent)
            iters: int = 8, bins: int = 200, fwhm: float = 0.15) -> Volume:
     """N4 bias-field correction in pure torch (runs on `device`; CUDA = fast, no custom kernels).
 
@@ -123,5 +123,5 @@ def _n4_sitk(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
         log_field = corr.GetLogBiasFieldAsImage(img)    # but evaluate the field at full res
         out = img / sitk.Exp(log_field)
         return sitk.GetArrayFromImage(out).astype(np.float32)
-    except Exception:
-        return arr                                      # ITK hiccup -> pass through, never break the run
+    except RuntimeError:
+        return arr                                      # ITK hiccup (SimpleITK raises RuntimeError) -> pass through

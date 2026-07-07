@@ -30,11 +30,11 @@ import pyvista as pv
 from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
-from core.data.static.labels import LV_CAV  # 3
+from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.obs import setup
 from core.preprocessing.preprocess import fit_square
 
-from .anatomy import REAL_SIZE_PX, load_pool
+from .anatomy import REAL_SIZE_PX, PoolBuildCfg, load_pool
 
 log = logging.getLogger("cardioseg.mrxcat")
 
@@ -110,29 +110,32 @@ def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | 
     return fit_square(crop, size, 0).astype(np.uint8)
 
 
-def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
-               min_fg: int = 40, min_cav_frac: float = 0.05, seed: int = 0) -> tuple[Path, tuple]:
+def build_pool(vti_dir: str | Path, out_path: str | Path,
+               cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple]:
     """Every `*.vti` in `vti_dir` → canonical label volume → SAX slices → heart-crop+scale-to-real →
-    `fit_square` to `size` → stacked label pool, saved to `out_path` (npz `slices` [N,size,size] uint8 —
-    the shared `anatomy.load_pool` schema, so the generator consumes it identically). Heart bbox is
-    scaled to a target side sampled from the real ACDC size band (`anatomy.REAL_SIZE_PX`) so MRXCAT
+    `fit_square` to `cfg.size` → stacked label pool, saved to `out_path` (npz `slices` [N,size,size]
+    uint8 — the shared `anatomy.load_pool` schema, so the generator consumes it identically). Heart bbox
+    is scaled to a target side sampled from the real ACDC size band (`anatomy.REAL_SIZE_PX`) so MRXCAT
     hearts frame like the SSM pool. Near-empty and cavity-less slices dropped (same composition guard as
-    `anatomy.build_pool`: apex slices with no cavity over-represent vs real)."""
-    rng = np.random.default_rng(seed)
+    `anatomy.build_pool`: apex slices with no cavity over-represent vs real). Reuses `anatomy.PoolBuildCfg`
+    (the .vti path is pre-voxelized, so cfg.inplane/scale_reps/workers don't apply — only size/min_fg/
+    min_cav_frac/seed are read)."""
+    cfg = cfg or PoolBuildCfg()
+    rng = np.random.default_rng(cfg.seed)
     slices: list[np.ndarray] = []
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
         canon = to_canonical(load_vti_labels(vp))
         for k in range(canon.shape[0]):
             s = canon[k]
             fg = int((s > 0).sum())
-            if fg < min_fg:
+            if fg < cfg.min_fg:
                 continue
-            if min_cav_frac > 0 and int(((s == 1) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
+            if cfg.min_cav_frac > 0 and int(((s == RV) | (s == LV_CAV)).sum()) < cfg.min_cav_frac * fg:
                 continue
-            sq = _heart_crop_scale(s, size, int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1)))
+            sq = _heart_crop_scale(s, cfg.size, int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1)))
             if sq is not None:
                 slices.append(sq)
-    arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
+    arr = np.stack(slices) if slices else np.zeros((0, cfg.size, cfg.size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
     return out_path, arr.shape
@@ -212,7 +215,7 @@ def place_heart_in_fov(fov: np.ndarray, heart: np.ndarray) -> np.ndarray:
     return out
 
 
-def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,
+def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,  # noqa: PLR0913  KEEP? FOV compositing builder — two input dirs + FOV-specific `scale`; doesn't share PoolBuildCfg's fields (no min_fg/min_cav_frac). Its own cfg would be a 3-field singleton. bd if you want the sweep.
                        size: int = DEFAULT_SIZE, scale: float = 3.0, seed: int = 0) -> tuple[Path, tuple]:
     """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
     into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.

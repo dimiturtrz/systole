@@ -85,7 +85,7 @@ def resample_inplane(
     return out, new_spacing
 
 
-def preprocess_case(
+def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
     patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE,
     n4: bool = False, n4_params=None, nyul_standard=None, norm: str = "zscore",
 ) -> dict:

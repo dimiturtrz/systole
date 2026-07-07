@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pyvista as pv
 from PIL import Image
+from pydantic import BaseModel
 from scipy.ndimage import (
     binary_closing,
     binary_dilation,
@@ -31,10 +32,39 @@ from scipy.ndimage import (
 from scipy.ndimage import label as cc_label
 from scipy.ndimage import zoom as _zoom
 
-from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
-from core.data.static.labels import LV_CAV  # 3
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
+from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
 from core.obs import setup
 from core.preprocessing.preprocess import fit_square
+
+
+class MeshError(Exception):
+    """A mesh could not be read or voxelized into a usable label volume (bad file, degenerate
+    geometry, no foreground). The pool builder skips these — one bad mesh must not kill the build."""
+
+
+class PoolBuildCfg(BaseModel):
+    """Voxelization + slice-selection knobs for `build_pool` (offline anatomy-pool build). Bundles what
+    were 7 loose args; each default is a measured/physical choice (see field comments), not a free knob."""
+    model_config = _VALIDATE
+    size: int = DEFAULT_SIZE
+    inplane: float = DEFAULT_INPLANE
+    min_fg: int = 40             # drop a SAX slice with fewer foreground px than this (near-empty apex/base)
+    scale_reps: int = 1          # independent real-size scale draws emitted per mesh
+    seed: int = 0
+    workers: int = 0             # 0 -> cpu_count-2
+    min_cav_frac: float = 0.05   # require cavity >= this fraction of fg (drops pure-apical myo-only slices)
+
+
+class PathologyPoolCfg(BaseModel):
+    """DCM / HCM / abnormal-RV remodel ranges for `build_pathology_pool`. Each is an inclusive U[lo,hi]
+    voxel radius for the morphological deform: dcm = LV-cav dilate, hcm = LV-cav erode, rv = RV grow."""
+    model_config = _VALIDATE
+    k_dcm: tuple[int, int] = (1, 6)
+    k_hcm: tuple[int, int] = (1, 4)
+    rv: tuple[int, int] = (2, 6)
+    seed: int = 0
+
 
 log = logging.getLogger("cardioseg.anatomy")
 
@@ -112,6 +142,9 @@ def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
     return np.asarray(sel["SelectedPoints"]).astype(bool)
 
 
+_MIN_LV_WALL_PX = 8   # fewer LV-wall px than this in a SAX slice -> too little to close a cavity ring, skip
+
+
 def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
              rv_close: int = 3) -> np.ndarray:
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
@@ -122,6 +155,8 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     x0, x1, y0, y1, z0, z1 = m.bounds
     nx = int(np.ceil((x1 - x0) / inplane)); ny = int(np.ceil((y1 - y0) / inplane))
     nz = int(np.ceil((z1 - z0) / slice_mm))
+    if min(nx, ny, nz) < 1:                              # degenerate/empty mesh -> no grid to rasterize
+        raise MeshError(f"degenerate mesh bounds {m.bounds} -> grid {(nx, ny, nz)}")
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=(inplane, inplane, slice_mm),
                         origin=(x0, y0, z0))
     lv = _wall_mask(m, LV_ID, grid, tn).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
@@ -129,7 +164,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
         lw, rw = lv[k], rv[k]
-        if lw.sum() < 8:  # noqa: PLR2004 (min LV-wall px for a usable slice)
+        if lw.sum() < _MIN_LV_WALL_PX:
             continue
         lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
         # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
@@ -144,8 +179,8 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
             near = binary_dilation(rw, iterations=2)
             keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
             rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
-        out[k][rv_cav] = 1                                            # RV cavity
-        out[k][lw] = 2                                               # LV myocardium (RV wall -> bg)
+        out[k][rv_cav] = RV                                           # RV cavity
+        out[k][lw] = MYO                                             # LV myocardium (RV wall -> bg)
         out[k][lv_cav] = LV_CAV                                      # LV cavity (3)
     return out
 
@@ -177,8 +212,13 @@ def load(path: str | Path):
     BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
     p = Path(path)
     vtu = p.with_suffix(".vtu")
-    m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
-    m.set_active_scalars(_tag_name(m), preference="cell")
+    try:
+        m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
+        m.set_active_scalars(_tag_name(m), preference="cell")
+    except (OSError, ValueError, KeyError, RuntimeError) as e:
+        # pyvista read/parse failures (missing/corrupt file, no region tag) surface as these — wrap as
+        # our domain error so callers catch MeshError, not a blanket Exception.
+        raise MeshError(f"cannot read mesh {p}: {e}") from e
     return m
 
 
@@ -205,7 +245,7 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
     (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
     ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
-    lvc, myo = mask == LV_CAV, mask == 2  # noqa: PLR2004 (2 = LV-myo label id)
+    lvc, myo = mask == LV_CAV, mask == MYO
     wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
     out = mask.copy()
     if lvc.any() and myo.any() and k != 0:
@@ -215,22 +255,23 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
             out[wall] = 2
             out[new_lvc] = LV_CAV
     if rv_k > 0 and (mask == 1).any():                       # abnormal RV: grow RV cavity into bg only
-        grown = binary_dilation(mask == 1, iterations=rv_k) & ~(out == 2) & ~(out == LV_CAV)  # noqa: PLR2004 (2 = LV-myo label id)
+        grown = binary_dilation(mask == RV, iterations=rv_k) & ~(out == MYO) & ~(out == LV_CAV)
         out[grown] = 1
     return out
 
 
-def build_pathology_pool(pool: np.ndarray, out_path: str | Path, k_dcm=(1, 6), k_hcm=(1, 4),
-                         rv=(2, 6), seed: int = 0) -> tuple[Path, tuple]:
+def build_pathology_pool(pool: np.ndarray, out_path: str | Path,
+                         cfg: PathologyPoolCfg | None = None) -> tuple[Path, tuple]:
     """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
     HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
     The composite source covering the DCM/HCM/RV tail the SSM misses (bd vpn5/uch6)."""
-    rng = np.random.default_rng(seed)
+    cfg = cfg or PathologyPoolCfg()
+    rng = np.random.default_rng(cfg.seed)
     out = []
     for m in pool:
-        out.append(pathology_deform(m, k=int(rng.integers(k_dcm[0], k_dcm[1] + 1))))
-        out.append(pathology_deform(m, k=-int(rng.integers(k_hcm[0], k_hcm[1] + 1))))
-        out.append(pathology_deform(m, rv_k=int(rng.integers(rv[0], rv[1] + 1))))
+        out.append(pathology_deform(m, k=int(rng.integers(cfg.k_dcm[0], cfg.k_dcm[1] + 1))))
+        out.append(pathology_deform(m, k=-int(rng.integers(cfg.k_hcm[0], cfg.k_hcm[1] + 1))))
+        out.append(pathology_deform(m, rv_k=int(rng.integers(cfg.rv[0], cfg.rv[1] + 1))))
     arr = np.stack(out).astype(np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
@@ -245,7 +286,7 @@ def _pool_worker(args) -> list[np.ndarray]:
     out = []
     try:
         vol = voxelize(load(mp), inplane=inplane)
-    except Exception:                                    # a malformed mesh shouldn't kill the whole build
+    except MeshError:                                   # bad file / degenerate geometry -> skip this mesh
         return out
     for _ in range(max(1, scale_reps)):
         tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
@@ -258,30 +299,30 @@ def _pool_worker(args) -> list[np.ndarray]:
             # drop pure-apical myo-only slices (no cavity): the mesh contributes its whole apico-basal
             # stack, so apex slices (~all myo, no cavity) over-represent 11x vs real (19% vs 1.8%). Require
             # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
-            if min_cav_frac > 0 and int(((s == 1) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
+            if min_cav_frac > 0 and int(((s == RV) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
                 continue
             out.append(fit_square(s, size, 0).astype(np.uint8))
     return out
 
 
-def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
-               inplane: float = DEFAULT_INPLANE, min_fg: int = 40, scale_reps: int = 1,
-               seed: int = 0, workers: int = 0, min_cav_frac: float = 0.05) -> tuple[Path, tuple]:
-    """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `size`
+def build_pool(mesh_dir: str | Path, out_path: str | Path,
+               cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple]:
+    """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `cfg.size`
     -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
     ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
     apex/base slices dropped. Each mesh is globally rescaled to a target max-bbox side sampled from the
-    real ACDC size distribution (REAL_SIZE_PX); `scale_reps` emits that many independent scale draws per
-    mesh. Meshes are voxelized in PARALLEL (`workers` processes; 0 -> cpu-2, the bottleneck is the
+    real ACDC size distribution (REAL_SIZE_PX); `cfg.scale_reps` emits that many independent scale draws
+    per mesh. Meshes are voxelized in PARALLEL (`cfg.workers` processes; 0 -> cpu-2, the bottleneck is the
     per-mesh select_enclosed_points on ~2M-cell tets) — embarrassingly parallel, deterministic."""
+    cfg = cfg or PoolBuildCfg()
     # discover meshes by STEM: prefer the binary .vtu (4.5x faster load; the ASCII .vtk is a redundant
     # duplicate and is pruned from storage), fall back to .vtk for a fresh, unconverted download.
     stems = {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtu")}
     stems |= {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtk")}
     meshes = sorted((s.with_suffix(".vtu") if s.with_suffix(".vtu").exists() else s.with_suffix(".vtk"))
                     for s in stems)
-    nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
-    jobs = [(str(mp), inplane, size, min_fg, scale_reps, min_cav_frac, seed + i)
+    nw = cfg.workers if cfg.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+    jobs = [(str(mp), cfg.inplane, cfg.size, cfg.min_fg, cfg.scale_reps, cfg.min_cav_frac, cfg.seed + i)
             for i, mp in enumerate(meshes)]
     slices: list[np.ndarray] = []
     if nw == 1 or len(jobs) <= 1:
@@ -291,7 +332,7 @@ def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_S
         with ProcessPoolExecutor(max_workers=nw) as ex:
             for part in ex.map(_pool_worker, jobs, chunksize=1):
                 slices.extend(part)
-    arr = np.stack(slices) if slices else np.zeros((0, size, size), np.uint8)
+    arr = np.stack(slices) if slices else np.zeros((0, cfg.size, cfg.size), np.uint8)
     out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out_path, slices=arr)
     return out_path, arr.shape

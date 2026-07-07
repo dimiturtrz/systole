@@ -74,7 +74,7 @@ def load_sax(case: str | Path) -> list[tuple]:
         try:
             vol, sp, meta = read_series(sd)
             rows.append((vol, sp, meta, float(meta.get("slice_loc") or 0)))
-        except Exception:
+        except (RuntimeError, OSError, ValueError):   # sitk/IO/parse failure on a broken series -> skip
             continue
     rows.sort(key=lambda t: t[3])
     return [(v, s, m) for v, s, m, _ in rows]

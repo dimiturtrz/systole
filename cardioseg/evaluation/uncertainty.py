@@ -21,12 +21,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import polars as pl
 from scipy.ndimage import binary_erosion
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from core.config import FLAGSHIP_REF
-from core.data.static import store
+from core.data.static import splits, store
 from core.data.static.labels import overlay_cmap
 from core.inference import predict_volume_members
 from core.obs import setup
@@ -77,26 +76,12 @@ def ece(conf, correct, n_bins=15):
     return float(e), bins
 
 
-def main():
-    setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_REF)
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
-    a = ap.parse_args()
-    run = resolve(a.run)
-    model, _, device = load_run(run)
-
-    if a.eval == "canon":
-        df = store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
-    else:
-        df = store.load(["acdc"]).filter(pl.col("labelled"))
-
-    confs, corrects, ents = [], [], []  # foreground-voxel calibration + error-detection samples
-    ales, epis = [], []                # aleatoric / epistemic (BALD) over foreground voxels
-    bnd_u, int_u = [], []              # boundary vs interior uncertainty (sanity)
-    cases = []                         # per-case uncertainty scores
-    out = run / "plots"
-    out.mkdir(parents=True, exist_ok=True)
+def _collect_uncertainty(model, df, device, out, eval_name):
+    """Per-case foreground-voxel uncertainty over ED/ES frames: TTA entropy/confidence, aleatoric/
+    epistemic (BALD), boundary-vs-interior, per-case scores — plus one overlay PNG (ACDC ED only).
+    Returns the pooled sample lists (confs, corrects, ents, ales, epis, bnd_u, int_u, cases) for the
+    caller to aggregate."""
+    confs, corrects, ents, ales, epis, bnd_u, int_u, cases = [], [], [], [], [], [], [], []
     saved = False
     for r in df.iter_rows(named=True):
         c = store.load_arrays(r["path"])
@@ -114,10 +99,40 @@ def main():
                 b = _boundary(pred[z]); inte = (pred[z] > 0) & ~b
                 if b.any(): bnd_u.append(ent[z][b].mean())
                 if inte.any(): int_u.append(ent[z][inte].mean())
-            if not saved and a.eval == "acdc" and tag == "ed":  # one overlay PNG
+            if not saved and eval_name == "acdc" and tag == "ed":  # one overlay PNG
                 z = int(np.argmax([(g > 0).sum() for g in gt]))
                 _save_overlay(c[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", fit_square, SIZE, plt)
                 saved = True
+    return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
+
+
+def _reliability_plot(bins, ece_val, out):
+    """Reliability diagram (foreground confidence vs accuracy per bin) -> out/reliability.png."""
+    fig, ax = plt.subplots(figsize=(4.5, 4.5))
+    if bins:
+        cs, as_, _ = zip(*bins, strict=True)
+        ax.plot([0, 1], [0, 1], "--", color="#999", lw=1)
+        ax.plot(cs, as_, "o-", color="#5b8def")
+    ax.set_xlabel("confidence (max softmax)"); ax.set_ylabel("accuracy")
+    ax.set_title(f"Reliability (foreground) — ECE {ece_val:.3f}")
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
+
+
+def main():
+    setup()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--run", default=FLAGSHIP_REF)
+    ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
+    a = ap.parse_args()
+    run = resolve(a.run)
+    model, _, device = load_run(run)
+
+    df = splits.eval_set(a.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
+
+    out = run / "plots"
+    out.mkdir(parents=True, exist_ok=True)
+    confs, corrects, ents, ales, epis, bnd_u, int_u, cases = _collect_uncertainty(model, df, device, out, a.eval)
 
     conf = np.concatenate(confs); correct = np.concatenate(corrects).astype(float)
     e, bins = ece(conf, correct)
@@ -143,16 +158,7 @@ def main():
                            "epistemic_fraction": round(epi_frac, 3)},
          "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
 
-    # reliability diagram
-    fig, ax = plt.subplots(figsize=(4.5, 4.5))
-    if bins:
-        cs, as_, _ = zip(*bins, strict=True)
-        ax.plot([0, 1], [0, 1], "--", color="#999", lw=1)
-        ax.plot(cs, as_, "o-", color="#5b8def")
-    ax.set_xlabel("confidence (max softmax)"); ax.set_ylabel("accuracy")
-    ax.set_title(f"Reliability (foreground) — ECE {e:.3f}")
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-    fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
+    _reliability_plot(bins, e, out)
 
     log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
              f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
@@ -168,7 +174,7 @@ def main():
     trk.end()
 
 
-def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
+def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913  plotting helper — independent inputs
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

@@ -61,47 +61,56 @@ def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tens
                           for i in range(0, X.shape[0], batch)])
 
 
-def _render(model, X, Y, pred, device, out_png: Path, n_classes: int, k: int = 4) -> bool:
-    """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
-    it was drawn. Always writes the real/GT/pred panel."""
-    good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n_classes))][:k]
-    if not good:
-        good = list(range(min(k, Y.shape[0])))
-    def _fwd(x):
-        return model(x).sum(dim=(2, 3))                   # spatial-sum logits -> [B,C] for attribution
-    sal = Saliency(_fwd)
+class Attribution:
+    """Model-interpretability diagnostic (confusion recall + captum saliency) for a trained model.
+    Holds model + device + n_classes as STATE (bd 01fh: they were threaded as args); .run(X, Y, out_dir)
+    takes only the data + output location that vary."""
 
-    rows = 4 if sal is not None else 3
-    fig, ax = plt.subplots(rows, len(good), figsize=(3 * len(good), 3 * rows), squeeze=False)
-    for c, i in enumerate(good):
-        xi = X[i:i + 1].to(device)
-        ax[0, c].imshow(X[i, 0].cpu(), cmap="gray"); ax[0, c].set_title("real"); ax[0, c].axis("off")
-        ax[1, c].imshow(Y[i].cpu(), cmap="viridis", vmin=0, vmax=n_classes - 1); ax[1, c].set_title("GT"); ax[1, c].axis("off")
-        ax[2, c].imshow(pred[i], cmap="viridis", vmin=0, vmax=n_classes - 1); ax[2, c].set_title("pred"); ax[2, c].axis("off")
-        if sal is not None:
-            a = sal.attribute(xi, target=n_classes - 1).abs()[0, 0].detach().cpu().numpy()
-            ax[3, c].imshow(a, cmap="hot"); ax[3, c].set_title(f"saliency({_NAMES[-1]})"); ax[3, c].axis("off")
-    fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
-    return sal is not None
+    def __init__(self, model, device: str, n_classes: int):
+        self.model, self.device, self.n_classes = model, device, n_classes
 
+    def run(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
+        """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
+        attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
+        out = Path(out_dir)
+        pred = _predict(self.model, X, self.device)          # on cpu
+        conf = class_confusion(pred, Y.cpu(), self.n_classes)
+        # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
+        summary = {
+            "names": _NAMES[:self.n_classes],
+            "confusion": [[round(float(conf[g, p]), 3) for p in range(self.n_classes)] for g in range(self.n_classes)],
+            "recall": {_NAMES[g]: round(float(conf[g, g]), 3) for g in range(self.n_classes)},
+        }
+        has_sal = self._render(X, Y, pred, out / "attribution.png")
+        summary["saliency"] = has_sal
+        (out / "attribution.json").write_text(json.dumps(summary, indent=2))
+        return summary
 
-def run_attribution(model, X: torch.Tensor, Y: torch.Tensor, n_classes: int, device: str,
-                    out_dir: str | Path) -> dict:
-    """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
-    attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
-    out = Path(out_dir)
-    pred = _predict(model, X, device)                    # on cpu
-    conf = class_confusion(pred, Y.cpu(), n_classes)
-    # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
-    summary = {
-        "names": _NAMES[:n_classes],
-        "confusion": [[round(float(conf[g, p]), 3) for p in range(n_classes)] for g in range(n_classes)],
-        "recall": {_NAMES[g]: round(float(conf[g, g]), 3) for g in range(n_classes)},
-    }
-    has_sal = _render(model, X, Y, pred, device, out / "attribution.png", n_classes)
-    summary["saliency"] = has_sal
-    (out / "attribution.json").write_text(json.dumps(summary, indent=2))
-    return summary
+    def _render(self, X, Y, pred, out_png: Path, k: int = 4) -> bool:
+        """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
+        it was drawn. Always writes the real/GT/pred panel."""
+        good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
+        if not good:
+            good = list(range(min(k, Y.shape[0])))
+        def _fwd(x):
+            return self.model(x).sum(dim=(2, 3))             # spatial-sum logits -> [B,C] for attribution
+        sal = Saliency(_fwd)
+
+        rows = 4 if sal is not None else 3
+        vmax = self.n_classes - 1
+        fig, ax = plt.subplots(rows, len(good), figsize=(3 * len(good), 3 * rows), squeeze=False)
+        def _panel(row, c, img, title, **kw):
+            ax[row, c].imshow(img, **kw); ax[row, c].set_title(title); ax[row, c].axis("off")
+        for c, i in enumerate(good):
+            xi = X[i:i + 1].to(self.device)
+            _panel(0, c, X[i, 0].cpu(), "real", cmap="gray")
+            _panel(1, c, Y[i].cpu(), "GT", cmap="viridis", vmin=0, vmax=vmax)
+            _panel(2, c, pred[i], "pred", cmap="viridis", vmin=0, vmax=vmax)
+            if sal is not None:
+                a = sal.attribute(xi, target=self.n_classes - 1).abs()[0, 0].detach().cpu().numpy()
+                _panel(3, c, a, f"saliency({_NAMES[-1]})", cmap="hot")
+        fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
+        return sal is not None
 
 
 def _main():
@@ -116,7 +125,7 @@ def _main():
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
     X, Y = load_to_gpu(splits.paths(va), d.size, device)
-    s = run_attribution(model, X, Y, (cfg.model.out_channels if cfg else 4), device, a.out or run_dir)
+    s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, a.out or run_dir)
     log.info(json.dumps(s, indent=2))
 
 

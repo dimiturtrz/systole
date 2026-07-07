@@ -42,7 +42,7 @@ def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
         try:
             if r.HasMetaDataKey(tag):
                 meta[name] = r.GetMetaData(tag).strip()
-        except Exception:  # noqa: S110  — optional DICOM tag; skip if absent/unreadable
+        except RuntimeError:   # sitk raises RuntimeError on an unreadable/odd-encoded tag — skip it
             pass
     return arr, (sy, sx), meta
 

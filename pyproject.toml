@@ -74,7 +74,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
 "tests/**" = ["PLR2004", "FBT"]       # literal fixtures + bool test flags are fine in tests
-"cardioseg/tracking.py" = ["S110"]    # best-effort telemetry: mlflow errors must never break training
+"cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

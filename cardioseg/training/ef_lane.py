@@ -98,7 +98,7 @@ class KaggleEF:
     cases' ES) segment-summed per case -> EF-RATIO Huber vs the csv EF. No dense mask, so the seg loss
     never touches these."""
 
-    def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,
+    def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913
                  lv_label: int = LV_CAV, seed: int = 0):
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
         self.X, self.LP, self.ef = [], [], []          # [L*P,1,H,W] GPU / (L,P) / EF%
@@ -147,12 +147,13 @@ class KaggleEF:
         return F.huber_loss(ef_pred / 100, ef_pred.new_tensor(tgt) / 100, delta=delta)
 
 
-def build_aux(cfg, splits, train_df, size: int, device: str, is_static: bool) -> list:
+def build_aux(cfg, splits, train_df, device: str, is_static: bool) -> list:
     """Assemble the active auxiliary lanes from a TrainCfg. Empty list when the EF lane is off or the
     train source isn't static (EDV/ESV need labeled patient frames). The train loop iterates the list;
-    it never inspects cfg.ef_* itself."""
+    it never inspects cfg.ef_* itself. `size` is config (cfg.generator.data.size), not an arg."""
     if cfg.ef_lambda <= 0 or not is_static:
         return []
+    size = cfg.generator.data.size
     lanes: list = [VolConsistency(splits.paths(train_df), size, device, cfg.ef_subjects)]
     if cfg.ef_kaggle:
         lanes.append(KaggleEF(kaggle_cases("train"), kaggle_ef("train"), size, device,

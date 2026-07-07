@@ -29,7 +29,7 @@ def _wslpath(flag: str, raw: str) -> str | None:
         out = subprocess.run(["wslpath", flag, raw], capture_output=True, text=True,
                              timeout=5, check=True).stdout.strip()
         return out or None
-    except Exception:
+    except (subprocess.SubprocessError, OSError):          # nonzero exit / timeout / wslpath vanished
         return None
 
 

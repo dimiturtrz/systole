@@ -23,7 +23,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import polars as pl
 from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
@@ -249,13 +248,8 @@ def main():
     run = resolve(a.run)
     device = resolve_device()
 
-    # eval set = a criteria filter over the consolidated store (no named splits)
-    if a.eval == "canon":
-        df = store.load(["mnms1"]).filter((pl.col("vendor") == "Canon") & pl.col("labelled"))
-    else:
-        df = store.load([a.eval]).filter(pl.col("labelled"))
-        if a.holdout:
-            _, df = splits.patient_val(df, 0.2, a.seed)
+    # eval set = a split over the consolidated store; eval_set owns the canon/holdout special-cases
+    df = splits.eval_set(a.eval, holdout=a.holdout, seed=a.seed)
     label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(df)})"
     rows = collect(run, device, df.iter_rows(named=True))
     dists, dice_acc, ef_gt, ef_pred = _pooled(rows)

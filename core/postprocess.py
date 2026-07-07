@@ -31,7 +31,7 @@ def _gpu_cc():
         import cupy  # noqa: F401, PLC0415
         from cucim.skimage.measure import label  # noqa: PLC0415
         return label
-    except Exception:
+    except ImportError:                        # cupy/cucim not installed (windows / no-GPU) -> CPU fallback
         return None
 
 

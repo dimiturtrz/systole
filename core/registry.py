@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import mlflow
+from mlflow.exceptions import MlflowException
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"
@@ -41,7 +42,7 @@ def _run_id_for(ref: str) -> str:
     # alias (e.g. 'production')
     try:
         return c.get_model_version_by_alias(MODEL_NAME, ref).run_id
-    except Exception:  # noqa: S110  — alias miss -> fall through to version / run-id resolution
+    except MlflowException:   # no such alias (ref is a version number or run-id) -> fall through
         pass
     # explicit version number
     if str(ref).isdigit():
@@ -68,7 +69,7 @@ def resolve(ref: str = PRODUCTION) -> Path:
     return inner if (inner / "model.pth").exists() else dst
 
 
-def save_model(staging_dir, *, run_name: str, params: dict | None = None,
+def save_model(staging_dir, *, run_name: str, params: dict | None = None,  # noqa: PLR0913  already keyword-only (*); legit registry inputs
                alias: str | None = None, description: str | None = None,
                tags: dict | None = None, run_id: str | None = None) -> str:
     """Log a trained model's artifacts (everything in `staging_dir`: model.pth/config.json/onnx/card)

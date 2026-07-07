@@ -34,7 +34,7 @@ class _AppendHandler(logging.Handler):
         try:
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(self.format(record) + "\n")
-        except Exception:
+        except OSError:
             self.handleError(record)
 
 

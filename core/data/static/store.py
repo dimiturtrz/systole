@@ -127,7 +127,7 @@ def param_key(inplane: float = TARGET_INPLANE, n4: bool = False, n4_params: N4Cf
     return key
 
 
-def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,
+def dataset_dir(dataset: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
                 n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
     return Path(data_root("processed")) / dataset / param_key(inplane, n4, n4_params, nyul, norm)
 
@@ -282,7 +282,7 @@ def _write_meta(name: str, adapter, data_dir: Path, out: Path) -> Path:
             continue
         try:
             meta = adapter.meta(case)
-        except Exception:
+        except (KeyError, ValueError, OSError, AttributeError):   # missing/odd metadata field -> no meta, not fatal
             meta = {}
         arrays = dict(np.load(data_dir / f, allow_pickle=True))
         rows.append(_meta_row(name, case, arrays, meta, f))
@@ -312,7 +312,7 @@ def migrate_meta(names: list[str] | None = None) -> list[Path]:
     return out
 
 
-def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
+def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
           n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False,
           nyul: bool = False, nyul_standard=None, norm: str = "zscore") -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
@@ -346,7 +346,7 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
     return out
 
 
-def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
+def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
          n4: bool = False, n4_params: N4Cfg | None = None, workers: int | None = None,
          nyul: bool = False, norm: str = "zscore") -> pl.DataFrame:
     """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them

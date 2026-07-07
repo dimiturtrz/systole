@@ -36,7 +36,7 @@ from .mri_physics import bssfp_signal, tissue_params
 log = logging.getLogger("cardioseg.inverse")
 
 
-def render_heart(seg: torch.Tensor, tr: torch.Tensor, flip_deg: torch.Tensor, n_classes: int,
+def render_heart(seg: torch.Tensor, tr: torch.Tensor, flip_deg: torch.Tensor, n_classes: int,  # noqa: PLR0913  physics params (independent scalars)
                  field: float, device) -> torch.Tensor:
     """Deterministic, differentiable bSSFP paint of the HEART classes (bg=0, excluded from any loss).
     seg [B,H,W] long; tr/flip_deg [B,1]; -> signal [B,1,H,W]. Tissue T1/T2/PD at literature values
@@ -52,7 +52,7 @@ def _standardize(v: torch.Tensor) -> torch.Tensor:
     return (v - v.mean()) / v.std().clamp_min(1e-6)
 
 
-def fit_acquisition(real_img: torch.Tensor, seg: torch.Tensor, n_classes: int, field: float = 1.5,
+def fit_acquisition(real_img: torch.Tensor, seg: torch.Tensor, n_classes: int, field: float = 1.5,  # noqa: PLR0913  physics params (independent scalars)
                     fit_params: tuple[str, ...] = ("flip",), tr0: float = 3.0, flip0: float = 50.0,
                     steps: int = 400, lr: float = 0.5, device: str = "cpu") -> dict:
     """FIT the acquisition θ (subset in `fit_params`, default flip only = identifiable) to ONE real scan

@@ -47,34 +47,6 @@ def wasserstein1d(a: torch.Tensor, b: torch.Tensor, q: int = 100) -> float:
     return float((torch.quantile(sub(a).float(), qs) - torch.quantile(sub(b).float(), qs)).abs().mean())
 
 
-def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: str,
-                        q: int = 100) -> dict:
-    """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
-    SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
-    (z-units) + the mean and worst class — the break localized."""
-    Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
-    rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
-    ym = Y.reshape(-1).cpu()
-    # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
-    # SHAPE = W1 of the mean-centered distributions (genuine signal-model mismatch). Tells whether the
-    # gap is fixable by matching composition (location) or needs better blood physics (shape).
-    dist, loc, shape = {}, {}, {}
-    for c in range(n_classes):
-        m = ym == c
-        r, s = rx[m], sx[m]
-        dist[_NAMES[c]] = round(wasserstein1d(r, s, q), 3)
-        if r.numel() and s.numel():
-            loc[_NAMES[c]] = round(abs(float(r.mean()) - float(s.mean())), 3)
-            shape[_NAMES[c]] = round(wasserstein1d(r - r.mean(), s - s.mean(), q), 3)
-        else:
-            loc[_NAMES[c]] = shape[_NAMES[c]] = float("nan")
-    vals = [v for v in dist.values() if v == v]                  # drop NaN (absent classes)
-    worst = max(dist, key=lambda k: (dist[k] if dist[k] == dist[k] else -1))
-    return {"per_class_w1": dist, "location": loc, "shape": shape,
-            "mean_w1": round(sum(vals) / len(vals), 3) if vals else float("nan"),
-            "worst_class": worst}
-
-
 # --- separability (d'): a DIFFERENT axis from W1. W1 asks "is synth FAITHFUL to real?"; d' asks "are
 #     the classes DISTINGUISHABLE?" (the learnability bug-check — a net can't segment a boundary it can't
 #     see). Signal-detection d'(A,B) = |mu_A-mu_B| / sqrt(.5(var_A+var_B)); affine-invariant, so z-score
@@ -150,35 +122,6 @@ def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
             "per_slice": {_NAMES[c]: perslice[c] for c in range(n_classes)}}
 
 
-def variance_attribution(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: str,
-                         field: float | None = None) -> dict:
-    """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
-    pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
-    generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
-    Xdev, Ydev = X[:, 0].to(device), Y.to(device)
-    base = copy.deepcopy(cfg)
-    if field is not None:
-        base.fields = (field,)
-    def synth_spread(c):
-        Xs, _ = synthesize_from_labels(Ydev, c, n_classes, real_img=X.to(device))
-        return _spread(Xs[:, 0], Ydev, n_classes)
-    out = {"field": field or "sweep",
-           "real_target": _spread(Xdev, Ydev, n_classes),
-           "synth_baseline": synth_spread(base)}
-    deltas = {}
-    for name, ov in _KNOB_OFF.items():
-        c = copy.deepcopy(base)
-        for k, v in ov.items():
-            setattr(c, k, v)
-        off = synth_spread(c)
-        deltas[name] = {lvl: {cl: round(out["synth_baseline"][lvl][cl] - off[lvl][cl], 3)
-                              for cl in off[lvl] if out["synth_baseline"][lvl][cl] == out["synth_baseline"][lvl][cl]
-                              and off[lvl][cl] == off[lvl][cl]}
-                        for lvl in ("pooled", "per_slice")}
-    out["knob_delta"] = deltas
-    return out
-
-
 def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800) -> dict:
     """Per-VENDOR real per-class pooled σ, and the σ BAND (min..max across vendors) + all-pooled. The
     fair target for a DIVERSITY synth: real spread isn't one number, it's a RANGE across scanners. Synth
@@ -205,30 +148,90 @@ def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800
     return {"per_vendor": per_vendor, "band_across_vendors": band}
 
 
-def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
-              min_slices: int = 200, max_slices: int = 1200) -> dict:
-    """Per-vendor synth-vs-real distance — does the blood-level (location) gap differ by SCANNER?
-    Groups the (labelled) real cases by vendor, paints synth from each vendor's masks, measures the
-    per-class W1 / location / shape for each. A vendor-dependent blood location gap says the fix must
-    be machine-conditioned (per-vendor inflow), not one global scalar; a flat gap says a single term
-    is enough. Thin vendors (< min_slices) are skipped (W1 noisy on tiny samples); large vendors are
-    random-subsampled to max_slices (W1 is sample-size-agnostic, and it bounds GPU memory + makes
-    vendors comparable). Reuses `synth_real_distance` per subset — the pure metric stays the source."""
-    out = {}
-    for v in sorted(meta.get_column("vendor").unique().to_list()):
-        sub = meta.filter(pl.col("vendor") == v)
-        X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
-        n = int(X.shape[0])
-        if n < min_slices:
-            out[v] = {"skipped": f"{n} slices < {min_slices}"}
-            continue
-        if n > max_slices:
-            g = torch.Generator().manual_seed(0)
-            idx = torch.randperm(n, generator=g)[:max_slices]
-            X, Y = X[idx], Y[idx]
-        out[v] = {"n_slices": n, "n_used": int(X.shape[0]),
-                  **synth_real_distance(X, Y, cfg, n_classes, device, q)}
-    return out
+class SynthFidelity:
+    """Synth-vs-real distribution analysis: how close the generator's painted intensity matches real,
+    per class. Holds the generation cfg + n_classes + device + size (shared STATE); methods take only
+    the real (X,Y) set / meta that varies. (bd 01fh: cfg/n_classes/device/size were threaded as args.)"""
+
+    def __init__(self, cfg, n_classes: int, device: str, size: int):
+        self.cfg, self.n_classes, self.device, self.size = cfg, n_classes, device, size
+
+    def distance(self, X: torch.Tensor, Y: torch.Tensor, q: int = 100) -> dict:
+        """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
+        SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
+        (z-units) + the mean and worst class — the break localized."""
+        Xs, _ = synthesize_from_labels(Y.to(self.device), self.cfg, self.n_classes, real_img=X.to(self.device))
+        rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
+        ym = Y.reshape(-1).cpu()
+        # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
+        # SHAPE = W1 of the mean-centered distributions (genuine signal-model mismatch). Tells whether the
+        # gap is fixable by matching composition (location) or needs better blood physics (shape).
+        dist, loc, shape = {}, {}, {}
+        for c in range(self.n_classes):
+            m = ym == c
+            r, s = rx[m], sx[m]
+            dist[_NAMES[c]] = round(wasserstein1d(r, s, q), 3)
+            if r.numel() and s.numel():
+                loc[_NAMES[c]] = round(abs(float(r.mean()) - float(s.mean())), 3)
+                shape[_NAMES[c]] = round(wasserstein1d(r - r.mean(), s - s.mean(), q), 3)
+            else:
+                loc[_NAMES[c]] = shape[_NAMES[c]] = float("nan")
+        vals = [v for v in dist.values() if v == v]                  # drop NaN (absent classes)
+        worst = max(dist, key=lambda k: (dist[k] if dist[k] == dist[k] else -1))
+        return {"per_class_w1": dist, "location": loc, "shape": shape,
+                "mean_w1": round(sum(vals) / len(vals), 3) if vals else float("nan"),
+                "worst_class": worst}
+
+    def variance(self, X: torch.Tensor, Y: torch.Tensor, field: float | None = None) -> dict:
+        """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
+        pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
+        generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
+        Xdev, Ydev = X[:, 0].to(self.device), Y.to(self.device)
+        base = copy.deepcopy(self.cfg)
+        if field is not None:
+            base.fields = (field,)
+        def synth_spread(c):
+            Xs, _ = synthesize_from_labels(Ydev, c, self.n_classes, real_img=X.to(self.device))
+            return _spread(Xs[:, 0], Ydev, self.n_classes)
+        out = {"field": field or "sweep",
+               "real_target": _spread(Xdev, Ydev, self.n_classes),
+               "synth_baseline": synth_spread(base)}
+        deltas = {}
+        for name, ov in _KNOB_OFF.items():
+            c = copy.deepcopy(base)
+            for k, v in ov.items():
+                setattr(c, k, v)
+            off = synth_spread(c)
+            deltas[name] = {lvl: {cl: round(out["synth_baseline"][lvl][cl] - off[lvl][cl], 3)
+                                  for cl in off[lvl] if out["synth_baseline"][lvl][cl] == out["synth_baseline"][lvl][cl]
+                                  and off[lvl][cl] == off[lvl][cl]}
+                            for lvl in ("pooled", "per_slice")}
+        out["knob_delta"] = deltas
+        return out
+
+    def by_vendor(self, meta, q: int = 100, min_slices: int = 200, max_slices: int = 1200) -> dict:
+        """Per-vendor synth-vs-real distance — does the blood-level (location) gap differ by SCANNER?
+        Groups the (labelled) real cases by vendor, paints synth from each vendor's masks, measures the
+        per-class W1 / location / shape for each. A vendor-dependent blood location gap says the fix must
+        be machine-conditioned (per-vendor inflow), not one global scalar; a flat gap says a single term
+        is enough. Thin vendors (< min_slices) are skipped (W1 noisy on tiny samples); large vendors are
+        random-subsampled to max_slices (W1 is sample-size-agnostic, and it bounds GPU memory + makes
+        vendors comparable). Reuses `self.distance` per subset — the pure metric stays the source."""
+        out = {}
+        for v in sorted(meta.get_column("vendor").unique().to_list()):
+            sub = meta.filter(pl.col("vendor") == v)
+            X, Y = load_to_gpu(splits.paths(sub), self.size, "cpu")
+            n = int(X.shape[0])
+            if n < min_slices:
+                out[v] = {"skipped": f"{n} slices < {min_slices}"}
+                continue
+            if n > max_slices:
+                g = torch.Generator().manual_seed(0)
+                idx = torch.randperm(n, generator=g)[:max_slices]
+                X, Y = X[idx], Y[idx]
+            out[v] = {"n_slices": n, "n_used": int(X.shape[0]),
+                      **self.distance(X, Y, q)}
+        return out
 
 
 def _main():
@@ -252,9 +255,10 @@ def _main():
     device = resolve_device(None)
     d = cfg.generator.data
     sc, nc = cfg.generator.synth, cfg.model.out_channels
+    fid = SynthFidelity(sc, nc, device, d.size)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     if a.mode == "distance" and a.by_vendor:
-        log.info(json.dumps(by_vendor(meta.filter(pl.col("labelled")), sc, nc, device, d.size), indent=2))
+        log.info(json.dumps(fid.by_vendor(meta.filter(pl.col("labelled"))), indent=2))
         return
     # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
     # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
@@ -271,10 +275,10 @@ def _main():
         s = separability(X, Y, sc, nc, device)
     elif a.mode == "variance":
         fields = (None, 1.5, 3.0) if a.by_field else (None,)
-        s = {str(f or "sweep"): variance_attribution(X, Y, sc, nc, device, field=f) for f in fields}
+        s = {str(f or "sweep"): fid.variance(X, Y, field=f) for f in fields}
         s["real_vendor_bands"] = real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
     else:
-        s = synth_real_distance(X, Y, sc, nc, device)
+        s = fid.distance(X, Y)
     log.info(json.dumps(s, indent=2))
 
 
