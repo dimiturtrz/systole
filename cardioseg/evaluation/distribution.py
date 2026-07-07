@@ -28,6 +28,7 @@ from scipy.stats import gaussian_kde
 from core.config import FLAGSHIP_REF
 from core.data.static import splits, store
 from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
+from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import LOA_Z, ef_statistics, ejection_fraction
 from core.model import resolve_device
@@ -250,8 +251,19 @@ def main():
 
     # eval set = a split over the consolidated store; eval_set owns the canon/holdout special-cases
     df = splits.eval_set(a.eval, holdout=a.holdout, seed=a.seed)
-    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(df)})"
-    rows = collect(run, device, df.iter_rows(named=True))
+    # LEAK GUARD (bd h9bz): eval_set picks a set by NAME, model-blind — so if this dataset overlaps what
+    # THIS model TRAINED on (reconstructed from its own config), scoring on it would report train Dice.
+    # Exclude the train subjects (val stays — it's held-out and legitimately displayable); a fully-OOD
+    # eval loses nothing. Never silent — log what was dropped.
+    d_model = from_json(run / "config.json").generator.data
+    trained = splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
+    kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
+    n_excl = len(df) - len(kept)
+    if n_excl:
+        log.warning("excluded %d/%d '%s' subjects the model TRAINED on — leak-free distribution (bd h9bz)",
+                    n_excl, len(df), a.eval)
+    label = f" ({a.eval}{', held-out' if a.holdout else ''}, n={len(kept)})"
+    rows = collect(run, device, kept)
     dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
 
     out = run / "plots"

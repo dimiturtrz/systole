@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from core.data.ingest.source import subject_keys
 from core.data.ingest.splits import resolve_cfg
 from core.data.static import store
 
@@ -97,6 +98,38 @@ def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
         return resolve_cfg(d, meta).val.frame
     return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                       d.val_datasets, d.val_vendors, d.train_vendors)[1]
+
+
+def seen_keys(d, meta: pl.DataFrame) -> set[str]:
+    """The real subjects a model (DataCfg `d`) actually SAW = train ∪ val, restricted to its own
+    `sources` — the honest basis for an OOD/leak check (a val subject IS seen; early-stopping touched
+    it). Coded split (`d.split`): resolved val ∪ (static) train — a DYNAMIC/synth train contributes no
+    real subjects. Old criteria: labelled ∩ sources − test. ANY tool that scores a model on a set it
+    chose by name (not via the model's split) must exclude these to stay leak-free (bd cardiac-seg-h9bz).
+    The `dataset\\tsubject` key format matches `subject_keys`, so callers can set-difference directly."""
+    in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
+    if getattr(d, "split", ""):
+        r = resolve_cfg(d, in_sources)
+        seen = set(r.val.subjects())                            # val is always a real StaticSource
+        if getattr(r.train, "kind", "static") == "static":
+            seen |= set(r.train.subjects())                     # dynamic/synth train = no real subjects
+        return {f"{a}\t{b}" for a, b in seen}
+    test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
+    return subject_keys(in_sources.filter(pl.col("labelled") & ~test))
+
+
+def train_keys(d, meta: pl.DataFrame) -> set[str]:
+    """The real subjects a model (DataCfg `d`) actually TRAINED on (gradient) — like `seen_keys` but
+    EXCLUDING val. For tools that may legitimately show the held-out VAL (qualitative overlays, a val-
+    centre distribution) yet must never score on TRAIN: exclude these, keep val. Coded split: the static
+    train subjects (a dynamic/synth train = none). Old criteria: the train partition of split_from_cfg."""
+    in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
+    if getattr(d, "split", ""):
+        r = resolve_cfg(d, in_sources)
+        if getattr(r.train, "kind", "static") != "static":
+            return set()                                        # dynamic/synth train touches no real subject
+        return {f"{a}\t{b}" for a, b in r.train.subjects()}
+    return subject_keys(split_from_cfg(d, in_sources)[0])       # [0] = train partition (val carved off)
 
 
 def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0
