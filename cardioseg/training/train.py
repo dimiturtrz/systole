@@ -31,7 +31,7 @@ from core.obs import progress, setup, timed
 from core.registry import MODEL_NAME, save_model
 
 from ..evaluation.modelcard import generate
-from ..evaluation.validate import summarize, validate
+from ..evaluation.validate import EvalCfg, Evaluator, summarize
 from ..tracking import track_run
 from .ef_lane import build_aux
 from .losses import PartialLabelDiceCE, SoftDiceCE, build_loss, uncertainty_weighted
@@ -194,12 +194,13 @@ def _train_one_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick
         model.load_state_dict(best_state)                      # evaluate/ship the best, not the last
 
     log.info("===== VALIDATION =====")
-    dice_per_class, ef_rows, surf = validate(model, splits.paths(val_df), d.size, device)
+    ev = Evaluator(model, device, EvalCfg(size=d.size))         # state (model/device/size) once; call many
+    dice_per_class, ef_rows, surf = ev.validate(splits.paths(val_df))
     results = {"val": summarize(dice_per_class, ef_rows, surf)}
     if len(test_df):                                            # held-out test = the criteria split
         log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
                  list(d.test_datasets), list(d.test_vendors), len(test_df))
-        tdice, tef, tsurf = validate(model, splits.paths(test_df), d.size, device)
+        tdice, tef, tsurf = ev.validate(splits.paths(test_df))
         results["test"] = summarize(tdice, tef, tsurf)
 
     torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above

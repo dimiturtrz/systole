@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cardioseg.evaluation import validate as validate_mod
+from cardioseg.evaluation.validate import EvalCfg, Evaluator
 from core import registry as registry_mod
 from core import run as run_mod
 from core.data.ingest.source import subject_keys
@@ -75,7 +75,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
             src = ts.source(meta)                        # lock-checked; raises on drift
             paths, subj = src.paths(), set(src.subjects())
             ood = None if seen is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(seen)
-            dice, ef_rows, _ = validate_mod.validate(model, paths, size, device, tta=tta)
+            dice, ef_rows, _ = Evaluator(model, device, EvalCfg(size=size, tta=tta)).validate(paths)
             classes = _LV_ONLY if ts.task == "seg_lv" else tuple(dice)
             dmean = float(np.nanmean([dice[c] for c in classes]))
             ef_mae = (float(np.mean([abs(r["ef_gt"] - r["ef_pred"]) for r in ef_rows]))

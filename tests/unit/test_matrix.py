@@ -38,8 +38,8 @@ def _stub(monkeypatch):
     monkeypatch.setattr("core.registry.resolve", lambda ref: ref)
     monkeypatch.setattr("core.run.load_run", lambda run, device=None: (object(), cfg, "cpu"))
     monkeypatch.setattr("core.data.static.store.load", lambda *a, **k: _meta())
-    monkeypatch.setattr("cardioseg.evaluation.validate.validate",
-                        lambda model, paths, size, device, tta=True: ({1: 0.9, 2: 0.8, 3: 0.85}, [], {}))
+    monkeypatch.setattr("cardioseg.evaluation.validate.Evaluator.validate",
+                        lambda self, npz_paths: ({1: 0.9, 2: 0.8, 3: 0.85}, [], {}))
     monkeypatch.setattr("cardioseg.evaluation.matrix.TESTSETS", _TS)
 
 
