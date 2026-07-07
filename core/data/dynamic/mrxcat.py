@@ -21,12 +21,18 @@ whole-FOV coverage, painted by the shared engine.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
+from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV  # 3
+from core.preprocessing.preprocess import fit_square
+
+from .anatomy import REAL_SIZE_PX, load_pool
 
 # XCAT/MRXCAT label codes → our canonical {0 bg, 1 RV-cav, 2 LV-myo, 3 LV-cav}. Cardiac codes from MRXCAT2.0
 # `myLabels(LV_wall=1, RV_wall=2, LV_blood=5, RV_blood=6, Peri=50, Aorta=36)` (MakePhantom.py). Everything
@@ -76,7 +82,6 @@ def load_vti_labels(path: str | Path) -> np.ndarray:
     """Read an MRXCAT `.vti` phantom → integer label volume [nz, ny, nx] (the `labels` point array).
     pyvista (the `viz` extra, lazy) — same reader family as `anatomy.load`. VTK ImageData is x-fastest;
     reshape Fortran-order to (nx,ny,nz) then move to (nz,ny,nx) so axis 0 indexes short-axis-ish slices."""
-    import pyvista as pv
     g = pv.read(str(path))
     nx, ny, nz = g.dimensions
     lab = np.asarray(g.point_data["labels"]).reshape((nx, ny, nz), order="F")
@@ -88,9 +93,6 @@ def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | 
     `fit_square` crops it away. Crop to the heart bbox, uniformly scale (nearest, label-preserving) so
     its longest side hits `target_px`, then centre `fit_square` to `size` — heart-filling like the SSM
     pool (`anatomy._scale_to_target` intent), drop-in for the shared painter. None if ~empty."""
-    from scipy.ndimage import zoom as _zoom
-
-    from core.preprocessing.preprocess import fit_square
     ys, xs = np.where(s > 0)
     if ys.size == 0:
         return None
@@ -109,7 +111,6 @@ def build_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SI
     scaled to a target side sampled from the real ACDC size band (`anatomy.REAL_SIZE_PX`) so MRXCAT
     hearts frame like the SSM pool. Near-empty and cavity-less slices dropped (same composition guard as
     `anatomy.build_pool`: apex slices with no cavity over-represent vs real)."""
-    from .anatomy import REAL_SIZE_PX
     rng = np.random.default_rng(seed)
     slices: list[np.ndarray] = []
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
@@ -143,9 +144,6 @@ def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
     """Crop a `scale`×(heart-bbox) chest WINDOW centred on the heart (realistic cardiac FOV — surrounding
     lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
     the SSM pool lacks, unlike `_heart_crop_scale` (heart-only). None if no heart."""
-    from scipy.ndimage import zoom as _zoom
-
-    from core.preprocessing.preprocess import fit_square
     heart = np.isin(s, (1, 2, 3))
     if not heart.any():
         return None
@@ -186,7 +184,6 @@ def place_heart_in_fov(fov: np.ndarray, heart: np.ndarray) -> np.ndarray:
     its location. Gives OUR anatomy diversity inside MRXCAT's realistic surrounding context, without XCAT
     generation or MATLAB. Returns an 8-class FOV map (paint via bg_mode='mrxcat'); None-safe (returns fov
     unchanged if either heart is absent)."""
-    from scipy.ndimage import zoom as _zoom
     hm = np.isin(fov, (1, 2, 3))
     hys, hxs = np.where(heart > 0)
     if not hm.any() or hys.size == 0:
@@ -213,7 +210,6 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
     """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
     into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.
     Paint with bg_mode='mrxcat'. Reuses `_fov_window` for the XCAT backgrounds and `place_heart_in_fov`."""
-    from .anatomy import load_pool
     hearts = load_pool(rodero_pool)                                # [N,size,size] canonical (heart-centred)
     bgs = []                                                       # XCAT whole-FOV chest windows (with heart)
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
@@ -233,7 +229,6 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
 
 def _main():
     """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
-    import argparse
     ap = argparse.ArgumentParser(description="MRXCAT .vti → canonical label sanity probe (bd hpy).")
     ap.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
     a = ap.parse_args()

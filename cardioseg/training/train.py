@@ -12,18 +12,33 @@ import json
 import time
 from pathlib import Path
 
-from core.data.static.labels import FOREGROUND
-from core.hparams import TrainCfg
+import mlflow
+import numpy as np
+import torch
 
+from core.data.analysis.attribution import run_attribution
+from core.data.dynamic.anatomy import load_pool
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.generator import Generator
+from core.data.dynamic.synth import excise_heart
+from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
+from core.data.static import splits, store
+from core.data.static.labels import FOREGROUND
+from core.hparams import TrainCfg, apply_overrides, to_json
+from core.model import build_unet, resolve_device
+from core.obs import progress, setup, timed
+from core.registry import MODEL_NAME, save_model
+
+from ..evaluation.modelcard import generate
+from ..evaluation.validate import summarize, validate
 from ..tracking import track_run
+from .ef_lane import build_aux
+from .losses import PartialLabelDiceCE, SoftDiceCE, build_loss, uncertainty_weighted
 
 
 def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
     Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
-    import numpy as np
-    import torch
-
     inter = {c: 0.0 for c in FOREGROUND}
     denom = {c: 0.0 for c in FOREGROUND}
     model.eval()
@@ -43,17 +58,6 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     """Train ONE seed on the shared resident data `sh` (built once by train_seg). Seed-dependent state
     — RNG, model, optimizer, per-seed artifact dir + registry entry — lives here; the read-only data
     (resident tensors, val, aux EF lanes) is shared, so N seeds cost 1×data + N×model, not N×both."""
-    import numpy as np
-    import torch
-
-    from core.data.static import splits
-    from core.hparams import to_json
-    from core.model import build_unet
-    from core.obs import progress, setup
-
-    from ..evaluation.validate import summarize, validate
-    from .losses import build_loss, uncertainty_weighted
-
     d = cfg.generator.data
     device, pin, data_device = sh["device"], sh["pin"], sh["data_device"]
     gen, Xva, Yva, aux = sh["gen"], sh["Xva"], sh["Yva"], sh["aux"]
@@ -75,12 +79,10 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     soft_sigma = cfg.generator.aug.soft_label_sigma
     partial = getattr(gen, "valid", None) is not None
     if partial:
-        from .losses import PartialLabelDiceCE
         loss_fn = PartialLabelDiceCE()
         log.info("PARTIAL-LABEL loss: %d/%d slices class-masked",
                  int((~gen.valid.all(1)).sum()), gen.valid.shape[0])
     elif soft_sigma > 0:
-        from .losses import SoftDiceCE
         loss_fn = SoftDiceCE()
     else:
         loss_fn = build_loss(cfg.loss)
@@ -173,13 +175,11 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
         return model, results
     # build the rest of the artifacts into staging (card + onnx) BEFORE registering the complete set.
     try:
-        from ..evaluation.modelcard import generate
         generate(out)
         log.info("wrote %s/MODEL_CARD.md", out)
     except Exception as e:
         log.warning("model card skipped: %s", e)
     try:                                                   # attribution diagnostic (confusion + saliency)
-        from core.data.analysis.attribution import run_attribution
         s = run_attribution(model, Xva, Yva, cfg.model.out_channels, device, out)
         log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
     except Exception as e:
@@ -195,9 +195,6 @@ def _run_seed(cfg: TrainCfg, seed: int, sh: dict, alias: str | None, quick: bool
     # register the COMPLETE artifact set (model.pth + config + metrics + onnx + card) to the mlflow
     # registry — the sole model store. alias='production' makes this the flagship.
     try:
-        import mlflow
-
-        from core.registry import MODEL_NAME, save_model
         rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
         split = "+".join(d.test_vendors) or "legacy"
         kind = "flagship" if alias == "production" else "candidate"
@@ -218,14 +215,6 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     no per-seed disk reload or VRAM duplication. Artifacts register to the mlflow model registry (the
     sole store); `alias='production'` makes a run the flagship. Multi-seed needs a coded `--split`
     (legacy criteria splits key their partition on the seed, so they can't share one dataset)."""
-    import torch
-
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.dynamic.generator import Generator
-    from core.data.static import splits, store
-    from core.model import resolve_device
-    from core.obs import setup, timed
-
     d = cfg.generator.data
     # staging dir (gitignored) — per-seed artifacts build under here, then register to mlflow (the
     # store). base_out itself only holds the shared load log; each seed gets base_out(_s<seed>).
@@ -246,13 +235,11 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
     srcs = list(d.sources)
     if d.split:
-        from core.data.ingest.splits import load_split, parse_ref
         srcs = list(getattr(load_split(parse_ref(d.split)[0]), "sources", None) or d.sources)
     with timed(log, "store.load + split"):
         meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
         if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
-            from core.data.ingest.splits import resolve_cfg
             r = resolve_cfg(d, meta)
             train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam
             test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
@@ -278,7 +265,6 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     # gpu only makes sense with a cuda device; fall back to cpu residency otherwise.
     data_device = device if (cfg.residency == "gpu" and device == "cuda") else "cpu"
     with timed(log, f"preload slices (residency={cfg.residency}->{data_device})"):
-        import torch as _t
         if train_src is not None:
             # NEW: each Source OWNS its batch engine (train_gen). No static/dynamic if, no force_synth in
             # the interface, no bg_mode poke — StaticSource = real + DR-aug, DynamicSource = synth painter.
@@ -289,29 +275,27 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
             force_synth = None
             if d.anatomy_pool:
                 # TRAIN masks from synthetic anatomy (Rodero SSM label maps); val/test stay REAL held-out.
-                from core.data.dynamic.anatomy import load_pool
-                Ys = _t.as_tensor(load_pool(d.anatomy_pool), dtype=_t.long, device=data_device)  # [N,H,W]
+                Ys = torch.as_tensor(load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
                 if d.anatomy_mode == "mix":
                     # AUGMENTATION (bd pwih): REAL train + synth-anatomy UNION; synth rows force-painted.
                     Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-                    Xsy = _t.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
-                    Xtr = _t.cat([Xr, Xsy]); Ytr = _t.cat([Yr, Ys])
-                    force_synth = _t.cat([_t.zeros(Xr.shape[0], dtype=_t.bool, device=data_device),
-                                          _t.ones(Ys.shape[0], dtype=_t.bool, device=data_device)])
+                    Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
+                    Xtr = torch.cat([Xr, Xsy]); Ytr = torch.cat([Yr, Ys])
+                    force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
+                                          torch.ones(Ys.shape[0], dtype=torch.bool, device=data_device)])
                     log.info("ANATOMY MIX: %d real + %d synth-anatomy (bg=%s)", Xr.shape[0], Ys.shape[0],
                              cfg.generator.synth.bg_mode)
                 else:                                                        # "replace": synth anatomy ONLY
                     Ytr = Ys
                     cfg.generator.synth.synth_p = 1.0
                     if cfg.generator.synth.bg_mode in ("flat", "procedural", "mrxcat"):
-                        Xtr = _t.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
+                        Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
                         log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0],
                                  cfg.generator.synth.bg_mode)
                     else:                                                    # Rodero heart on real bg (excised)
-                        from core.data.dynamic.synth import excise_heart
                         Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
                         Xr = excise_heart(Xr, Yr)
-                        Xtr = Xr[_t.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
+                        Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
                         log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0],
                                  cfg.generator.synth.bg_mode)
             else:
@@ -326,7 +310,6 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
     n_train = gen.X.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
     # Auxiliary EF lanes (GPU-resident, built ONCE and shared across seeds) — a list the epoch loop
     # iterates, so it never branches on cfg.ef_*. Empty when the lane is off / train source isn't static.
-    from .ef_lane import build_aux
     aux = build_aux(cfg, splits, train_df, d.size, device,
                     train_src is not None and train_src.kind == "static")
     for lane in aux:
@@ -343,8 +326,6 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, quick: bool = False, seed
 
 
 if __name__ == "__main__":
-    from core.hparams import apply_overrides
-
     # Defaults = the generalization split (hold out ACDC + Canon). Change the split via the criteria
     # on DataCfg with --set, e.g. legacy train M&M-2 -> test ACDC:
     #   --set generator.data.sources=('mnm2','acdc') generator.data.test_datasets=('acdc',) generator.data.test_vendors=()
@@ -375,7 +356,6 @@ if __name__ == "__main__":
 
     cfg = TrainCfg()
     if a.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
-        from core.data.ingest.splits import list_splits
         name = a.split.split("@", 1)[0]
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")

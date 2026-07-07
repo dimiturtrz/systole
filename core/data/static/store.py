@@ -18,19 +18,24 @@ missing), then returns one polars frame over all requested datasets. Splits are 
 """
 from __future__ import annotations
 
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import polars as pl
+from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
+from core.data.static.geo import COUNTRY_CONTINENT
 from core.data.static.mri.pathology import harmonize
 from core.data.static.mri.registry import get_adapter
+from core.obs import progress
 from core.preprocessing.n4 import N4Cfg
-from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case
+from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
+from core.preprocessing.preprocess import TARGET_INPLANE, preprocess_case, resample_inplane
 
 
 class DataCfg(BaseModel):
@@ -134,10 +139,6 @@ def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_IN
     """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
     it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks are
     stable). The standard is a normalization axis -> reference data, fit once, applied in preprocess."""
-    from omegaconf import OmegaConf
-
-    from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
-    from core.preprocessing.preprocess import resample_inplane
     names = SOURCE_DATASETS if names is None else names
     rows = []
     for name in names:
@@ -208,9 +209,6 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
     derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
     real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
     so the whole domain-randomization sweep survives for everything we lack real values for."""
-    import polars as pl
-    from omegaconf import OmegaConf
-
     from core.data.static.reference import reference_dir
     base = Path(data_root("processed"))
     metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
@@ -288,7 +286,6 @@ def migrate_meta(names: list[str] | None = None) -> list[Path]:
     — NO image reload (sidecar parse only). Run after adding a metadata column or fixing an adapter's
     meta() (e.g. SCD now carrying centre/country/scanner). Every processed/<name>/<paramkey>/ of a
     REGISTERED adapter is refreshed; unregistered dirs (anatomy pools etc.) skipped. `names` filters."""
-    from core.data.static.mri.registry import get_adapter
     base = Path(data_root("processed"))
     out: list[Path] = []
     for meta_csv in sorted(base.glob("*/*/meta.csv")):
@@ -328,9 +325,6 @@ def build(name: str, inplane: float = TARGET_INPLANE, n4: bool = False,
         np.savez_compressed(data_dir / f"{case.name}.npz", **npz)
 
     if todo:
-        import logging
-
-        from core.obs import progress
         log = logging.getLogger("cardioseg.store")
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
         log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
@@ -368,7 +362,6 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE,
         frames.append(df)
     cloud = pl.concat(frames, how="vertical_relaxed")
     # continent is DERIVED from country (SSOT in data/geo) — queryable column, never hand-stored.
-    from core.data.static.geo import COUNTRY_CONTINENT
     return cloud.with_columns(
         pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 

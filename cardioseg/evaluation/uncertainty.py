@@ -15,7 +15,24 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
+import polars as pl
+from scipy.ndimage import binary_erosion
+from sklearn.metrics import average_precision_score, roc_auc_score
+
+from core.config import FLAGSHIP_REF
+from core.data.static import store
+from core.data.static.labels import overlay_cmap
+from core.inference import predict_volume_members
+from core.model import load_run
+from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
+from core.registry import resolve
+
+from ..tracking import track_run
 
 
 def tta_uncertainty(model, vol_img, size, device):
@@ -27,8 +44,6 @@ def tta_uncertainty(model, vol_img, size, device):
         epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
     NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
     here is a lower-bound proxy, not deep-ensemble gold."""
-    from core.inference import predict_volume_members
-
     pred, mean, members = predict_volume_members(model, vol_img, size, device)  # mean [D,C,H,W]; members [K,D,C,H,W]
     logc = np.log(mean.shape[1])
     total = -(mean * (mean + 1e-12).log()).sum(1) / logc                        # H[mean]
@@ -40,7 +55,6 @@ def tta_uncertainty(model, vol_img, size, device):
 
 def _boundary(mask):
     """1-voxel boundary band of the foreground (per slice)."""
-    from scipy.ndimage import binary_erosion
     fg = mask > 0
     return fg & ~binary_erosion(fg, iterations=1)
 
@@ -60,17 +74,6 @@ def ece(conf, correct, n_bins=15):
 
 
 def main():
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import polars as pl
-
-    from core.config import FLAGSHIP_REF
-    from core.data.static import store
-    from core.model import load_run
-    from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
-    from core.registry import resolve
-
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
@@ -118,7 +121,6 @@ def main():
 
     # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
     # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
-    from sklearn.metrics import average_precision_score, roc_auc_score
     ent_all = np.concatenate(ents); wrong = 1.0 - correct
     base = float(wrong.mean())
     rocauc = float(roc_auc_score(wrong, ent_all))
@@ -153,7 +155,6 @@ def main():
           f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
     print(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
-    from ..tracking import track_run
     trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     ev = a.eval
     trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
@@ -163,7 +164,6 @@ def main():
 
 
 def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):
-    from core.data.static.labels import overlay_cmap
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

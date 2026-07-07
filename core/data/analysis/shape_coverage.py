@@ -12,9 +12,13 @@ numpy-only (SVD for PCA); no sklearn/umap dependency.
 """
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 
 import numpy as np
+
+from core.data.dynamic.anatomy import load_pool
 
 # canonical labels: 1 RV-cav, 2 LV-myo, 3 LV-cav (0 bg)
 _RV, _MYO, _LVC = 1, 2, 3
@@ -78,9 +82,6 @@ def coverage(real: np.ndarray, synth: np.ndarray) -> dict:
 
 
 def _main():
-    import argparse
-
-    from core.data.dynamic.anatomy import load_pool
     ap = argparse.ArgumentParser(description="Shape coverage: does generated anatomy encompass real? (uy4d)")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
@@ -88,7 +89,6 @@ def _main():
     a = ap.parse_args()
     real = _feats_from_masks(_real_masks(a.real))
     synth = _feats_from_masks(load_pool(a.pool))
-    import json
     print(json.dumps(coverage(real, synth), indent=2))
     # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
     mu, sd = real.mean(0), real.std(0) + 1e-9

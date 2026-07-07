@@ -14,15 +14,25 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import polars as pl
+import torch
+
+from core.data.static import splits, store
+from core.data.static.labels import FOREGROUND
+from core.inference import predict_volume_probs
+from core.measure import ejection_fraction
+from core.model import load_run, resolve_device
+from core.postprocess import largest_cc_per_class
+from core.preprocessing.preprocess import SIZE, stack_slices
+from core.registry import resolve
+
+from ..tracking import start
+from .uncertainty import tta_uncertainty
 
 
 def ensemble_decompose(models, vol_img, size, device):
     """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
     [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
-    import torch
-
-    from core.inference import predict_volume_probs
-
     mems = [predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
     members = torch.stack(mems)                                                  # [K,D,C,H,W]
     mean = members.mean(0)
@@ -37,14 +47,6 @@ def ensemble_decompose(models, vol_img, size, device):
 def ensemble_score(models, df, size, device):
     """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
     like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
-    import numpy as np
-
-    from core.data.static import store
-    from core.data.static.labels import FOREGROUND
-    from core.measure import ejection_fraction
-    from core.postprocess import largest_cc_per_class
-    from core.preprocessing.preprocess import stack_slices
-
     inter = {c: 0.0 for c in FOREGROUND}; den = {c: 0.0 for c in FOREGROUND}
     diffs = []
     for r in df.iter_rows(named=True):
@@ -70,9 +72,6 @@ def ensemble_score(models, df, size, device):
 
 
 def _eval_df(cfg, which):
-    import polars as pl
-
-    from core.data.static import splits, store
     d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -84,10 +83,6 @@ def _eval_df(cfg, which):
 
 def _headroom(models, df, size, device):
     """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
-    from core.data.static import store
-    from core.preprocessing.preprocess import stack_slices
-
-    from .uncertainty import tta_uncertainty
     ea, ee, ta, te = [], [], [], []
     for r in df.iter_rows(named=True):
         c = store.load_arrays(r["path"])
@@ -106,12 +101,6 @@ def _headroom(models, df, size, device):
 
 
 def main():
-    from core.model import load_run, resolve_device
-    from core.preprocessing.preprocess import SIZE
-    from core.registry import resolve
-
-    from ..tracking import start
-
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")

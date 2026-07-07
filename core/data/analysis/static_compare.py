@@ -10,8 +10,16 @@ ED->ES DEFORMATION. Those require a contraction model to generate ES from ED (fl
 """
 from __future__ import annotations
 
-import numpy as np
+import argparse
+import json
 
+import numpy as np
+import torch
+from scipy.ndimage import binary_erosion, distance_transform_edt
+
+from core.data.dynamic.anatomy import load_pool
+
+from .shape_coverage import _real_masks
 from .synth_fidelity import wasserstein1d  # reuse the W1 the color analysis uses
 
 _RV, _MYO, _LVC = 1, 2, 3
@@ -19,7 +27,6 @@ _RV, _MYO, _LVC = 1, 2, 3
 
 def geom_metrics(mask: np.ndarray) -> dict | None:
     """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
-    from scipy.ndimage import binary_erosion, distance_transform_edt
     fg = mask > 0
     if int(fg.sum()) < 40:
         return None
@@ -48,7 +55,6 @@ def _dist(masks) -> dict:
 
 def compare(real_masks, synth_masks) -> dict:
     """Per-metric W1(real, synth) + real/synth medians — the geometry/biomarker panel."""
-    import torch
     R, S = _dist(real_masks), _dist(synth_masks)
     out = {}
     for k in R:
@@ -60,12 +66,6 @@ def compare(real_masks, synth_masks) -> dict:
 
 
 def _main():
-    import argparse
-    import json
-
-    from core.data.dynamic.anatomy import load_pool
-
-    from .shape_coverage import _real_masks
     ap = argparse.ArgumentParser(description="Static geometry/biomarker panel: synth vs real (uy4d).")
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")

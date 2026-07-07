@@ -14,6 +14,10 @@ looks up); train.py applies it to the generator cfg before building the engine.
 """
 from __future__ import annotations
 
+import torch
+
+from core.data.dynamic import anatomy as _anatomy
+from core.data.dynamic.generator import Generator
 from core.data.ingest.source import Source
 
 DEFAULT_POOL_BG = "procedural"          # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
@@ -33,10 +37,7 @@ class DynamicSource:
     def _resident(self, size: int, device: str):
         """(X, Y, force_synth) resident tensors for this source's Generator. Zero-input: N = pool size,
         X = zeros, all force. Seeded: seed's real ++ synth-anatomy rows, force only the synth ones."""
-        import torch
-
-        from core.data.dynamic.anatomy import load_pool
-        Ys = torch.as_tensor(load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
+        Ys = torch.as_tensor(_anatomy.load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
         Xsy = torch.zeros((Ys.shape[0], 1, size, size), device=device)                 # no real pixels
         if self.seed is None:                                                          # zero real input
             return Xsy, Ys, torch.ones(Ys.shape[0], dtype=torch.bool, device=device)
@@ -49,7 +50,6 @@ class DynamicSource:
     def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
         """The source's own batch engine. The painter (bg_mode) + synth fraction ride on a COPY of the
         generator cfg — no global mutation. force_synth is internal (never in the public interface)."""
-        from core.data.dynamic.generator import Generator
         X, Y, fs = self._resident(size, device)
         synth = gen_cfg.synth.model_copy(update={"bg_mode": self.bg_mode, "synth_p": self.synth_p})
         cfg = gen_cfg.model_copy(update={"synth": synth})

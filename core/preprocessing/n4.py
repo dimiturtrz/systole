@@ -11,6 +11,9 @@ spatial (fixes *where* the brightness drifts); intensity-norm is global (fixes t
 from __future__ import annotations
 
 import numpy as np
+import SimpleITK as sitk
+import torch
+import torch.nn.functional as F
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
@@ -39,8 +42,6 @@ def n4_bias(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
 
 def _smooth3d(v, sigma: float):
     """Separable 3D Gaussian blur (the smooth bias field) via conv3d. v: [D,H,W] tensor."""
-    import torch
-    import torch.nn.functional as F
     k = max(3, int(6 * sigma) | 1)
     r = torch.arange(k, device=v.device, dtype=v.dtype) - k // 2
     g = torch.exp(-0.5 * (r / sigma) ** 2); g = g / g.sum()
@@ -61,8 +62,6 @@ def n4_gpu(vol: Volume, spacing: Spacing | None = None, device: str = "cuda",
     estimated bias -> smooth it (the field) -> subtract}. Histogram sharpening is what separates
     bias from real low-frequency anatomy (vs a naive low-pass). All ops are tensor ops.
     """
-    import torch
-
     x = torch.as_tensor(vol, dtype=torch.float32, device=device)
     pos = x[x > 0]
     if pos.numel() < 16:
@@ -106,8 +105,6 @@ def _n4_sitk(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
     `shrink` downsamples for the fit (speed); the estimated field is applied at full resolution.
     Otsu foreground mask so air doesn't drive the fit. Falls back to the input on any ITK error.
     """
-    import SimpleITK as sitk
-
     arr = vol.astype(np.float32)
     img = sitk.GetImageFromArray(arr)                  # [D,H,W] -> (x,y,z) internally
     if spacing is not None:

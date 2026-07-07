@@ -19,10 +19,14 @@ but the digital-twin needs multi-acquisition input; one-frame heart fit is degen
 """
 from __future__ import annotations
 
+import argparse
 import math
+from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 
 from .mri_physics import bssfp_signal, tissue_params
 
@@ -80,10 +84,6 @@ def fit_acquisition(real_img: torch.Tensor, seg: torch.Tensor, n_classes: int, f
 def _main():
     """Fit acquisition to one real ACDC slice (given its GT) and report recon + the identifiability check
     (fit flip-only vs fit tr+flip from two inits -> same recon, different params = under-determined)."""
-    import argparse
-    from pathlib import Path
-
-    import numpy as np
     ap = argparse.ArgumentParser(description="FIT probe: recover acquisition from a real scan (bd ixea).")
     ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
     ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")
@@ -106,7 +106,6 @@ def _main():
     print(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
     print("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
     if a.out or True:
-        from PIL import Image
         heart = (tg[0] > 0).numpy()
         def show(t):
             v = t[0, 0].numpy().copy()

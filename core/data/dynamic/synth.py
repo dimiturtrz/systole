@@ -20,6 +20,7 @@ global RNG (seed for repro). Config = injected SynthCfg.
 """
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 
 import torch
@@ -29,6 +30,16 @@ from pydantic import BaseModel, Field
 from core.config import _VALIDATE
 
 from .augment import _gaussian_kernel
+from .mri_physics import (
+    TR_RANGE_MS,
+    banding,
+    blood_classes,
+    bssfp_signal,
+    derive_flip_range,
+    named_tissue_params,
+    tissue_params,
+)
+from .mrxcat import FOV_TISSUE
 
 
 class SynthCfg(BaseModel):
@@ -164,7 +175,6 @@ class Background(ABC):
     def paint_params(self, n_classes: int, n_paint: int, field: float, dev):
         """(T1,T2,PD) [n_paint] for the extended classes at `field`. Default = heart classes + bg-ladder
         tiers (`tissue_params`). A strategy that assigns each class an EXPLICIT tissue (FovBg) overrides."""
-        from .mri_physics import tissue_params
         return tissue_params(n_classes, n_paint - n_classes, field, dev)
 
     def seg_target(self, mask: torch.Tensor) -> torch.Tensor:
@@ -246,12 +256,9 @@ class FovBg(Background):
     restricted to {1,2,3}. `mask` passed to the painter IS this FOV map; n_classes stays the model's 4
     (blood/inflow logic keys on cavities 1/3, unchanged)."""
     def extend(self, mask, n_classes, dev, real_img=None):
-        from .mrxcat import FOV_TISSUE
         return mask.long(), len(FOV_TISSUE)                  # mask is the FOV tissue map; paint all 8
 
     def paint_params(self, n_classes, n_paint, field, dev):
-        from .mri_physics import named_tissue_params
-        from .mrxcat import FOV_TISSUE
         return named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
 
     def seg_target(self, mask):
@@ -297,7 +304,6 @@ class RandomizedAcq(Acquisition):
     """Physics-bounded domain randomization: TR over the cited cine band, flip across the per-field
     SAR-bounded FWHM contrast range (derive_flip_range). Breadth, not the single optimal point."""
     def sample(self, b, cfg, dev):
-        from .mri_physics import TR_RANGE_MS, derive_flip_range
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
         rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
         tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev)
@@ -344,10 +350,6 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     the background is split by REAL per-slice intensity into tissue tiers (real SHAPES) and painted by
     tissue too -> whole-FOV physical synth. `real_img` supplies those bg shapes (and the hybrid bg).
     """
-    import math
-
-    from .mri_physics import bssfp_signal
-
     b = mask.shape[0]
     dev = mask.device
     mask = mask.long()
@@ -375,20 +377,17 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
-        from .mri_physics import blood_classes  # from physiological v/thk + derived TR (no magic fraction)
-        v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
+        v = torch.rand(b, 1, device=dev)         # from physiological v/thk + derived TR (no magic fraction) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
         thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
         f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
         s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
         for c in blood_classes(n_classes):
             mu[:, c] = (1 - f[:, 0]) * mu[:, c] + f[:, 0] * s_fresh[:, c]     # blend blood toward fresh
     if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
-        from .mri_physics import blood_classes
         for c in blood_classes(n_classes):
             mu[:, c] = mu[:, c] * cfg.blood_scale
     sg = mu.abs() * cfg.texture                                              # within-class texture
     if cfg.flow > 0:                                                         # flow: blood pools spread
-        from .mri_physics import blood_classes
         for c in blood_classes(n_classes):
             sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
@@ -396,7 +395,6 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,
     # strongest for long-T2 blood -> lowers+spreads the over-bright cavity (the cav-fidelity fix).
     # Applied as the signal RATIO band(φ)/band(0) so per-class jitter/flow in mu_map are preserved.
     if cfg.b0_hz > 0:
-        from .mri_physics import banding
         t2m = (oh * t2[:, :, None, None]).sum(1, keepdim=True)               # per-pixel T2
         low = torch.rand(b, 1, 4, 4, device=dev) * 2 - 1
         df = cfg.b0_hz * F.interpolate(low, size=mask.shape[-2:], mode="bilinear", align_corners=False)

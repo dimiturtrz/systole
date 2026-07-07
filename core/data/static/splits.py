@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from core.data.ingest.splits import resolve_cfg
+
 
 def split_patients(cases: list[Path], val_frac: float = 0.2, seed: int = 0
                    ) -> tuple[list[Path], list[Path]]:
@@ -75,7 +77,6 @@ def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
     ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
     the coded splits' val — a trap this removes)."""
     if getattr(d, "split", ""):
-        from core.data.ingest.splits import resolve_cfg
         return resolve_cfg(d, meta).val.frame
     return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                       d.val_datasets, d.val_vendors, d.train_vendors)[1]

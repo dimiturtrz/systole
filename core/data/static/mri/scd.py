@@ -21,14 +21,16 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+from skimage.draw import polygon
 
+from core.config import data_root
 from core.data.static.mri.base import DatasetAdapter, PatientData, load_csv_info
+from core.data.static.mri.dicom import read_image
 
 _IRCCI = "contours-manual/IRCCI-expert"
 
 
 def _root(root: str | Path | None = None) -> Path:
-    from core.config import data_root
     return Path(root) if root else Path(data_root("raw")) / "sunnybrook"
 
 
@@ -69,7 +71,6 @@ def _read_contour(path: Path) -> np.ndarray:
 def _fill(pts: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     """Rasterize a closed polygon (x=col, y=row pixel coords) to a boolean mask on `shape` [rows,cols].
     skimage.draw (a core dep) — matplotlib.path circular-imports in spawn workers on Windows."""
-    from skimage.draw import polygon
     m = np.zeros(shape, dtype=bool)
     rr, cc = polygon(pts[:, 1], pts[:, 0], shape)        # polygon(row=y, col=x)
     m[rr, cc] = True
@@ -89,7 +90,6 @@ def _rasterize(endo: np.ndarray | None, epi: np.ndarray | None, shape) -> np.nda
 def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
     """SCD patient -> ED/ES frames (img [D,H,W], canonical mask {0,2,3}). D = contoured SAX slices; each
     slice's ED/ES chosen by endo area (larger=ED). Spacing (z,y,x): z from SliceLocation steps, y/x from px."""
-    from core.data.static.mri.dicom import read_image
     case = Path(case)
     base = _root(root)
     info = _patient_csv(base).get(case.name, {})
@@ -131,7 +131,6 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
 
 def scd_meta(case: str | Path, root: str | Path | None = None) -> dict:
     """Demographics + pathology from the patient CSV — the stratified-eval / normalization hook."""
-    from core.data.static.mri.dicom import read_image
     case = Path(case)
     info = _patient_csv(_root(root)).get(case.name, {})
     m = {"group": info.get("Pathology"), "sex": info.get("Gender"), "age": info.get("Age"),

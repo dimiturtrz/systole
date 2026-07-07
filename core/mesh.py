@@ -11,9 +11,13 @@ Ref: Lorensen & Cline (marching cubes) 1987.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
+from scipy.ndimage import zoom
+from skimage.measure import marching_cubes
 
 from core.config import data_root
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
@@ -28,9 +32,6 @@ def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
     """Smooth chamber surface (pyvista PolyData, world mm) or None if the chamber is absent/tiny.
     largest-CC -> isotropic linear resample (no z-staircase) -> zero-pad (cap open base/apex) ->
     marching cubes -> Taubin smooth -> decimate -> oriented normals."""
-    import pyvista as pv
-    from scipy.ndimage import zoom
-    from skimage.measure import marching_cubes
     binary = largest_cc_binary(mask == label)
     if binary.sum() < 8:
         return None
@@ -49,7 +50,6 @@ def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
 
 def export_glb(mask: np.ndarray, spacing, path: str | Path, iso: float = MESH_MM) -> Path:
     """Colored multi-chamber GLB (glTF 2.0). Myocardium semi-transparent so the cavity shows."""
-    import pyvista as pv
     pl = pv.Plotter(off_screen=True)
     for label, (_name, color) in CLASSES.items():
         mesh = chamber_surface(mask, label, spacing, iso)
@@ -88,7 +88,6 @@ def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"
 def _main():
     """Export chamber meshes for one consolidated subject npz. Location layering: default is
     <data>/meshes/ (config — the paths.yaml data root); --out overrides per invocation (argv)."""
-    import argparse
     ap = argparse.ArgumentParser(description="Export chamber meshes (GLB + STL) from a subject npz.")
     ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
     ap.add_argument("--frame", default="ed", choices=["ed", "es"])

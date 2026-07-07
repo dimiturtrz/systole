@@ -13,12 +13,22 @@ so every run ships an attribution.png + confusion next to its card. captum is an
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
+import matplotlib
 import torch
 
-from core.data.static.labels import CLASSES
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+from core.config import FLAGSHIP_REF  # noqa: E402
+from core.data.dynamic.dataset import load_to_gpu  # noqa: E402
+from core.data.static import splits, store  # noqa: E402
+from core.data.static.labels import CLASSES  # noqa: E402
+from core.obs import setup  # noqa: E402
+from core.registry import resolve  # noqa: E402
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
@@ -48,10 +58,6 @@ def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tens
 def _render(model, X, Y, pred, device, out_png: Path, n_classes: int, k: int = 4) -> bool:
     """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
     it was drawn. Always writes the real/GT/pred panel."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n_classes))][:k]
     if not good:
         good = list(range(min(k, Y.shape[0])))
@@ -97,16 +103,8 @@ def run_attribution(model, X: torch.Tensor, Y: torch.Tensor, n_classes: int, dev
 
 
 def _main():
-    import argparse
-
-    from core.config import FLAGSHIP_REF
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits, store
     from core.hparams import TrainCfg
     from core.model import load_run
-    from core.obs import setup
-    from core.registry import resolve
-
     ap = argparse.ArgumentParser(description="Attribution diagnostic: confusion + saliency on a model.")
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")

@@ -14,6 +14,9 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from pydantic import ConfigDict
 
+from core.paths import resolve_data_root
+from core.registry import resolve
+
 # Shared pydantic config used by every dispersed cfg (ModelCfg/AugCfg/…): setattr (used by the
 # `--set` overrides) re-validates the field. Lives here — a leaf module both core.hparams and the
 # per-class config homes import without cycling.
@@ -30,7 +33,6 @@ def _root() -> str:
     """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback, then
     adapted to the current OS by core.paths.resolve_data_root — translates a Windows drive path to/
     from its WSL mount, and raises (never silently relative) for an untranslatable foreign path."""
-    from core.paths import resolve_data_root
     raw = str(os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT)
     return resolve_data_root(raw)
 
@@ -42,7 +44,6 @@ def data_root(kind: str = "raw") -> str:
     still never silently relative)."""
     override = OmegaConf.select(_cfg, kind)
     if override:
-        from core.paths import resolve_data_root
         return resolve_data_root(str(override))
     return str(Path(_root()) / kind)
 
@@ -56,7 +57,6 @@ FLAGSHIP_REF = "production"
 def flagship_dir() -> str:
     """Local dir of the flagship's resolved artifacts (model.pth + config.json + …), downloaded from
     the registry on demand. Use this where a run dir was expected. Lazy import — keep config light."""
-    from core.registry import resolve
     return str(resolve(FLAGSHIP_REF))
 
 

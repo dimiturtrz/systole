@@ -12,6 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import polars as pl
 
@@ -22,7 +23,7 @@ from core.evaluate import CLASSES, surface_metrics
 from core.hparams import from_json
 from core.measure import ef_statistics
 from core.model import resolve_device
-from core.registry import resolve
+from core.registry import _DB_URI, _run_id_for, resolve
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
 
@@ -92,9 +93,6 @@ def main():
 
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
     try:
-        import mlflow
-
-        from core.registry import _DB_URI, _run_id_for
         mlflow.set_tracking_uri(_DB_URI)
         with mlflow.start_run(run_id=_run_id_for(a.run)):
             for ax, v in f.items():

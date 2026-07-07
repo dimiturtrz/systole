@@ -9,6 +9,7 @@ so this is computed per-volume, not per-slice.
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as F
 
 from core.data.static.labels import LV_CAV
 from core.measure import voxel_volume_ml
@@ -42,7 +43,6 @@ def vol_loss(edv_pred: torch.Tensor, esv_pred: torch.Tensor, edv_gt, esv_gt,
     BATCHED: edv_pred/esv_pred (and edv_gt/esv_gt) may be scalars OR [K] per-subject vectors — Huber
     mean-reduces over all 2K elements, identical to per-subject loss then averaged. Lets the EF lane
     do one segment-summed forward for a whole sampled batch instead of a python loop over subjects."""
-    import torch.nn.functional as F
     edv_gt = torch.as_tensor(edv_gt, dtype=edv_pred.dtype, device=edv_pred.device)
     esv_gt = torch.as_tensor(esv_gt, dtype=edv_pred.dtype, device=edv_pred.device)
     pred = torch.stack([edv_pred, esv_pred]) / edv_gt              # [2] or [2,K] — dimensionless

@@ -11,11 +11,19 @@ Companion to attribution.py (what the MODEL learns) — this is what the DATA lo
 """
 from __future__ import annotations
 
+import argparse
+import copy
 import json
 
+import numpy as np
+import polars as pl
 import torch
 
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.synth import synthesize_from_labels
+from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.obs import setup
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]
 
@@ -36,7 +44,6 @@ def synth_real_distance(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, d
     """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
     SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
     (z-units) + the mean and worst class — the break localized."""
-    from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
     ym = Y.reshape(-1).cpu()
@@ -88,9 +95,6 @@ def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: 
     """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
     and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
     synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
-    import numpy as np
-
-    from core.data.dynamic.synth import synthesize_from_labels
     Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
     Xr, Xs = X[:, 0].to(device), Xs[:, 0]
     ym = Y.to(device)
@@ -124,7 +128,6 @@ _KNOB_OFF = {"jitter": {"jitter": 0.0}, "texture": {"texture": 0.0}, "noise": {"
 
 def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
     """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
-    import numpy as np
     xr, yr = x1c.reshape(-1), ym.reshape(-1)
     pooled = {c: float(xr[yr == c].std()) if int((yr == c).sum()) > 50 else float("nan")
               for c in range(n_classes)}
@@ -144,9 +147,6 @@ def variance_attribution(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, 
     """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
     pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
     generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
-    import copy
-
-    from core.data.dynamic.synth import synthesize_from_labels
     Xdev, Ydev = X[:, 0].to(device), Y.to(device)
     base = copy.deepcopy(cfg)
     if field is not None:
@@ -177,11 +177,6 @@ def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800
     σ ABOVE the band's max on a class = genuinely wider than any real vendor (candidate over-spread);
     WITHIN the band = just covering the vendor range (domain randomization working, not a defect).
     DIAGNOSTIC ONLY — never a tuning target (fitting synth to these = leaking real/test-vendor stats)."""
-    import polars as pl
-    import torch
-
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits
     per_vendor = {}
     for v in sorted(meta.get_column("vendor").unique().to_list()):
         sub = meta.filter(pl.col("vendor") == v)
@@ -211,11 +206,6 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
     is enough. Thin vendors (< min_slices) are skipped (W1 noisy on tiny samples); large vendors are
     random-subsampled to max_slices (W1 is sample-size-agnostic, and it bounds GPU memory + makes
     vendors comparable). Reuses `synth_real_distance` per subset — the pure metric stays the source."""
-    import polars as pl
-    import torch
-
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits
     out = {}
     for v in sorted(meta.get_column("vendor").unique().to_list()):
         sub = meta.filter(pl.col("vendor") == v)
@@ -234,14 +224,6 @@ def by_vendor(meta, cfg, n_classes: int, device: str, size: int, q: int = 100,
 
 
 def _main():
-    import argparse
-
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits, store
-    from core.hparams import TrainCfg
-    from core.model import resolve_device
-    from core.obs import setup
-
     ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real intensity analysis. "
                                  "distance=W1 faithfulness | separability=d' distinguishability | "
                                  "variance=per-knob spread attribution vs real (all on VAL, test untouched).")
@@ -256,10 +238,8 @@ def _main():
                     "sample-size-agnostic; bounds VRAM)")
     a = ap.parse_args()
     setup()
-    import polars as pl
-    import torch
-
-    from core.hparams import apply_overrides
+    from core.hparams import TrainCfg, apply_overrides
+    from core.model import resolve_device
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in a.overrides])
     cfg.generator.synth.synth_p = 1.0

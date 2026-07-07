@@ -12,11 +12,17 @@ acquisition calibration is NOT the fidelity lever (the gap is composition/z-norm
 """
 from __future__ import annotations
 
+import argparse
 import math
 
+import polars as pl
 import torch
 
+from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+from core.data.static import splits, store
 from core.data.static.labels import CLASSES
+from core.obs import setup
 
 
 def _standardize(v: torch.Tensor) -> torch.Tensor:
@@ -28,7 +34,6 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
     """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
     real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
     Standardized so it fits the CONTRAST SHAPE (bSSFP scale is arbitrary)."""
-    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
     real_z = _standardize(real_means)
     trs = torch.linspace(*tr_grid[:2], int(tr_grid[2]))
     fls = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
@@ -47,15 +52,7 @@ def fit_acquisition(real_means: torch.Tensor, n_classes: int,
 
 
 def _main():
-    import argparse
-
-    import polars as pl
-
-    from core.data.dynamic.dataset import load_to_gpu
-    from core.data.static import splits, store
     from core.hparams import TrainCfg
-    from core.obs import setup
-
     ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")
     ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
     a = ap.parse_args()

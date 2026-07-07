@@ -13,12 +13,26 @@ pyvista + vtk are the `viz` extra (imported lazily). ED-only, CT-derived (see bd
 """
 from __future__ import annotations
 
+import argparse
+import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
+from PIL import Image
+from scipy.ndimage import (
+    binary_closing,
+    binary_dilation,
+    binary_erosion,
+    binary_fill_holes,
+)
+from scipy.ndimage import label as cc_label
+from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV  # 3
+from core.preprocessing.preprocess import fit_square
 
 LV_ID, RV_ID = 1, 2                    # cell tag: LV / RV myocardium (rest = atria/vessels, dropped)
 _SENTINEL = -5.0                       # universal-coord sentinel guard (real values in [-1..1]; atria=-10)
@@ -94,9 +108,6 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
     Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
     LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
-    import pyvista as pv
-    from scipy.ndimage import binary_closing, binary_dilation, binary_fill_holes
-    from scipy.ndimage import label as cc_label
     m = _sax_align(mesh)
     tn = _tag_name(m)
     x0, x1, y0, y1, z0, z1 = m.bounds
@@ -141,7 +152,6 @@ REAL_SIZE_PX = (58, 92)               # sample target max-bbox side here (measur
 def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
     """Uniformly in-plane rescale a [D,H,W] label volume so its GLOBAL max fg-bbox longest side hits
     `target_px` (nearest-neighbour, label-preserving). No-op if the heart has no foreground."""
-    from scipy.ndimage import zoom as _zoom
     fg = vol > 0
     if not fg.any():
         return vol
@@ -156,7 +166,6 @@ def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
 def load(path: str | Path):
     """Read a Rodero mesh (pyvista); sets the region tag active for thresholding. Prefers a sibling
     BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
-    import pyvista as pv
     p = Path(path)
     vtu = p.with_suffix(".vtu")
     m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
@@ -165,7 +174,6 @@ def load(path: str | Path):
 
 
 def _convert_one(mp: str) -> str:
-    import pyvista as pv
     out = Path(mp).with_suffix(".vtu")
     if not out.exists():
         pv.read(mp).save(str(out), binary=True)
@@ -175,8 +183,6 @@ def _convert_one(mp: str) -> str:
 def convert_binary(mesh_dir: str | Path, workers: int = 0) -> int:
     """One-time: write a BINARY .vtu beside every ASCII .vtk (parallel). load() then uses it (4.5x
     faster). Returns count converted. ASCII parse is ~half the per-mesh voxelize cost."""
-    import os
-    from concurrent.futures import ProcessPoolExecutor
     vtks = [str(p) for p in sorted(Path(mesh_dir).rglob("*.vtk"))]
     nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
     with ProcessPoolExecutor(max_workers=nw) as ex:
@@ -190,7 +196,6 @@ def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
     deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
     (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
     ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
-    from scipy.ndimage import binary_dilation, binary_erosion
     lvc, myo = mask == LV_CAV, mask == 2
     wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
     out = mask.copy()
@@ -227,7 +232,6 @@ def _pool_worker(args) -> list[np.ndarray]:
     """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
     process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
     mp, inplane, size, min_fg, scale_reps, min_cav_frac, mseed = args
-    from core.preprocessing.preprocess import fit_square
     rng = np.random.default_rng(mseed)
     out = []
     try:
@@ -261,8 +265,6 @@ def build_pool(mesh_dir: str | Path, out_path: str | Path, size: int = DEFAULT_S
     real ACDC size distribution (REAL_SIZE_PX); `scale_reps` emits that many independent scale draws per
     mesh. Meshes are voxelized in PARALLEL (`workers` processes; 0 -> cpu-2, the bottleneck is the
     per-mesh select_enclosed_points on ~2M-cell tets) — embarrassingly parallel, deterministic."""
-    import os
-    from concurrent.futures import ProcessPoolExecutor
     # discover meshes by STEM: prefer the binary .vtu (4.5x faster load; the ASCII .vtk is a redundant
     # duplicate and is pruned from storage), fall back to .vtk for a fresh, unconverted download.
     stems = {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtu")}
@@ -293,7 +295,6 @@ def load_pool(path: str | Path) -> np.ndarray:
 
 def _main():
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
-    import argparse
     ap = argparse.ArgumentParser(description="Rodero mesh -> SAX 3-class label volume (bd 1vl).")
     ap.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
     ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
@@ -302,7 +303,6 @@ def _main():
     vol = voxelize(load(a.mesh), inplane=a.inplane)
     counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     print(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
-    from PIL import Image
     D = vol.shape[0]
     ks = [int(D * f) for f in (0.3, 0.45, 0.6, 0.75)]            # mid-ventricular slices
     cmap = np.array([[0, 0, 0], [91, 141, 239], [255, 202, 91], [239, 83, 80]], np.uint8)

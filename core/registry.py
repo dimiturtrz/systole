@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mlflow
+
 _ROOT = Path(__file__).resolve().parents[1]
 _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"
 _CACHE = _ROOT / ".mlflow_cache"                       # resolved-artifact cache (gitignored)
@@ -25,7 +27,6 @@ PRODUCTION = "production"                               # the flagship alias
 
 
 def _mlflow():
-    import mlflow
     mlflow.set_tracking_uri(_DB_URI)
     return mlflow
 
@@ -53,7 +54,6 @@ def resolve(ref: str = PRODUCTION) -> Path:
     """Download the model version's artifacts to a cache dir and return it (a dir with model.pth +
     config.json + …, ready for core.model.load_run). ref = alias | version | run-id — OR an existing
     dir (returned as-is, so callers can pass a path too)."""
-    import mlflow
     p = Path(ref)
     if (p / "model.pth").exists():                     # already a dir (back-compat / explicit path)
         return p

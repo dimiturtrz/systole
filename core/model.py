@@ -5,6 +5,8 @@ architecture always matches the weights."""
 from pathlib import Path
 from typing import Literal
 
+import torch
+from monai.networks.nets import UNet
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
@@ -31,7 +33,6 @@ class ModelCfg(BaseModel):
 
 def build_unet(cfg: ModelCfg | None = None):
     """4-class U-Net (bg, RV, myo, LV-cav) from a ModelCfg. Default cfg = 2D slice-wise."""
-    from monai.networks.nets import UNet
     cfg = cfg or ModelCfg()
     return UNet(
         spatial_dims=cfg.spatial_dims,
@@ -47,7 +48,6 @@ def build_unet(cfg: ModelCfg | None = None):
 
 def resolve_device(preferred: str | None = None) -> str:
     """Torch device string: explicit `preferred`, else 'cuda' if available, else 'cpu'."""
-    import torch
     return preferred or ("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -55,7 +55,6 @@ def load_run(run, device: str | None = None):
     """Load a trained run into eval mode. The architecture is rebuilt from the run's saved
     config.json (so weights can't mismatch a wrong default arch); older runs without a config
     fall back to the default ModelCfg. Returns (model, cfg | None, device)."""
-    import torch
     run = Path(run)
     cfg_path = run / "config.json"
     cfg = None

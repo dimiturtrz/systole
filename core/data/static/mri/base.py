@@ -6,8 +6,13 @@ labels to this via `label_map`, so one model's labels mean the same thing across
 
 Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm.
 """
+import csv
 from pathlib import Path
 from typing import Protocol, TypedDict, runtime_checkable
+
+import nibabel as nib
+import numpy as np
+from scipy import ndimage
 
 from core.types import Image, Mask, Spacing, Volume
 
@@ -37,7 +42,6 @@ def load_csv_info(csv_path, key_col: str, *, alt_key_col: str | None = None,
     cache_key = str(csv_path)
     if cache_key in _CSV_CACHE:
         return _CSV_CACHE[cache_key]
-    import csv
     info: dict[str, dict[str, str]] = {}
     p = Path(csv_path)
     if p.exists():
@@ -67,8 +71,6 @@ class PatientData(TypedDict, total=False):
 def load_nifti(path: str | Path, frame: int | None = None) -> tuple[Volume, Spacing]:
     """Load a NIfTI volume -> (array [D, H, W], spacing (z, y, x) mm). For a 4D cine, pass
     `frame` to extract one time-index ([x,y,z,t] -> [D,H,W]); 3D inputs ignore `frame`."""
-    import nibabel as nib
-    import numpy as np
     img = nib.load(str(path))
     arr = np.asanyarray(img.dataobj)          # NIfTI is x,y,z (,t)
     if frame is not None and arr.ndim == 4:
@@ -99,7 +101,6 @@ def load_frames(group, resolve, label_map: dict[int, int]) -> "PatientData":
 
 def apply_label_map(gt: Mask, label_map: dict[int, int]) -> Mask:
     """Remap raw integer labels to the canonical convention. Identity map -> unchanged."""
-    import numpy as np
     if not label_map or all(k == v for k, v in label_map.items()):
         return gt
     out = np.zeros_like(gt)
@@ -113,9 +114,6 @@ def identify_lv_cavity(mask: Mask, myo_label: int = LV_MYO) -> tuple[int | None,
     """Geometrically identify the LV-cavity label: the non-myo foreground label most enclosed
     by the myocardium ring. Trusts geometry, not a remembered int. mask [D,H,W] or [H,W].
     Returns (lv_label, scores) where score = fraction of a label's shell touching myocardium."""
-    import numpy as np
-    from scipy import ndimage
-
     labels = [int(l) for l in np.unique(mask) if l != 0 and l != myo_label]
     myo = mask == myo_label
     scores: dict[int, float] = {}

@@ -14,6 +14,8 @@ Approximate — fine for domain randomization.
 """
 from __future__ import annotations
 
+import math
+
 import torch
 
 # tissue -> field (Tesla) -> (T1 ms, T2 ms, PD). Two fields = the cross-vendor relaxation axis.
@@ -59,7 +61,6 @@ def _contrast_optimal_flip(field: float, tr_ms: float) -> float:
     """Flip (deg, integer sweep) maximizing |S_blood - S_myo| bSSFP contrast at `field`, from the TISSUE
     T1/T2 table. Cine targets blood-myocardium contrast; this DERIVES the flip that maximizes it rather
     than quoting a routine-protocol value (which is SNR-, not contrast-, optimized)."""
-    import math
     bt1, bt2, bpd = _params("blood", field)
     mt1, mt2, mpd = _params("myocardium", field)
     a = torch.arange(1.0, 91.0)
@@ -85,7 +86,6 @@ def derive_flip_range(field: float) -> tuple[float, float]:
     half-maximum convention on the contrast curve + the SAR ceiling) — no arbitrary fraction of the cap.
     Sampling across this band gives contrast DIVERSITY (measured: the single contrast-optimal point
     trains WORSE — fidelity != training value, bd 276). Field-driven; contrast-optimal sits inside it."""
-    import math
     f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
     bt1, bt2, bpd = _params("blood", f)
     mt1, mt2, mpd = _params("myocardium", f)

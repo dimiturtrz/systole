@@ -10,6 +10,7 @@ Labels: same flip as M&M-2 (raw 1=LV-cav) -> canonical via label_map.
 import os
 from pathlib import Path
 
+from core.config import data_root
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     DatasetAdapter,
@@ -63,7 +64,6 @@ def _root(root: str | Path | None = None) -> Path:
 
 
 def data_root_raw() -> str:
-    from core.config import data_root
     return data_root("raw")
 
 

@@ -18,10 +18,12 @@ near-identical neighbouring slices leak across train/val and inflate Dice.
 from pathlib import Path
 
 import numpy as np
+import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
 from core.data.static.store import load_arrays
+from core.obs import progress
 
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
@@ -45,7 +47,6 @@ class ACDCSliceDataset(Dataset):
         keep_empty: bool = False,
         augment: bool = False,
     ):
-        from core.obs import progress
         self.size = size
         self.items: list[tuple[Slice2D, Slice2D]] = []   # (img[H,W] f32, mask[H,W] u8)
         self.owners: list[int] = []                      # per-slice index into npz_paths (for per-slice meta)
@@ -69,7 +70,6 @@ class ACDCSliceDataset(Dataset):
         return len(self.items)
 
     def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
-        import torch
         img, m = self.items[i]
         img = fit_square(img, self.size, pad_value=0.0)          # [size, size]
         m = fit_square(m, self.size, pad_value=0)                # [size, size]
@@ -90,7 +90,6 @@ def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda",
     on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
     (CI / no-GPU) — same index-batched loop, just on CPU. `return_owners` also returns a per-slice
     LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask)."""
-    import torch
     ds = ACDCSliceDataset(npz_paths, size=size, frames=frames, keep_empty=keep_empty)
     if not ds.items:
         z = torch.zeros((0, size, size))

@@ -20,11 +20,24 @@ Data is scarce here, so reference values are ideally DERIVED from `processed/` a
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
+import numpy as np
+import polars as pl
 from omegaconf import OmegaConf
 
-from core.config import data_root
+from core.config import DEFAULT_INPLANE, KNOWN_VENDORS, data_root
+from core.data.dynamic.mri_physics import (
+    SAR_FLIP_CAP,
+    TR_RANGE_MS,
+    acquisition_for,
+    derive_acquisition,
+)
+from core.data.static import store
+from core.data.static.labels import CLASSES
+from core.measure import ejection_fraction
+from core.obs import setup
 
 _PROV_KEYS = {"value", "source", "based_on", "extracted_by", "verified"}
 
@@ -90,7 +103,6 @@ class Reference:
 def _range_entry(vals, based_on: str) -> dict:
     """A provenance leaf for a derived [p5, p95] range. verified=true: it's reproducible from the
     cohort (not an unchecked external fact)."""
-    import numpy as np
     a = np.asarray([v for v in vals if v is not None and np.isfinite(v)], float)
     return {
         "value": [round(float(np.percentile(a, 5)), 1), round(float(np.percentile(a, 95)), 1)],
@@ -106,12 +118,6 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
     pathology, n, datasets) so a scarce-data reference traces back to what produced it.
 
     Healthy cohort (pathology contains 'normal') is also surfaced as normal_ranges.* for consumers."""
-    import polars as pl
-
-    from core.config import DEFAULT_INPLANE
-    from core.data.static import store
-    from core.measure import ejection_fraction
-
     inplane = DEFAULT_INPLANE if inplane is None else inplane
     df = store.load(sources, inplane=inplane).filter(pl.col("labelled"))
     paramkey = store.param_key(inplane)
@@ -159,7 +165,6 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
 def _level_entry(vals, based_on: str) -> dict:
     """Provenance leaf for a measured per-vendor per-class intensity level (z-units): mean + [p5,p95]
     spread + n. verified=true — computed from the cohort's real images, reproducible."""
-    import numpy as np
     a = np.asarray(vals, float)
     return {
         "value": round(float(a.mean()), 3),
@@ -178,13 +183,6 @@ def build_real_levels(sources=None, inplane: float | None = None, per_case: int 
     Per case: z-score the volume (matches the model's per-image input), then subsample `per_case`
     pixels per class; aggregate per vendor -> mean + [p5,p95] over pixels. `based_on` records the
     cohort. Blood classes (RV=1, LV-cav=3) are the ones that carry the vendor-dependent gap."""
-    import numpy as np
-    import polars as pl
-
-    from core.config import DEFAULT_INPLANE
-    from core.data.static import store
-    from core.data.static.labels import CLASSES
-
     inplane = DEFAULT_INPLANE if inplane is None else inplane
     df = store.load(sources, inplane=inplane).filter(pl.col("labelled"))
     paramkey = store.param_key(inplane)
@@ -238,8 +236,6 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
     NORMALIZED: the machine reference table (attributes live once). Subjects hold the FK (vendor,
     field_T) in the store and JOIN here via `acquisition_for`; each vendor block is also the slot to
     drop a DICOM-mined per-vendor override later. (bd ex1 / 276.)"""
-    from core.config import KNOWN_VENDORS
-    from core.data.dynamic.mri_physics import SAR_FLIP_CAP, TR_RANGE_MS, derive_acquisition
     tr15, te15, f15 = derive_acquisition(1.5)
     _, _, f30 = derive_acquisition(3.0)
     src = ("DERIVED: flip = argmax|S_blood-S_myo| (bSSFP signal eq + literature T1/T2), capped by SAR "
@@ -269,7 +265,6 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
 
 
 def _main():
-    import argparse
     ap = argparse.ArgumentParser(description="Derive reference values from processed/ (ground truth + images).")
     ap.add_argument("--build", action="store_true", help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
     ap.add_argument("--real-levels", action="store_true", dest="real_levels",
@@ -278,11 +273,9 @@ def _main():
                     help="emit <data>/reference/acquisition.yaml (machine dimension from committed paper priors)")
     ap.add_argument("--sources", nargs="*", default=None)
     a = ap.parse_args()
-    from core.obs import setup
     if a.acquisition:
         p = build_acquisition()
         print(f"wrote {p}")
-        from core.data.dynamic.mri_physics import acquisition_for
         ref = Reference(root=p.parent)
         for v in ("Siemens", "Philips", "GE", "Canon"):
             tr15, te15, f15 = acquisition_for(v, 1.5, ref)

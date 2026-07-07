@@ -13,7 +13,9 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import onnxruntime as ort
 import torch
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
 from core.data.static import store
@@ -32,8 +34,6 @@ def load_model(run: Path):
 
 def parity(model, onnx_path: Path, npz_path) -> float:
     """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
-    import onnxruntime as ort
-
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     case = store.load_arrays(npz_path)
     imgs = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in case["ed_img"]])
@@ -65,8 +65,6 @@ def export(run: Path, verify_dir: Path, quantize: bool = True,
     print(f"exported {path}  {path.stat().st_size / 1e6:.1f} MB  parity {p32:.3f}%")
 
     if quantize:
-        from onnxruntime.quantization import QuantType, quantize_dynamic
-
         q = run / "model.int8.onnx"
         quantize_dynamic(str(path), str(q), weight_type=QuantType.QInt8)
         pq = parity(model, q, verify_dir)

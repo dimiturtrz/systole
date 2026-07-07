@@ -1,9 +1,9 @@
 """Marching-cubes surface mesh per chamber (saves ASCII STL; VTK optional later)."""
+from skimage import measure
 
 
 def mesh_label(mask, label, spacing=(1, 1, 1), out="chamber.stl"):
     """Extract a surface mesh for one label and write an ASCII STL. Returns (verts, faces)."""
-    from skimage import measure
     verts, faces, _, _ = measure.marching_cubes(
         (mask == label).astype(float), level=0.5, spacing=tuple(spacing))
     _save_stl(verts, faces, out)

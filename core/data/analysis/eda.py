@@ -14,7 +14,11 @@ Usage:
 import argparse
 from pathlib import Path
 
+import matplotlib
 import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
 from core.data.static.mri.acdc import (
     DATA_ROOT,
@@ -45,10 +49,6 @@ def summarize_patient(patient_dir):
 
 
 def save_viz(patient_dir, d, out_png):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     rows = [t for t in ("ED", "ES") if t in d]
     if not rows:
         return

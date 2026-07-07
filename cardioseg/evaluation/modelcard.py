@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from core.data.static.labels import CLASS_NAMES
+from core.data.static.reference import Reference
 from core.registry import resolve
 
 _ORDER = tuple(reversed(CLASS_NAMES))  # display order: LV-cav, LV-myo, RV
@@ -41,7 +42,6 @@ def _reference_section() -> list[str]:
     present; omitted entirely when absent (graceful fallback — the card still generates on a fresh
     clone with no <data>/reference/). Shows provenance regardless of verified, but only verified
     values would actually be used by consumers."""
-    from core.data.static.reference import Reference
     ref = Reference()
     if not ref.present():
         return []

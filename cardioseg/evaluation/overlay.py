@@ -11,6 +11,7 @@ from pathlib import Path
 
 import matplotlib
 import numpy as np
+import torch
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -61,7 +62,6 @@ def _case(model, path, size, device):
 
 
 def main():
-    import torch
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")

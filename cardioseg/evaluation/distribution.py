@@ -13,6 +13,7 @@ Also prints pooled HD95 / ASSD / Dice / EF-MAE. Writes PNGs to <run>/plots/.
 from __future__ import annotations
 
 import argparse
+import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -272,7 +273,6 @@ def main():
         if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
             strata[key] = strata_table(rows, key)
             plot_strata(rows, key, out / f"strata_{key}.png", label)
-    import json
     (out / "stratified.json").write_text(json.dumps(strata, indent=2))
     print(f"\nplots + stratified.json -> {out}")
 
