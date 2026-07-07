@@ -39,9 +39,20 @@ def test_reject_val_frac_ge_1():
 
 
 def test_reject_bad_loss_kind():
-    from core.hparams import LossCfg
+    from core.hparams import TrainCfg
     with pytest.raises(ValidationError):
-        LossCfg(kind="dice_ce_bogus")        # Literal enum
+        TrainCfg.model_validate({"loss": {"kind": "dice_ce_bogus"}})   # no such union variant
+
+
+def test_loss_union_picks_variant_and_ignores_old_flat_fields():
+    # OLD flat config (kind + every loss's params) must still load: discriminator picks the variant,
+    # extra fields are dropped. Guards config.json backward-compat for registered models.
+    from core.hparams import DiceCEHDCfg, TrainCfg
+    flat = {"kind": "dice_ce_hd", "hd_weight": 0.02, "tversky_alpha": 0.3, "her_weight": 0.5}
+    t = TrainCfg.model_validate({"loss": flat})
+    assert isinstance(t.loss, DiceCEHDCfg)
+    assert t.loss.hd_weight == 0.02
+    assert not hasattr(t.loss, "tversky_alpha")   # other variants' params are gone, not carried
 
 
 def test_reject_bad_spatial_dims():

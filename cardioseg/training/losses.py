@@ -5,11 +5,13 @@ the heavy bg/fg imbalance. Both are *region* losses — blind to a thin boundary
 cavity over-segmentation that drives the EF bias). `dice_ce_hd` adds a Hausdorff-DT boundary term,
 ramped in over a warmup (HD losses diverge if applied from epoch 0), to attack that directly.
 """
+from __future__ import annotations
+
 import torch
 import torch.nn.functional as F
 from monai.losses import DiceCELoss, DiceLoss, HausdorffDTLoss, TverskyLoss
 
-from core.hparams import LossCfg
+from core.hparams import DiceCECfg, DiceCEHDCfg, DiceCEHERCfg, DiceCETverskyCfg, LossCfg
 
 
 def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
@@ -184,21 +186,22 @@ def uncertainty_weighted(loss_terms, log_vars):
     return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
 
 
-# kind -> builder(cfg). Register a new loss by adding a row, not by extending an if-chain.
+# cfg TYPE -> builder(cfg). Dispatch on the discriminated-union variant; add a loss = add a row.
 _LOSSES = {
-    "dice_ce": lambda cfg: dice_ce_loss(),
-    "dice_ce_tversky": lambda cfg: DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda),
-    "dice_ce_her": lambda cfg: DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp),
-    "dice_ce_hd": lambda cfg: DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp),
+    DiceCECfg: lambda cfg: dice_ce_loss(),
+    DiceCETverskyCfg: lambda cfg: DiceCETversky(cfg.tversky_alpha, cfg.tversky_beta, cfg.tversky_lambda),
+    DiceCEHERCfg: lambda cfg: DiceCEHER(cfg.her_weight, cfg.her_alpha, cfg.her_erosions, cfg.her_warmup, cfg.her_ramp),
+    DiceCEHDCfg: lambda cfg: DiceCEHD(hd_weight=cfg.hd_weight, warmup=cfg.hd_warmup, ramp=cfg.hd_ramp),
 }
 
 
 def build_loss(cfg: LossCfg | None = None):
-    """Loss callable from a LossCfg (dispatched via `_LOSSES`). Returns an object with __call__(logits, y)
-    and a `.epoch` attribute the train loop updates each epoch (HD-warmup losses use it, others ignore)."""
-    cfg = cfg or LossCfg()
-    if cfg.kind not in _LOSSES:
-        raise ValueError(f"unknown loss {cfg.kind!r} (known: {', '.join(_LOSSES)})")
-    loss = _LOSSES[cfg.kind](cfg)
+    """Build the loss from its (variant) cfg, dispatched on cfg type. Returns an object with
+    __call__(logits, y) and a `.epoch` attr the train loop updates each epoch (HD-warmup losses use it)."""
+    cfg = cfg or DiceCECfg()
+    build = _LOSSES.get(type(cfg))
+    if build is None:
+        raise ValueError(f"unknown loss cfg {type(cfg).__name__} (known: {[c.__name__ for c in _LOSSES]})")
+    loss = build(cfg)
     loss.epoch = 0
     return loss
