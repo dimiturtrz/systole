@@ -232,7 +232,7 @@ class SeedTrainer:
         model, device, d, log = self.model, self.device, self.d, self.log
         test_df = self.sh["test_df"]
         log.info("===== VALIDATION =====")
-        ev = Evaluator(model, device, EvalCfg(size=d.size))         # state (model/device/size) once; call many
+        ev = Evaluator(model, device, EvalCfg(size=d.size, boundary=not self.quick))  # skip HD95/ASSD on quick sweeps
         dice_per_class, ef_rows, surf = ev.validate(splits.paths(self.sh["val_df"]))
         results = {"val": summarize(dice_per_class, ef_rows, surf)}
         if len(test_df):                                            # held-out test = the criteria split

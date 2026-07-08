@@ -25,9 +25,16 @@ V = pl.col
 _SSM = "pool_1000_bal"
 _PATHOLOGY = "pool_pathology"
 
+# GPU-resident VRAM budget: synth_main preloads ~10k slices (pool_1000_bal) on the 32 GB card and fits;
+# the FULL 42k composite union does NOT (synth_main.py: "the 42k-slice composite pool does not"). Cap each
+# source so the union stays ~synth_main's resident size — which also SIZE-MATCHES synth_main for a clean
+# A/B (isolates the effect of pathology SHAPES, not 'more data'). Budget split evenly across the sources.
+_RESIDENT_BUDGET = 10000
+_CAP = _RESIDENT_BUDGET // 2            # per-source slice cap (SSM + pathology)
+
 
 def _synth_source(pool: str, note: str) -> DynamicSource:
-    return DynamicSource(pool=_pool(pool), bg=ProceduralBgCfg(), note=note)
+    return DynamicSource(pool=_pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
 
 
 class SynthComposite:

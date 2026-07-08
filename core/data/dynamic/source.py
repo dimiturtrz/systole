@@ -25,18 +25,25 @@ from core.data.ingest.source import Source
 class DynamicSource:
     kind = "dynamic"
 
-    def __init__(self, pool: str, bg: AnyBgCfg | None = None, synth_p: float = 1.0,
-                 seed: Source | None = None, note: str = ""):
+    def __init__(self, pool: str, bg: AnyBgCfg | None = None, synth_p: float = 1.0,  # noqa: PLR0913
+                 seed: Source | None = None, note: str = "", cap: int | None = None):
         self.pool = str(pool)
         self.bg = bg or ProceduralBgCfg()      # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
         self.synth_p = synth_p
         self.seed = seed
         self._note = note
+        # cap = max resident slices this source contributes (deterministic subsample). The GPU-resident
+        # preload is VRAM-bounded (synth_main: the full 42k-slice pool does NOT fit the 32 GB card, only
+        # ~10k does) — a composite of several big pools must cap each so the UNION stays resident-sized.
+        self.cap = cap
 
     def _resident(self, size: int, device: str):
         """(X, Y, force_synth) resident tensors for this source's Generator. Zero-input: N = pool size,
         X = zeros, all force. Seeded: seed's real ++ synth-anatomy rows, force only the synth ones."""
         Ys = torch.as_tensor(_anatomy.load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
+        if self.cap is not None and Ys.shape[0] > self.cap:                             # VRAM-bound the resident
+            keep = torch.randperm(Ys.shape[0], generator=torch.Generator().manual_seed(0))[:self.cap]
+            Ys = Ys[keep.to(Ys.device)]
         Xsy = torch.zeros((Ys.shape[0], 1, size, size), device=device)                 # no real pixels
         if self.seed is None:                                                          # zero real input
             return Xsy, Ys, torch.ones(Ys.shape[0], dtype=torch.bool, device=device)
@@ -55,8 +62,9 @@ class DynamicSource:
         return Generator(cfg, X, Y, n_classes, device, force_synth=fs)
 
     def provenance(self) -> dict:
-        return {"kind": self.kind, "pool": self.pool, "bg": self.bg.mode, "synth_p": self.synth_p,
-                "note": self._note, "seed": (self.seed.provenance() if self.seed else None)}
+        return {"kind": self.kind, "pool": self.pool, "cap": self.cap, "bg": self.bg.mode,
+                "synth_p": self.synth_p, "note": self._note,
+                "seed": (self.seed.provenance() if self.seed else None)}
 
 
 class CompositeSource:
