@@ -56,7 +56,7 @@ def ef_ratio_loss(ed: torch.Tensor, es: torch.Tensor, targets, delta: float = 0.
     return F.huber_loss(ef_pred / 100, tgt.to(ef_pred) / 100, delta=delta)
 
 
-def _cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:  # pragma: no cover  (batched GPU model forward + segment-sum)
+def _cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
     """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
     by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
     owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)
@@ -72,7 +72,7 @@ class VolConsistency:
     forward per phase, segment-sum -> dimensionless vol_loss vs the GT volumes. Subjects missing ED/ES
     or with no cavity are skipped at build."""
 
-    def __init__(self, npz_paths, size: int, device: str, k: int, lv_label: int = LV_CAV):  # pragma: no cover  (load_arrays per subject -> GPU-resident ED/ES stacks + GT volumes)
+    def __init__(self, npz_paths, size: int, device: str, k: int, lv_label: int = LV_CAV):
         self.device, self.lv, self.k = device, lv_label, k
         self.ed, self.es = [], []                       # per-subject [Di,1,H,W] GPU stacks (aligned)
         edv_gt, esv_gt, vox = [], [], []
@@ -94,7 +94,7 @@ class VolConsistency:
         self.edv_gt = torch.tensor(edv_gt, device=device)
         self.esv_gt = torch.tensor(esv_gt, device=device)
 
-    def loss(self, model, delta: float = 0.1, *, amp: bool = True):  # pragma: no cover  (samples subjects + GPU forward -> vol_loss; the math is vol_loss, tested in test_volumes)
+    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
         idx = torch.randperm(self.n, device=self.device)[:self.k]
@@ -114,7 +114,7 @@ class KaggleEF:
     cases' ES) segment-summed per case -> EF-RATIO Huber vs the csv EF. No dense mask, so the seg loss
     never touches these."""
 
-    def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913  # pragma: no cover  (loads + caches the Kaggle cine pool to host RAM)
+    def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913
                  lv_label: int = LV_CAV, seed: int = 0):
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
         self.X, self.LP, self.ef = [], [], []          # [L*P,1,H,W] GPU / (L,P) / EF%
@@ -139,7 +139,7 @@ class KaggleEF:
             self.ef.append(float(t["ef"]))
         self.n = len(self.X)
 
-    def loss(self, model, delta: float = 0.1, *, amp: bool = True):  # pragma: no cover  (phase-find + two GPU forwards -> ef_ratio_loss; the math is ef_ratio_loss, tested here)
+    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
         idx = [int(i) for i in torch.randperm(self.n)[:self.k]]

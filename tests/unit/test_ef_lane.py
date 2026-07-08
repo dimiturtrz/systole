@@ -2,12 +2,25 @@
 extracted out of KaggleEF.loss (which needs a cine pool + GPU forward — that's the shell). Equivalence
 classes over cavity-total inputs; synthetic tensors, no model. Mirrors test_volumes' vol_loss idiom.
 """
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import torch
 
-from cardioseg.training.ef_lane import _stack, _zscore, build_aux, ef_ratio, ef_ratio_loss
+import cardioseg.training.ef_lane as EL
+from cardioseg.training.ef_lane import (
+    KaggleEF,
+    VolConsistency,
+    _cav_volume,
+    _stack,
+    _zscore,
+    build_aux,
+    ef_ratio,
+    ef_ratio_loss,
+)
+from core.data.static.labels import LV_CAV
+from core.model import build_unet
 
 
 def test_ef_ratio_matches_hand_formula():
@@ -93,3 +106,80 @@ def test_stack_shapes_dtype_device():
     vol = np.zeros((3, 20, 24), np.float32); vol[:, 5:15, 5:15] = 1.0
     t = _stack(vol, 16, "cpu")
     assert t.shape == (3, 1, 16, 16) and t.dtype == torch.float32 and t.device.type == "cpu"
+
+
+# --- forward-path lanes on a real CPU U-Net: the disk loaders (load_arrays/load_sax) are stubbed with
+#     synthetic arrays, the model forward + segment-sum run on CPU (amp=False makes autocast('cuda') a
+#     no-op). Mirrors test_validate/test_ensemble's stub-the-loader idiom. ---
+SIZE = 32
+
+
+def _cpu_model():
+    torch.manual_seed(0)
+    return build_unet().eval()
+
+
+def _fake_case(dz=2, seed=0):
+    """A synthetic consolidated-subject dict in the shape load_arrays returns (ED+ES img/gt + spacing),
+    with a cavity blob so EDV>0 (ED bigger than ES, as in diastole)."""
+    rng = np.random.RandomState(seed)
+    ed_gt = np.zeros((dz, 20, 20), np.uint8); ed_gt[:, 6:14, 6:14] = LV_CAV       # big cavity
+    es_gt = np.zeros((dz, 20, 20), np.uint8); es_gt[:, 8:12, 8:12] = LV_CAV       # smaller cavity
+    return {"ed_img": rng.randn(dz, 20, 20).astype(np.float32),
+            "es_img": rng.randn(dz, 20, 20).astype(np.float32),
+            "ed_gt": ed_gt, "es_gt": es_gt, "spacing": np.array([10.0, 1.5, 1.5])}
+
+
+def test_cav_volume_segment_sums_per_item():
+    """_cav_volume: one batched forward over ΣDi slices -> per-item soft LV-cav totals [K], grad-carrying.
+    Two items of 2 and 3 slices -> a length-2 vector; runs on CPU with amp off."""
+    model = _cpu_model()
+    stacks = torch.randn(5, 1, SIZE, SIZE, requires_grad=True)   # 5 = 2 + 3 slices
+    sizes = torch.tensor([2, 3])
+    out = _cav_volume(model, stacks, sizes, LV_CAV, amp=False)
+    assert out.shape == (2,) and out.requires_grad
+    out.sum().backward()
+    assert stacks.grad is not None and float(stacks.grad.abs().sum()) > 0
+
+
+def test_volconsistency_builds_and_losses(monkeypatch):
+    """VolConsistency: stubbed load_arrays -> GPU(cpu)-resident ED/ES stacks + GT EDV/ESV; loss() samples
+    subjects, forwards on CPU, returns a finite grad-carrying vol_loss scalar."""
+    monkeypatch.setattr(EL, "load_arrays", lambda _p: _fake_case())
+    vc = VolConsistency([Path("a.npz"), Path("b.npz")], SIZE, "cpu", k=2)
+    assert vc.n == 2 and vc.edv_gt.min() > 0                     # both subjects kept (EDV>0)
+    loss = vc.loss(_cpu_model(), amp=False)
+    assert loss is not None and torch.isfinite(loss)
+
+
+def test_volconsistency_skips_empty_cavity_and_missing_frame(monkeypatch):
+    """Build-time skips: a subject with no ED frame OR zero-EDV is dropped; empty pool -> loss None."""
+    empty = _fake_case(); empty["ed_gt"] = np.zeros_like(empty["ed_gt"])           # EDV 0 -> skip
+    monkeypatch.setattr(EL, "load_arrays", lambda _p: empty)
+    vc = VolConsistency([Path("a.npz")], SIZE, "cpu", k=2)
+    assert vc.n == 0 and vc.loss(_cpu_model(), amp=False) is None
+
+
+def _fake_sax(L=2, P=3, seed=0):
+    """A stubbed load_sax result: L slice-locations, each a [P,H,W] cine + spacing + meta."""
+    rng = np.random.RandomState(seed)
+    return [(rng.randn(P, 18, 18).astype(np.float32), (8.0, 1.5, 1.5), {}) for _ in range(L)]
+
+
+def test_kaggleef_builds_pool_and_losses(monkeypatch):
+    """KaggleEF: stubbed load_sax fills the host-RAM cine pool (cases with an EF target kept); loss()
+    phase-finds + two CPU forwards -> a finite grad-carrying ef_ratio Huber."""
+    monkeypatch.setattr(EL, "load_sax", lambda _c: _fake_sax())
+    cases = [Path("1"), Path("2")]
+    ef_targets = {"1": {"ef": 55.0}, "2": {"ef": 62.0}}
+    lane = KaggleEF(cases, ef_targets, SIZE, "cpu", k=2, pool=8, seed=0)
+    assert lane.n == 2
+    loss = lane.loss(_cpu_model(), amp=False)
+    assert loss is not None and torch.isfinite(loss)
+
+
+def test_kaggleef_skips_cases_without_ef_target(monkeypatch):
+    """Filter class: a case absent from ef_targets (or ef missing) is skipped; no targets -> loss None."""
+    monkeypatch.setattr(EL, "load_sax", lambda _c: _fake_sax())
+    lane = KaggleEF([Path("1")], {"1": {"ef": None}}, SIZE, "cpu", k=1, pool=8)
+    assert lane.n == 0 and lane.loss(_cpu_model(), amp=False) is None
