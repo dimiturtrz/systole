@@ -49,6 +49,11 @@ jobs:
         continue-on-error: true
         run: |
           uvx vulture@2.16 --min-confidence 60 | sed -E 's#^([^:]+):([0-9]+): (.*)$#::warning file=\1,line=\2::\3#'
+      # Architecture layers — the dependency rule as a static import-graph contract (bd cardiac-seg-dsz2).
+      # BLOCKS: core must import neither cardioseg nor cardioview; the viewer never the trainer. Contracts
+      # in [tool.importlinter]. Fails the day a new upward edge lands.
+      - name: Import layers — enforced (import-linter)
+        run: uvx --from import-linter lint-imports
 
   tests:
     runs-on: ubuntu-latest

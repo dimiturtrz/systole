@@ -30,6 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
+devtools = ["grimp", "networkx"]   # import-graph architecture diagnostic (devtools/graph.py, bd au0o)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
@@ -40,6 +41,7 @@ all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]          # repo root importable -> top-level devtools/ (dev tooling, not a shipped package)
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
@@ -114,6 +116,24 @@ exclude_lines = [
     "raise NotImplementedError",
     "^\\s*\\.\\.\\.$",
 ]
+
+# import-linter (grimp engine): the dependency rule as a STATIC import-graph contract, not prose. core is
+# the shared kernel — it must import NEITHER trainer (cardioseg) NOR viewer (cardioview); the viewer
+# depends only on core. CI fails the day a new upward edge lands. bd cardiac-seg-dsz2.
+[tool.importlinter]
+root_packages = ["core", "cardioseg", "cardioview"]
+
+[[tool.importlinter.contracts]]
+name = "core is an independent kernel (imports neither cardioseg nor cardioview)"
+type = "forbidden"
+source_modules = ["core"]
+forbidden_modules = ["cardioseg", "cardioview"]
+
+[[tool.importlinter.contracts]]
+name = "cardioview depends only on core (never the trainer)"
+type = "forbidden"
+source_modules = ["cardioview"]
+forbidden_modules = ["cardioseg"]
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only
