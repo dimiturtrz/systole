@@ -94,6 +94,50 @@ def test_dynamic_resident_seeded_is_composite(monkeypatch):
     assert (X[:2] == 1).all() and (X[2:] == 0).all()          # real pixels kept, synth zeroed
 
 
+def test_composite_generator_dispatches_by_index_range():
+    """CompositeGenerator routes global indices to the right child gen (each its own painter) and
+    concatenates — n = Σ child n, and a mixed batch paints each row via its origin source."""
+    import torch
+
+    from core.data.dynamic.generator import CompositeGenerator
+
+    class _FakeGen:                                            # duck-types the batch() seam (n/device/batch)
+        def __init__(self, n, tag):
+            self.n, self.device, self.tag = n, "cpu", tag
+        def batch(self, idx, *, pin=False):
+            b = idx.shape[0]
+            return torch.full((b, 1, 2, 2), self.tag, dtype=torch.float), \
+                torch.full((b, 2, 2), self.tag, dtype=torch.long), None
+
+    cg = CompositeGenerator([_FakeGen(3, 1.0), _FakeGen(2, 2.0)])
+    assert cg.n == 5 and cg.valid is None
+    x, y, v = cg.batch(torch.arange(5))                       # all rows
+    assert x.shape == (5, 1, 2, 2) and v is None
+    assert int((x == 1.0).sum()) == 3 * 4 and int((x == 2.0).sum()) == 2 * 4   # 3 from child0, 2 from child1
+    x2, _, _ = cg.batch(torch.tensor([4, 0]))                 # one row from each child, shuffled
+    assert int((x2 == 1.0).sum()) == 4 and int((x2 == 2.0).sum()) == 4
+
+
+def test_composite_source_unions_children(monkeypatch):
+    """CompositeSource builds one CompositeGenerator over its child sources (each keeps its own bg);
+    n = sum of pool sizes, provenance lists every child."""
+    import numpy as np
+
+    from core.data.dynamic.source import CompositeSource, DynamicSource
+    from core.data.dynamic.synth import FlatBgCfg, ProceduralBgCfg
+    from core.hparams import TrainCfg
+    sizes = {"a": 4, "b": 3}
+    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool",
+                        lambda p: np.zeros((sizes[p], 8, 8), np.int64))
+    src = CompositeSource([DynamicSource(pool="a", bg=ProceduralBgCfg()),
+                           DynamicSource(pool="b", bg=FlatBgCfg())])   # different painters per source
+    gen = src.train_gen(8, "cpu", TrainCfg().generator, 4)
+    assert gen.n == 7                                          # 4 + 3, unioned
+    prov = src.provenance()
+    assert prov["kind"] == "composite" and len(prov["sources"]) == 2
+    assert {s["bg"] for s in prov["sources"]} == {"procedural", "flat"}   # each child kept its own bg
+
+
 def test_dynamic_train_gen_no_global_mutation(monkeypatch):
     """The refactor's whole point: a DynamicSource configures its OWN engine via a cfg COPY — it must
     NOT mutate the passed generator cfg (the old bg_mode/synth_p poke)."""

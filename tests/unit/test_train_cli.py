@@ -92,10 +92,10 @@ def test_split_tag_legacy_when_nothing():
 
 # --- n_train_of: dynamic (slice-count) vs static/legacy (row-count) ---
 def test_n_train_dynamic_uses_gen_slices():
-    """A dynamic train source has no patient frame -> count resident slices (gen.X)."""
-    src = SimpleNamespace(kind="dynamic")
-    gen = SimpleNamespace(X=SimpleNamespace(shape=(128, 1, 256, 256)))
-    assert n_train_of(src, gen, train_df=[]) == 128
+    """A dynamic OR composite train source has no patient frame -> count resident slices (gen.n)."""
+    gen = SimpleNamespace(n=128)
+    assert n_train_of(SimpleNamespace(kind="dynamic"), gen, train_df=[]) == 128
+    assert n_train_of(SimpleNamespace(kind="composite"), gen, train_df=None) == 128
 
 
 def test_n_train_static_uses_frame_rows():
