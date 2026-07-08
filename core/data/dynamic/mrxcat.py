@@ -143,15 +143,6 @@ def build_pool(vti_dir: str | Path, out_path: str | Path,
     return out_path, arr.shape
 
 
-def canonical_from_fov(fov: np.ndarray) -> np.ndarray:
-    """Seg target from a whole-FOV tissue map: keep heart classes {1,2,3}, everything else → bg. The FOV
-    heart codes coincide with `to_canonical` (both from XCAT 6/1/5), so this is the aligned 4-class label."""
-    out = np.zeros_like(fov, dtype=np.uint8)
-    m = np.isin(fov, (1, 2, 3))
-    out[m] = fov[m]
-    return out
-
-
 def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
     """Crop a `scale`×(heart-bbox) chest WINDOW centred on the heart (realistic cardiac FOV — surrounding
     lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
@@ -173,8 +164,7 @@ def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAUL
     """WHOLE-FOV pool (bd q4ww): every `*.vti` → `to_tissue_map` → per slice, crop a chest window around
     the heart (`scale`× heart bbox) → resize to `size` → stacked 8-class FOV maps (npz `slices`). Unlike
     `build_pool` (heart-only 4-class), these keep surrounding organs so the painter (bg_mode='mrxcat')
-    renders realistic whole-FOV context; the seg target is `canonical_from_fov`. Slices with no heart
-    dropped."""
+    renders realistic whole-FOV context. Slices with no heart dropped."""
     slices: list[np.ndarray] = []
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
         fov = to_tissue_map(load_vti_labels(vp))

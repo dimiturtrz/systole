@@ -65,13 +65,6 @@ def test_tissue_map_keeps_heart_and_surrounding_organs():
     assert got.dtype == np.uint8
 
 
-def test_canonical_from_fov_keeps_only_heart():
-    """Seg target derived from the whole-FOV paint map = heart {1,2,3}; surrounding tissue → bg."""
-    from core.data.dynamic.mrxcat import canonical_from_fov
-    fov = np.array([[1, 2, 3], [4, 5, 6], [7, 0, 0]])     # heart | lung/liver/muscle | fat/bg/bg
-    assert canonical_from_fov(fov).tolist() == [[1, 2, 3], [0, 0, 0], [0, 0, 0]]
-
-
 def test_place_heart_in_fov_swaps_anatomy():
     """SSM x MRXCAT (majh): excise the phantom's heart, paste OUR heart at its location. Result keeps
     surrounding tissue + carries our heart classes; the old phantom-heart pixels not covered → muscle."""
