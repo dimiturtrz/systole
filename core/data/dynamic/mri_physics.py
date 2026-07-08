@@ -170,6 +170,41 @@ def tissue_range(name: str, field: float) -> tuple[tuple[float, float], tuple[fl
     return table[f]
 
 
+_CAVITY_O2 = {1: "low", 3: "high"}       # RV cavity = deoxygenated (short T2) / LV cavity = oxygenated (long T2)
+
+
+def sample_heart_tissue(t1: torch.Tensor, t2: torch.Tensor, fi: torch.Tensor,  # noqa: PLR0913
+                        fields: tuple[float, ...], n_classes: int, spread: float):
+    """Per-sample redraw of HEART-class (blood/myo) T1/T2 from the literature TISSUE_RANGE band, lerped
+    from the current point value by `spread` (0=point/off, 1=full uniform band). Physically-constrained
+    breadth (UltimateSynth) in place of decorrelated jitter: contrast then flows through bssfp_signal, so
+    the tissues move together the way a real protocol/subject change does. Blood cavities split by
+    oxygenation — LV (long T2, upper half of the band), RV (short T2, lower half). t1/t2 [B, n_paint];
+    fi [B] long, field index into `fields`. Returns fresh (t1, t2)."""
+    dev = t1.device
+    t1, t2 = t1.clone(), t2.clone()
+    b = t1.shape[0]
+    for c, tissue in _HEART.items():
+        if c >= n_classes:
+            continue
+        bands = [tissue_range(tissue, float(f)) for f in fields]              # per field ((t1..),(t2..))
+        t1lo = torch.tensor([bd[0][0] for bd in bands], device=dev)[fi]       # [B], per-sample field band
+        t1hi = torch.tensor([bd[0][1] for bd in bands], device=dev)[fi]
+        t2lo = torch.tensor([bd[1][0] for bd in bands], device=dev)[fi]
+        t2hi = torch.tensor([bd[1][1] for bd in bands], device=dev)[fi]
+        if tissue == "blood":                                                # oxygenation splits the T2 band
+            mid = 0.5 * (t2lo + t2hi)
+            if _CAVITY_O2.get(c) == "high":
+                t2lo = mid
+            elif _CAVITY_O2.get(c) == "low":
+                t2hi = mid
+        s1 = t1lo + torch.rand(b, device=dev) * (t1hi - t1lo)
+        s2 = t2lo + torch.rand(b, device=dev) * (t2hi - t2lo)
+        t1[:, c] = t1[:, c] + spread * (s1 - t1[:, c])
+        t2[:, c] = t2[:, c] + spread * (s2 - t2[:, c])
+    return t1, t2
+
+
 def named_tissue_params(names: list[str], field: float, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """(T1,T2,PD) tensors for an EXPLICIT list of tissue names (each a key of TISSUE) at `field`. Generic
     builder for sources that assign every class a specific tissue — e.g. MRXCAT whole-FOV paints classes

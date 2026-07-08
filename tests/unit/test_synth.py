@@ -83,6 +83,48 @@ def test_tissue_points_inside_literature_ranges():
     assert set(TISSUE_RANGE) == set(TISSUE)                       # same tissue vocabulary
 
 
+def test_sample_heart_tissue_spread_off_is_identity():
+    """spread=0 -> point values unchanged (backward-compatible; registered models / the mdem baseline
+    are unaffected until the knob is turned on)."""
+    from core.data.dynamic.mri_physics import sample_heart_tissue, tissue_params
+    t1p, t2p, _ = tissue_params(N, 0, 1.5, "cpu")
+    t1 = t1p.expand(64, N).clone(); t2 = t2p.expand(64, N).clone()
+    fi = torch.zeros(64, dtype=torch.long)
+    o1, o2 = sample_heart_tissue(t1, t2, fi, (1.5, 3.0), N, 0.0)
+    assert torch.equal(o1, t1) and torch.equal(o2, t2)
+
+
+def test_sample_heart_tissue_stays_in_band_and_splits_by_o2():
+    """spread=1: heart T1/T2 land inside the literature band; blood cavities split by oxygenation
+    (LV-cav long T2 upper half, RV-cav short T2 lower half); 3T blood T2 < 1.5T (field shift)."""
+    from core.data.dynamic.mri_physics import sample_heart_tissue, tissue_params, tissue_range
+    torch.manual_seed(0)
+    B = 4000
+    t1p, t2p, _ = tissue_params(N, 0, 1.5, "cpu")
+    t1 = t1p.expand(B, N).clone(); t2 = t2p.expand(B, N).clone()
+    fi15 = torch.zeros(B, dtype=torch.long)
+    o1, o2 = sample_heart_tissue(t1, t2, fi15, (1.5, 3.0), N, 1.0)
+    (mt1lo, mt1hi), _ = tissue_range("myocardium", 1.5)
+    assert o1[:, 2].min() >= mt1lo - 1 and o1[:, 2].max() <= mt1hi + 1     # myo T1 within band
+    (_, _), (blo, bhi) = tissue_range("blood", 1.5)
+    mid = 0.5 * (blo + bhi)
+    assert o2[:, 3].min() >= mid - 1e-3                                    # LV cav (3) = high-O2 upper half
+    assert o2[:, 1].max() <= mid + 1e-3                                    # RV cav (1) = low-O2 lower half
+    t1b, t2b = t1p.expand(B, N).clone(), t2p.expand(B, N).clone()
+    o1b, o2b = sample_heart_tissue(t1b, t2b, torch.ones(B, dtype=torch.long), (1.5, 3.0), N, 1.0)
+    assert o2b[:, 3].mean() < o2[:, 3].mean()                             # 3T blood T2 lower than 1.5T
+
+
+def test_tissue_spread_changes_paint_end_to_end():
+    """Integration: turning tissue_spread on flows a different physical contrast through bssfp_signal ->
+    a different painted image (same seed), and stays finite. The knob is wired, not dead."""
+    base = dict(synth_p=1.0, bg=FlatBgCfg())
+    torch.manual_seed(3); off, _ = synthesize_from_labels(_mask(), SynthCfg(**base, tissue_spread=0.0), N)
+    torch.manual_seed(3); on, _ = synthesize_from_labels(_mask(), SynthCfg(**base, tissue_spread=1.0), N)
+    assert torch.isfinite(on).all()
+    assert not torch.allclose(on, off)
+
+
 # --- generation ---
 def test_shape_and_zscore():
     img, msk = synthesize_from_labels(_mask(), SynthCfg(synth_p=1.0, bg=FlatBgCfg()), N)
