@@ -15,17 +15,39 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
+import torch
+from common import (
+    CHAMBERS,
+    DEFAULT_MODEL,
+    MODELS,
+    load_model,
+    log_setup,
+    patient_dir,
+    square_stack,
+)
+from common import (
+    masks as build_masks,
+)
+from geometry import bbox_slices
+from render_volume import normalize, to_imagedata
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
-from core.preprocessing.preprocess import preprocess_case
+from core.data.static.mri.acdc import acdc_cases, load_ed_es
+from core.data.static.splits import split_patients
 from core.measure import ejection_fraction
-from render_volume import normalize, to_imagedata
-from common import CHAMBERS, MODELS, DEFAULT_MODEL, load_model, patient_dir, square_stack, masks as build_masks
-from geometry import bbox_slices
+from core.preprocessing.preprocess import preprocess_case
+
+log = logging.getLogger("cardioview.render_overlay")
+
+MIN_MESH_VOXELS = 8        # skip a chamber whose binary mask is smaller than this (marching-cubes noise)
+MYO_LABEL = 2              # LV myocardium — rendered semi-transparent so cavities stay visible
 
 
 def crop_and_iso(img_zyx, mask_zyx, spacing_zyx, margin_mm=12.0):
@@ -41,10 +63,8 @@ def crop_and_iso(img_zyx, mask_zyx, spacing_zyx, margin_mm=12.0):
 
 def chamber_mesh(mask_zyx, label, iso):
     """Marching-cubes surface for one label, in (x,y,z) world mm to match the volume."""
-    import pyvista as pv
-
     binary = (mask_zyx == label).astype(np.float32)
-    if binary.sum() < 8:
+    if binary.sum() < MIN_MESH_VOXELS:
         return None
     verts, faces, _, _ = marching_cubes(binary, level=0.5, spacing=(iso, iso, iso))
     verts = verts[:, [2, 1, 0]]  # (z,y,x) -> (x,y,z), the volume's world order
@@ -52,43 +72,66 @@ def chamber_mesh(mask_zyx, label, iso):
     return pv.PolyData(verts, faces_pv).smooth_taubin(n_iter=20, pass_band=0.05)
 
 
-def render(patient, phase, source, out, interactive, model_name, margin_mm, html=None, gltf=None):
-    import pyvista as pv
-    import torch
+@dataclass
+class OverlayCfg:
+    """One overlay-render request: what to load, how to crop, and where to write."""
+    patient: str = "patient001"
+    phase: str = "ED"
+    source: str = "pred"
+    model_name: str = DEFAULT_MODEL
+    margin_mm: float = 12.0
+    out: str | None = None
+    interactive: bool = False
+    html: str | None = None
+    gltf: str | None = None
 
-    from core.data.static.mri.acdc import load_ed_es
-    case = preprocess_case(patient_dir(patient), loader=load_ed_es)
-    spacing = tuple(float(s) for s in case["spacing"])
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = None if source == "gt" else load_model(MODELS[model_name], device)
-    split_tag = ""
-    if source == "pred":  # honesty: was this patient in the model's training set?
-        from core.data.static.mri.acdc import acdc_cases
-        from core.data.static.splits import split_patients
-        _, val = split_patients(list(acdc_cases()), 0.2, 0)
-        held = patient in {c.name for c in val}
-        split_tag = "  held-out" if held else "  TRAIN-seen"
-        if not held:
-            print(f"WARNING: {patient} was in training — pred overstates the model. Use a held-out patient.")
-    masks = build_masks(case, source, model, device)
-    if phase not in masks:
-        raise SystemExit(f"phase {phase} unavailable for {patient}")
 
-    # EF (both phases) for the title — the measurement, pred or GT
-    ef_txt = ""
-    if "ED" in masks and "ES" in masks:
-        ef, _, _ = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
-        ef_g, _, _ = ejection_fraction(
-            *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
-        ef_txt = f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
+def _split_tag(patient: str) -> str:
+    """Honesty tag: was this patient in the model's training set? (warns on TRAIN-seen preds)."""
+    _, val = split_patients(list(acdc_cases()), 0.2, 0)
+    held = patient in {c.name for c in val}
+    if not held:
+        log.warning("%s was in training — pred overstates the model. Use a held-out patient.", patient)
+    return "  held-out" if held else "  TRAIN-seen"
 
-    img = square_stack(case[f"{phase.lower()}_img"])
-    img_i, mask_i, iso = crop_and_iso(img, masks[phase], spacing, margin_mm)
 
-    pl = pv.Plotter(off_screen=not interactive, window_size=(1000, 1000))
+def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
+    """EF (both phases) for the scene title — pred vs GT."""
+    if "ED" not in masks or "ES" not in masks:
+        return ""
+    ef, _, _ = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
+    ef_g, _, _ = ejection_fraction(
+        *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
+    return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
+
+
+def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:
+    """Dispatch the built plotter to gltf / html / interactive / screenshot per cfg."""
+    if cfg.gltf:
+        Path(cfg.gltf).parent.mkdir(parents=True, exist_ok=True)
+        pl.export_gltf(cfg.gltf)
+        log.info("saved %s  (glb for the web viewer)%s", cfg.gltf, ef_txt)
+        return
+    if cfg.html:
+        Path(cfg.html).parent.mkdir(parents=True, exist_ok=True)
+        pl.export_html(cfg.html)
+        log.info("saved %s  (rotatable web scene)%s", cfg.html, ef_txt)
+        return
+    if cfg.interactive:
+        pl.show()
+        return
+    out = cfg.out or f"cardioview/out/{cfg.patient}_{cfg.phase}_{cfg.source}.png"
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    pl.screenshot(out)
+    log.info("saved %s  (iso %s @ %s mm)%s", out, mask_i.shape, round(iso[0], 2), ef_txt)
+
+
+def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):
+    """Assemble the pyvista scene: dim intensity backdrop (screenshot only) + chamber surfaces."""
+    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
     pl.set_background("#0e1116")
     # Volume backdrop doesn't export to vtk.js/glTF cleanly — skip it for web export.
-    if not (html or gltf):
+    if not (cfg.html or cfg.gltf):
         grid = to_imagedata(normalize(img_i) * 255.0, iso)
         pl.add_volume(grid, scalars="intensity", cmap="bone",
                       opacity=[0.0, 0.0, 0.02, 0.04, 0.08, 0.14, 0.25],  # dim backdrop
@@ -96,31 +139,31 @@ def render(patient, phase, source, out, interactive, model_name, margin_mm, html
     for label, (name, color) in CHAMBERS.items():
         mesh = chamber_mesh(mask_i, label, iso[0])
         if mesh is not None:
-            pl.add_mesh(mesh, color=color, opacity=1.0 if label != 2 else 0.55,
+            pl.add_mesh(mesh, color=color, opacity=0.55 if label == MYO_LABEL else 1.0,
                         smooth_shading=True, specular=0.3, label=name)
     pl.add_legend(bcolor="#161a20", border=False, size=(0.26, 0.16))
     pl.view_isometric()
     pl.camera.azimuth = 35
     pl.camera.elevation = 20
-    pl.add_text(f"{patient}  {phase}  [{source}]{split_tag}{ef_txt}", font_size=11, color="#cdd6e0")
+    pl.add_text(title, font_size=11, color="#cdd6e0")
+    return pl
 
-    if gltf:
-        Path(gltf).parent.mkdir(parents=True, exist_ok=True)
-        pl.export_gltf(gltf)
-        print(f"saved {gltf}  (glb for the web viewer){ef_txt}")
-        return
-    if html:
-        Path(html).parent.mkdir(parents=True, exist_ok=True)
-        pl.export_html(html)
-        print(f"saved {html}  (rotatable web scene){ef_txt}")
-        return
-    if interactive:
-        pl.show()
-        return
-    out = out or f"cardioview/out/{patient}_{phase}_{source}.png"
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    pl.screenshot(out)
-    print(f"saved {out}  (iso {mask_i.shape} @ {round(iso[0],2)} mm){ef_txt}")
+
+def render(cfg: OverlayCfg) -> None:
+    case = preprocess_case(patient_dir(cfg.patient), loader=load_ed_es)
+    spacing = tuple(float(s) for s in case["spacing"])
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = None if cfg.source == "gt" else load_model(MODELS[cfg.model_name], device)
+    split_tag = _split_tag(cfg.patient) if cfg.source == "pred" else ""
+    masks = build_masks(case, cfg.source, model, device)
+    if cfg.phase not in masks:
+        raise SystemExit(f"phase {cfg.phase} unavailable for {cfg.patient}")
+    ef_txt = _ef_title(masks, case, spacing, cfg.source)
+    img = square_stack(case[f"{cfg.phase.lower()}_img"])
+    img_i, mask_i, iso = crop_and_iso(img, masks[cfg.phase], spacing, cfg.margin_mm)
+    title = f"{cfg.patient}  {cfg.phase}  [{cfg.source}]{split_tag}{ef_txt}"
+    pl = _build_plotter(cfg, img_i, mask_i, iso, title)
+    _write_scene(pl, cfg, mask_i, iso, ef_txt)
 
 
 def main():
@@ -135,8 +178,10 @@ def main():
     ap.add_argument("--html", default=None, help="export a rotatable standalone web page (vtk.js)")
     ap.add_argument("--gltf", default=None, help="export chamber meshes as .glb for the web viewer")
     args = ap.parse_args()
-    render(args.patient, args.phase, args.source, args.out, args.interactive,
-           args.model, args.margin, args.html, args.gltf)
+    log_setup()
+    render(OverlayCfg(patient=args.patient, phase=args.phase, source=args.source,
+                      model_name=args.model, margin_mm=args.margin, out=args.out,
+                      interactive=args.interactive, html=args.html, gltf=args.gltf))
 
 
 if __name__ == "__main__":

@@ -9,12 +9,16 @@ copy the artifact to web/public/models/<name>.onnx (served as the bundled model)
 from __future__ import annotations
 
 import argparse
+import logging
 import shutil
 from pathlib import Path
 
-from core.export_onnx import export as build_onnx
+from common import DEFAULT_MODEL, MODELS, log_setup, model_dir
+
 from core.data.static import store
-from common import MODELS, DEFAULT_MODEL, model_dir
+from core.export_onnx import export as build_onnx
+
+log = logging.getLogger("cardioview.export_onnx")
 
 OUT = Path("cardioview/web/public/models")
 
@@ -25,6 +29,7 @@ def main() -> None:
     ap.add_argument("--verify", default=None)
     ap.add_argument("--no-quantize", dest="quantize", action="store_false")
     a = ap.parse_args()
+    log_setup()
 
     run = model_dir(MODELS[a.model])  # registry ref -> resolved artifact dir
     # parity check needs a CONSOLIDATED-STORE npz (not a raw patient dir) — same source as
@@ -35,7 +40,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     dst = OUT / f"{a.model}.onnx"
     shutil.copyfile(onnx, dst)
-    print(f"-> bundled web model: {dst}")
+    log.info("-> bundled web model: %s", dst)
 
 
 if __name__ == "__main__":

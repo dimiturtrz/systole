@@ -29,7 +29,7 @@ jobs:
       # Ratchet: add each in-progress family's code to --select as it reaches zero.
       # Remaining advisory (not yet 0 on the enforced path): E501 (bd cardiac-seg-i851). bd cardiac-seg-l79o.
       - name: Lint — enforced (shipped code, clean rules)
-        run: uvx ruff@0.15.13 check core cardioseg --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415,FBT,RUF100
+        run: uvx ruff@0.15.13 check core cardioseg cardioview --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415,FBT,RUF100
       # ADVISORY (never blocks): full curated config over the whole tree — surfaces the families still
       # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
       - name: Lint — advisory full (non-blocking)
@@ -69,6 +69,11 @@ jobs:
       # Config (source/omit/exclude) is in [tool.coverage.*]. Integration tests skip on the data-less runner.
       - name: Tests + coverage (tests block)
         run: uv run pytest tests --cov --cov-report=term-missing -q
+      # cardioview's own geometry tests (pure numpy + core) — gate them too so cardioview logic
+      # regressions are caught. cardioview isn't pip-installed (not in packages.find), so put the repo
+      # root on PYTHONPATH for the `cardioview.` package import. Not under --cov (coverage = core+cardioseg).
+      - name: cardioview tests (geometry logic)
+        run: PYTHONPATH=. uv run pytest cardioview/tests -q
       # Coverage RED tier (mirrors vulture conf80): below 80% fails the merge. Reads the .coverage from
       # the run above. bd cardiac-seg-emko — reaching 80 honestly is tracked in 7bbq.
       - name: Coverage floor — enforced (>=80, blocks)

@@ -47,7 +47,7 @@ testpaths = ["tests"]
 # later axis (bd rp8l).
 [tool.ruff]
 line-length = 120
-extend-exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
+extend-exclude = ["baselines", "cardioview/web/node_modules", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
 
 [tool.ruff.lint]
 select = [
@@ -75,7 +75,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
-"tests/**" = ["PLR2004", "FBT"]       # literal fixtures + bool test flags are fine in tests
+"**/tests/**" = ["PLR2004", "FBT"]    # literal fixtures + bool test flags are fine in tests
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
 
 # Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg ONLY
@@ -85,10 +85,10 @@ select = [
 # eats entry-point/no-fan-in false positives). ignore_names/decorators kill the pydantic FPs (a
 # ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
 [tool.vulture]
-paths = ["core", "cardioseg"]
-exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
+paths = ["core", "cardioseg", "cardioview"]
+exclude = ["baselines", "*/node_modules/*", "cardioview/tests", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
 min_confidence = 60
-ignore_names = ["model_config"]
+ignore_names = ["model_config", "azimuth", "elevation"]  # azimuth/elevation: pyvista Camera setters (live, vulture-blind)
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Measures core+cardioseg. The denominator is LIBRARY logic, not scripts: omit

@@ -13,14 +13,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
+from common import log_setup, patient_dir
+from geometry import bbox_slices
 from scipy.ndimage import zoom
 
 from core.data.static.mri.acdc import load_ed_es
-from common import patient_dir  # noqa: F401  (re-exported; used here and by render_overlay)
-from geometry import bbox_slices
+
+log = logging.getLogger("cardioview.render_volume")
 
 
 def crop_to_heart(vol_zyx, gt_zyx, spacing_zyx, margin_mm: float = 15.0):
@@ -47,29 +52,36 @@ def normalize(vol: np.ndarray, lo_pct: float = 1.0, hi_pct: float = 99.5) -> np.
 
 def to_imagedata(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):
     """Wrap a [z,y,x] array as a pyvista ImageData (VTK wants x-fastest)."""
-    import pyvista as pv
-
     nz, ny, nx = vol_zyx.shape
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=spacing_zyx[::-1])  # spacing as (x,y,z)
     grid.point_data["intensity"] = vol_zyx.transpose(2, 1, 0).flatten(order="F")
     return grid
 
 
-def render(patient: str, phase: str, out: str | None, interactive: bool,
-           crop: bool = True, margin_mm: float = 15.0) -> None:
-    import pyvista as pv
+@dataclass
+class RenderCfg:
+    """One volume-render request: what to load + how to crop/output."""
+    patient: str = "patient001"
+    phase: str = "ED"
+    out: str | None = None
+    interactive: bool = False
+    crop: bool = True
+    margin_mm: float = 15.0
 
+
+def render(cfg: RenderCfg) -> None:
+    patient, phase = cfg.patient, cfg.phase
     d = load_ed_es(patient_dir(patient))
     if phase not in d:
         raise SystemExit(f"phase {phase} not available for {patient} (have {list(d)})")
     vol = d[phase]["img"]
     gt = d[phase].get("gt")
     spacing = d["spacing"]
-    crop_vol, _ = crop_to_heart(vol, gt, spacing, margin_mm) if crop else (vol, gt)
+    crop_vol, _ = crop_to_heart(vol, gt, spacing, cfg.margin_mm) if cfg.crop else (vol, gt)
     iso_vol, iso_spacing = to_isotropic(crop_vol, spacing)
     grid = to_imagedata(normalize(iso_vol) * 255.0, iso_spacing)
 
-    pl = pv.Plotter(off_screen=not interactive, window_size=(1000, 1000))
+    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
     pl.set_background("#0e1116")
     # Translucent ramp — fade the dark background, stay see-through at the bright end so
     # the chambers/blood pool read instead of a solid opaque shell.
@@ -91,14 +103,14 @@ def render(patient: str, phase: str, out: str | None, interactive: bool,
     pl.camera.elevation = 20
     pl.add_text(f"{patient}  {phase}", font_size=12, color="#cdd6e0")
 
-    if interactive:
+    if cfg.interactive:
         pl.show()
         return
-    out = out or f"cardioview/out/{patient}_{phase}.png"
+    out = cfg.out or f"cardioview/out/{patient}_{phase}.png"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     pl.screenshot(out)
-    print(f"saved {out}  (vol {vol.shape} @ {tuple(round(s,2) for s in spacing)} mm "
-          f"-> iso {iso_vol.shape} @ {round(iso_spacing[0],2)} mm)")
+    log.info("saved %s  (vol %s @ %s mm -> iso %s @ %s mm)", out, vol.shape,
+             tuple(round(s, 2) for s in spacing), iso_vol.shape, round(iso_spacing[0], 2))
 
 
 def main() -> None:
@@ -110,7 +122,9 @@ def main() -> None:
     ap.add_argument("--no-crop", dest="crop", action="store_false", help="render the full FOV, not just the heart ROI")
     ap.add_argument("--margin", type=float, default=15.0, help="crop margin around the heart, mm")
     args = ap.parse_args()
-    render(args.patient, args.phase, args.out, args.interactive, args.crop, args.margin)
+    log_setup()
+    render(RenderCfg(patient=args.patient, phase=args.phase, out=args.out,
+                     interactive=args.interactive, crop=args.crop, margin_mm=args.margin))
 
 
 if __name__ == "__main__":

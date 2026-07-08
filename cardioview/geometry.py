@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.postprocess import largest_cc_binary as keep_largest  # single source (bd cardiac-seg-y0x)
-
 
 def nearest_index(values, target) -> int:
     """Index of the value closest to `target` (e.g. map an ED/ES frame to a sampled frame)."""
