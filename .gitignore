@@ -64,6 +64,6 @@ D:/
 data/volumetric/
 
 # coverage.py artifacts
-.coverage
+.coverage*
 coverage.xml
 htmlcov/
