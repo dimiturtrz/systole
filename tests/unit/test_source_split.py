@@ -118,6 +118,19 @@ def test_composite_generator_dispatches_by_index_range():
     assert int((x2 == 1.0).sum()) == 4 and int((x2 == 2.0).sum()) == 4
 
 
+def test_dynamic_source_cap_bounds_resident(monkeypatch):
+    """cap deterministically subsamples the resident to <= cap slices (VRAM-bound the GPU preload); no
+    cap or cap >= pool size = the full pool. Fixes the composite thrash: the 42k union doesn't fit VRAM."""
+    import numpy as np
+
+    from core.data.dynamic.source import DynamicSource
+    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((100, 8, 8), np.int64))
+    X, Y, fs = DynamicSource(pool="p", cap=30)._resident(8, "cpu")
+    assert X.shape[0] == 30 and Y.shape[0] == 30 and fs.shape[0] == 30      # capped
+    assert DynamicSource(pool="p")._resident(8, "cpu")[0].shape[0] == 100   # no cap = full
+    assert DynamicSource(pool="p", cap=999)._resident(8, "cpu")[0].shape[0] == 100  # cap>=size = no-op
+
+
 def test_synth_composite_split_resolves_to_composite_source():
     """The registered synth_composite split's train is a CompositeSource of SSM + pathology sources —
     the real consumer of the composition mechanism (so it isn't dead code)."""
