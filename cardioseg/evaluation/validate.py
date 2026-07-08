@@ -37,6 +37,8 @@ class EvalCfg(BaseModel):
     size: int = SIZE
     postproc: bool = True
     tta: bool = True
+    boundary: bool = True          # compute HD95/ASSD (per-class 3D distance transforms — the eval's heaviest
+    #                                CPU step); turn OFF for Dice/EF-only sweeps (result-identical Dice/EF)
 
 
 class _ClassScores:
@@ -47,7 +49,8 @@ class _ClassScores:
 
     _CLS = np.fromiter(CLASS_NAMES, dtype=int)                           # [C] foreground label ids (1,2,3)
 
-    def __init__(self):
+    def __init__(self, *, boundary: bool = True):
+        self.boundary = boundary
         self.inter = {c: 0.0 for c in CLASS_NAMES}
         self.denom = {c: 0.0 for c in CLASS_NAMES}
         self.surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
@@ -64,6 +67,9 @@ class _ClassScores:
         for i, cl in enumerate(CLASS_NAMES):
             self.inter[cl] += float(inter_c[i])
             self.denom[cl] += float(denom_c[i])
+        if not self.boundary:                                           # Dice/EF-only sweep — skip the EDT cost
+            return
+        for cl in CLASS_NAMES:
             sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if sd.size:
                 m = surface_metrics(sd)
@@ -107,7 +113,7 @@ class Evaluator:
         group; dataset-agnostic (canonical labels)."""
         model, device, size = self.model, self.device, self.cfg.size
         postproc, tta = self.cfg.postproc, self.cfg.tta
-        scores = _ClassScores()                                  # holds the Dice/boundary accumulators
+        scores = _ClassScores(boundary=self.cfg.boundary)        # holds the Dice/boundary accumulators
         ef_rows = []
         for npz_path in npz_paths:
             case = load_arrays(npz_path)
@@ -127,7 +133,7 @@ class Evaluator:
                 ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
                 ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
-        return scores.dice(), ef_rows, scores.surface()
+        return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
 
     def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
         """Foreground (logits[N,C], labels[N]) over subjects — single forward, NO TTA/postproc —

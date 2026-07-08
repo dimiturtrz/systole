@@ -39,6 +39,18 @@ def test_dice_perfect_overlap():
     assert all(abs(d[c] - 1.0) < 1e-9 for c in CLASS_NAMES)
 
 
+def test_boundary_off_keeps_dice_skips_surface():
+    """boundary=False: Dice identical to boundary=True, but no surface distances computed (the sweep
+    speedup — HD95/ASSD EDT is the eval's heaviest step)."""
+    pred = _vol([[1, 1], [2, 0]])
+    gt = _vol([[1, 0], [2, 2]])
+    on = _ClassScores(); on.add(pred.copy(), gt, SP)
+    off = _ClassScores(boundary=False); off.add(pred.copy(), gt, SP)
+    don, doff = on.dice(), off.dice()
+    assert all((np.isnan(don[c]) and np.isnan(doff[c])) or don[c] == doff[c] for c in don)  # Dice unchanged
+    assert all(not off.surf[c]["hd95"] and not off.surf[c]["assd"] for c in off.surf)  # no boundary work
+
+
 def test_dice_disjoint_is_zero():
     """Disjoint class: pred and gt share no voxels of label 1 -> Dice 0 (both present, no overlap)."""
     pred = _vol([[1, 0], [0, 0]])

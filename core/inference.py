@@ -27,10 +27,13 @@ def predict_volume_members(model, vol_img: Volume, size: int, device: str):
     xs = _stack_slices(vol_img, size)
     with torch.no_grad():
         x = torch.from_numpy(xs)[:, None].to(device)          # [D, 1, size, size]
-        flips = []
-        for dims in _FLIPS:
-            p = torch.softmax(model(torch.flip(x, dims) if dims else x), dim=1)
-            flips.append(torch.flip(p, dims) if dims else p)  # un-flip back before stacking
+        d = x.shape[0]
+        # ONE batched forward over all K flips ([K*D,1,H,W]) instead of K sequential calls — same math,
+        # ~K× fewer kernel launches / python round-trips (the TTA test scores volume-by-volume × K).
+        batched = torch.cat([torch.flip(x, dims) if dims else x for dims in _FLIPS], dim=0)
+        probs = torch.softmax(model(batched), dim=1)          # [K*D, C, size, size]
+        flips = [torch.flip(probs[i * d:(i + 1) * d], dims) if dims else probs[i * d:(i + 1) * d]
+                 for i, dims in enumerate(_FLIPS)]             # un-flip each block back
         members = torch.stack(flips)                          # [K, D, C, size, size]
         mean = members.mean(0)                                # [D, C, size, size] mean softmax
         pred = mean.argmax(1).to(torch.uint8).cpu().numpy()
