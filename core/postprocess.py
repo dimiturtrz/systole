@@ -28,9 +28,9 @@ def _gpu_cc():
     """cucim GPU connected-components (the linux GPU lane) if importable, else None -> scipy CPU.
     Detected once at import — a single capability gate, no per-call branching beyond the dispatch."""
     try:
-        import cupy  # noqa: F401, PLC0415
-        from cucim.skimage.measure import label  # noqa: PLC0415
-        return label
+        import cupy  # noqa: F401, PLC0415  # pragma: no cover
+        from cucim.skimage.measure import label  # noqa: PLC0415  # pragma: no cover
+        return label  # pragma: no cover
     except ImportError:                        # cupy/cucim not installed (windows / no-GPU) -> CPU fallback
         return None
 
@@ -38,7 +38,7 @@ def _gpu_cc():
 _CUCIM_LABEL = _gpu_cc()
 
 
-def _largest_cc_gpu(mask: Mask, labels) -> Mask:
+def _largest_cc_gpu(mask: Mask, labels) -> Mask:  # pragma: no cover  (linux GPU lane only — no cucim on CI)
     """GPU largest-CC via cupy + cucim (linux lane). Same result as the scipy path; back to numpy."""
     import cupy as cp  # noqa: PLC0415
     m = cp.asarray(mask)
@@ -60,7 +60,7 @@ def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = FOREGROUND) -> Ma
     mask: [D, H, W] integer label map (classes disjoint, as from argmax). Returns a cleaned
     copy — false-positive islands dropped, the main structure kept. Uses the cucim GPU path when
     available (linux), else scipy CPU — identical output either way."""
-    if _CUCIM_LABEL is not None:
+    if _CUCIM_LABEL is not None:               # pragma: no cover  (GPU dispatch — CPU path tested)
         return _largest_cc_gpu(mask, labels)
     out = np.zeros_like(mask)
     for lab in labels:

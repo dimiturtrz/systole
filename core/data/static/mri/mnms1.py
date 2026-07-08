@@ -99,6 +99,28 @@ def mnms1_cases(root: str | Path | None = None) -> list[Path]:
     return out
 
 
+def _frame_idx(idx) -> int | None:
+    """CSV ED/ES frame cell -> int index (float-string tolerant), or None when blank/missing."""
+    if idx is None or idx == "":
+        return None
+    return int(float(idx))
+
+
+def meta_from_row(row: dict) -> dict:
+    """PURE M&Ms-1 meta from one CSV row: centre code -> (readable site, country) via the paper map,
+    vendor from either spelling, demographics float-parsed. Unknown centre -> (raw code, None country)."""
+    name, country = CENTRES.get(str(row.get("Centre")).strip(), (row.get("Centre"), None))
+    return {
+        "group": row.get("Pathology"),
+        "vendor": row.get("VendorName") or row.get("Vendor"),
+        "centre": name, "country": country,   # code -> readable site + country (paper map)
+        "age": to_float(row.get("Age")), "sex": row.get("Sex"),
+        "height": to_float(row.get("Height")), "weight": to_float(row.get("Weight")),
+        "scanner": None, "field_T": None,   # not in CSV (paper tables)
+        "_source": {"all": "csv", "centre+country": "paper centre map", "field_T": "paper(unfilled)"},
+    }
+
+
 def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
     """Load ED + ES frames (from the 4D cine at CSV indices) + canonical-remapped masks."""
     case = Path(case)
@@ -106,10 +128,8 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
     img_p, gt_p = _sa(case)
 
     def resolve(tag):
-        idx = row.get(tag)
-        if idx is None or idx == "":
-            return None
-        return img_p, gt_p, int(float(idx))   # 4D cine -> frame index from the CSV
+        idx = _frame_idx(row.get(tag))
+        return None if idx is None else (img_p, gt_p, idx)   # 4D cine -> frame index from the CSV
 
     return load_frames(row.get("Pathology"), resolve, LABEL_MAP)
 
@@ -127,14 +147,4 @@ class Mnms1Adapter(DatasetAdapter):
 
     def meta(self, case: Path) -> dict:
         """Acquisition + demographics — AUTO from the CSV (richest of the three)."""
-        r = mnms1_info().get(case.name, {})
-        name, country = CENTRES.get(str(r.get("Centre")).strip(), (r.get("Centre"), None))
-        return {
-            "group": r.get("Pathology"),
-            "vendor": r.get("VendorName") or r.get("Vendor"),
-            "centre": name, "country": country,   # code -> readable site + country (paper map)
-            "age": to_float(r.get("Age")), "sex": r.get("Sex"),
-            "height": to_float(r.get("Height")), "weight": to_float(r.get("Weight")),
-            "scanner": None, "field_T": None,   # not in CSV (paper tables)
-            "_source": {"all": "csv", "centre+country": "paper centre map", "field_T": "paper(unfilled)"},
-        }
+        return meta_from_row(mnms1_info().get(case.name, {}))

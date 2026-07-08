@@ -76,6 +76,27 @@ def ece(conf, correct, n_bins=15):
     return float(e), bins
 
 
+def boundary_interior_uncertainty(pred, ent):
+    """Per-slice mean entropy on the foreground boundary band vs the interior. Returns two lists
+    (bnd means, interior means) — a slice contributes to each only where that region is non-empty."""
+    bnd_u, int_u = [], []
+    for z in range(pred.shape[0]):
+        b = _boundary(pred[z]); inte = (pred[z] > 0) & ~b
+        if b.any(): bnd_u.append(ent[z][b].mean())
+        if inte.any(): int_u.append(ent[z][inte].mean())
+    return bnd_u, int_u
+
+
+def foreground_uncertainty(pred, gt, maps):
+    """Pure per-case fold: select foreground voxels (pred>0 OR gt>0) from the per-voxel maps
+    `maps = (ent, conf, ale, epi)` and return the pooled arrays (conf, correct, ent, ale, epi) +
+    the scalar per-case uncertainty (mean fg entropy, 0 if empty)."""
+    ent, conf, ale, epi = maps
+    fg = (pred > 0) | (gt > 0)
+    score = float(ent[fg].mean()) if fg.any() else 0.0
+    return conf[fg], (pred == gt)[fg], ent[fg], ale[fg], epi[fg], score
+
+
 def _collect_uncertainty(model, df, device, out, eval_name):
     """Per-case foreground-voxel uncertainty over ED/ES frames: TTA entropy/confidence, aleatoric/
     epistemic (BALD), boundary-vs-interior, per-case scores — plus one overlay PNG (ACDC ED only).
@@ -90,15 +111,11 @@ def _collect_uncertainty(model, df, device, out, eval_name):
                 continue
             pred, ent, conf, ale, epi = tta_uncertainty(model, case[f"{tag}_img"], SIZE, device)
             gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
-            fg = (pred > 0) | (gt > 0)
-            confs.append(conf[fg]); corrects.append((pred == gt)[fg]); ents.append(ent[fg])
-            ales.append(ale[fg]); epis.append(epi[fg])
-            cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}",
-                          "uncertainty": float(ent[fg].mean()) if fg.any() else 0.0})
-            for z in range(pred.shape[0]):                      # boundary vs interior
-                b = _boundary(pred[z]); inte = (pred[z] > 0) & ~b
-                if b.any(): bnd_u.append(ent[z][b].mean())
-                if inte.any(): int_u.append(ent[z][inte].mean())
+            cf, ok, en, al, ep, score = foreground_uncertainty(pred, gt, (ent, conf, ale, epi))
+            confs.append(cf); corrects.append(ok); ents.append(en); ales.append(al); epis.append(ep)
+            cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}", "uncertainty": score})
+            b, i = boundary_interior_uncertainty(pred, ent)
+            bnd_u.extend(b); int_u.extend(i)
             if not saved and eval_name == "acdc" and tag == "ed":  # one overlay PNG
                 z = int(np.argmax([(g > 0).sum() for g in gt]))
                 _save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", fit_square, SIZE, plt)
@@ -106,7 +123,7 @@ def _collect_uncertainty(model, df, device, out, eval_name):
     return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 
 
-def _reliability_plot(bins, ece_val, out):
+def _reliability_plot(bins, ece_val, out):  # pragma: no cover  matplotlib rendering + PNG file write
     """Reliability diagram (foreground confidence vs accuracy per bin) -> out/reliability.png."""
     fig, ax = plt.subplots(figsize=(4.5, 4.5))
     if bins:
@@ -119,7 +136,7 @@ def _reliability_plot(bins, ece_val, out):
     fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
 
-def main():
+def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
@@ -174,7 +191,7 @@ def main():
     trk.end()
 
 
-def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913  plotting helper — independent inputs
+def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913
     img = fit_square(vol[z].astype(np.float32), size, 0.0)
     cmap = overlay_cmap()
     fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))

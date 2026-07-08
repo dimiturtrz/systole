@@ -49,6 +49,20 @@ def ensemble_decompose(models, vol_img, size, device):
     return pred.cpu().numpy(), total.cpu().numpy(), aleat.cpu().numpy(), epi.cpu().numpy()
 
 
+def _dice_fold(pred, gt, inter, den):
+    """Fold one (pred, gt) label-map pair into the running per-class Dice inter/den accumulators."""
+    for cl in FOREGROUND:
+        p, g = pred == cl, gt == cl
+        inter[cl] += 2.0 * np.logical_and(p, g).sum(); den[cl] += p.sum() + g.sum()
+
+
+def _score_summary(inter, den, diffs):
+    """Finalize the ensemble accumulators: mean per-class Dice + EF MAE over the collected EF diffs."""
+    dice = {cl: (inter[cl] / den[cl] if den[cl] else float("nan")) for cl in FOREGROUND}
+    return {"dice_mean": round(float(np.nanmean(list(dice.values()))), 3),
+            "ef_mae": round(float(np.mean(np.abs(diffs))), 1) if diffs else float("nan")}
+
+
 def ensemble_score(models, df, size, device):
     """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
     like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
@@ -63,20 +77,16 @@ def ensemble_score(models, df, size, device):
             pred = largest_cc_per_class(ensemble_decompose(models, case[f"{tag}_img"], size, device)[0])
             gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
             preds[tag], gts[tag] = pred, gt
-            for cl in FOREGROUND:
-                p, g = pred == cl, gt == cl
-                inter[cl] += 2.0 * np.logical_and(p, g).sum(); den[cl] += p.sum() + g.sum()
+            _dice_fold(pred, gt, inter, den)
         if "ed" in preds and "es" in preds:
             efp = ejection_fraction(preds["ed"], preds["es"], sp)[0]
             efg = ejection_fraction(gts["ed"], gts["es"], sp)[0]
             if not (np.isnan(efp) or np.isnan(efg)):
                 diffs.append(efp - efg)
-    dice = {cl: (inter[cl] / den[cl] if den[cl] else float("nan")) for cl in FOREGROUND}
-    return {"dice_mean": round(float(np.nanmean(list(dice.values()))), 3),
-            "ef_mae": round(float(np.mean(np.abs(diffs))), 1) if diffs else float("nan")}
+    return _score_summary(inter, den, diffs)
 
 
-def _eval_df(cfg, which):
+def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
     d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
     _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -84,6 +94,13 @@ def _eval_df(cfg, which):
     if which == "acdc":
         return val
     return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
+
+
+def reducible_frac(aleatoric, epistemic):
+    """epistemic / (aleatoric + epistemic) over pooled foreground samples (lists of arrays) —
+    the reducible (model) fraction of total uncertainty. Guards the all-zero denominator."""
+    a = float(np.concatenate(aleatoric).mean()); e = float(np.concatenate(epistemic).mean())
+    return e / max(a + e, 1e-9)
 
 
 def _headroom(models, df, size, device):
@@ -100,12 +117,10 @@ def _headroom(models, df, size, device):
             ea.append(ale[fg]); ee.append(epi[fg])
             _, _, _, sa, se_ = tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
             ta.append(sa[fg]); te.append(se_[fg])
-    f = lambda al, ep: (float(np.concatenate(ep).mean()) /
-                        max(float(np.concatenate(al).mean()) + float(np.concatenate(ep).mean()), 1e-9))
-    return f(ea, ee), f(ta, te)             # ensemble reducible-frac, single(TTA) reducible-frac
+    return reducible_frac(ea, ee), reducible_frac(ta, te)   # ensemble reducible-frac, single(TTA) reducible-frac
 
 
-def main():
+def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")

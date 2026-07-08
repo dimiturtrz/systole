@@ -41,7 +41,25 @@ def _perf_table(r: dict) -> str:
     return "\n".join(rows)
 
 
-def _reference_section() -> list[str]:
+_REF_KEYS = (("ef_normal", "Normal LV EF"), ("edv_normal_ml", "Normal EDV"), ("esv_normal_ml", "Normal ESV"))
+
+
+def reference_rows(provenances: dict) -> list[str]:
+    """Pure provenance -> markdown rows: `{key: provenance_dict}` -> the reference-range bullet list.
+    A key whose provenance is missing or whose `value` isn't a [lo,hi] list is skipped. Extracted from
+    `_reference_section` (whose `Reference()` store probe is the shell) so the row formatting +
+    unit/n/based-on rendering is testable off synthetic provenance dicts."""
+    rows = []
+    for key, label in _REF_KEYS:
+        p = provenances.get(key)
+        if p and isinstance(p.get("value"), list):
+            unit = "%" if key == "ef_normal" else " mL"
+            rows.append(f"- {label}: **{p['value'][0]}–{p['value'][1]}{unit}** (p5–p95, n={p.get('n','?')}). "
+                        f"<sub>{p.get('based_on','')}</sub>")
+    return rows
+
+
+def _reference_section() -> list[str]:  # pragma: no cover  (probes the on-disk <data>/reference/ store; row formatting is reference_rows)
     """Surface the derived reference ranges (with cohort provenance) IF the local reference store is
     present; omitted entirely when absent (graceful fallback — the card still generates on a fresh
     clone with no <data>/reference/). Shows provenance regardless of verified, but only verified
@@ -49,14 +67,7 @@ def _reference_section() -> list[str]:
     ref = Reference()
     if not ref.present():
         return []
-    rows = []
-    for key, label in (("ef_normal", "Normal LV EF"), ("edv_normal_ml", "Normal EDV"),
-                       ("esv_normal_ml", "Normal ESV")):
-        p = ref.provenance("normal_ranges", key)
-        if p and isinstance(p.get("value"), list):
-            unit = "%" if key == "ef_normal" else " mL"
-            rows.append(f"- {label}: **{p['value'][0]}–{p['value'][1]}{unit}** (p5–p95, n={p.get('n','?')}). "
-                        f"<sub>{p.get('based_on','')}</sub>")
+    rows = reference_rows({key: ref.provenance("normal_ranges", key) for key, _ in _REF_KEYS})
     if not rows:
         return []
     return ["", "## Reference ranges (derived from our GT, for context)",
@@ -64,14 +75,14 @@ def _reference_section() -> list[str]:
             "cohort. Clinical context only — the model is not evaluated against these.*", *rows]
 
 
-def generate(run_dir: str | Path) -> Path:
-    run = Path(run_dir)
-    cfg = json.loads((run / "config.json").read_text())
-    m = json.loads((run / "metrics.json").read_text())
+def render_card(run_name: str, cfg: dict, m: dict, ref_section: list[str] | None = None) -> str:
+    """The pure card renderer: (config dict, metrics dict) -> the MODEL_CARD.md TEXT. No file IO — the
+    disk read + reference-store probe live in `generate`, so the whole markdown (model block, split
+    criteria, val/test perf tables, narrative) is testable off a synthetic config+metrics pair."""
     res, d, mdl, ls = m["results"], (cfg.get("generator") or cfg)["data"], cfg["model"], cfg["loss"]
 
     parts = [
-        f"# Model Card — cardioseg run `{run.name}`",
+        f"# Model Card — cardioseg run `{run_name}`",
         "*Auto-generated from `config.json` + `metrics.json` at training end — numbers are never "
         "hand-typed, so this card always matches the shipped model. Deeper analysis lives in the "
         "curated [`cardioseg/MODEL_CARD.md`](../../cardioseg/MODEL_CARD.md).*",
@@ -98,7 +109,7 @@ def generate(run_dir: str | Path) -> Path:
         t = res[test_key]
         parts += ["", "### Held-out test", _perf_table(t),
                   f"\nEF vs GT: **MAE {t.get('ef_mae', float('nan')):.1f}%** (n={len(t.get('ef_rows', []))})."]
-    parts += _reference_section()
+    parts += ref_section or []
     parts += [
         "",
         "## Intended use & limitations",
@@ -112,15 +123,22 @@ def generate(run_dir: str | Path) -> Path:
         "- Unseen-vendor evidence (Canon) is thin (n≈9). Demographic fairness (sex/age) is not "
         "audited — the data lacks coverage on the held-out set.",
         "",
-        f"**Reproduce:** `runs/{run.name}/config.json` fully specifies this run "
+        f"**Reproduce:** `runs/{run_name}/config.json` fully specifies this run "
         "(`core.hparams.from_json` → `train_seg`).",
     ]
+    return "\n".join(parts) + "\n"
+
+
+def generate(run_dir: str | Path) -> Path:  # pragma: no cover  (reads config.json/metrics.json + reference store, writes MODEL_CARD.md — render_card is the pure core)
+    run = Path(run_dir)
+    cfg = json.loads((run / "config.json").read_text())
+    m = json.loads((run / "metrics.json").read_text())
     out = run / "MODEL_CARD.md"
-    out.write_text("\n".join(parts) + "\n")
+    out.write_text(render_card(run.name, cfg, m, _reference_section()))
     return out
 
 
-def main():
+def main():  # pragma: no cover  (CLI: resolve registry ref + generate the card file)
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")

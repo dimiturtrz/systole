@@ -2,11 +2,19 @@ name: ci
 
 # Gate for the dev -> main flow: `tests` + `lint` must pass on every PR (and on pushes to dev/main).
 # Enforced as required status checks via branch protection on main (merge blocked until green).
+# pull_request validates the dev->main PR — reruns on every push to the PR head (synchronize) and tests
+# the MERGE PREVIEW (branch merged into main), not the raw head. push:[main] adds a post-merge safety
+# net. A dev push isn't a push to main, so only one event ever handles a given commit — no double-run.
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
   pull_request:
-    branches: [dev, main]
+    branches: [main]
+
+# A newer push to the same branch cancels the older in-flight run (no stacking on rapid pushes).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -29,6 +37,18 @@ jobs:
       # ADVISORY: `ruff format` not applied yet (bd i851) — shows the pending reformat, does not block.
       - name: Format — advisory (non-blocking)
         run: uvx ruff@0.15.13 format --check . || true
+      # Vulture — dead code, the axis ruff can't see (bd cardiac-seg-5ogp). Two tiers (paths/ignores in
+      # [tool.vulture]). BLOCKS at conf>=80 (near-certain: redundant conditions, unreachable, unused
+      # locals — precision high enough to fail the merge).
+      - name: Dead code — enforced (vulture conf>=80)
+        run: uvx vulture@2.16 --min-confidence 80
+      # WARNS at conf>=60 (dead functions/classes — real signal, but eats no-fan-in FPs so it can't
+      # block). continue-on-error keeps the job green (yellow ⚠); output is reshaped to ::warning:: PR
+      # annotations (first ~10 render inline on the diff, all print in the log).
+      - name: Dead code — advisory (vulture conf>=60, warns)
+        continue-on-error: true
+        run: |
+          uvx vulture@2.16 --min-confidence 60 | sed -E 's#^([^:]+):([0-9]+): (.*)$#::warning file=\1,line=\2::\3#'
 
   tests:
     runs-on: ubuntu-latest
@@ -45,5 +65,17 @@ jobs:
           enable-cache: true
       - name: Install dependencies (locked, + dev extra for pytest)
         run: uv sync --frozen --extra dev
-      - name: Unit tests
-        run: uv run pytest tests/unit -q
+      # One instrumented run = the test gate AND the coverage data (.coverage), no double suite exec.
+      # Config (source/omit/exclude) is in [tool.coverage.*]. Integration tests skip on the data-less runner.
+      - name: Tests + coverage (tests block)
+        run: uv run pytest tests --cov --cov-report=term-missing -q
+      # Coverage RED tier (mirrors vulture conf80): below 80% fails the merge. Reads the .coverage from
+      # the run above. bd cardiac-seg-emko — reaching 80 honestly is tracked in 7bbq.
+      - name: Coverage floor — enforced (>=80, blocks)
+        run: uv run coverage report --fail-under=80
+      # Coverage YELLOW tier (mirrors vulture conf60): 80–95 warns, never blocks. `always()` so the
+      # target signal shows even when the floor failed; `continue-on-error` keeps it non-blocking.
+      - name: Coverage target — advisory (>=95, warns)
+        if: always()
+        continue-on-error: true
+        run: uv run coverage report --fail-under=95 || echo "::warning::coverage below the 95% target"

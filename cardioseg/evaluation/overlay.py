@@ -42,7 +42,22 @@ def _mid_slice(gt_vol):
     return int(np.argmax([(s > 0).sum() for s in gt_vol]))
 
 
-def _panel(ax, img, mask, title):
+CLEAN_GROUPS = ("DCM", "NOR", "MINF")
+HCM_GROUP = "HCM"
+
+
+def pick_hero_cases(cases: list[dict]) -> tuple[dict, dict]:
+    """Choose the two overlay rows from scored cases (each dict has group + ef_gt/ef_pred): the
+    lowest-EF-error clean case (DCM/NOR/MINF) and the WORST-EF HCM case (the honest failure). Each case
+    gains an `ef_err` key. Pure selection — no model, no plot; the picture-choosing policy, testable."""
+    for c in cases:
+        c["ef_err"] = abs(c["ef_gt"] - c["ef_pred"])
+    clean = min((c for c in cases if c["group"] in CLEAN_GROUPS), key=lambda c: c["ef_err"])
+    hcm = max((c for c in cases if c["group"] == HCM_GROUP), key=lambda c: c["ef_err"])
+    return clean, hcm
+
+
+def _panel(ax, img, mask, title):  # pragma: no cover  (matplotlib imshow render)
     ax.imshow(img, cmap="gray")
     ax.imshow(mask, cmap=_CMAP, vmin=0, vmax=3, interpolation="nearest")
     ax.set_title(title, fontsize=11)
@@ -64,7 +79,7 @@ def _case(model, path, size, device):
                 ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)
 
 
-def main():
+def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
@@ -84,10 +99,7 @@ def main():
 
     # score every case once: pick a clean low-error case + the worst-EF HCM case
     cases = [_case(model, p, size, device) for p in paths]
-    for c in cases:
-        c["ef_err"] = abs(c["ef_gt"] - c["ef_pred"])
-    clean = min((c for c in cases if c["group"] in ("DCM", "NOR", "MINF")), key=lambda c: c["ef_err"])
-    hcm = max((c for c in cases if c["group"] == "HCM"), key=lambda c: c["ef_err"])
+    clean, hcm = pick_hero_cases(cases)
 
     fig, axes = plt.subplots(2, 3, figsize=(9, 6.2))
     for row, c in enumerate((clean, hcm)):

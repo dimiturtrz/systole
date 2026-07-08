@@ -106,27 +106,36 @@ def load_ed_es(case: str | Path, root: str | Path | None = None) -> PatientData:
         dcm = next(iter(sax.glob(f"*-{inst}.dcm")), None)
         if dcm is None:
             continue
-        img, (sy, sx), meta = read_image(dcm)
-        loc = round(float(meta.get("slice_loc", "0")), 1)    # SliceLocation groups phases of one slice
-        endo = _read_contour(ic)
-        ocf = ic.with_name(ic.name.replace("icontour", "ocontour"))
-        epi = _read_contour(ocf) if ocf.exists() else None
-        mask = _rasterize(endo, epi, img.shape)
-        by_slice[loc].append({"loc": loc, "area": int((mask == 3).sum()), "img": img, "mask": mask, "px": (sy, sx)})  # noqa: PLR2004 (3 = LV-cav label id)
+        img, (sy, sx), meta = read_image(dcm)                # pragma: no cover  reads a real SCD DICOM slice; mask/ED-ES cores (_rasterize, select_ed_es, _read_contour) tested with synthetic arrays/files
+        loc = round(float(meta.get("slice_loc", "0")), 1)    # pragma: no cover
+        endo = _read_contour(ic)                             # pragma: no cover
+        ocf = ic.with_name(ic.name.replace("icontour", "ocontour"))  # pragma: no cover
+        epi = _read_contour(ocf) if ocf.exists() else None   # pragma: no cover
+        mask = _rasterize(endo, epi, img.shape)              # pragma: no cover
+        by_slice[loc].append({"loc": loc, "area": int((mask == 3).sum()), "img": img, "mask": mask, "px": (sy, sx)})  # noqa: PLR2004 (3 = LV-cav)  # pragma: no cover
 
     if not by_slice:
         return out
+    ed_i, es_i, spacing = select_ed_es(by_slice)             # pragma: no cover  only reached with real gathered DICOM recs; select_ed_es tested directly
+    out["spacing"] = spacing                                 # pragma: no cover
+    for tag, recs in (("ED", ed_i), ("ES", es_i)):           # pragma: no cover
+        out[tag] = {"img": np.stack([r["img"] for r in recs]).astype(np.float32),  # pragma: no cover
+                    "gt": np.stack([r["mask"] for r in recs])}
+    return out                                                # pragma: no cover
+
+
+def select_ed_es(by_slice: dict) -> tuple[list, list, tuple]:
+    """PURE ED/ES assignment over gathered per-slice records. `by_slice` maps sliceLoc -> list of recs
+    (each {loc, area, img, mask, px}); per slice the LARGER-endo-area rec is ED, the smallest ES (one
+    rec -> ED==ES). Returns (ed_recs, es_recs, spacing (z,y,x)); z = median inter-slice step (or the
+    in-plane px if a single slice), never negative."""
     locs = sorted(by_slice)
     ed_i, es_i, px = [], [], None
     for loc in locs:
         recs = sorted(by_slice[loc], key=lambda r: r["area"])
         es_i.append(recs[0]); ed_i.append(recs[-1]); px = recs[0]["px"]   # 1 rec -> ED==ES for that slice
     dz = float(np.median(np.diff(locs))) if len(locs) > 1 else float(px[0])
-    out["spacing"] = (abs(dz), px[0], px[1])
-    for tag, recs in (("ED", ed_i), ("ES", es_i)):
-        out[tag] = {"img": np.stack([r["img"] for r in recs]).astype(np.float32),
-                    "gt": np.stack([r["mask"] for r in recs])}
-    return out
+    return ed_i, es_i, (abs(dz), px[0], px[1])
 
 
 def scd_meta(case: str | Path, root: str | Path | None = None) -> dict:
@@ -138,7 +147,7 @@ def scd_meta(case: str | Path, root: str | Path | None = None) -> dict:
          "centre": "Sunnybrook Health Sciences Centre", "country": "Canada"}   # single-centre Toronto
     sax = _sax_series_dir(case)                                       # real acquisition + scanner from DICOM —
     dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip/model the NIfTI sets lack
-    if dcm is not None:
+    if dcm is not None:                                              # pragma: no cover  reads a real SCD DICOM header for acquisition tags
         _, _, d = read_image(dcm)
         m.update(tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
                  field_T=d.get("field_T"), scanner=d.get("scanner"), institution=d.get("institution"))

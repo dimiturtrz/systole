@@ -39,6 +39,63 @@ from ..tracking import track_run
 from .ef_lane import build_aux
 
 
+def parse_seeds(seeds_arg: str | None) -> list[int] | None:
+    """CLI '--seeds 0,1,2' -> [0,1,2]; None/'' -> None (falls back to cfg.seed). Pure string parse."""
+    return [int(s) for s in seeds_arg.split(",")] if seeds_arg else None
+
+
+def resolve_seeds(cfg_seed: int, seeds) -> list[int]:
+    """The effective seed list for a run: explicit `seeds` if given, else the single cfg seed. Mirrors
+    train_seg's `seeds = list(seeds) if seeds else [cfg.seed]`, pulled out so it's testable off-GPU."""
+    return list(seeds) if seeds else [cfg_seed]
+
+
+def check_multiseed_split(seeds: list, split) -> None:
+    """Multi-seed A/B needs a coded --split (legacy criteria splits key their partition on the seed, so
+    they can't share one loaded dataset). Raises ValueError on the invalid combination; else no-op."""
+    if len(seeds) > 1 and not split:
+        raise ValueError("multi-seed needs a coded --split: legacy criteria splits key their partition "
+                         "on the seed, so seeds can't share one loaded dataset")
+
+
+def seed_out_dir(base_out: Path, seed: int, *, single: bool) -> Path:
+    """Per-seed artifact dir: the shared base for a single seed, else `<base>_s<seed>` as a sibling."""
+    return base_out if single else base_out.parent / f"{base_out.name}_s{seed}"
+
+
+def split_tag_of(d) -> str:
+    """The tracker's split tag from a DataCfg: coded split name, else joined test vendors, else 'legacy'."""
+    return d.split or ("+".join(d.test_vendors) or "legacy")
+
+
+def n_train_of(train_src, gen, train_df) -> int:
+    """n_train is the resident slice count (gen.X) when the train source is dynamic (no patient frame);
+    else the patient-row count of the train frame."""
+    return gen.X.shape[0] if (train_src is not None and getattr(train_src, "kind", None) == "dynamic") \
+        else len(train_df)
+
+
+def apply_cli_args(cfg: TrainCfg, args) -> TrainCfg:
+    """Map the argparse Namespace onto a TrainCfg IN PLACE (then returned): scalar attrs copied when
+    set, the store-flags folded in, then the deep `--set` overrides applied last (so --set wins). The
+    coded --split is applied by the caller (it needs list_splits validation) before this. Pure mapping —
+    no IO, so the whole CLI contract is testable without training."""
+    a = args if isinstance(args, dict) else vars(args)         # Namespace -> dict; also accept a plain dict
+    for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
+        if a.get(attr) is not None:
+            setattr(cfg, attr, a[attr])
+    if a.get("n4"):
+        cfg.generator.data.n4 = True
+    if a.get("ef_learn"):
+        cfg.ef_learn = True
+    if a.get("ef_kaggle"):
+        cfg.ef_kaggle = True
+    if a.get("out"):
+        cfg.out_dir = a["out"]
+    apply_overrides(cfg, a.get("overrides") or [])
+    return cfg
+
+
 def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
     """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
     Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
@@ -63,12 +120,12 @@ class SeedTrainer:
     shared data (resident tensors, val, aux EF lanes) comes via `sh`. Construct per seed, call .run().
     N seeds cost 1xdata + Nxmodel. (bd 01fh: former _train_loop/_finalize threaded ~10 args -> methods.)"""
 
-    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):
+    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover  (builds a GPU model/optimizer/tracker on the resident data bundle)
         self.cfg, self.seed, self.sh, self.alias, self.quick = cfg, seed, sh, alias, quick
         self.d = cfg.generator.data
         self.device, self.pin, self.gen, self.aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
         cfg.seed = seed
-        self.out = sh["base_out"] if sh["single"] else sh["base_out"].parent / f"{sh['base_out'].name}_s{seed}"
+        self.out = seed_out_dir(sh["base_out"], seed, single=sh["single"])
         self.out.mkdir(parents=True, exist_ok=True)
         self.log = setup(self.out / "train.log")
         to_json(cfg, self.out / "config.json")
@@ -78,7 +135,7 @@ class SeedTrainer:
         self.partial, self.loss_fn = self._build_loss()
         self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
-        split_tag = self.d.split or ("+".join(self.d.test_vendors) or "legacy")
+        split_tag = split_tag_of(self.d)
         self.trk = track_run("cardioseg", self.out.name, run_dir=self.out,
                              params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
                              tags={"split": split_tag, "seed": seed})
@@ -87,7 +144,7 @@ class SeedTrainer:
             self.log_sig = torch.zeros(1 + len(self.aux), device=self.device, requires_grad=True)
             self.opt.add_param_group({"params": [self.log_sig]})
 
-    def _build_loss(self):
+    def _build_loss(self):  # pragma: no cover  (branches on the resident GPU Generator's partial/soft flags)
         """PARTIAL-LABEL mask -> PartialLabelDiceCE; soft-label -> SoftDiceCE; else the configured loss."""
         gen = self.gen
         partial = gen.valid is not None
@@ -99,7 +156,7 @@ class SeedTrainer:
             return partial, SoftDiceCE()
         return partial, self.cfg.loss.build()
 
-    def run(self):
+    def run(self):  # pragma: no cover  (drives the full GPU train->eval->save->finalize sequence)
         """train loop -> eval (val + held-out test) -> save -> finalize (artifacts+registry unless quick)."""
         best_state = self._train_loop()
         if best_state is not None:
@@ -113,7 +170,7 @@ class SeedTrainer:
         self.trk.end()
         return self.model, results
 
-    def _train_loop(self):
+    def _train_loop(self):  # pragma: no cover  (the GPU forward/backward epoch loop — needs a real model + resident batches)
         """The epoch loop for one seed — a long but LINEAR procedure (the training step, by nature): each
         epoch forward/loss/backward over the resident batches (+ the EF aux-lane nudge folded into one seg
         step), then a fast batched val-Dice for early stopping. Returns the best-val `state_dict` (or None)."""
@@ -170,7 +227,7 @@ class SeedTrainer:
         trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
         return best_state
 
-    def _evaluate(self) -> dict:
+    def _evaluate(self) -> dict:  # pragma: no cover  (Evaluator runs GPU inference over the val/test frames)
         """VALIDATION + HELD-OUT TEST: one Evaluator, score val + the criteria test split, summarize."""
         model, device, d, log = self.model, self.device, self.d, self.log
         test_df = self.sh["test_df"]
@@ -185,7 +242,7 @@ class SeedTrainer:
             results["test"] = summarize(tdice, tef, tsurf)
         return results
 
-    def _save(self, results: dict):
+    def _save(self, results: dict):  # pragma: no cover  (torch.save model.pth + metrics.json write + tracker summary)
         """Persist model.pth + metrics.json, then log the final per-axis summary to the tracker."""
         model, out, cfg, val_df = self.model, self.out, self.cfg, self.sh["val_df"]
         torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
@@ -195,7 +252,7 @@ class SeedTrainer:
         self.log.info("saved model + config + metrics -> %s/", out)
         self.trk.summary(results)                               # final per-axis dice/EF (metrics in the run)
 
-    def _finalize(self):
+    def _finalize(self):  # pragma: no cover  (model-card + attribution + ONNX export + mlflow registry save)
         """The non-quick artifact tail: build model card + attribution + ONNX (each best-effort, logged on
         failure), then register the COMPLETE set (model.pth + config + metrics + onnx + card) to the mlflow
         registry — the sole model store. alias='production' makes this the flagship."""
@@ -226,7 +283,7 @@ class SeedTrainer:
     _ARTIFACT_FAILURES = (OSError, RuntimeError, ValueError, MlflowException)
 
     @contextmanager
-    def _artifact_step(self, name):
+    def _artifact_step(self, name):  # pragma: no cover  (best-effort wrapper around the finalize artifact steps)
         """Run one post-training artifact step best-effort. By the time _finalize runs the model.pth is
         ALREADY saved, so a card / attribution / ONNX / registry hiccup (a missing optional dep, one bad
         val slice, a locked mlflow db) is logged and swallowed — the trained run is never lost."""
@@ -236,7 +293,7 @@ class SeedTrainer:
             self.log.warning("%s skipped: %s", name, e)
 
 
-def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):  # noqa: PLR0913  one-off legacy-path builder — independent inputs
+def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):  # noqa: PLR0913  # pragma: no cover  (loads slice tensors to VRAM + builds the Generator — needs the real store)
     """LEGACY criteria path (no coded --split): build the resident TRAIN tensors + shared Generator +
     val tensors. Optional synth-anatomy (Rodero SSM label maps; val/test stay REAL held-out): 'mix' =
     real + synth-anatomy UNION with synth rows force-painted (bd pwih); 'replace' = synth anatomy only,
@@ -271,7 +328,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     return gen, Xva, Yva
 
 
-def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):
+def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):  # pragma: no cover  (composition root: store.load + split + VRAM preload + per-seed GPU training)
     """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
     list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
     ONCE and shared across seeds (`SeedTrainer` does the per-seed work) — N seeds cost 1×data + N×model,
@@ -284,15 +341,13 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     base_out = Path(cfg.out_dir or ".staging/run")
     base_out.mkdir(parents=True, exist_ok=True)
     log = setup(base_out / "load.log")          # shared data-loading phase (per-seed logs are separate)
-    seeds = list(seeds) if seeds else [cfg.seed]
-    if len(seeds) > 1 and not d.split:
-        raise ValueError("multi-seed needs a coded --split: legacy criteria splits key their partition "
-                         "on the seed, so seeds can't share one loaded dataset")
+    seeds = resolve_seeds(cfg.seed, seeds)
+    check_multiseed_split(seeds, d.split)
     device = resolve_device(cfg.device)
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
-    log.info("device=%s torch=%s seeds=%s | split=%s | criteria datasets=%s vendors=%s", device,
-             torch.__version__, seeds, d.split or "(legacy criteria)",
-             list(d.test_datasets), list(d.test_vendors))
+    log.info("device=%s torch=%s cudnn.benchmark=%s seeds=%s | split=%s | criteria datasets=%s vendors=%s",
+             device, torch.__version__, torch.backends.cudnn.benchmark, seeds,
+             d.split or "(legacy criteria)", list(d.test_datasets), list(d.test_vendors))
 
     # split = criteria over the consolidated store (builds processed/<ds>/ if missing). A coded split
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
@@ -340,7 +395,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
              (train_src.kind if train_src else "legacy"), gen.X.shape[0], Xva.shape[0], len(test_df),
              data_device, device)
     # n_train in slices when the train source is dynamic (no patient frame); else patient rows.
-    n_train = gen.X.shape[0] if (train_src is not None and train_src.kind == "dynamic") else len(train_df)
+    n_train = n_train_of(train_src, gen, train_df)
     # Auxiliary EF lanes (GPU-resident, built ONCE and shared across seeds) — a list the epoch loop
     # iterates, so it never branches on cfg.ef_*. Empty when the lane is off / train source isn't static.
     aux = build_aux(cfg, splits, train_df, device,
@@ -393,17 +448,5 @@ if __name__ == "__main__":
         if name not in list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
         cfg.generator.data.split = args.split
-    for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
-        if getattr(args, attr) is not None:
-            setattr(cfg, attr, getattr(args, attr))
-    if args.n4:
-        cfg.generator.data.n4 = True
-    if args.ef_learn:
-        cfg.ef_learn = True
-    if args.ef_kaggle:
-        cfg.ef_kaggle = True
-    if args.out:
-        cfg.out_dir = args.out
-    apply_overrides(cfg, args.overrides)
-    seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
-    train_seg(cfg, alias=args.alias, quick=args.quick, seeds=seeds)
+    apply_cli_args(cfg, args)
+    train_seg(cfg, alias=args.alias, quick=args.quick, seeds=parse_seeds(args.seeds))

@@ -11,7 +11,8 @@ pool — and paint contrast with OUR bSSFP painter (`synth.py`); MRXCAT's own (M
 needed. So the heavy, gated parts of MRXCAT never run here: the MATLAB MR-sim and XCAT (Duke-licensed) torso
 generation. The runnable, dependency-light Python stage (`MakePhantom.py`, `runXCAT=False`,
 `use_texturizer=False`) produces `.vti` label + T1/T2/PD maps on the bundled example with no MATLAB/XCAT.
-The tool itself is vendored under `external/mrxcat2` (gitignored, MIT); THIS module only ADAPTS its output
+The tool is an EXTERNAL CHECKOUT — clone the public ETH repo (paper MIT) into the gitignored
+`external/mrxcat2` (pinned 9f396a9; see GENERATION.md), never vendored; THIS module only ADAPTS its output
 into our canonical pool (`anatomy.load_pool` format — one shared home for the pool schema).
 
 NB MRXCAT2.0 paints the MYOCARDIUM UNIFORM (`fixLVTexture(..., 'meanLV')`, default `textureLV=False`) *"to
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -141,15 +143,6 @@ def build_pool(vti_dir: str | Path, out_path: str | Path,
     return out_path, arr.shape
 
 
-def canonical_from_fov(fov: np.ndarray) -> np.ndarray:
-    """Seg target from a whole-FOV tissue map: keep heart classes {1,2,3}, everything else → bg. The FOV
-    heart codes coincide with `to_canonical` (both from XCAT 6/1/5), so this is the aligned 4-class label."""
-    out = np.zeros_like(fov, dtype=np.uint8)
-    m = np.isin(fov, (1, 2, 3))
-    out[m] = fov[m]
-    return out
-
-
 def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
     """Crop a `scale`×(heart-bbox) chest WINDOW centred on the heart (realistic cardiac FOV — surrounding
     lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
@@ -171,8 +164,7 @@ def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAUL
     """WHOLE-FOV pool (bd q4ww): every `*.vti` → `to_tissue_map` → per slice, crop a chest window around
     the heart (`scale`× heart bbox) → resize to `size` → stacked 8-class FOV maps (npz `slices`). Unlike
     `build_pool` (heart-only 4-class), these keep surrounding organs so the painter (bg_mode='mrxcat')
-    renders realistic whole-FOV context; the seg target is `canonical_from_fov`. Slices with no heart
-    dropped."""
+    renders realistic whole-FOV context. Slices with no heart dropped."""
     slices: list[np.ndarray] = []
     for vp in sorted(Path(vti_dir).rglob("*.vti")):
         fov = to_tissue_map(load_vti_labels(vp))
@@ -237,17 +229,87 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
     return out_path, arr.shape
 
 
-def _main():
+_MRXCAT_REPO = "https://gitlab.ethz.ch/ibt-cmr-public/mrxcat-2.0.git"
+_MRXCAT_PIN = "9f396a998f435525b234a304c502238ad5955fb2"
+_MRXCAT_DIR = Path("external/mrxcat2")
+
+
+def _cmd_probe(args) -> None:  # pragma: no cover
     """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
-    setup()
-    ap = argparse.ArgumentParser(description="MRXCAT .vti → canonical label sanity probe (bd hpy).")
-    ap.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
-    args = ap.parse_args()
     vol = load_vti_labels(args.vti)
     raw = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     canon = to_canonical(vol)
     cc = {int(c): int((canon == c).sum()) for c in np.unique(canon)}
     log.info(f"vti {vol.shape}\nraw label counts: {raw}\ncanonical (0bg 1RV 2myo 3LVcav): {cc}")
+
+
+def _cmd_fetch(args) -> None:  # pragma: no cover
+    """Clone + pin the external MRXCAT2.0 tool into gitignored external/mrxcat2 (idempotent)."""
+    if (_MRXCAT_DIR / ".git").exists():
+        log.info(f"mrxcat2 already present at {_MRXCAT_DIR}; skipping clone")
+        return
+    subprocess.run(["git", "clone", _MRXCAT_REPO, str(_MRXCAT_DIR)], check=True)
+    subprocess.run(["git", "-C", str(_MRXCAT_DIR), "checkout", _MRXCAT_PIN], check=True)
+    log.info(f"cloned mrxcat2 @ {_MRXCAT_PIN} into {_MRXCAT_DIR}")
+
+
+def _cmd_build_pool(args) -> None:  # pragma: no cover
+    """Build the heart-only canonical MRXCAT pool from a dir of `.vti` phantoms."""
+    out_path, shape = build_pool(args.vti_dir, args.out)
+    log.info(f"wrote pool {out_path}  shape {shape}")
+
+
+def _cmd_build_fov_pool(args) -> None:  # pragma: no cover
+    """Build the whole-FOV 8-class MRXCAT pool from a dir of `.vti` phantoms."""
+    out_path, shape = build_fov_pool(args.vti_dir, args.out, args.size, args.min_fg)
+    log.info(f"wrote fov pool {out_path}  shape {shape}")
+
+
+def _cmd_build_ssm_fov_pool(args) -> None:  # pragma: no cover
+    """Build the SSM×MRXCAT composite pool (our hearts in XCAT whole-FOV context)."""
+    out_path, shape = build_ssm_fov_pool(args.rodero_pool, args.vti_dir, args.out, args.size, args.scale)
+    log.info(f"wrote ssm-fov pool {out_path}  shape {shape}")
+
+
+_CMDS = {
+    "probe": _cmd_probe,
+    "fetch": _cmd_fetch,
+    "build-pool": _cmd_build_pool,
+    "build-fov-pool": _cmd_build_fov_pool,
+    "build-ssm-fov-pool": _cmd_build_ssm_fov_pool,
+}
+
+
+def _main():  # pragma: no cover
+    """MRXCAT2.0 CLI: fetch the external tool, probe a `.vti`, or build the (heart / FOV / SSM-FOV) pools."""
+    setup()
+    ap = argparse.ArgumentParser(description="MRXCAT2.0 phantom: fetch + probe + offline pool build (bd hpy/8pfl).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    pr = sub.add_parser("probe", help="raw + canonical label counts for one .vti")
+    pr.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
+
+    sub.add_parser("fetch", help="clone + pin external/mrxcat2 (idempotent)")
+
+    bp = sub.add_parser("build-pool", help="vti dir -> heart-only canonical pool npz")
+    bp.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+    bp.add_argument("--out", required=True, help="output pool npz")
+
+    bf = sub.add_parser("build-fov-pool", help="vti dir -> whole-FOV 8-class pool npz")
+    bf.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+    bf.add_argument("--out", required=True, help="output pool npz")
+    bf.add_argument("--size", type=int, default=DEFAULT_SIZE)
+    bf.add_argument("--min-fg", type=int, default=40)
+
+    bs = sub.add_parser("build-ssm-fov-pool", help="rodero pool + vti dir -> SSM×MRXCAT composite pool npz")
+    bs.add_argument("--rodero-pool", required=True, help="healthy Rodero pool npz (our hearts)")
+    bs.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+    bs.add_argument("--out", required=True, help="output pool npz")
+    bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
+    bs.add_argument("--scale", type=float, default=3.0)
+
+    args = ap.parse_args()
+    _CMDS[args.cmd](args)
 
 
 if __name__ == "__main__":

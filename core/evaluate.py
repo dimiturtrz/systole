@@ -29,11 +29,6 @@ def dice(pred: Mask, gt: Mask, label: int) -> float:
     return 2.0 * np.logical_and(p, g).sum() / denom
 
 
-def dice_all(pred: Mask, gt: Mask, labels: tuple[int, ...] = FOREGROUND) -> dict[int, float]:
-    """Per-label Dice -> {label: dice}."""
-    return {int(l): dice(pred, gt, l) for l in labels}
-
-
 def _surface(m: Mask) -> Mask:
     """Boundary voxels of a binary mask (region minus its erosion)."""
     return m & ~binary_erosion(m)
@@ -77,8 +72,3 @@ def hd95(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> fl
 def assd(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:
     """Average symmetric surface distance — the mean of the boundary-distance distribution."""
     return surface_metrics(surface_distances(pred, gt, label, spacing))["assd"]
-
-
-def rank_failures(case_scores: dict[str, float]) -> list[tuple[str, float]]:
-    """case_scores: {name -> mean dice}. Worst-first (where the model fails)."""
-    return sorted(case_scores.items(), key=lambda kv: kv[1])

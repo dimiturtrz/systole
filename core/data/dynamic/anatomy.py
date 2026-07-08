@@ -145,6 +145,32 @@ def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
 _MIN_LV_WALL_PX = 8   # fewer LV-wall px than this in a SAX slice -> too little to close a cavity ring, skip
 
 
+def _slice_labels(lw: np.ndarray, rw: np.ndarray, rv_close: int = 3) -> np.ndarray:
+    """Pure per-SAX-slice cavity recovery: given the boolean LV-wall (`lw`) and RV-wall (`rw`) rasters,
+    return a 3-class label slice (RV-cav 1 / LV-myo 2 / LV-cav 3). Empty (all-bg) if the LV wall is too
+    thin to close a cavity ring. LV ring -> LV-cav; LV+RV walls together -> RV-cav (see voxelize doc)."""
+    out = np.zeros(lw.shape, dtype=np.uint8)
+    if lw.sum() < _MIN_LV_WALL_PX:
+        return out
+    lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
+    # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
+    # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
+    # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
+    # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
+    walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
+    both = binary_fill_holes(walls) & ~(lw | rw)
+    rv_cav = both & ~lv_cav
+    if rw.any() and rv_cav.any():
+        lbl, _ = cc_label(rv_cav)
+        near = binary_dilation(rw, iterations=2)
+        keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
+        rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
+    out[rv_cav] = RV                                              # RV cavity
+    out[lw] = MYO                                                 # LV myocardium (RV wall -> bg)
+    out[lv_cav] = LV_CAV                                          # LV cavity (3)
+    return out
+
+
 def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
              rv_close: int = 3) -> np.ndarray:
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
@@ -163,25 +189,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     rv = _wall_mask(m, RV_ID, grid, tn).reshape(nz, ny, nx)
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
-        lw, rw = lv[k], rv[k]
-        if lw.sum() < _MIN_LV_WALL_PX:
-            continue
-        lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
-        # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
-        # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
-        # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
-        # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
-        walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
-        both = binary_fill_holes(walls) & ~(lw | rw)
-        rv_cav = both & ~lv_cav
-        if rw.any() and rv_cav.any():
-            lbl, n = cc_label(rv_cav)
-            near = binary_dilation(rw, iterations=2)
-            keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
-            rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
-        out[k][rv_cav] = RV                                           # RV cavity
-        out[k][lw] = MYO                                             # LV myocardium (RV wall -> bg)
-        out[k][lv_cav] = LV_CAV                                      # LV cavity (3)
+        out[k] = _slice_labels(lv[k], rv[k], rv_close=rv_close)
     return out
 
 
@@ -199,7 +207,7 @@ def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
     fg = vol > 0
     if not fg.any():
         return vol
-    zs, ys, xs = np.where(fg)
+    _, ys, xs = np.where(fg)                    # z discarded — bbox is in-plane (ys, xs) only
     cur = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1
     f = target_px / max(cur, 1)
     if abs(f - 1.0) < _ZOOM_NOOP_EPS:
@@ -343,14 +351,8 @@ def load_pool(path: str | Path) -> np.ndarray:
     return np.load(str(path))["slices"]
 
 
-def _main():
+def _cmd_view(args) -> None:  # pragma: no cover
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
-    setup()
-    ap = argparse.ArgumentParser(description="Rodero mesh -> SAX 3-class label volume (bd 1vl).")
-    ap.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
-    ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
-    ap.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
-    args = ap.parse_args()
     vol = voxelize(load(args.mesh), inplane=args.inplane)
     counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     log.info(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
@@ -362,6 +364,63 @@ def _main():
     out = args.out or (str(Path(args.mesh).with_suffix("")) + "_sax.png")
     Image.fromarray(montage).save(out)
     log.info(f"wrote {out}  (slices {ks})")
+
+
+def _cmd_build_pool(args) -> None:  # pragma: no cover
+    """Build the healthy SSM anatomy pool from a mesh dir (the ad-hoc REPL build, now committed)."""
+    cfg = PoolBuildCfg(size=args.size, scale_reps=args.scale_reps, workers=args.workers)
+    out_path, shape = build_pool(args.mesh_dir, args.out, cfg)
+    log.info(f"wrote pool {out_path}  shape {shape}")
+
+
+def _cmd_build_pathology_pool(args) -> None:  # pragma: no cover
+    """Build the DCM/HCM/abnormal-RV pathology pool from a healthy pool npz."""
+    out_path, shape = build_pathology_pool(load_pool(args.pool), args.out)
+    log.info(f"wrote pathology pool {out_path}  shape {shape}")
+
+
+def _cmd_convert_binary(args) -> None:  # pragma: no cover
+    """One-time: write a binary .vtu beside every ASCII .vtk (faster load)."""
+    n = convert_binary(args.mesh_dir, args.workers)
+    log.info(f"converted {n} meshes under {args.mesh_dir}")
+
+
+_CMDS = {
+    "view": _cmd_view,
+    "build-pool": _cmd_build_pool,
+    "build-pathology-pool": _cmd_build_pathology_pool,
+    "convert-binary": _cmd_convert_binary,
+}
+
+
+def _main():  # pragma: no cover
+    """Rodero SSM anatomy CLI: view a mesh montage, or build the (healthy / pathology) anatomy pools."""
+    setup()
+    ap = argparse.ArgumentParser(description="Rodero SSM anatomy: view + offline pool build (bd 1vl/8pfl).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    v = sub.add_parser("view", help="voxelize one mesh -> SAX label montage PNG")
+    v.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
+    v.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
+    v.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
+
+    bp = sub.add_parser("build-pool", help="voxelize a mesh dir -> healthy anatomy pool npz")
+    bp.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk/.vtu meshes")
+    bp.add_argument("--out", required=True, help="output pool npz")
+    bp.add_argument("--size", type=int, default=DEFAULT_SIZE)
+    bp.add_argument("--workers", type=int, default=0)
+    bp.add_argument("--scale-reps", type=int, default=1)
+
+    pp = sub.add_parser("build-pathology-pool", help="healthy pool -> DCM/HCM/RV pathology pool npz")
+    pp.add_argument("--pool", required=True, help="input healthy pool npz")
+    pp.add_argument("--out", required=True, help="output pathology pool npz")
+
+    cb = sub.add_parser("convert-binary", help="write binary .vtu beside each ASCII .vtk (faster load)")
+    cb.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk meshes")
+    cb.add_argument("--workers", type=int, default=0)
+
+    args = ap.parse_args()
+    _CMDS[args.cmd](args)
 
 
 if __name__ == "__main__":

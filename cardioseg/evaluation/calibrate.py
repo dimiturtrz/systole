@@ -59,7 +59,7 @@ def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
     return ece(conf, (pred == labels).astype(float))[0]
 
 
-def main():
+def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
