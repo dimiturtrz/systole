@@ -86,7 +86,7 @@ select = [
 # ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
 [tool.vulture]
 paths = ["core", "cardioseg", "cardioview"]
-exclude = ["baselines", "*/node_modules/*", "cardioview/tests", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
+exclude = ["baselines", "*/node_modules/*", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
 min_confidence = 60
 ignore_names = ["model_config", "azimuth", "elevation"]  # azimuth/elevation: pyvista Camera setters (live, vulture-blind)
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
