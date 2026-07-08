@@ -368,10 +368,13 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
         else:
             train_src = val_src = None               # legacy: DataCfg criteria + inline anatomy block
             train_df, val_df, test_df = splits.split_from_cfg(d, meta, seeds[0])   # single-seed only
-    if cfg.n_patients:                          # debug cap (old-style frames only; test always capped)
-        test_df = test_df.head(cfg.n_patients)
-        if train_src is None:
-            train_df, val_df = train_df.head(cfg.n_patients), val_df.head(max(1, cfg.n_patients // 4))
+    if cfg.n_patients:                          # debug cap — bound test + val (+ legacy train frame)
+        n = cfg.n_patients
+        test_df = test_df.head(n)
+        if val_df is not None:                  # coded split OR legacy: cap the val frame the same way
+            val_df = val_df.head(max(1, n))
+        if train_src is None:                   # legacy criteria path also has a train frame to cap
+            train_df = train_df.head(n)
 
     # Preload ALL slices into device memory (VRAM): after this, the epoch loop is pure GPU — index a
     # permutation, augment, train; zero per-epoch CPU/disk/host↔device copy. The slice set fits the
