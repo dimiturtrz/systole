@@ -328,6 +328,19 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     return gen, Xva, Yva
 
 
+def _run_seeds(cfg: TrainCfg, seeds: list, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover  (per-seed GPU train loop)
+    """Train each seed on the shared bundle. Between seeds (multi-seed A/B only) move the finished seed's
+    weights to host + reclaim its CUDA pool, so a later seed's memory-heavy TTA test doesn't OOM (bd fpav)."""
+    res = []
+    for s in seeds:
+        out = SeedTrainer(cfg, s, sh, alias, quick=quick).run()
+        if len(seeds) > 1 and sh["device"] == "cuda":
+            out[0].cpu()
+            torch.cuda.empty_cache()
+        res.append(out)
+    return res[0] if len(seeds) == 1 else res
+
+
 def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):  # pragma: no cover  (composition root: store.load + split + VRAM preload + per-seed GPU training)
     """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
     list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
@@ -388,7 +401,11 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
         if train_src is not None:
             # NEW: each Source OWNS its batch engine (train_gen). No static/dynamic if, no force_synth in
             # the interface, no bg_mode poke — StaticSource = real + DR-aug, DynamicSource = synth painter.
-            gen = train_src.train_gen(d.size, data_device, cfg.generator, cfg.model.out_channels)
+            # residency governs the STATIC real pool (VRAM vs host RAM). A dynamic painter has no big real
+            # pool; it must paint ON the compute device or its float batch mismatches the autocast Half model
+            # (bd uoiu) — so residency=cpu is a no-op for dynamic (paint always on `device`).
+            gen_device = data_device if train_src.kind == "static" else device
+            gen = train_src.train_gen(d.size, gen_device, cfg.generator, cfg.model.out_channels)
             Xva, Yva = val_src.resident(d.size, data_device)
         else:
             gen, Xva, Yva = _legacy_resident(cfg, train_df, val_df, data_device, device, log)
@@ -411,8 +428,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
           "train_df": train_df, "val_df": val_df, "test_df": test_df, "train_src": train_src,
           "aux": aux, "nb": nb, "n_train": n_train, "base_out": base_out, "single": len(seeds) == 1}
     log.info("shared data ready — training %d seed(s): %s", len(seeds), seeds)
-    res = [SeedTrainer(cfg, s, sh, alias, quick=quick).run() for s in seeds]
-    return res[0] if len(seeds) == 1 else res
+    return _run_seeds(cfg, seeds, sh, alias, quick=quick)
 
 
 if __name__ == "__main__":

@@ -68,8 +68,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Install dependencies (locked, + dev extra for pytest)
-        run: uv sync --frozen --extra dev
+      - name: Install dependencies (locked, + dev/devtools extras for pytest + graph tests)
+        run: uv sync --frozen --extra dev --extra devtools
       # One instrumented run = the test gate AND the coverage data (.coverage), no double suite exec.
       # Config (source/omit/exclude) is in [tool.coverage.*]. Integration tests skip on the data-less runner.
       - name: Tests + coverage (tests block)
