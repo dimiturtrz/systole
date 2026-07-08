@@ -18,6 +18,9 @@ __pycache__/
 runs/
 # stray training logs written beside runs/ (never in the repo)
 runs_*.log
+logs/
+# Claude Code transient session lock (scheduled-wakeup state, not repo content)
+.claude/scheduled_tasks.lock
 
 # Beads / Dolt files (added by bd init)
 .dolt/

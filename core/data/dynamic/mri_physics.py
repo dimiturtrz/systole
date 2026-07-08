@@ -29,6 +29,19 @@ TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
 }
 _FIELD_1P5T = 1.5                            # tesla; the low-field column (else use the 3T flip value)
 
+# tissue -> field -> ((T1_min,T1_max),(T2_min,T2_max)) ms: the literature SPREAD (inter-subject +
+# inter-study/method), for per-sample physical sampling (bd 04bh). Prefer in-vivo mapping over the
+# in-vitro Stanisz table for myo/blood. Full sourcing + confidence flags:
+# research/deep_dives/2026-07-08_tissue_relaxation_ranges.md. TISSUE points sit inside these bands.
+TISSUE_RANGE: dict[str, dict[float, tuple[tuple[float, float], tuple[float, float]]]] = {
+    "blood":      {1.5: ((1350.0, 1550.0), (200.0, 290.0)), 3.0: ((1550.0, 2100.0), (100.0, 165.0))},
+    "myocardium": {1.5: (( 950.0, 1050.0), ( 45.0,  56.0)), 3.0: ((1150.0, 1300.0), ( 45.0,  52.0))},
+    "fat":        {1.5: (( 250.0,  380.0), (100.0, 165.0)), 3.0: (( 370.0,  450.0), (100.0, 220.0))},
+    "lung":       {1.5: (( 800.0, 1300.0), ( 40.0,  50.0)), 3.0: ((1000.0, 1400.0), ( 30.0,  50.0))},
+    "liver":      {1.5: (( 500.0,  650.0), ( 40.0, 102.0)), 3.0: (( 700.0,  900.0), ( 30.0,  50.0))},
+    "muscle":     {1.5: (( 870.0, 1100.0), ( 35.0,  50.0)), 3.0: ((1300.0, 1450.0), ( 30.0,  50.0))},
+}
+
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
 _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 # background intensity ladder dark -> bright; bg tiers INTERPOLATE params along it (no collisions, any K).
@@ -147,6 +160,49 @@ def _params(name: str, field: float) -> tuple[float, float, float]:
     table = TISSUE[name]
     f = min(table, key=lambda k: abs(k - field))
     return table[f]
+
+
+def tissue_range(name: str, field: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    """((T1_min,T1_max),(T2_min,T2_max)) ms for a tissue at the nearest tabulated field — the literature
+    spread the per-sample sampler (bd 04bh) draws over. See TISSUE_RANGE."""
+    table = TISSUE_RANGE[name]
+    f = min(table, key=lambda k: abs(k - field))
+    return table[f]
+
+
+_CAVITY_O2 = {1: "low", 3: "high"}       # RV cavity = deoxygenated (short T2) / LV cavity = oxygenated (long T2)
+
+
+def sample_heart_tissue(t1: torch.Tensor, t2: torch.Tensor, fi: torch.Tensor,  # noqa: PLR0913
+                        fields: tuple[float, ...], n_classes: int, spread: float):
+    """Per-sample redraw of HEART-class (blood/myo) T1/T2 from the literature TISSUE_RANGE band, lerped
+    from the current point value by `spread` (0=point/off, 1=full uniform band). Physically-constrained
+    breadth (UltimateSynth) in place of decorrelated jitter: contrast then flows through bssfp_signal, so
+    the tissues move together the way a real protocol/subject change does. Blood cavities split by
+    oxygenation — LV (long T2, upper half of the band), RV (short T2, lower half). t1/t2 [B, n_paint];
+    fi [B] long, field index into `fields`. Returns fresh (t1, t2)."""
+    dev = t1.device
+    t1, t2 = t1.clone(), t2.clone()
+    b = t1.shape[0]
+    for c, tissue in _HEART.items():
+        if c >= n_classes:
+            continue
+        bands = [tissue_range(tissue, float(f)) for f in fields]              # per field ((t1..),(t2..))
+        t1lo = torch.tensor([bd[0][0] for bd in bands], device=dev)[fi]       # [B], per-sample field band
+        t1hi = torch.tensor([bd[0][1] for bd in bands], device=dev)[fi]
+        t2lo = torch.tensor([bd[1][0] for bd in bands], device=dev)[fi]
+        t2hi = torch.tensor([bd[1][1] for bd in bands], device=dev)[fi]
+        if tissue == "blood":                                                # oxygenation splits the T2 band
+            mid = 0.5 * (t2lo + t2hi)
+            if _CAVITY_O2.get(c) == "high":
+                t2lo = mid
+            elif _CAVITY_O2.get(c) == "low":
+                t2hi = mid
+        s1 = t1lo + torch.rand(b, device=dev) * (t1hi - t1lo)
+        s2 = t2lo + torch.rand(b, device=dev) * (t2hi - t2lo)
+        t1[:, c] = t1[:, c] + spread * (s1 - t1[:, c])
+        t2[:, c] = t2[:, c] + spread * (s2 - t2[:, c])
+    return t1, t2
 
 
 def named_tissue_params(names: list[str], field: float, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

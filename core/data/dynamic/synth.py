@@ -38,6 +38,7 @@ from .mri_physics import (
     bssfp_signal,
     derive_flip_range,
     named_tissue_params,
+    sample_heart_tissue,
     tissue_params,
 )
 from .mrxcat import FOV_TISSUE
@@ -194,6 +195,11 @@ class SynthCfg(BaseModel):
     #                                                metadata so synth carries provenance + flows the same
     #                                                harmonization path as real (return_meta=True)
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
+    tissue_spread: float = Field(0.0, ge=0)        # per-sample PHYSICAL T1/T2 sampling of heart tissues
+    #                                                over the literature band (mri_physics.TISSUE_RANGE),
+    #                                                lerped from the point by this (0=off/point, 1=full
+    #                                                band). Replaces decorrelated jitter with a physically-
+    #                                                constrained sweep (bd 04bh); blood cavities split by O2.
     texture: float = Field(0.05, ge=0)             # within-class texture: std as a fraction of |signal|
     flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
     #                                                texture on blood classes so cav/RV aren't flat-bright
@@ -458,6 +464,8 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     # acquisition STRATEGY: per-sample field/TR/flip/vendor (legacy ranges / physics-randomized / matched)
     fi, tr, fl, vi = cfg.acq.build().sample(b, cfg, dev)
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
+    if cfg.tissue_spread > 0:                                               # physical per-sample T1/T2 sweep
+        t1, t2 = sample_heart_tissue(t1, t2, fi, cfg.fields, n_classes, cfg.tissue_spread)
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
     mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state

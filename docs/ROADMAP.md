@@ -37,9 +37,11 @@ Design in [`PLAN.md`](PLAN.md) / [`GENERATION.md`](../core/data/dynamic/GENERATI
   unseen-vendor gap; 4-seed ensemble shows only ~15–18% reducible headroom → the gap is aleatoric +
   model-class. ([normalization README](../cardioseg/preprocessing/normalization/README.md))
 - ✅ **SSM anatomy source** (Rodero) — voxelizer + 1000-mesh pool; zero-real generation ~0.56
-  cross-vendor (probe's "walled" verdict was wrong once confounds fixed). Physical **inflow** now
-  default (2× verified: +0.054 zero-real, RV +0.095; neutral on the DA path) — cine blood is
-  inflow-enhanced, so synth-only needs it, real+synth doesn't.
+  cross-vendor (probe's "walled" verdict was wrong once confounds fixed; **ceiling re-confirmed 0.559**,
+  2-seed, post-bugfix). Physical **inflow** is default, but its earlier "+0.054 / RV +0.095" was measured
+  with the blood-velocity lever DEAD (v stuck [0,1) cm/s, fixed `cab7326`) — **retracted**. Re-verified
+  post-fix (bd mdem): the effect is small (~+0.02, at the noise floor), and the gain is in myo+cav, not
+  RV. Cine blood IS inflow-enhanced (keep it), but it isn't the headline lever it looked.
 - ✅ **Myo weak-link diagnosed** (`bd b6tb`) — geometry ruled out (synth wall thickness matches real,
   3.82 vs 4.21 px); it's a contrast/**separability** gap (within-slice myo|blood d′ 0.54 vs real 2.67).
   Brightness levers are d′-invariant (variance scales with signal) — why every cheap lever was
