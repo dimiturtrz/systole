@@ -1,4 +1,4 @@
-"""SSOT guard: the single-sourced constants must stay equal to every consumer that reads them.
+"""SSOT (single source of truth) guard: the single-sourced constants must stay equal to every consumer that reads them.
 If someone re-hardcodes a value, one of these fails (that's the point)."""
 from core.config import (
     DEFAULT_INPLANE,

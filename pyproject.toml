@@ -88,7 +88,7 @@ select = [
 paths = ["core", "cardioseg", "cardioview"]
 exclude = ["baselines", "*/node_modules/*", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
 min_confidence = 60
-ignore_names = ["model_config", "azimuth", "elevation"]  # azimuth/elevation: pyvista Camera setters (live, vulture-blind)
+ignore_names = ["model_config", "azimuth", "elevation", "BG", "ED", "ES"]  # framework-structural FPs vulture can't see used: pydantic model_config; pyvista Camera setters azimuth/elevation; Label enum member BG (read via enum iteration); PatientData TypedDict fields ED/ES (accessed by string key)
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Measures core+cardioseg. The denominator is LIBRARY logic, not scripts: omit
