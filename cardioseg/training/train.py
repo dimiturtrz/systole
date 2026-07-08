@@ -71,7 +71,7 @@ def split_tag_of(d) -> str:
 def n_train_of(train_src, gen, train_df) -> int:
     """n_train is the resident slice count (gen.X) when the train source is dynamic (no patient frame);
     else the patient-row count of the train frame."""
-    return gen.X.shape[0] if (train_src is not None and getattr(train_src, "kind", None) == "dynamic") \
+    return gen.n if (train_src is not None and getattr(train_src, "kind", None) in ("dynamic", "composite")) \
         else len(train_df)
 
 
@@ -185,7 +185,7 @@ class SeedTrainer:
             model.train()
             loss_fn.epoch = ep                                 # drives the HD-warmup ramp (dice_ce_hd); no-op for others
             tot = 0.0
-            perm = torch.randperm(gen.X.shape[0], device=gen.X.device)   # shuffle on the data's device
+            perm = torch.randperm(gen.n, device=gen.device)   # shuffle on the data's device
             for bi in progress(range(nb), f"epoch {ep}", total=nb):
                 idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
                 x, yt, valid = gen.batch(idx, pin=pin)              # collapsed batch (+ partial-label mask)
@@ -389,9 +389,9 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
             Xva, Yva = val_src.resident(d.size, data_device)
         else:
             gen, Xva, Yva = _legacy_resident(cfg, train_df, val_df, data_device, device, log)
-    nb = max(1, gen.X.shape[0] // cfg.batch)
+    nb = max(1, gen.n // cfg.batch)
     log.info("engine train=%s | slices: %d train / %d val / %d test-subj (resident %s, compute %s)",
-             (train_src.kind if train_src else "legacy"), gen.X.shape[0], Xva.shape[0], len(test_df),
+             (train_src.kind if train_src else "legacy"), gen.n, Xva.shape[0], len(test_df),
              data_device, device)
     # n_train in slices when the train source is dynamic (no patient frame); else patient rows.
     n_train = n_train_of(train_src, gen, train_df)

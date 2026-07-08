@@ -17,7 +17,7 @@ from __future__ import annotations
 import torch
 
 from core.data.dynamic import anatomy as _anatomy
-from core.data.dynamic.generator import Generator
+from core.data.dynamic.generator import CompositeGenerator, Generator
 from core.data.dynamic.synth import AnyBgCfg, ProceduralBgCfg
 from core.data.ingest.source import Source
 
@@ -57,3 +57,26 @@ class DynamicSource:
     def provenance(self) -> dict:
         return {"kind": self.kind, "pool": self.pool, "bg": self.bg.mode, "synth_p": self.synth_p,
                 "note": self._note, "seed": (self.seed.provenance() if self.seed else None)}
+
+
+class CompositeSource:
+    """The composite training set as a UNION OF SOURCES — each a clean single-origin generation node
+    (SSM pool, label-space pathology, MRXCAT, learned), each keeping its OWN painter/bg, not one pool
+    frankensteined into one generator. `train_gen` builds each child's generator and unions them behind
+    the same batch() seam (CompositeGenerator). This is the "each source enters the DAG at a different
+    point with a different control degree" composition (bd cumw/uch6)."""
+
+    kind = "composite"
+
+    def __init__(self, sources, note: str = ""):
+        self.sources = tuple(sources)
+        if not self.sources:
+            raise ValueError("CompositeSource needs at least one source")
+        self._note = note
+
+    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+        return CompositeGenerator([s.train_gen(size, device, gen_cfg, n_classes) for s in self.sources])
+
+    def provenance(self) -> dict:
+        return {"kind": self.kind, "note": self._note,
+                "sources": [s.provenance() for s in self.sources]}

@@ -47,6 +47,7 @@ class Generator:
                  valid: torch.Tensor | None = None):
         self.cfg = cfg
         self.X, self.Y = X, Y
+        self.n = X.shape[0]                       # resident slice count — the epoch-loop seam (also CompositeGenerator)
         self.device = device
         # force_synth [N] bool: rows that MUST be painted synthetic every batch (e.g. synth-anatomy masks
         # with no real pixels), aligned to X/Y. Real rows still repaint with prob synth_p. (bd pwih)
@@ -69,3 +70,32 @@ class Generator:
         for t in self.pipeline:
             b = t(b)
         return b.x, b.yt, b.valid
+
+
+class CompositeGenerator:
+    """Union of child generators behind the SAME batch() seam — the composite training set as a list of
+    sources, each with its OWN painter (bg/synth_p), NOT one pool crammed into one generator. A global
+    index space [0, Σnᵢ) maps to (child, local); a batch may mix rows from several children, each painting
+    its own via its own pipeline. Sampling is proportional to child size (a bigger pool → more batches).
+    `valid` is None (composite is for synth sources — partial-label real isn't composed here)."""
+
+    def __init__(self, gens: list):
+        self.gens = gens
+        self.device = gens[0].device
+        self.valid = None
+        sizes = torch.tensor([g.n for g in gens])
+        self.n = int(sizes.sum())
+        self.offsets = torch.cat([torch.zeros(1, dtype=torch.long), sizes.cumsum(0)])   # [len+1] boundaries
+
+    def batch(self, idx: torch.Tensor, *, pin: bool = False):
+        """Route the global indices to their child generators, paint each child's rows with its own
+        pipeline, and concatenate — one collapsed batch of mixed-source samples."""
+        xs, ys = [], []
+        for c, g in enumerate(self.gens):
+            lo, hi = int(self.offsets[c]), int(self.offsets[c + 1])
+            m = (idx >= lo) & (idx < hi)
+            if not bool(m.any()):
+                continue
+            x, y, _ = g.batch(idx[m] - lo, pin=pin)
+            xs.append(x); ys.append(y)
+        return torch.cat(xs), torch.cat(ys), None
