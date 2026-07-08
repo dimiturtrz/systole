@@ -5,8 +5,6 @@ from core.config import (
     DEFAULT_SIZE,
     FLAGSHIP_REF,
     KNOWN_DATASETS,
-    flagship_dir,
-    flagship_model,
 )
 from core.data.static.store import DataCfg
 
@@ -28,9 +26,8 @@ def test_dataset_vocab_single_sourced():
 
 def test_flagship_is_registry_ref():
     """Flagship resolves from the mlflow registry (production alias), not a hardcoded dir. Don't
-    invoke resolve here (that hits mlflow) — just guard the ref + that the helpers are callable."""
+    invoke resolve here (that hits mlflow) — just guard the ref."""
     assert FLAGSHIP_REF == "production"
-    assert callable(flagship_model) and callable(flagship_dir)
 
 
 def test_root_delegates_to_resolver(monkeypatch):

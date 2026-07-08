@@ -5,8 +5,11 @@ math, not a model. Real-data behaviour is covered by tests/integration.
 """
 import numpy as np
 
-from core.data.static.mri.base import LV_CAVITY, LV_MYO, RV_CAVITY, identify_lv_cavity
-from core.evaluate import dice, hausdorff
+from core.data.static.labels import LV_CAV as LV_CAVITY
+from core.data.static.labels import MYO as LV_MYO
+from core.data.static.labels import RV as RV_CAVITY
+from core.data.static.mri.base import identify_lv_cavity
+from core.evaluate import dice
 from core.measure import ejection_fraction, expected_volume_ml, label_volume_ml, voxel_volume_ml
 
 
@@ -78,8 +81,3 @@ def test_dice_empty_and_partial_classes():
     assert dice(a, z, 3) == 0.0                  # one empty -> no overlap
     b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, :4, :2] = 3   # 8 vox, subset of a
     assert abs(dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)
-
-
-def test_hausdorff_zero_on_identical():
-    m = _enclosed_lv()
-    assert hausdorff(m, m, LV_CAVITY, spacing=(8.0, 1.5, 1.5)) == 0.0

@@ -21,15 +21,6 @@ def soft_lv_volume(probs: torch.Tensor, spacing, lv_label: int = LV_CAV) -> torc
     return probs[:, lv_label].sum() * voxel_volume_ml(spacing)
 
 
-def soft_ef(ed_probs: torch.Tensor, es_probs: torch.Tensor, spacing, lv_label: int = LV_CAV):
-    """(EF %, EDV mL, ESV mL) — differentiable — from ED/ES soft-prob stacks [N,C,H,W]. EF = (EDV-ESV)/
-    EDV; a ratio, so spacing cancels there but is carried for the absolute volumes."""
-    edv = soft_lv_volume(ed_probs, spacing, lv_label)
-    esv = soft_lv_volume(es_probs, spacing, lv_label)
-    ef = (edv - esv) / edv * 100.0 if float(edv) > 0 else edv.new_tensor(float("nan"))
-    return ef, edv, esv
-
-
 def vol_loss(edv_pred: torch.Tensor, esv_pred: torch.Tensor, edv_gt, esv_gt,
              delta: float = 0.1) -> torch.Tensor:
     """DIMENSIONLESS volume-consistency loss — both volumes normalized by the (stable, >0) GT EDV, so

@@ -16,8 +16,7 @@ from scipy import ndimage
 
 from core.types import Image, Mask, Spacing, Volume
 
-LV_CAVITY, LV_MYO, RV_CAVITY = 3, 2, 1
-CANONICAL_LABELS = {0: "background", 1: "RV", 2: "LV-myo", 3: "LV-cav"}
+LV_MYO = 2   # LV-myocardium; the identify_lv_cavity ring label (canonical home: core.data.static.labels)
 
 # M&Ms raw labels (1=LV-cav, 2=myo, 3=RV) -> canonical; shared by the M&M-2 + M&Ms-1 adapters.
 MNM_LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}

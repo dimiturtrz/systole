@@ -11,8 +11,3 @@ COUNTRY_CONTINENT = {
     "Canada": "North America",
     "China": "Asia",
 }
-
-
-def continent_of(country: str | None) -> str | None:
-    """Continent for a country name, or None if unknown/missing. Derive-on-read, don't store."""
-    return COUNTRY_CONTINENT.get(country) if country else None

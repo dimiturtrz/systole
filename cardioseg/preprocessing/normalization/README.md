@@ -204,8 +204,8 @@ label-protocol mismatch; it's domain/intensity. See
 ## Status / contents
 - **AUTO parser** ✅ — `data/mri/{acdc,mnm2,mnms1}.py` `meta()` parses sidecars → `_source` per field.
 - **Paper layer** ✅ — `sources.yaml`: cited WEB/paper constants, each `{value, source, verified}`.
-- **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`; `load_meta()` with
-  per-scan fallback. `python -m cardioseg.preprocessing.normalization.persist`.
+- **persist** ✅ — `persist.py` merges AUTO + paper → `<data>/raw/<ds>/meta/<ds>.yaml`.
+  `python -m cardioseg.preprocessing.normalization.persist`.
 - **fetch_sources** ✅ — `fetch_sources.sh`: public challenge-page pulls + a manifest of gated sources.
 - **N4** ✅ — `n4.py` (bias correction; params in `DataCfg.n4_params`, recorded in config.json).
 - **Nyúl histogram standardization** ✅ built (`core/preprocessing/nyul.py`, `DataCfg.nyul`; standard

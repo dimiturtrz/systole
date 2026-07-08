@@ -12,7 +12,9 @@ NIH + Children's National, normal + diseased.
 """
 from __future__ import annotations
 
+import argparse
 import csv
+import logging
 from pathlib import Path
 
 import polars as pl
@@ -20,6 +22,9 @@ import polars as pl
 from core.config import data_root
 from core.data.static.mri.dicom import read_image, read_series
 from core.data.static.store import _norm_vendor, _region_of
+from core.obs import setup
+
+log = logging.getLogger("cardioseg.kaggle_dsb")
 
 # Provenance is dataset knowledge -> it lives in the adapter (the PROCESS layer), not the raw data.
 # DSB 2015 was compiled by NIH + Children's National, scanned in the Washington DC area.
@@ -110,3 +115,21 @@ def build_kaggle_meta(split: str, root: str | Path | None = None) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     pl.DataFrame(rows, strict=False).write_csv(out / "meta.csv")
     return out / "meta.csv"
+
+
+def _main():  # pragma: no cover
+    """Kaggle DSB offline builder: extract per-case meta.csv into the store (fit_acquisition_reference
+    then mines its tr_ms column, bSSFP-filtered — makes Kaggle location/vendor part of the data cloud)."""
+    setup()
+    ap = argparse.ArgumentParser(description="Kaggle DSB 2015: offline meta.csv build (bd 8pfl pattern).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    bm = sub.add_parser("build-meta", help="write processed/kaggle/<split>/meta.csv over a split's cases")
+    bm.add_argument("--split", required=True, choices=("train", "validate", "test"))
+    bm.add_argument("--root", default=None, help="override the raw kaggle_dsb2015 root")
+    args = ap.parse_args()
+    out = build_kaggle_meta(args.split, args.root)
+    log.info(f"wrote {out}")
+
+
+if __name__ == "__main__":
+    _main()

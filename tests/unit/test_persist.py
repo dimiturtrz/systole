@@ -2,8 +2,10 @@
 data_root are faked so the pure provenance/serialize logic runs without real data or sidecars."""
 from pathlib import Path
 
+from omegaconf import OmegaConf
+
 import cardioseg.preprocessing.normalization.persist as P
-from cardioseg.preprocessing.normalization.persist import _prov, load_meta, persist_meta
+from cardioseg.preprocessing.normalization.persist import _prov, persist_meta
 
 
 def test_prov_paper_layer_wins():
@@ -45,8 +47,8 @@ class _FakeAdapter:
                 "_source": {"scanner": "dicom", "rest": "parsed"}}
 
 
-def test_persist_and_load_roundtrip(monkeypatch, tmp_path):
-    """persist_meta + load_meta pipeline: fake adapter -> yaml written under raw/, reloads identically."""
+def test_persist_writes_provenance_yaml(monkeypatch, tmp_path):
+    """persist_meta pipeline: fake adapter -> yaml written under raw/, provenance-tagged as expected."""
     monkeypatch.setattr(P, "get_adapter", lambda _ds: _FakeAdapter())
     monkeypatch.setattr(P, "data_root", lambda _kind="raw": str(tmp_path))
     monkeypatch.setattr(P, "_overlay",
@@ -56,19 +58,13 @@ def test_persist_and_load_roundtrip(monkeypatch, tmp_path):
     assert out == Path(tmp_path) / "acdc" / "meta" / "acdc.yaml"
     assert out.exists()
 
-    loaded = load_meta("acdc")
+    loaded = OmegaConf.to_container(OmegaConf.load(out))
     assert loaded["dataset"] == "acdc" and loaded["n"] == 2
     subj = loaded["subjects"]["p001"]
     assert subj["scanner"]["value"] == "Siemens"
     assert subj["scanner"]["by"] == "paper"            # overlay won for scanner
     assert subj["field_strength"]["by"] == "auto"      # no overlay -> auto
     assert "_source" not in subj                       # provenance map popped, not serialized
-
-
-def test_load_meta_absent_is_none(monkeypatch, tmp_path):
-    """load_meta boundary: no yaml on disk -> None (caller falls back to per-scan parsing)."""
-    monkeypatch.setattr(P, "data_root", lambda _kind="raw": str(tmp_path))
-    assert load_meta("nope") is None
 
 
 def test_overlay_absent_is_empty(monkeypatch, tmp_path):
