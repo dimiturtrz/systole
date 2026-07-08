@@ -144,5 +144,6 @@ next (advisory).
 ## Conventions & Patterns
 
 - **Tasks → `bd` (beads) only** (see above). **Data lives out of repo** under `<data>/raw/` (gitignored).
+- **External git-repo deps live gitignored under `external/`** — checked out, never vendored (don't commit third-party code). Commit the URL + pinned commit (in a doc + the fetch step that lives with the consuming lane, not a top-level `scripts/`) so the checkout is reproducible. Only their gated/large DATA stays out; the *how-to-fetch* is committed. (e.g. `external/mrxcat2` ← public ETH MRXCAT2.0, pinned; see `core/data/dynamic/GENERATION.md`.)
 - Env quirks: `conda run` swallows stdout + rejects multiline `-c` (write script files); `/tmp` doesn't survive
   Windows-python round-trip (use repo-relative paths). CRLF→LF + beads "auto-export git add failed" warnings are benign.
