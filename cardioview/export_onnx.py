@@ -23,7 +23,7 @@ log = logging.getLogger("cardioview.export_onnx")
 OUT = Path("cardioview/web/public/models")
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover  (core.export_onnx build + shutil.copy — onnx export shell)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", default=DEFAULT_MODEL, choices=list(MODELS))
     ap.add_argument("--verify", default=None)

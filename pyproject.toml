@@ -97,6 +97,10 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # (low coverage there is honest signal to close, not noise to hide). exclude_lines drops the __main__
 # entry blocks + protocol stubs from the count. Gate is ADVISORY (CI prints, never fails) until a
 # baseline floor is set + ratcheted. bd cardiac-seg-emko.
+# cardioview is measured SEPARATELY (not in this source list): the CI cardioview step runs
+# `pytest cardioview/tests --cov=cardioview` into its own .coverage.cardioview and prints it advisory,
+# so the >=80 core+cardioseg floor stays calibrated to LIBRARY logic and isn't moved by the viewer's
+# render/onnx shells (all pragma'd). bd cardiac-seg-3vbc.
 [tool.coverage.run]
 source = ["core", "cardioseg"]
 omit = ["*/data/analysis/*", "*_build.py", "core/export_onnx.py"]

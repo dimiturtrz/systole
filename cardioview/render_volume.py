@@ -50,7 +50,7 @@ def normalize(vol: np.ndarray, lo_pct: float = 1.0, hi_pct: float = 99.5) -> np.
     return np.clip((vol - lo) / max(hi - lo, 1e-6), 0.0, 1.0)
 
 
-def to_imagedata(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):
+def to_imagedata(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):  # pragma: no cover  (pyvista ImageData — render shell)
     """Wrap a [z,y,x] array as a pyvista ImageData (VTK wants x-fastest)."""
     nz, ny, nx = vol_zyx.shape
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=spacing_zyx[::-1])  # spacing as (x,y,z)
@@ -69,7 +69,7 @@ class RenderCfg:
     margin_mm: float = 15.0
 
 
-def render(cfg: RenderCfg) -> None:
+def render(cfg: RenderCfg) -> None:  # pragma: no cover  (load_ed_es disk read + pyvista Plotter/screenshot — render shell)
     patient, phase = cfg.patient, cfg.phase
     d = load_ed_es(patient_dir(patient))
     if phase not in d:
@@ -113,7 +113,7 @@ def render(cfg: RenderCfg) -> None:
              tuple(round(s, 2) for s in spacing), iso_vol.shape, round(iso_spacing[0], 2))
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover  (argparse CLI entry — render shell)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--patient", default="patient001")
     ap.add_argument("--phase", default="ED", choices=["ED", "ES"])

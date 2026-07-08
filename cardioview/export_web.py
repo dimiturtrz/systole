@@ -57,7 +57,7 @@ CINE_BBOX_MARGIN = 14      # in-plane crop margin (voxels) around the whole-cine
 OUT = Path(data_root("meshes")) / "cardioview"
 
 
-def publish_model(model_name: str) -> None:
+def publish_model(model_name: str) -> None:  # pragma: no cover  (shutil.copyfile of the ONNX artifact — file-copy shell)
     """Copy the exact ONNX that produced these assets into the external home (models/<name>.onnx),
     so the web bundle's model travels with its manifest. The registry artifact dir holds model.onnx
     (built by core.export_onnx at train time)."""
@@ -77,7 +77,7 @@ def heldout_set(model_name: str) -> set[str]:
     80/20 ACDC val split for older runs without a config.json."""
     run = model_dir(MODELS[model_name])
     cfg_path = run / "config.json"
-    if cfg_path.exists():
+    if cfg_path.exists():  # pragma: no cover  (reads a real run config.json + consolidated store — registry/data dependency)
         dc = from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
         _, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
@@ -116,21 +116,29 @@ def volumes(masks: dict, spacing) -> dict:
     return {}
 
 
-def upsert_manifest(entry: dict, model_name: str) -> None:
-    """Insert/replace one patient in manifest.json. Manifest = {model, hearts}; the web
-    reads `model` to know which bundled .onnx to load (so it follows what was exported)."""
-    OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / "manifest.json"
-    data = json.loads(path.read_text()) if path.exists() else {}
+def manifest_with(data, entry: dict, model_name: str) -> dict:
+    """Pure insert/replace of one patient into a manifest dict -> the new {model, hearts} dict.
+    `data` is the prior manifest (dict, the old bare-array form, or None); the entry replaces any
+    same-patient row and the hearts list stays sorted by patient. (write is the shell around this.)"""
+    data = data or {}
     if isinstance(data, list):  # back-compat with the old array form
         data = {"hearts": data}
     hearts = [e for e in data.get("hearts", []) if e["patient"] != entry["patient"]]
     hearts.append(entry)
     hearts.sort(key=lambda e: e["patient"])
-    path.write_text(json.dumps({"model": model_name, "hearts": hearts}, indent=2))
+    return {"model": model_name, "hearts": hearts}
 
 
-def load_4d(pdir, name: str):
+def upsert_manifest(entry: dict, model_name: str) -> None:  # pragma: no cover  (manifest.json read/write — file-IO shell around manifest_with)
+    """Insert/replace one patient in manifest.json. Manifest = {model, hearts}; the web
+    reads `model` to know which bundled .onnx to load (so it follows what was exported)."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    path = OUT / "manifest.json"
+    data = json.loads(path.read_text()) if path.exists() else {}
+    path.write_text(json.dumps(manifest_with(data, entry, model_name), indent=2))
+
+
+def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — IO shell)
     """Load the cine as [t, z, y, x] + spacing (z, y, x) mm."""
     img = nib.load(str(pdir / f"{name}_4d.nii.gz"))
     arr = np.transpose(np.asanyarray(img.dataobj), (3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
@@ -138,13 +146,13 @@ def load_4d(pdir, name: str):
     return arr, (zs, ys, xs)
 
 
-def frame_indices(pdir):
+def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
     """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
     cfg = parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
-def run(patients, source, ctx: ExportCtx):
+def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case disk read + export_glb write — export orchestration shell)
     held = heldout_set(ctx.model_name)
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
@@ -165,14 +173,14 @@ def run(patients, source, ctx: ExportCtx):
                  entry["pred"].get("ef"), entry["gt"].get("ef"))
 
 
-def run_animate(patients, ctx: ExportCtx, stride=1):
+def run_animate(patients, ctx: ExportCtx, stride=1):  # pragma: no cover  (per-patient cine segmentation + glb write — export orchestration shell)
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry, per patient."""
     held = heldout_set(ctx.model_name)
     for p in patients:
         _animate_patient(p, ctx, held, stride)
 
 
-def _segment_cine(pdir, name, ctx: ExportCtx, stride):
+def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (load_4d disk read + predict_volume GPU model — inference shell)
     """Segment every strided cine frame -> (frames_t, masks{k}, grays{k} aligned, rspacing)."""
     vol, spacing = load_4d(pdir, name)
     rspacing = (spacing[0], INPLANE_MM, INPLANE_MM)
@@ -197,7 +205,7 @@ def _heart_bbox(masks, margin=CINE_BBOX_MARGIN):
             max(0, int(xs.min()) - margin), min(SIZE, int(xs.max()) + margin + 1))
 
 
-def _animate_patient(p, ctx: ExportCtx, held, stride):
+def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (disk read + model inference + glb/png writes — export orchestration shell)
     """One patient: segment the cine, write per-frame slice strips + chamber glbs, upsert the entry."""
     pdir = patient_dir(p)
     name = pdir.name
@@ -232,7 +240,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):
 
 
 
-def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:
+def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:  # pragma: no cover  (PIL Image write — file-write shell)
     """One cine frame's (already heart-cropped) slices -> a vertical RGBA PNG strip [D*H, W]:
     R = grayscale (percentile-windowed for real MRI contrast), G = label (0..3). The web decodes it
     directly (W from image width, H from height/D)."""
@@ -247,7 +255,7 @@ def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:
     Image.fromarray(rgba, "RGBA").save(path)
 
 
-def main():
+def main():  # pragma: no cover  (argparse CLI entry + load_model GPU + export orchestration — shell)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--mode", choices=["static", "animate"], default="static")
     # Default hearts come from paths.yaml (cardioview.hearts); fallback = one per condition.
