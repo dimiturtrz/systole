@@ -15,7 +15,6 @@ from omegaconf import OmegaConf
 from pydantic import ConfigDict
 
 from core.paths import resolve_data_root
-from core.registry import resolve
 
 # Shared pydantic config used by every dispersed cfg (ModelCfg/AugCfg/…): setattr (used by the
 # `--set` overrides) re-validates the field. Lives here — a leaf module both core.hparams and the
@@ -52,17 +51,6 @@ def data_root(kind: str = "raw") -> str:
 # the SINGLE source for "which model is flagship". Re-point by moving the alias, not editing a path.
 # All eval/export/viewer defaults reference this ref. See ROADMAP.
 FLAGSHIP_REF = "production"
-
-
-def flagship_dir() -> str:
-    """Local dir of the flagship's resolved artifacts (model.pth + config.json + …), downloaded from
-    the registry on demand. Use this where a run dir was expected. Lazy import — keep config light."""
-    return str(resolve(FLAGSHIP_REF))
-
-
-def flagship_model() -> str:
-    """Path to the flagship trained weights (resolved from the registry)."""
-    return str(Path(flagship_dir()) / "model.pth")
 
 
 # --- pipeline constants (single source; config-default + module-constant readers reference these) ---

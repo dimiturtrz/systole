@@ -91,11 +91,12 @@ def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + ma
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_unet(cfg.model).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
-    size = cfg.generator.data.size
+    d = cfg.generator.data
+    size = d.size
 
-    meta = store.load(["acdc"], inplane=cfg.generator.data.inplane, n4=cfg.generator.data.n4)
-    acdc = meta.filter((meta["dataset"] == "acdc") & meta["labelled"])
-    paths = splits.paths(acdc)
+    meta = store.load_cfg(d)                    # the run's own preprocessing params
+    val = splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
+    paths = splits.paths(val)
 
     # score every case once: pick a clean low-error case + the worst-EF HCM case
     cases = [_case(model, p, size, device) for p in paths]

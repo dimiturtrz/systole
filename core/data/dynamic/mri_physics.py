@@ -27,7 +27,6 @@ TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
     "liver":      {1.5: (580.0,   45.0, 0.70), 3.0: (810.0,   34.0, 0.70)},
     "muscle":     {1.5: (1010.0,  35.0, 0.75), 3.0: (1420.0,  32.0, 0.75)},
 }
-FIELDS: tuple[float, ...] = (1.5, 3.0)
 _FIELD_1P5T = 1.5                            # tesla; the low-field column (else use the 3T flip value)
 
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.

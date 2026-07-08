@@ -54,12 +54,6 @@ def persist_meta(dataset: str) -> Path:
     return out
 
 
-def load_meta(dataset: str):
-    """Read the persisted meta yaml; None if absent (caller falls back to per-scan parsing)."""
-    p = Path(data_root("raw")) / dataset / "meta" / f"{dataset}.yaml"
-    return OmegaConf.to_container(OmegaConf.load(p)) if p.exists() else None
-
-
 def main():
     setup()
     ap = argparse.ArgumentParser(description=__doc__)

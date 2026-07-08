@@ -95,6 +95,16 @@ def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
                       d.val_datasets, d.val_vendors, d.train_vendors)[1]
 
 
+def model_test(d, meta: pl.DataFrame) -> pl.DataFrame:
+    """The test subject frame a model (DataCfg `d`) held out — a coded split's frozen test when
+    `d.split` is set, else the DataCfg-criteria test. The test-side counterpart to `model_val`;
+    per-axis (e.g. per-vendor) eval filters this rather than re-deriving the split from a literal."""
+    if d.split:
+        return resolve_cfg(d, meta).test.frame
+    return make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+                      d.val_datasets, d.val_vendors, d.train_vendors)[2]
+
+
 def seen_keys(d, meta: pl.DataFrame) -> set[str]:
     """The real subjects a model (DataCfg `d`) actually SAW = train ∪ val, restricted to its own
     `sources` — the honest basis for an OOD/leak check (a val subject IS seen; early-stopping touched

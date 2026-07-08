@@ -89,10 +89,9 @@ def ensemble_score(models, df, size, device):
 def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
     d = cfg.generator.data
     meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
-    _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                     val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-    if which == "acdc":
-        return val
+    if which.lower() == "val":                          # the held-out val split (split-derived, not a literal)
+        return splits.model_val(d, meta)
+    test = splits.model_test(d, meta)                   # a vendor axis carves the frozen test by vendor
     return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
 
@@ -124,7 +123,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
-    ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge acdc")
+    ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
     args = ap.parse_args()
     device = resolve_device()
     loaded = [load_run(resolve(r), device) for r in args.runs]

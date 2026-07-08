@@ -17,7 +17,6 @@ import pytest
 from core.evaluate import (
     assd,
     dice,
-    hausdorff,
     hd95,
     surface_distances,
     surface_metrics,
@@ -194,6 +193,5 @@ def test_surface_metric_ordering_is_consistent():
     sd = surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
     m = surface_metrics(sd)
     assert m["assd"] <= m["hd95"] <= m["hd"]               # mean <= 95th pct <= max
-    assert np.isclose(m["hd"], hausdorff(a, b, 3, (1.5, 1.5, 1.5)))
     assert np.isclose(m["hd95"], hd95(a, b, 3, (1.5, 1.5, 1.5)))
     assert np.isclose(m["assd"], assd(a, b, 3, (1.5, 1.5, 1.5)))

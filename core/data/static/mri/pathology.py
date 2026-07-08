@@ -21,8 +21,6 @@ _MAP = {
     # ambiguous -> other: CIA, AHS, LVNC, Other
 }
 
-COARSE_CLASSES = ("normal", "dilated", "hypertrophic", "ischemic", "rv_congenital", "other")
-
 
 def harmonize(raw: str | None) -> str:
     """Map a raw pathology code to the coarse scheme. None/unknown -> 'other'."""

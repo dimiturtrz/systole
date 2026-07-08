@@ -58,12 +58,6 @@ def surface_metrics(sd: np.ndarray) -> dict[str, float]:
     return {"hd": float(sd.max()), "hd95": float(np.percentile(sd, HD_PERCENTILE)), "assd": float(sd.mean())}
 
 
-def hausdorff(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:
-    """Symmetric Hausdorff (max boundary distance); mm if spacing given. Fragile to one
-    outlier — prefer hd95 for reporting (G4)."""
-    return surface_metrics(surface_distances(pred, gt, label, spacing))["hd"]
-
-
 def hd95(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:
     """95th-percentile boundary distance — robust Hausdorff (drops the top 5% outliers)."""
     return surface_metrics(surface_distances(pred, gt, label, spacing))["hd95"]
