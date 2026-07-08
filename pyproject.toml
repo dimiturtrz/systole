@@ -29,14 +29,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-cov"]
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
 # The code branches on availability (single capability gate), scipy/CPU fallback on Windows. Install
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest"]
+all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -90,6 +90,26 @@ exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
 min_confidence = 60
 ignore_names = ["model_config"]
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+
+# Coverage (pytest-cov). Measures core+cardioseg. The denominator is LIBRARY logic, not scripts: omit
+# the exploratory analysis CLIs + offline builders + the onnx export (no import fan-in, need raw data
+# on disk — counting them just drags the % with code that isn't unit-testable). Data ADAPTERS stay in
+# (low coverage there is honest signal to close, not noise to hide). exclude_lines drops the __main__
+# entry blocks + protocol stubs from the count. Gate is ADVISORY (CI prints, never fails) until a
+# baseline floor is set + ratcheted. bd cardiac-seg-emko.
+[tool.coverage.run]
+source = ["core", "cardioseg"]
+omit = ["*/data/analysis/*", "*_build.py", "core/export_onnx.py"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.$",
+]
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only
