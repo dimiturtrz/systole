@@ -65,10 +65,17 @@ jobs:
           enable-cache: true
       - name: Install dependencies (locked, + dev extra for pytest)
         run: uv sync --frozen --extra dev
-      # One instrumented run = the test gate AND the coverage report (no double suite execution).
-      # Tests BLOCK on failure; coverage is ADVISORY — it only prints term-missing (no --cov-fail-under,
-      # so it never fails the build). Config (source/omit/exclude) is in [tool.coverage.*]. Integration
-      # tests skip cleanly on the data-less runner. Ratchet (bd cardiac-seg-emko): add a fail-under floor
-      # once a baseline is agreed, then raise it.
-      - name: Tests + coverage (coverage advisory)
+      # One instrumented run = the test gate AND the coverage data (.coverage), no double suite exec.
+      # Config (source/omit/exclude) is in [tool.coverage.*]. Integration tests skip on the data-less runner.
+      - name: Tests + coverage (tests block)
         run: uv run pytest tests --cov --cov-report=term-missing -q
+      # Coverage RED tier (mirrors vulture conf80): below 80% fails the merge. Reads the .coverage from
+      # the run above. bd cardiac-seg-emko — reaching 80 honestly is tracked in 7bbq.
+      - name: Coverage floor — enforced (>=80, blocks)
+        run: uv run coverage report --fail-under=80
+      # Coverage YELLOW tier (mirrors vulture conf60): 80–95 warns, never blocks. `always()` so the
+      # target signal shows even when the floor failed; `continue-on-error` keeps it non-blocking.
+      - name: Coverage target — advisory (>=95, warns)
+        if: always()
+        continue-on-error: true
+        run: uv run coverage report --fail-under=95 || echo "::warning::coverage below the 95% target"
