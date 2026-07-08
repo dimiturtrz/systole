@@ -21,7 +21,7 @@ import polars as pl
 import torch
 
 from core.data.dynamic.dataset import load_to_gpu
-from core.data.dynamic.synth import synthesize_from_labels
+from core.data.dynamic.synth import MatchedAcqCfg, synthesize_from_labels
 from core.data.static import splits, store
 from core.data.static.labels import CLASSES
 from core.hparams import TrainCfg, apply_overrides
@@ -103,7 +103,7 @@ def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: 
 #     replace (-> literature T1/T2/PD sampling sized to exactly that gap). No training.
 _KNOB_OFF = {"jitter": {"jitter": 0.0}, "texture": {"texture": 0.0}, "noise": {"noise": 0.0},
              "inflow": {"inflow": False}, "bias": {"bias_strength": 0.0}, "blur": {"blur": (0.0, 0.0)},
-             "sweep": {"acq_mode": "matched"}}      # matched = single fixed field/TR/flip -> sweep off
+             "sweep": {"acq": MatchedAcqCfg()}}     # matched acq = single fixed field/TR/flip -> sweep off
 
 
 def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
