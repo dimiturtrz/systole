@@ -362,8 +362,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
             train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam
             test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
             val_df = r.val.frame                     # val is real -> its frame drives scoring/export/params
-            if r.train.kind == "static":
-                train_df = r.train.frame             # dynamic train has no frame (counts via tensors)
+            train_df = r.train.frame if r.train.kind == "static" else None   # dynamic train has no frame (counts via tensors)
             log.info("split=%s@%s test_hash=%s | train=%s val=%s test n=%d",
                      d.split.split("@")[0], r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
         else:
