@@ -11,7 +11,8 @@ pool — and paint contrast with OUR bSSFP painter (`synth.py`); MRXCAT's own (M
 needed. So the heavy, gated parts of MRXCAT never run here: the MATLAB MR-sim and XCAT (Duke-licensed) torso
 generation. The runnable, dependency-light Python stage (`MakePhantom.py`, `runXCAT=False`,
 `use_texturizer=False`) produces `.vti` label + T1/T2/PD maps on the bundled example with no MATLAB/XCAT.
-The tool itself is vendored under `external/mrxcat2` (gitignored, MIT); THIS module only ADAPTS its output
+The tool is an EXTERNAL CHECKOUT — `scripts/fetch_mrxcat2.sh` clones the public ETH repo (paper MIT)
+into the gitignored `external/mrxcat2` (pinned), never vendored; THIS module only ADAPTS its output
 into our canonical pool (`anatomy.load_pool` format — one shared home for the pool schema).
 
 NB MRXCAT2.0 paints the MYOCARDIUM UNIFORM (`fixLVTexture(..., 'meanLV')`, default `textureLV=False`) *"to
