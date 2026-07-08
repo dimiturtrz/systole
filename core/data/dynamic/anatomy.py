@@ -351,14 +351,8 @@ def load_pool(path: str | Path) -> np.ndarray:
     return np.load(str(path))["slices"]
 
 
-def _main():  # pragma: no cover
+def _cmd_view(args) -> None:  # pragma: no cover
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
-    setup()
-    ap = argparse.ArgumentParser(description="Rodero mesh -> SAX 3-class label volume (bd 1vl).")
-    ap.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
-    ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
-    ap.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
-    args = ap.parse_args()
     vol = voxelize(load(args.mesh), inplane=args.inplane)
     counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
     log.info(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
@@ -370,6 +364,63 @@ def _main():  # pragma: no cover
     out = args.out or (str(Path(args.mesh).with_suffix("")) + "_sax.png")
     Image.fromarray(montage).save(out)
     log.info(f"wrote {out}  (slices {ks})")
+
+
+def _cmd_build_pool(args) -> None:  # pragma: no cover
+    """Build the healthy SSM anatomy pool from a mesh dir (the ad-hoc REPL build, now committed)."""
+    cfg = PoolBuildCfg(size=args.size, scale_reps=args.scale_reps, workers=args.workers)
+    out_path, shape = build_pool(args.mesh_dir, args.out, cfg)
+    log.info(f"wrote pool {out_path}  shape {shape}")
+
+
+def _cmd_build_pathology_pool(args) -> None:  # pragma: no cover
+    """Build the DCM/HCM/abnormal-RV pathology pool from a healthy pool npz."""
+    out_path, shape = build_pathology_pool(load_pool(args.pool), args.out)
+    log.info(f"wrote pathology pool {out_path}  shape {shape}")
+
+
+def _cmd_convert_binary(args) -> None:  # pragma: no cover
+    """One-time: write a binary .vtu beside every ASCII .vtk (faster load)."""
+    n = convert_binary(args.mesh_dir, args.workers)
+    log.info(f"converted {n} meshes under {args.mesh_dir}")
+
+
+_CMDS = {
+    "view": _cmd_view,
+    "build-pool": _cmd_build_pool,
+    "build-pathology-pool": _cmd_build_pathology_pool,
+    "convert-binary": _cmd_convert_binary,
+}
+
+
+def _main():  # pragma: no cover
+    """Rodero SSM anatomy CLI: view a mesh montage, or build the (healthy / pathology) anatomy pools."""
+    setup()
+    ap = argparse.ArgumentParser(description="Rodero SSM anatomy: view + offline pool build (bd 1vl/8pfl).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    v = sub.add_parser("view", help="voxelize one mesh -> SAX label montage PNG")
+    v.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
+    v.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
+    v.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
+
+    bp = sub.add_parser("build-pool", help="voxelize a mesh dir -> healthy anatomy pool npz")
+    bp.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk/.vtu meshes")
+    bp.add_argument("--out", required=True, help="output pool npz")
+    bp.add_argument("--size", type=int, default=DEFAULT_SIZE)
+    bp.add_argument("--workers", type=int, default=0)
+    bp.add_argument("--scale-reps", type=int, default=1)
+
+    pp = sub.add_parser("build-pathology-pool", help="healthy pool -> DCM/HCM/RV pathology pool npz")
+    pp.add_argument("--pool", required=True, help="input healthy pool npz")
+    pp.add_argument("--out", required=True, help="output pathology pool npz")
+
+    cb = sub.add_parser("convert-binary", help="write binary .vtu beside each ASCII .vtk (faster load)")
+    cb.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk meshes")
+    cb.add_argument("--workers", type=int, default=0)
+
+    args = ap.parse_args()
+    _CMDS[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -141,6 +141,20 @@ Each source covers a different region; the union covers more than any one.
 | **MRXCAT** | whole thing (torso+heart+physics) → we consume its **label `.vti`**, paint with our engine | LOW–MED — pathology knobs | whole-FOV + pathology + structured bg | `hpy` — adapter `core/data/dynamic/mrxcat.py` ✓ (`to_canonical`/`load_vti_labels`/`build_pool`; remap geometrically verified — myo ring encloses LV-cav). Tool = external checkout (public ETH repo, MIT-cited): `git clone https://gitlab.ethz.ch/ibt-cmr-public/mrxcat-2.0.git external/mrxcat2 && git -C external/mrxcat2 checkout 9f396a9` — kept in gitignored `external/`, never vendored (fetch to be folded into the mrxcat generation CLI, bd cardiac-seg-8pfl); XCAT torso Duke-gated but example bundled. NB MRXCAT paints myo UNIFORM by construction (`fixLVTexture` meanLV) — confirms our myo over-spread is low-res-PV, not physics |
 | **learned prior** | shape = sample a learned model | LOW — latent | the real manifold incl pathology | future (`vpn5` option) |
 
+**Building the pools (committed CLI, bd 8pfl)** — the offline builds are reproducible subcommands, not ad-hoc REPL:
+
+```bash
+# SSM (Rodero) anatomy — healthy pool, then the DCM/HCM/RV pathology pool
+python -m core.data.dynamic.anatomy convert-binary --mesh-dir <data>/volumetric/meshes/raw
+python -m core.data.dynamic.anatomy build-pool --mesh-dir <data>/volumetric/meshes/raw --out <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz
+python -m core.data.dynamic.anatomy build-pathology-pool --pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --out <data>/volumetric/meshes/processed/rodero_anatomy/pool_pathology.npz
+# MRXCAT — fetch the external tool (pinned), then heart-only / whole-FOV / SSM×MRXCAT pools
+python -m core.data.dynamic.mrxcat fetch
+python -m core.data.dynamic.mrxcat build-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/pool.npz
+python -m core.data.dynamic.mrxcat build-fov-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/fov_pool.npz
+python -m core.data.dynamic.mrxcat build-ssm-fov-pool --rodero-pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/ssm_fov_pool.npz
+```
+
 **Composition is cheap** (union of label pools → the painter is shared): `pool_composite = concat(sourceA,
 sourceB, …)`. The VALUE is *diverse sources*, not one bigger source. Coverage is measured per source and
 on the union (`shape_coverage`, `static_compare`), so we can see which source fills which gap — e.g. SSM
