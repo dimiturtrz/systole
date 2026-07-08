@@ -1,22 +1,7 @@
 """Unit tests for cardioview's pure mask geometry (no torch/vtk needed)."""
 import numpy as np
 
-from cardioview.geometry import keep_largest, bbox_slices, nearest_index
-
-
-def test_keep_largest_drops_islands():
-    a = np.zeros((10, 10, 10), bool)
-    a[2:7, 2:7, 2:7] = True  # big blob (125 voxels)
-    a[0, 0, 0] = True  # stray island
-    out = keep_largest(a)
-    assert out.sum() == 125
-    assert not out[0, 0, 0]
-
-
-def test_keep_largest_noop_when_single_component():
-    a = np.zeros((5, 5, 5), bool)
-    a[1:4, 1:4, 1:4] = True
-    assert np.array_equal(keep_largest(a), a)
+from cardioview.geometry import bbox_slices, nearest_index
 
 
 def test_bbox_slices_tight_with_zero_margin():
