@@ -2,12 +2,14 @@ name: ci
 
 # Gate for the dev -> main flow: `tests` + `lint` must pass on every PR (and on pushes to dev/main).
 # Enforced as required status checks via branch protection on main (merge blocked until green).
-# Trigger on push only. Check runs attach to the commit SHA, and a PR displays checks for its head SHA
-# regardless of trigger event — so an open dev->main PR still shows lint/tests (required checks gate)
-# without a second `pull_request` run. One run per commit, not two.
+# pull_request validates the dev->main PR — reruns on every push to the PR head (synchronize) and tests
+# the MERGE PREVIEW (branch merged into main), not the raw head. push:[main] adds a post-merge safety
+# net. A dev push isn't a push to main, so only one event ever handles a given commit — no double-run.
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 # A newer push to the same branch cancels the older in-flight run (no stacking on rapid pushes).
 concurrency:
