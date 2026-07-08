@@ -82,13 +82,18 @@ class Mnm2Adapter(DatasetAdapter):
 
     def meta(self, case: Path) -> dict:
         """Acquisition + disease — AUTO from dataset_information.csv."""
-        info = mnm2_info(case.parent.parent).get(case.name, {})
-        return {
-            "group": info.get("DISEASE"),
-            "vendor": info.get("VENDOR"), "scanner": info.get("SCANNER"),
-            "field_T": to_float(info.get("FIELD")),
-            # 3 Spanish hospitals; per-subject centre not published, but country is uniform.
-            "centre": None, "country": "Spain",
-            "age": None, "sex": None, "height": None, "weight": None,
-            "_source": {"all": "dataset_information.csv", "country": "paper (3 Spanish hospitals)"},
-        }
+        return meta_from_info(mnm2_info(case.parent.parent).get(case.name, {}))
+
+
+def meta_from_info(info: dict) -> dict:
+    """PURE M&M-2 meta from one CSV row: disease/vendor/scanner pass through, FIELD float-parsed;
+    centre null (not published) + country fixed Spain (3 Spanish hospitals, paper)."""
+    return {
+        "group": info.get("DISEASE"),
+        "vendor": info.get("VENDOR"), "scanner": info.get("SCANNER"),
+        "field_T": to_float(info.get("FIELD")),
+        # 3 Spanish hospitals; per-subject centre not published, but country is uniform.
+        "centre": None, "country": "Spain",
+        "age": None, "sex": None, "height": None, "weight": None,
+        "_source": {"all": "dataset_information.csv", "country": "paper (3 Spanish hospitals)"},
+    }

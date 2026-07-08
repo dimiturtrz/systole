@@ -41,3 +41,16 @@ def test_n4_distinct_params_distinct_keys():
     assert base != param_key(1.5, n4=True, n4_params=N4Cfg(shrink=2))
     assert base != param_key(1.5, n4=True, n4_params=N4Cfg(fwhm=0.3))
     assert base != param_key(1.5, n4=True, n4_params=N4Cfg(iters=(30, 30, 30)))
+
+
+def test_nyul_suffix():
+    """nyul=True appends '_nyul' (harmonized cache is separate); combines with n4."""
+    assert param_key(1.5, nyul=True) == "inplane1p5_nyul"
+    assert param_key(1.5, n4=True, nyul=True).endswith("_nyul")   # n4 then nyul, both present
+
+
+def test_norm_suffix_only_when_nonzscore():
+    """norm='zscore' (default) adds NO suffix; any other norm appends '_<norm>' (blood-anchored cache)."""
+    assert param_key(1.5, norm="zscore") == "inplane1p5"          # default -> no suffix
+    assert param_key(1.5, norm="blood") == "inplane1p5_blood"
+    assert param_key(1.5, nyul=True, norm="blood") == "inplane1p5_nyul_blood"   # both suffixes, ordered

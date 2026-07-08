@@ -136,7 +136,7 @@ def _nyul_ref_path() -> Path:
     return reference_dir() / "nyul.yaml"
 
 
-def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_INPLANE,
+def fit_nyul_standard(names: list[str] | None = None, inplane: float = TARGET_INPLANE,  # pragma: no cover  reads real adapter NIfTI from disk + writes reference/nyul.yaml
                       per_dataset: int = 40) -> "np.ndarray":
     """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
     it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks are
@@ -214,18 +214,11 @@ _FIELD_1P5T = 1.5           # tesla; nominal low-field
 _FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T flip bucket
 
 
-def fit_acquisition_reference(root: str | Path | None = None) -> dict:
-    """Aggregate REAL DICOM acquisition (TR/TE/flip) from the built stores into per-(vendor,field)
-    reference values -> reference/acquisition.yaml (verified: DICOM-measured). This is the DAG COMPOSE:
-    `mri_physics.acquisition_for` OVERRIDES its physics derivation with these where present, and the
-    derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
-    real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
-    so the whole domain-randomization sweep survives for everything we lack real values for."""
-    base = Path(data_root("processed"))
-    metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
-    if not metas:
-        return {}
-    df = pl.concat(metas, how="diagonal")
+def acquisition_from_frame(df: "pl.DataFrame") -> dict:
+    """PURE core of the acquisition mine: a cloud meta frame -> per-(vendor,field) TR/TE/flip medians
+    with provenance leaves. bSSFP-TR sanity gate rejects mixed-sequence DICOM (TR outside 2-6 ms) and
+    null vendor/TR; field normalized to 1 dp so '1.5'/'1.500000' fold into ONE group. {} if no tr_ms
+    column or no rows survive the gate."""
     if "tr_ms" not in df.columns:
         return {}
     # bSSFP-TR sanity gate: cine bSSFP TR is ~2.7-6 ms (mriquestions). Mixed-sequence DICOM (Kaggle:
@@ -245,6 +238,24 @@ def fit_acquisition_reference(root: str | Path | None = None) -> dict:
         e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))
         near15 = abs(float(field) - _FIELD_1P5T) < _FIELD_1P5T_TOL if field else True
         e["flip_deg_1p5t" if near15 else "flip_deg_3t"] = leaf(med("flip_deg"))
+    return acq
+
+
+def fit_acquisition_reference(root: str | Path | None = None) -> dict:  # pragma: no cover  globs built meta.csv from disk + writes reference/acquisition.yaml (pure core = acquisition_from_frame, tested)
+    """Aggregate REAL DICOM acquisition (TR/TE/flip) from the built stores into per-(vendor,field)
+    reference values -> reference/acquisition.yaml (verified: DICOM-measured). This is the DAG COMPOSE:
+    `mri_physics.acquisition_for` OVERRIDES its physics derivation with these where present, and the
+    derivation stays the backbone for the null majority — real refines, derived covers. Only rows with
+    real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are skipped,
+    so the whole domain-randomization sweep survives for everything we lack real values for."""
+    base = Path(data_root("processed"))
+    metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
+    if not metas:
+        return {}
+    df = pl.concat(metas, how="diagonal")
+    acq = acquisition_from_frame(df)
+    if not acq:
+        return {}
     out = reference_dir() / "acquisition.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("# Real per-(vendor,field) acquisition, DICOM-mined by store.fit_acquisition_reference.\n"
@@ -312,7 +323,7 @@ def migrate_meta(names: list[str] | None = None) -> list[Path]:
     return out
 
 
-def build(name: str, inplane: float = TARGET_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
+def build(name: str, inplane: float = TARGET_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)  # pragma: no cover  npz writes over real adapter volumes (preprocess_case reads NIfTI/DICOM); meta core = _write_meta, tested
           n4_params: N4Cfg | None = None, workers: int | None = None, rebuild: bool = False,
           nyul: bool = False, nyul_standard=None, norm: str = "zscore") -> Path:
     """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
@@ -362,7 +373,7 @@ def load(names: list[str] | str | None = None, inplane: float = TARGET_INPLANE, 
     for name in names:
         out = dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
         if not (out / "meta.csv").exists():
-            build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul,
+            build(name, inplane, n4, n4_params=n4_params, workers=workers, nyul=nyul,  # pragma: no cover  triggers a real consolidation build (reads adapter data from disk)
                   nyul_standard=std, norm=norm)
         # Pin `labelled` to Boolean — don't rely on polars schema inference (newer polars reads the
         # "true"/"false" column as String, breaking the `pl.col('labelled')` filter cross-platform).

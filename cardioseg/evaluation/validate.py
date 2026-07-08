@@ -81,6 +81,16 @@ class _ClassScores:
                 for cl in CLASS_NAMES}
 
 
+def _foreground_samples(logits, y, per_vol, rng):
+    """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
+    (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
+    pred = logits.argmax(1)
+    idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
+    if idx.size > per_vol:
+        idx = rng.choice(idx, per_vol, replace=False)
+    return logits[idx], y[idx]
+
+
 class Evaluator:
     """Scores a trained model over subject npz files. Holds the model + device + EvalCfg as STATE —
     construct once, call `.validate(paths)` on any subject set. (Replaces the old
@@ -138,12 +148,8 @@ class Evaluator:
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
-                y = gt.reshape(-1)
-                pred = logits.argmax(1)
-                idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
-                if idx.size > per_vol:
-                    idx = rng.choice(idx, per_vol, replace=False)
-                L.append(logits[idx]); Y.append(y[idx])
+                lg, y = _foreground_samples(logits, gt.reshape(-1), per_vol, rng)
+                L.append(lg); Y.append(y)
         return np.concatenate(L), np.concatenate(Y)
 
 

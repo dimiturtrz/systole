@@ -41,7 +41,7 @@ from core.run import load_run
 log = logging.getLogger("cardioseg.distribution")
 
 
-def collect(run: Path, device: str, meta_rows):
+def collect(run: Path, device: str, meta_rows):  # pragma: no cover  (loads the model + GPU predict_volume per case over the real store)
     """One record per subject: dice + boundary distances per class, EF gt/pred, and the
     stratification keys (vendor/pathology/field) straight from the store's meta — for the
     stratified views. Pure eval on the existing model (no retrain).
@@ -96,7 +96,7 @@ def _pooled(rows):
     return dists, dice_acc, ef_gt, ef_pred
 
 
-def plot_kde(dists, out: Path, label: str):
+def plot_kde(dists, out: Path, label: str):  # pragma: no cover  (matplotlib KDE render + savefig)
     fig, ax = plt.subplots(figsize=(7, 4))
     # data-driven x-range so the outlier tail (the point of the plot) isn't clipped at 12 mm
     pooled = [d for cl in CLASSES for d in dists[cl] if d.size]
@@ -119,7 +119,7 @@ def plot_kde(dists, out: Path, label: str):
     plt.close(fig)
 
 
-def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):
+def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover  (matplotlib scatter + marginal-KDE render + savefig)
     """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
     upright on top; bias + 95% LoA as vertical lines (and in the title)."""
     mean = (ef_gt + ef_pred) / 2
@@ -206,7 +206,7 @@ def strata_table(rows, key) -> dict:
     return out
 
 
-def plot_strata(rows, key, out: Path, label: str):
+def plot_strata(rows, key, out: Path, label: str):  # pragma: no cover  (matplotlib grouped-bar render + savefig)
     """Two panels: per-group mean Dice (bars) + per-group EF MAE (bars), n annotated,
     small-n groups hatched. The 'where does it fail' figure."""
     g = _groups(rows, key)
@@ -237,7 +237,7 @@ def plot_strata(rows, key, out: Path, label: str):
     plt.close(fig)
 
 
-def main():
+def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")

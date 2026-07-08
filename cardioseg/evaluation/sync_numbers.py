@@ -107,17 +107,29 @@ TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
            "baselines/nnunet/MODEL_CARD.md", "baselines/nnunet/README.md"]
 
 
-def main():
+def inject_blocks(txt: str, blocks: dict) -> tuple[str, int]:
+    """Replace each `<!-- results:KEY -->...<!-- /results:KEY -->` span with `\\n{fn()}\\n` between the
+    markers. Returns (new_text, n_blocks_substituted). Pure string transform (the file read/write is the
+    shell in `main`) — so the marker-matching + idempotent re-render is testable on an in-memory string.
+    A block present in the text but not in `blocks` is left untouched; a block in `blocks` not in the
+    text is skipped. `fn()` output that contains no marker keeps the operation idempotent."""
+    total = 0
+    for key, fn in blocks.items():
+        pat = re.compile(rf"(<!-- results:{key} -->).*?(<!-- /results:{key} -->)", re.DOTALL)
+        if pat.search(txt):
+            txt = pat.sub(lambda m, fn=fn: f"{m.group(1)}\n{fn()}\n{m.group(2)}", txt)
+            total += 1
+    return txt, total
+
+
+def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
     setup()
     total = 0
     for f in TARGETS:
         p = ROOT / f
         txt = orig = p.read_text()
-        for key, fn in BLOCKS.items():
-            pat = re.compile(rf"(<!-- results:{key} -->).*?(<!-- /results:{key} -->)", re.DOTALL)
-            if pat.search(txt):
-                txt = pat.sub(lambda m, fn=fn: f"{m.group(1)}\n{fn()}\n{m.group(2)}", txt)
-                total += 1
+        txt, n = inject_blocks(txt, BLOCKS)
+        total += n
         if txt != orig:
             p.write_text(txt)
             log.info(f"  updated {f}")

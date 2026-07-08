@@ -237,7 +237,7 @@ def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: s
     return out_path, arr.shape
 
 
-def _main():
+def _main():  # pragma: no cover
     """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
     setup()
     ap = argparse.ArgumentParser(description="MRXCAT .vti → canonical label sanity probe (bd hpy).")

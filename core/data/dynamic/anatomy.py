@@ -145,6 +145,32 @@ def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
 _MIN_LV_WALL_PX = 8   # fewer LV-wall px than this in a SAX slice -> too little to close a cavity ring, skip
 
 
+def _slice_labels(lw: np.ndarray, rw: np.ndarray, rv_close: int = 3) -> np.ndarray:
+    """Pure per-SAX-slice cavity recovery: given the boolean LV-wall (`lw`) and RV-wall (`rw`) rasters,
+    return a 3-class label slice (RV-cav 1 / LV-myo 2 / LV-cav 3). Empty (all-bg) if the LV wall is too
+    thin to close a cavity ring. LV ring -> LV-cav; LV+RV walls together -> RV-cav (see voxelize doc)."""
+    out = np.zeros(lw.shape, dtype=np.uint8)
+    if lw.sum() < _MIN_LV_WALL_PX:
+        return out
+    lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
+    # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
+    # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
+    # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
+    # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
+    walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
+    both = binary_fill_holes(walls) & ~(lw | rw)
+    rv_cav = both & ~lv_cav
+    if rw.any() and rv_cav.any():
+        lbl, _ = cc_label(rv_cav)
+        near = binary_dilation(rw, iterations=2)
+        keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
+        rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
+    out[rv_cav] = RV                                              # RV cavity
+    out[lw] = MYO                                                 # LV myocardium (RV wall -> bg)
+    out[lv_cav] = LV_CAV                                          # LV cavity (3)
+    return out
+
+
 def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
              rv_close: int = 3) -> np.ndarray:
     """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
@@ -163,25 +189,7 @@ def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
     rv = _wall_mask(m, RV_ID, grid, tn).reshape(nz, ny, nx)
     out = np.zeros((nz, ny, nx), dtype=np.uint8)
     for k in range(nz):
-        lw, rw = lv[k], rv[k]
-        if lw.sum() < _MIN_LV_WALL_PX:
-            continue
-        lv_cav = binary_fill_holes(lw) & ~lw                          # inside the LV wall ring
-        # RV cavity: RV free wall + LV(septal) wall enclose it, but the RV crescent rarely closes a
-        # ring in-plane (hinge gaps to the LV wall) -> raw fill leaks/empties. Close the wall union to
-        # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
-        # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
-        walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
-        both = binary_fill_holes(walls) & ~(lw | rw)
-        rv_cav = both & ~lv_cav
-        if rw.any() and rv_cav.any():
-            lbl, n = cc_label(rv_cav)
-            near = binary_dilation(rw, iterations=2)
-            keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
-            rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
-        out[k][rv_cav] = RV                                           # RV cavity
-        out[k][lw] = MYO                                             # LV myocardium (RV wall -> bg)
-        out[k][lv_cav] = LV_CAV                                      # LV cavity (3)
+        out[k] = _slice_labels(lv[k], rv[k], rv_close=rv_close)
     return out
 
 
@@ -343,7 +351,7 @@ def load_pool(path: str | Path) -> np.ndarray:
     return np.load(str(path))["slices"]
 
 
-def _main():
+def _main():  # pragma: no cover
     """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
     setup()
     ap = argparse.ArgumentParser(description="Rodero mesh -> SAX 3-class label volume (bd 1vl).")

@@ -35,7 +35,7 @@ from core.run import load_run
 log = logging.getLogger("cardioseg.soft_eval")
 
 
-def _val(run: Path):
+def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
     d = from_json(run / "config.json").generator.data
     meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
     _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -47,7 +47,7 @@ def _ef(edv: float, esv: float) -> float:
     return (edv - esv) / edv * 100.0 if edv > 0 else float("nan")
 
 
-def evaluate(run: Path):
+def evaluate(run: Path):  # pragma: no cover  (loads the model + runs GPU inference over real val cases)
     dev = resolve_device()
     model, _, _ = load_run(run, dev)
     rows, conf_all, corr_all = [], [], []
@@ -78,7 +78,7 @@ def evaluate(run: Path):
     return a, ece(conf, corr)[0]
 
 
-def main():
+def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
     setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
