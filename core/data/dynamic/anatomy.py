@@ -207,7 +207,7 @@ def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
     fg = vol > 0
     if not fg.any():
         return vol
-    zs, ys, xs = np.where(fg)
+    _, ys, xs = np.where(fg)                    # z discarded — bbox is in-plane (ys, xs) only
     cur = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1
     f = target_px / max(cur, 1)
     if abs(f - 1.0) < _ZOOM_NOOP_EPS:

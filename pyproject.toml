@@ -47,7 +47,7 @@ testpaths = ["tests"]
 # later axis (bd rp8l).
 [tool.ruff]
 line-length = 120
-extend-exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
+extend-exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs", "whitelist.py"]
 
 [tool.ruff.lint]
 select = [
@@ -85,7 +85,7 @@ select = [
 # eats entry-point/no-fan-in false positives). ignore_names/decorators kill the pydantic FPs (a
 # ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
 [tool.vulture]
-paths = ["core", "cardioseg"]
+paths = ["core", "cardioseg", "whitelist.py"]
 exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
 min_confidence = 60
 ignore_names = ["model_config"]
