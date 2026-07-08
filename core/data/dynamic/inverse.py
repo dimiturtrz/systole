@@ -111,18 +111,17 @@ def _main():
     log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
     log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
     log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
-    if args.out or True:
-        heart = (tg[0] > 0).numpy()
-        def show(t):
-            v = t[0, 0].numpy().copy()
-            m = v[heart]
-            v = (v - m.mean()) / (m.std() + 1e-6)
-            v = np.clip((v + 2) / 4, 0, 1); v[~heart] = 0
-            return (v * 255).astype(np.uint8)
-        montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
-        out = args.out or (str(Path(args.npz).with_suffix("")) + "_fit.png")
-        Image.fromarray(montage).save(out)
-        log.info(f"  wrote {out}  (real | recon, heart region)")
+    heart = (tg[0] > 0).numpy()
+    def show(t):
+        v = t[0, 0].numpy().copy()
+        m = v[heart]
+        v = (v - m.mean()) / (m.std() + 1e-6)
+        v = np.clip((v + 2) / 4, 0, 1); v[~heart] = 0
+        return (v * 255).astype(np.uint8)
+    montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
+    out = args.out or (str(Path(args.npz).with_suffix("")) + "_fit.png")
+    Image.fromarray(montage).save(out)
+    log.info(f"  wrote {out}  (real | recon, heart region)")
 
 
 if __name__ == "__main__":

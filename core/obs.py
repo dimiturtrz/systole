@@ -69,7 +69,7 @@ class timed:
         self.log.info("START %s", self.msg)
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *_):
         self.log.info("DONE  %s (%.2fs)", self.msg, time.perf_counter() - self.t)
 
 

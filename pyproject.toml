@@ -78,6 +78,19 @@ select = [
 "tests/**" = ["PLR2004", "FBT"]       # literal fixtures + bool test flags are fine in tests
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
 
+# Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg ONLY
+# (NOT tests): a prod symbol referenced solely by a test then surfaces as dead here, instead of being
+# masked by its test fan-in (the trap that fools both vulture and coverage). CI runs two tiers —
+# conf>=80 blocks (near-certain: redundant conditions, unused locals), conf>=60 warns (dead funcs, but
+# eats entry-point/no-fan-in false positives). ignore_names/decorators kill the pydantic FPs (a
+# ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
+[tool.vulture]
+paths = ["core", "cardioseg"]
+exclude = ["baselines", "cardioview", "mri-sim", ".staging", "runs"]
+min_confidence = 60
+ignore_names = ["model_config"]
+ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only
 # packages pinned via [tool.uv.sources] draw from this index.
