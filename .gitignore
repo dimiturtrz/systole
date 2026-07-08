@@ -62,3 +62,8 @@ mlartifacts/
 # form uses U+F03A so it won't match here — the resolver is what actually prevents it.
 D:/
 data/volumetric/
+
+# coverage.py artifacts
+.coverage
+coverage.xml
+htmlcov/
