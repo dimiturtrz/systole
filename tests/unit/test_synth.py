@@ -60,6 +60,29 @@ def test_tissue_params_field_shifts_and_bg_distinct():
     assert bg.unique().numel() == 6                             # all distinct (collision fixed)
 
 
+# Legacy generation points that knowingly sit OUTSIDE the in-vivo literature band — real discrepancies,
+# not drift, each an 04bh retune candidate (NOT changed here — would confound the mdem/9vp6 re-baseline):
+#   myocardium 1.5T T2=40 : in-vivo mapping is 45-56 [S3]; raising it is a myo-separability lever (bd b6tb).
+#   lung 3.0T T1=1550     : above the sourced 1000-1400 band, but lung is near-signal-void (PD 0.15) and
+#                           its T1 is poorly-constrained/secondary in the literature — barely load-bearing.
+_KNOWN_OUT_OF_BAND = {("myocardium", 1.5, "T2"), ("lung", 3.0, "T1")}
+
+
+def test_tissue_points_inside_literature_ranges():
+    """SSOT guard (bd 276/04bh): every TISSUE point sits INSIDE its TISSUE_RANGE band (so the per-sample
+    sampler draws around a physically-consistent centre), except the documented known discrepancies.
+    Catches point/range drift; a new out-of-band point fails until it's explained."""
+    from core.data.dynamic.mri_physics import TISSUE_RANGE, tissue_range
+    for name, fields in TISSUE.items():
+        for field, (t1, t2, _pd) in fields.items():
+            (t1lo, t1hi), (t2lo, t2hi) = tissue_range(name, field)
+            if (name, field, "T1") not in _KNOWN_OUT_OF_BAND:
+                assert t1lo <= t1 <= t1hi, f"{name}@{field}T T1 {t1} outside [{t1lo},{t1hi}]"
+            if (name, field, "T2") not in _KNOWN_OUT_OF_BAND:
+                assert t2lo <= t2 <= t2hi, f"{name}@{field}T T2 {t2} outside [{t2lo},{t2hi}]"
+    assert set(TISSUE_RANGE) == set(TISSUE)                       # same tissue vocabulary
+
+
 # --- generation ---
 def test_shape_and_zscore():
     img, msk = synthesize_from_labels(_mask(), SynthCfg(synth_p=1.0, bg=FlatBgCfg()), N)

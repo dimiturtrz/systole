@@ -29,6 +29,19 @@ TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
 }
 _FIELD_1P5T = 1.5                            # tesla; the low-field column (else use the 3T flip value)
 
+# tissue -> field -> ((T1_min,T1_max),(T2_min,T2_max)) ms: the literature SPREAD (inter-subject +
+# inter-study/method), for per-sample physical sampling (bd 04bh). Prefer in-vivo mapping over the
+# in-vitro Stanisz table for myo/blood. Full sourcing + confidence flags:
+# research/deep_dives/2026-07-08_tissue_relaxation_ranges.md. TISSUE points sit inside these bands.
+TISSUE_RANGE: dict[str, dict[float, tuple[tuple[float, float], tuple[float, float]]]] = {
+    "blood":      {1.5: ((1350.0, 1550.0), (200.0, 290.0)), 3.0: ((1550.0, 2100.0), (100.0, 165.0))},
+    "myocardium": {1.5: (( 950.0, 1050.0), ( 45.0,  56.0)), 3.0: ((1150.0, 1300.0), ( 45.0,  52.0))},
+    "fat":        {1.5: (( 250.0,  380.0), (100.0, 165.0)), 3.0: (( 370.0,  450.0), (100.0, 220.0))},
+    "lung":       {1.5: (( 800.0, 1300.0), ( 40.0,  50.0)), 3.0: ((1000.0, 1400.0), ( 30.0,  50.0))},
+    "liver":      {1.5: (( 500.0,  650.0), ( 40.0, 102.0)), 3.0: (( 700.0,  900.0), ( 30.0,  50.0))},
+    "muscle":     {1.5: (( 870.0, 1100.0), ( 35.0,  50.0)), 3.0: ((1300.0, 1450.0), ( 30.0,  50.0))},
+}
+
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
 _HEART = {1: "blood", 2: "myocardium", 3: "blood"}
 # background intensity ladder dark -> bright; bg tiers INTERPOLATE params along it (no collisions, any K).
@@ -145,6 +158,14 @@ def banding(T2: torch.Tensor, TR: torch.Tensor, dphi) -> torch.Tensor:
 def _params(name: str, field: float) -> tuple[float, float, float]:
     """(T1,T2,PD) for a tissue at the nearest tabulated field strength."""
     table = TISSUE[name]
+    f = min(table, key=lambda k: abs(k - field))
+    return table[f]
+
+
+def tissue_range(name: str, field: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    """((T1_min,T1_max),(T2_min,T2_max)) ms for a tissue at the nearest tabulated field — the literature
+    spread the per-sample sampler (bd 04bh) draws over. See TISSUE_RANGE."""
+    table = TISSUE_RANGE[name]
     f = min(table, key=lambda k: abs(k - field))
     return table[f]
 
