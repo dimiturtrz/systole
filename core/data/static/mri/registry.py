@@ -20,7 +20,3 @@ def get_adapter(name: str) -> DatasetAdapter:
     if name not in _ADAPTERS:
         raise KeyError(f"unknown dataset {name!r}; have {sorted(_ADAPTERS)}")
     return _ADAPTERS[name]
-
-
-def dataset_names() -> list[str]:
-    return sorted(_ADAPTERS)
