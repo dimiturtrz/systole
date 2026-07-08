@@ -96,13 +96,19 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
   **Dependency rule: core imports NEITHER cardioseg NOR cardioview** (still true) — but note
   `data/dynamic` holds MRI-specific batch generation, so the old "modality-agnostic" phrasing is
   loosened by owner decision: core is the shared kernel, not strictly modality-neutral. (bd cardiac-seg-t8p)
-- **Config classes live with the class they configure** (before-init pydantic dataclasses): `ModelCfg`
-  in `core/model.py`, `N4Cfg` in `core/preprocessing/n4.py`, `DataCfg` in `core/data/static/store.py`,
-  `AugCfg`/`SynthCfg`/`GeneratorCfg` in `core/data/dynamic/{augment,synth,generator}.py`. `TrainCfg`
-  (composition root) + `LossCfg` (its builder is in cardioseg, which core can't import) stay in
-  `core/hparams.py`, which imports the dispersed cfgs to assemble `TrainCfg` and re-exports them all
-  for back-compat. Shared `_VALIDATE = ConfigDict(validate_assignment=True)` lives in `core/config.py`
-  (a leaf both hparams and the cfg homes import without cycling).
+- **Config classes live with the class they configure** (pydantic `BaseModel`s, `validate_assignment`):
+  `ModelCfg` in `core/model.py`, `N4Cfg` in `core/preprocessing/n4.py`, `DataCfg` in
+  `core/data/static/store.py`, `AugCfg`/`SynthCfg`/`GeneratorCfg` in
+  `core/data/dynamic/{augment,synth,generator}.py`, `LossCfg`+variants in `core/losses.py` (co-located
+  with the loss classes so a cfg builds its own loss). `TrainCfg` (composition root) stays in
+  `core/hparams.py`, which imports the dispersed cfgs to assemble it + re-exports for back-compat.
+  Shared `_VALIDATE = ConfigDict(validate_assignment=True)` lives in `core/config.py` (a leaf all import
+  without cycling).
+- **Config polymorphism**: a cfg that selects a STRATEGY is a pydantic **discriminated union** — each
+  variant owns its params + a virtual `build()` that instantiates its object (`cfg.loss.build()`,
+  `cfg.acq.build()`, `cfg.bg.build()`). No `kind`/type dispatch (that's the serialization tag only).
+  `--set X.kind=`/`X.mode=` rebuilds the variant (an `apply_overrides` shim); a `_lift_legacy` before-
+  validator keeps old flat `config.json` loadable so registered models are unaffected. (bd cardiac-seg-bdw4)
 - `cardioseg/` — training + eval *orchestration* on top of core: the pipeline ACDC/M&M-2/M&Ms-1/CMRxMotion
   → adapters (canonical labels 0=bg/1=RV/2=LV-myo/3=LV-cav) → consolidated store → 2D MONAI U-Net → EF
   → evaluate. Holds `training/`, `evaluation/` (validate/distribution/ensemble/calibrate/…),
@@ -117,6 +123,23 @@ uv run python -m cardioseg.training.train --out runs/foo   # any entrypoint via 
 - `research/` — deep-dives; `learning/` — theory writeups. Public docs = README + `docs/PLAN.md` + `docs/ROADMAP.md`. The
   domain-shift / variance-taxonomy canonical doc lives in `cardioseg/preprocessing/normalization/README.md`.
 - Numbers are single-sourced: `cardioseg/RESULTS.json` ← `evaluation/results.py`; `cardioseg/evaluation/sync_numbers.py` fills doc marker blocks.
+
+## Static analysis — the ruff gate (bd cardiac-seg-l79o)
+
+CI requires `tests` + `lint` on dev→main (branch protection). `lint` = **enforced** ruff (pinned
+`uvx ruff@0.15.13 check core cardioseg --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415,FBT,RUF100`)
++ an **advisory** full run (`ruff check . --statistics || true`) that surfaces families still being
+cleaned. **Ratchet**: a family graduates into the enforced `--select` once it hits 0 — fix it, don't
+dodge (no limit-bumps, no noqa spray). The linter is a **bug-finder** (it caught an F821 NameError and
+a comment jammed mid-expression that dead-coded a physics term), not cosmetics. What the gate encodes:
+logging not prints (T201), named constants not magic numbers (PLR2004), keyword-only bools (FBT),
+specific-exception-or-let-it-crash (BLE001/S110 — no blind `except`), low complexity / strategy pattern
+(C901/PLR0912/0915), config objects over long arg lists (PLR0913), imports-at-top (PLC0415 — fix
+circulars by **extraction**, never lazy imports), **no dead noqa** (RUF100). noqa policy: **bare
+`# noqa: RULE`** — no prose reasons. **Minimal comments** — prefer self-documenting code + names.
+`getattr`/`hasattr` on a constant attr is a smell (B009 catches the no-default form). E501 stays
+advisory (the dense hand-tuned style). Config `pyproject [tool.ruff]`; evaluating vulture + coverage
+next (advisory).
 
 ## Conventions & Patterns
 
