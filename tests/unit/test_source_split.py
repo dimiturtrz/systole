@@ -118,6 +118,17 @@ def test_composite_generator_dispatches_by_index_range():
     assert int((x2 == 1.0).sum()) == 4 and int((x2 == 2.0).sum()) == 4
 
 
+def test_synth_composite_split_resolves_to_composite_source():
+    """The registered synth_composite split's train is a CompositeSource of SSM + pathology sources —
+    the real consumer of the composition mechanism (so it isn't dead code)."""
+    from core.data.dynamic.source import CompositeSource
+    from core.data.ingest.splits import list_splits, load_split
+    assert "synth_composite" in list_splits()
+    train = load_split("synth_composite").versions["1.0.0"].train(None)   # synth train ignores the cloud
+    assert isinstance(train, CompositeSource) and len(train.sources) == 2
+    assert train.provenance()["kind"] == "composite"
+
+
 def test_composite_source_unions_children(monkeypatch):
     """CompositeSource builds one CompositeGenerator over its child sources (each keeps its own bg);
     n = sum of pool sizes, provenance lists every child."""
