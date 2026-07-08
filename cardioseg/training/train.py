@@ -80,19 +80,19 @@ def apply_cli_args(cfg: TrainCfg, args) -> TrainCfg:
     set, the store-flags folded in, then the deep `--set` overrides applied last (so --set wins). The
     coded --split is applied by the caller (it needs list_splits validation) before this. Pure mapping —
     no IO, so the whole CLI contract is testable without training."""
+    a = args if isinstance(args, dict) else vars(args)         # Namespace -> dict; also accept a plain dict
     for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
-        v = getattr(args, attr, None)
-        if v is not None:
-            setattr(cfg, attr, v)
-    if getattr(args, "n4", False):
+        if a.get(attr) is not None:
+            setattr(cfg, attr, a[attr])
+    if a.get("n4"):
         cfg.generator.data.n4 = True
-    if getattr(args, "ef_learn", False):
+    if a.get("ef_learn"):
         cfg.ef_learn = True
-    if getattr(args, "ef_kaggle", False):
+    if a.get("ef_kaggle"):
         cfg.ef_kaggle = True
-    if getattr(args, "out", None):
-        cfg.out_dir = args.out
-    apply_overrides(cfg, getattr(args, "overrides", []) or [])
+    if a.get("out"):
+        cfg.out_dir = a["out"]
+    apply_overrides(cfg, a.get("overrides") or [])
     return cfg
 
 

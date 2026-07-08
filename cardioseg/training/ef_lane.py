@@ -29,7 +29,7 @@ from .volumes import vol_loss
 
 
 # ---- shared primitives ------------------------------------------------------------------------
-def _stack(vol, size: int, device: str) -> torch.Tensor:  # pragma: no cover  (per-slice fit_square -> device tensor; the volume-lane IO glue)
+def _stack(vol, size: int, device: str) -> torch.Tensor:
     """[D,H,W] numpy -> [D,1,size,size] float32 on device (grid-fit, no augmentation)."""
     slices = [torch.from_numpy(fit_square(vol[z], size, 0.0)) for z in range(vol.shape[0])]
     return torch.stack(slices)[:, None].to(device)

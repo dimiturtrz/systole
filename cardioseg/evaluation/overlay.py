@@ -64,7 +64,7 @@ def _panel(ax, img, mask, title):  # pragma: no cover  (matplotlib imshow render
     ax.axis("off")
 
 
-def _case(model, path, size, device):  # pragma: no cover  (load_arrays + GPU predict_volume per case; scoring policy is pick_hero_cases)
+def _case(model, path, size, device):
     case = load_arrays(path)
     spacing = tuple(float(s) for s in case["spacing"])
     pred_ed = largest_cc_per_class(predict_volume(model, case["ed_img"], size, device, tta=True))

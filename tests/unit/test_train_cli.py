@@ -148,6 +148,13 @@ def test_apply_cli_args_returns_same_cfg():
     assert apply_cli_args(cfg, _args()) is cfg
 
 
+def test_apply_cli_args_accepts_plain_dict():
+    """Input-type class: a plain dict works like a Namespace (vars-normalized, no getattr)."""
+    cfg = TrainCfg()
+    apply_cli_args(cfg, {"batch": 16, "n4": True})
+    assert cfg.batch == 16 and cfg.generator.data.n4 is True
+
+
 # --- _val_dice: the early-stop Dice signal (pure batched tensor math; a fixed-logit model stands in
 #     for the U-Net, so the GPU is not needed). Foreground classes = (1,2,3), bg=0. ---
 class _EchoModel(torch.nn.Module):

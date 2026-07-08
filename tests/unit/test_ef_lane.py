@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-from cardioseg.training.ef_lane import _zscore, build_aux, ef_ratio, ef_ratio_loss
+from cardioseg.training.ef_lane import _stack, _zscore, build_aux, ef_ratio, ef_ratio_loss
 
 
 def test_ef_ratio_matches_hand_formula():
@@ -85,3 +85,11 @@ def test_build_aux_off_when_lambda_nonpositive():
 def test_build_aux_off_when_not_static():
     """Source class: a non-static train source has no labeled EDV/ESV frame -> empty list."""
     assert build_aux(_cfg(ef_lambda=1.0), None, None, "cpu", is_static=False) == []
+
+
+# --- _stack: [D,H,W] numpy -> [D,1,size,size] device tensor (pure grid-fit, runs on CPU) ---
+def test_stack_shapes_dtype_device():
+    """Fit class: each slice grid-fit to size, stacked to [D,1,size,size] float32 on the given device."""
+    vol = np.zeros((3, 20, 24), np.float32); vol[:, 5:15, 5:15] = 1.0
+    t = _stack(vol, 16, "cpu")
+    assert t.shape == (3, 1, 16, 16) and t.dtype == torch.float32 and t.device.type == "cpu"
