@@ -345,9 +345,9 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     check_multiseed_split(seeds, d.split)
     device = resolve_device(cfg.device)
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
-    log.info("device=%s torch=%s seeds=%s | split=%s | criteria datasets=%s vendors=%s", device,
-             torch.__version__, seeds, d.split or "(legacy criteria)",
-             list(d.test_datasets), list(d.test_vendors))
+    log.info("device=%s torch=%s cudnn.benchmark=%s seeds=%s | split=%s | criteria datasets=%s vendors=%s",
+             device, torch.__version__, torch.backends.cudnn.benchmark, seeds,
+             d.split or "(legacy criteria)", list(d.test_datasets), list(d.test_vendors))
 
     # split = criteria over the consolidated store (builds processed/<ds>/ if missing). A coded split
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
