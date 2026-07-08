@@ -56,11 +56,10 @@ jobs:
           enable-cache: true
       - name: Install dependencies (locked, + dev extra for pytest)
         run: uv sync --frozen --extra dev
-      - name: Unit tests
-        run: uv run pytest tests/unit -q
-      # ADVISORY (bd cardiac-seg-emko): full suite under coverage, prints term-missing in the log,
-      # never blocks (no --cov-fail-under yet). Integration tests skip cleanly on the data-less runner.
-      # Config (source/omit/exclude) is in [tool.coverage.*]. Ratchet: set a fail-under floor once a
-      # baseline is agreed, then raise it.
-      - name: Coverage — advisory (non-blocking)
-        run: uv run pytest tests --cov --cov-report=term-missing -q || true
+      # One instrumented run = the test gate AND the coverage report (no double suite execution).
+      # Tests BLOCK on failure; coverage is ADVISORY — it only prints term-missing (no --cov-fail-under,
+      # so it never fails the build). Config (source/omit/exclude) is in [tool.coverage.*]. Integration
+      # tests skip cleanly on the data-less runner. Ratchet (bd cardiac-seg-emko): add a fail-under floor
+      # once a baseline is agreed, then raise it.
+      - name: Tests + coverage (coverage advisory)
+        run: uv run pytest tests --cov --cov-report=term-missing -q
