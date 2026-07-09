@@ -8,21 +8,24 @@ import numpy as np
 import polars as pl
 import pytest
 
-from core.data.static.store import query
-from core.data.static.store.build import load
+from core.data.static.mri.registry import AdapterRegistry
+from core.data.static.store.build import Build
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import (
     AcqReference,
     MetaBuilder,
-    _age_band,
-    _bsa,
-    _is_labelled,
-    _norm_vendor,
-    _region_of,
-    dataset_dir,
-    load_arrays,
-    param_key,
+    Store,
 )
+
+_region_of = MetaBuilder._region_of
+_bsa = MetaBuilder._bsa
+_age_band = MetaBuilder._age_band
+_norm_vendor = MetaBuilder._norm_vendor
+_is_labelled = MetaBuilder._is_labelled
+param_key = Store.param_key
+dataset_dir = Store.dataset_dir
+load_arrays = Store.load_arrays
+load = Build.load
 
 
 # --- _region_of: mapped country / unmapped / null ---
@@ -236,7 +239,7 @@ def test_migrate_meta_rewrites_registered(tmp_path, monkeypatch):
     """A registered adapter's processed dir is re-emitted with the current schema (no image reload)."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     _fake_processed(tmp_path, "acdc")
-    monkeypatch.setattr(query, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
+    monkeypatch.setattr(AdapterRegistry, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
     out = MetaBuilder.migrate()
     assert len(out) == 1 and out[0].name == "meta.csv"
     df = pl.read_csv(out[0], schema_overrides={"labelled": pl.Boolean})
@@ -247,7 +250,7 @@ def test_migrate_meta_names_filter(tmp_path, monkeypatch):
     """`names` restricts which stores refresh; a non-matching processed dir is skipped."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     _fake_processed(tmp_path, "acdc")
-    monkeypatch.setattr(query, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
+    monkeypatch.setattr(AdapterRegistry, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
     assert MetaBuilder.migrate(["mnm2"]) == []                       # acdc present but not in names -> skipped
 
 

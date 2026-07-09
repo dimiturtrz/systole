@@ -13,12 +13,12 @@ SYNTH train pool is mocked tiny (one load_pool patch) so the dynamic/composite e
 import numpy as np
 import pytest
 
-from cardioseg.training.train import train_seg
+from cardioseg.training.train import Train
 from core.data.ingest.source import StaticSource
-from core.data.static.mri.acdc import acdc_cases
+from core.data.static.mri.acdc import AcdcAdapter
 from core.hparams import TrainCfg
 
-needs_data = pytest.mark.skipif(not acdc_cases(), reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
+needs_data = pytest.mark.skipif(not AcdcAdapter().cases(), reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
 
 
 class _NoTrk:
@@ -37,7 +37,7 @@ def test_train_seg_e2e_smoke(split, tmp_path, monkeypatch):
     # few real npz (else the full-ACDC val preload dominates at minutes), no-op tracking (no mlflow).
     _orig_paths = StaticSource.paths
     monkeypatch.setattr(StaticSource, "paths", lambda self, _o=_orig_paths: _o(self)[:4])
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((20, 32, 32), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((20, 32, 32), np.int64))
     monkeypatch.setattr("cardioseg.training.train.track_run", lambda *a, **k: _NoTrk())
 
     cfg = TrainCfg()
@@ -48,7 +48,7 @@ def test_train_seg_e2e_smoke(split, tmp_path, monkeypatch):
     cfg.generator.data.split = split
     cfg.generator.data.size = 32                          # tiny input — pool mock is 32², val resized to match
 
-    model, results = train_seg(cfg, quick=True, seeds=[0])
+    model, results = Train.train_seg(cfg, quick=True, seeds=[0])
 
     assert model is not None
     dm = results["val"]["dice_mean"]

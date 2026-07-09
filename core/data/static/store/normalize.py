@@ -11,12 +11,12 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from core.config import DEFAULT_INPLANE
-from core.data.static.mri.registry import get_adapter
-from core.data.static.reference import Reference, reference_dir
+from core.data.static.mri.registry import AdapterRegistry
+from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS
 from core.preprocessing.n4 import N4Cfg
-from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
-from core.preprocessing.preprocess import preprocess_case, resample_inplane
+from core.preprocessing.nyul import LANDMARKS, Nyul
+from core.preprocessing.preprocess import Preprocess
 
 
 class Normalizer:
@@ -33,13 +33,13 @@ class Normalizer:
 
     def apply_case(self, case: Path, loader) -> dict:
         """Consolidate ONE raw case to the recipe's processed arrays (resample [+N4] [+Nyúl] + norm)."""
-        return preprocess_case(case, target_inplane=self.inplane, loader=loader,
+        return Preprocess.preprocess_case(case, target_inplane=self.inplane, loader=loader,
                                n4=self.n4, n4_params=self.n4_params,
                                nyul_standard=self.nyul_standard if self.nyul else None, norm=self.norm)
 
     @staticmethod
     def ref_path() -> Path:
-        return reference_dir() / "nyul.yaml"
+        return Reference.reference_dir() / "nyul.yaml"
 
     @staticmethod
     def load_standard() -> "np.ndarray | None":
@@ -56,14 +56,14 @@ class Normalizer:
         names = SOURCE_DATASETS if names is None else names
         rows = []
         for name in names:
-            adapter = get_adapter(name)
+            adapter = AdapterRegistry.get_adapter(name)
             for case in adapter.cases()[:per_dataset]:
                 d = adapter.load_ed_es(case)
                 if "ED" not in d:
                     continue
-                img, _ = resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
-                rows.append(image_landmarks(img))
-        std = fit_standard(np.stack(rows))
+                img, _ = Preprocess.resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
+                rows.append(Nyul.image_landmarks(img))
+        std = Nyul.fit_standard(np.stack(rows))
         p = Normalizer.ref_path(); p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Nyúl standard landmark scale (harmonization qfz) — fit by Normalizer.fit_standard\n"
                      + OmegaConf.to_yaml(OmegaConf.create({"nyul": {"standard": {

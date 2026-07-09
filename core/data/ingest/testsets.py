@@ -54,26 +54,36 @@ class TestSet:
         return s
 
 
-def _ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
-    """A TestSet with its lock pulled from the committed lockfile (empty until --freeze)."""
-    return TestSet(name, task, predicate, _LOCKS.get(name, ""))
+class TestSets:
+    """Factory + drift-computation helpers for the module's frozen TestSet constants (siblings
+    `TestSets._ts(...)`). Holds no state — the TestSet instances live at module level."""
+
+    @staticmethod
+    def _ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
+        """A TestSet with its lock pulled from the committed lockfile (empty until --freeze)."""
+        return TestSet(name, task, predicate, _LOCKS.get(name, ""))
+
+    @staticmethod
+    def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
+        """Recompute every TestSet's lock (content hash) over `cloud`."""
+        return {ts.name: StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash() for ts in _ALL}
 
 
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
-CANON = _ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
-GE = _ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
-CMRXMOTION = _ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
-ACDC = _ts("acdc", "seg4", V("dataset") == "acdc")
-MNM2 = _ts("mnm2", "seg4", V("dataset") == "mnm2")
-MNMS1 = _ts("mnms1", "seg4", V("dataset") == "mnms1")
-SCD_LV = _ts("scd_lv", "seg_lv", V("dataset") == "scd")
+CANON = TestSets._ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
+GE = TestSets._ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
+CMRXMOTION = TestSets._ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
+ACDC = TestSets._ts("acdc", "seg4", V("dataset") == "acdc")
+MNM2 = TestSets._ts("mnm2", "seg4", V("dataset") == "mnm2")
+MNMS1 = TestSets._ts("mnms1", "seg4", V("dataset") == "mnms1")
+SCD_LV = TestSets._ts("scd_lv", "seg_lv", V("dataset") == "scd")
 
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
-STATIC_MAIN_TEST = _ts("static_main_test", "seg4",
-                       _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
+STATIC_MAIN_TEST = TestSets._ts("static_main_test", "seg4",
+                                _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
-SYNTH_MAIN_TEST = _ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
+SYNTH_MAIN_TEST = TestSets._ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
 
 # the matrix's default granular battery (over-held models score OOD on the ones they didn't train)
 MATRIX_TESTSETS: list[TestSet] = [CANON, GE, CMRXMOTION, ACDC, MNM2, MNMS1, SCD_LV]
@@ -85,22 +95,17 @@ TESTSETS: dict[str, TestSet] = {ts.name: ts for ts in _ALL}     # lookup by name
 EVAL_SOURCES = ["acdc", "mnm2", "mnms1", "cmrxmotion", "scd"]
 
 
-def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
-    """Recompute every TestSet's lock (content hash) over `cloud`."""
-    return {ts.name: StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash() for ts in _ALL}
-
-
 if __name__ == "__main__":
     import argparse
 
-    from core.data.static.store import build as store
-    from core.obs import setup
-    setup()
+    from core.data.static.store.build import Build as store
+    from core.obs import Obs
+    Obs.setup()
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
     ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
     ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
     args = ap.parse_args()
-    fresh = compute_locks(store.load(EVAL_SOURCES))
+    fresh = TestSets.compute_locks(store.load(EVAL_SOURCES))
     if args.freeze:
         _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
         log.info(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")

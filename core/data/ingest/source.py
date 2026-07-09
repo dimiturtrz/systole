@@ -19,18 +19,24 @@ import torch
 
 from core.data.dynamic import dataset as _dataset
 from core.data.dynamic.generator import Generator
-from core.data.static.labels import valid_row
+from core.data.static.labels import Labels
 
 
-def ids_hash(subjects: list[tuple[str, str]]) -> str:
-    """sha256 of the sorted (dataset, subject_id) set — the freeze anchor / drift guard."""
-    blob = "\n".join(f"{d}\t{s}" for d, s in sorted(subjects))
-    return "sha256:" + hashlib.sha256(blob.encode()).hexdigest()
+class SubjectIds:
+    """The subject-identity primitives (free funcs folded in as staticmethods): the content-hash freeze
+    anchor and the '{dataset}\\t{subject_id}' key set — the lineage/leak-check surface shared by the
+    Source impls and the split builders."""
 
+    @staticmethod
+    def ids_hash(subjects: list[tuple[str, str]]) -> str:
+        """sha256 of the sorted (dataset, subject_id) set — the freeze anchor / drift guard."""
+        blob = "\n".join(f"{d}\t{s}" for d, s in sorted(subjects))
+        return "sha256:" + hashlib.sha256(blob.encode()).hexdigest()
 
-def subject_keys(df: pl.DataFrame) -> set[str]:
-    """The '{dataset}\\t{subject_id}' identity-key set for a frame — for join/leak/dedup checks."""
-    return set((df["dataset"] + "\t" + df["subject_id"].cast(pl.Utf8)).to_list())
+    @staticmethod
+    def subject_keys(df: pl.DataFrame) -> set[str]:
+        """The '{dataset}\\t{subject_id}' identity-key set for a frame — for join/leak/dedup checks."""
+        return set((df["dataset"] + "\t" + df["subject_id"].cast(pl.Utf8)).to_list())
 
 
 @runtime_checkable
@@ -65,19 +71,19 @@ class StaticSource:
                         (str(s) for s in self._f.get_column("subject_id").to_list()), strict=True))
 
     def ids_hash(self) -> str:
-        return ids_hash(self.subjects())
+        return SubjectIds.ids_hash(self.subjects())
 
     def resident(self, size: int, device: str):
         """Raw resident (X [N,1,H,W], Y [N,H,W]) — real slices, no transforms. Used for val/test scoring
         and as a train_gen's seed."""
-        return _dataset.load_to_gpu(self.paths(), size, device)
+        return _dataset.ACDCSliceDataset.load_to_gpu(self.paths(), size, device)
 
     def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
         """The source's own batch engine (owns its resident tensors + transform chain). Static = real
         pixels + the configured aug/DR-synth (gen_cfg.synth as-is: synth_p>0 -> physics-recontrast DR on
         real labels; the flagship recipe). No force_synth. Carries a per-slice partial-label mask when
         the source mixes datasets that annotate different classes (e.g. SCD = LV-only)."""
-        X, Y, owners = _dataset.load_to_gpu(self.paths(), size, device, return_owners=True)
+        X, Y, owners = _dataset.ACDCSliceDataset.load_to_gpu(self.paths(), size, device, return_owners=True)
         return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None,
                          valid=self._valid_mask(owners, n_classes, device))
 
@@ -85,7 +91,7 @@ class StaticSource:
         """Per-slice class-validity [N,C] bool (labels.valid_row of each slice's dataset). None if every
         slice is full-label — keeps the full-label path mask-free (loss stays on the standard recipe)."""
         ds = self._f.get_column("dataset").to_list()            # per-path dataset, aligned to paths()
-        rows = [valid_row(ds[o], n_classes) for o in owners.tolist()]
+        rows = [Labels.valid_row(ds[o], n_classes) for o in owners.tolist()]
         if all(all(r) for r in rows):
             return None
         return torch.tensor(rows, dtype=torch.bool, device=device)

@@ -15,8 +15,13 @@ _ADAPTERS: dict[str, DatasetAdapter] = {
 }
 
 
-def get_adapter(name: str) -> DatasetAdapter:
-    """Adapter for a dataset name (acdc / mnm2 / mnms1)."""
-    if name not in _ADAPTERS:
-        raise KeyError(f"unknown dataset {name!r}; have {sorted(_ADAPTERS)}")
-    return _ADAPTERS[name]
+class AdapterRegistry:
+    """Dataset adapter registry (staticmethod holder); named AdapterRegistry to avoid clashing with
+    core.registry.Registry (the mlflow model registry)."""
+
+    @staticmethod
+    def get_adapter(name: str) -> DatasetAdapter:
+        """Adapter for a dataset name (acdc / mnm2 / mnms1)."""
+        if name not in _ADAPTERS:
+            raise KeyError(f"unknown dataset {name!r}; have {sorted(_ADAPTERS)}")
+        return _ADAPTERS[name]

@@ -14,16 +14,10 @@ classes (upsample/downsample/identity; pad/crop; normal/zero/full/degenerate EF)
 import numpy as np
 import pytest
 
-from core.evaluate import (
-    assd,
-    dice,
-    hd95,
-    surface_distances,
-    surface_metrics,
-)
-from core.inference import predict_volume
-from core.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
-from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
+from core.evaluate import Evaluate
+from core.inference import Inference
+from core.measure import Measure
+from core.preprocessing.preprocess import Preprocess
 
 
 def _cube(d, hw, half, label=3, value=None):
@@ -55,10 +49,10 @@ def _cube(d, hw, half, label=3, value=None):
 ])
 def test_resample_then_fit_square_lands_on_grid(spacing_in, note):
     vol = np.random.rand(3, 48, 56).astype(np.float32)
-    res, sp = resample_inplane(vol, spacing_in, target_inplane=1.5)
+    res, sp = Preprocess.resample_inplane(vol, spacing_in, target_inplane=1.5)
     assert sp == (10.0, 1.5, 1.5)                       # spacing convention carried through
     size = 64
-    stack = np.stack([fit_square(s, size) for s in res])
+    stack = np.stack([Preprocess.fit_square(s, size) for s in res])
     assert stack.shape == (3, size, size), note         # both crop & pad paths reach the grid
     assert stack.dtype == res.dtype
 
@@ -66,8 +60,8 @@ def test_resample_then_fit_square_lands_on_grid(spacing_in, note):
 def test_mask_chain_preserves_integer_labels():
     """A label volume through resample(is_mask) -> fit_square stays integer-labelled (no blur)."""
     mask = _cube(3, 48, 10, label=3)
-    res, _ = resample_inplane(mask, (10.0, 3.0, 3.0), target_inplane=1.5, is_mask=True)
-    stack = np.stack([fit_square(s, 128) for s in res])  # 128 > resampled H,W -> pad path
+    res, _ = Preprocess.resample_inplane(mask, (10.0, 3.0, 3.0), target_inplane=1.5, is_mask=True)
+    stack = np.stack([Preprocess.fit_square(s, 128) for s in res])  # 128 > resampled H,W -> pad path
     assert set(np.unique(stack).tolist()).issubset({0, 3})
     assert stack.shape == (3, 128, 128)
 
@@ -75,9 +69,9 @@ def test_mask_chain_preserves_integer_labels():
 def test_zscore_then_fit_square_pad_is_background():
     """zscore centres the volume at ~0; fit_square pads with 0 -> padding == the mean (no bias)."""
     vol = (np.random.rand(2, 30, 30) * 50 + 100).astype(np.float32)  # uncalibrated intensities
-    z = zscore(vol)
+    z = Preprocess.zscore(vol)
     assert abs(float(z.mean())) < 1e-4
-    padded = np.stack([fit_square(s, 80) for s in z])   # 80 > 30 -> all-pad border
+    padded = np.stack([Preprocess.fit_square(s, 80) for s in z])   # 80 > 30 -> all-pad border
     border = padded[:, 0, 0]                              # a corner that is pure padding
     assert np.allclose(border, 0.0)                      # pad value sits at the z-score mean
 
@@ -86,12 +80,12 @@ def test_zscore_then_fit_square_pad_is_background():
 # fit_square'd label stacks are valid Dice inputs (same shape both sides -> no error).
 
 def test_squared_stacks_are_valid_dice_inputs():
-    a = np.stack([fit_square(_cube(1, 40, 8)[0], 64) for _ in range(4)])
-    b = np.stack([fit_square(_cube(1, 40, 5)[0], 64) for _ in range(4)])
-    assert dice(a, a, 3) == 1.0                           # identity
+    a = np.stack([Preprocess.fit_square(_cube(1, 40, 8)[0], 64) for _ in range(4)])
+    b = np.stack([Preprocess.fit_square(_cube(1, 40, 5)[0], 64) for _ in range(4)])
+    assert Evaluate.dice(a, a, 3) == 1.0                           # identity
     disjoint = np.zeros_like(a); disjoint[a == 0] = 3     # never overlaps a
-    assert dice(a, disjoint, 3) == 0.0                    # disjoint
-    assert 0.0 < dice(a, b, 3) < 1.0                      # partial (b inside a)
+    assert Evaluate.dice(a, disjoint, 3) == 0.0                    # disjoint
+    assert 0.0 < Evaluate.dice(a, b, 3) < 1.0                      # partial (b inside a)
 
 
 # === model -> measure / evaluate ==========================================
@@ -120,11 +114,11 @@ def test_predict_then_ejection_fraction():
     model = _ThreshModel()
     ed_vol = _cube(8, 64, 12, value=1.0)                  # large bright pool
     es_vol = _cube(8, 64, 7, value=1.0)                   # small bright pool
-    pred_ed = predict_volume(model, ed_vol, size=64, device="cpu")
-    pred_es = predict_volume(model, es_vol, size=64, device="cpu")
+    pred_ed = Inference.predict_volume(model, ed_vol, size=64, device="cpu")
+    pred_es = Inference.predict_volume(model, es_vol, size=64, device="cpu")
     assert pred_ed.shape == (8, 64, 64)
     assert set(np.unique(pred_ed).tolist()) == {0, 3}     # model emits bg + LV-cav only
-    ef, edv, esv = ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
+    ef, edv, esv = Measure.ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
     assert edv > esv > 0 and 0 < ef < 100
 
 
@@ -133,10 +127,10 @@ def test_predict_matches_groundtruth_threshold():
     pytest.importorskip("torch")
     model = _ThreshModel()
     vol = _cube(6, 64, 10, value=1.0)
-    pred = predict_volume(model, vol, size=64, device="cpu")
+    pred = Inference.predict_volume(model, vol, size=64, device="cpu")
     gt = np.where(vol > 0.5, 3, 0).astype(np.uint8)        # what the threshold model "should" give
-    assert dice(pred, gt, 3) == 1.0
-    assert hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance
+    assert Evaluate.dice(pred, gt, 3) == 1.0
+    assert Evaluate.hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance
 
 
 # === measure <-> evaluate (one mask pair feeds both) ======================
@@ -144,12 +138,12 @@ def test_predict_matches_groundtruth_threshold():
 def test_one_mask_pair_feeds_ef_and_overlap():
     ed, es = _cube(8, 64, 10), _cube(8, 64, 6)
     spacing = (10.0, 1.5, 1.5)
-    ef, edv, esv = ejection_fraction(ed, es, spacing)
+    ef, edv, esv = Measure.ejection_fraction(ed, es, spacing)
     assert edv > esv > 0 and 0 < ef < 100
-    assert np.isclose(edv, label_volume_ml(ed, 3, spacing))
-    assert dice(ed, ed, 3) == 1.0
-    assert dice(ed, es, 3) < 1.0
-    assert assd(ed, es, 3) > 0
+    assert np.isclose(edv, Measure.label_volume_ml(ed, 3, spacing))
+    assert Evaluate.dice(ed, ed, 3) == 1.0
+    assert Evaluate.dice(ed, es, 3) < 1.0
+    assert Evaluate.assd(ed, es, 3) > 0
 
 
 @pytest.mark.parametrize("ed_half,es_half,lo,hi", [
@@ -160,7 +154,7 @@ def test_one_mask_pair_feeds_ef_and_overlap():
 def test_ef_equivalence_classes(ed_half, es_half, lo, hi):
     ed = _cube(8, 64, ed_half)
     es = _cube(8, 64, es_half) if es_half else np.zeros((8, 64, 64), np.uint8)
-    ef, _, _ = ejection_fraction(ed, es, (10.0, 1.5, 1.5))
+    ef, _, _ = Measure.ejection_fraction(ed, es, (10.0, 1.5, 1.5))
     assert lo <= ef <= hi
 
 
@@ -168,20 +162,20 @@ def test_degenerate_ed_propagates_nan_not_crash():
     """Empty ED (EDV==0) -> EF NaN; evaluate stays defined on the same input (no crash)."""
     empty = np.zeros((8, 64, 64), dtype=np.uint8)
     es = _cube(8, 64, 6)
-    ef, edv, _ = ejection_fraction(empty, es, (10.0, 1.5, 1.5))
+    ef, edv, _ = Measure.ejection_fraction(empty, es, (10.0, 1.5, 1.5))
     assert edv == 0 and np.isnan(ef)
-    assert dice(empty, empty, 3) == 1.0                   # vacuous overlap defined
-    sd = surface_distances(empty, es, 3)
+    assert Evaluate.dice(empty, empty, 3) == 1.0                   # vacuous overlap defined
+    sd = Evaluate.surface_distances(empty, es, 3)
     assert sd.size == 0 or np.all(np.isnan(sd))           # absent label -> empty/nan, not error
 
 
 def test_ef_invariant_to_spacing_volumes_scale():
     """EF is a ratio -> spacing cancels; absolute volumes scale by the voxel-volume factor."""
     ed, es = _cube(8, 64, 10), _cube(8, 64, 6)
-    ef1, edv1, _ = ejection_fraction(ed, es, (10.0, 1.5, 1.5))
-    ef2, edv2, _ = ejection_fraction(ed, es, (5.0, 0.75, 0.75))  # every dim halved -> 1/8 volume
+    ef1, edv1, _ = Measure.ejection_fraction(ed, es, (10.0, 1.5, 1.5))
+    ef2, edv2, _ = Measure.ejection_fraction(ed, es, (5.0, 0.75, 0.75))  # every dim halved -> 1/8 volume
     assert np.isclose(ef1, ef2)
-    assert np.isclose(edv2 / edv1, voxel_volume_ml((5.0, 0.75, 0.75)) / voxel_volume_ml((10.0, 1.5, 1.5)))
+    assert np.isclose(edv2 / edv1, Measure.voxel_volume_ml((5.0, 0.75, 0.75)) / Measure.voxel_volume_ml((10.0, 1.5, 1.5)))
 
 
 # === surface chain: distances -> metrics -> hd/hd95/assd ==================
@@ -190,8 +184,8 @@ def test_surface_metric_ordering_is_consistent():
     """surface_distances -> surface_metrics agrees with the hd/hd95/assd helpers, mean<=p95<=max."""
     a = _cube(8, 64, 12)
     b = _cube(8, 64, 8)                                    # concentric -> a gap all around
-    sd = surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
-    m = surface_metrics(sd)
+    sd = Evaluate.surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
+    m = Evaluate.surface_metrics(sd)
     assert m["assd"] <= m["hd95"] <= m["hd"]               # mean <= 95th pct <= max
-    assert np.isclose(m["hd95"], hd95(a, b, 3, (1.5, 1.5, 1.5)))
-    assert np.isclose(m["assd"], assd(a, b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(m["hd95"], Evaluate.hd95(a, b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(m["assd"], Evaluate.assd(a, b, 3, (1.5, 1.5, 1.5)))

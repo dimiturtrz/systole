@@ -22,9 +22,9 @@ from pathlib import Path
 
 import numpy as np
 
-from core.data.static.mri.base import load_nifti
-from core.evaluate import hd95, dice as dice1
-from core.measure import ejection_fraction
+from core.data.static.mri.base import Base
+from core.evaluate import Evaluate
+from core.measure import Measure
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
@@ -44,13 +44,13 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
         gf = gt_dir / pf.name
         if not gf.exists():
             continue
-        pred, sp = load_nifti(pf)
-        gt, _ = load_nifti(gf)
+        pred, sp = Base.load_nifti(pf)
+        gt, _ = Base.load_nifti(gf)
         stem = pf.name[:-7]                     # strip .nii.gz
         pid = stem.rsplit("_", 1)[0] if "_" in stem else stem
         for c in CLASSES:
-            percase[pid][c].append(dice1(pred, gt, c))    # per-frame dice (macro-aggregated below)
-            h = hd95(pred, gt, c, sp)
+            percase[pid][c].append(Evaluate.dice(pred, gt, c))    # per-frame dice (macro-aggregated below)
+            h = Evaluate.hd95(pred, gt, c, sp)
             if not np.isnan(h):
                 hds[c].append(h)
         if "_" in stem:
@@ -74,8 +74,8 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
     for pid, ph in frames.items():
         if "ED" in ph and "ES" in ph:
             sp = ph["ED"][2]
-            ef_p, *_ = ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
-            ef_g, *_ = ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
+            ef_p, *_ = Measure.ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
+            ef_g, *_ = Measure.ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
             diffs.append(ef_p - ef_g)
     out = {"dice": {**dice, "mean": round(mean_dice, 3)}, "hd95": hd95d, "ef_mae": float("nan")}
     if diffs:

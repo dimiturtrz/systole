@@ -33,16 +33,16 @@ from common import (
 from geometry import bbox_slices, nearest_index
 from PIL import Image
 
-from core.config import data_root
+from core.config import Config
 from core.data.static import splits, store
-from core.data.static.mri.acdc import acdc_cases, load_ed_es, parse_info_cfg
-from core.data.static.splits import split_patients
-from core.hparams import from_json
-from core.inference import predict_volume
-from core.measure import ejection_fraction
-from core.mesh import export_glb  # reusable chamber-mesh tool (bd 7c9.1)
-from core.postprocess import largest_cc_per_class
-from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
+from core.data.static.mri.acdc import AcdcAdapter
+from core.data.static.splits import Splits
+from core.hparams import Hparams
+from core.inference import Inference
+from core.measure import Measure
+from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
+from core.postprocess import Postprocess
+from core.preprocessing.preprocess import Preprocess
 
 log = logging.getLogger("cardioview.export_web")
 
@@ -54,7 +54,7 @@ CINE_BBOX_MARGIN = 14      # in-plane crop margin (voxels) around the whole-cine
 # This is the single external home: glb/manifest/slices here + the exact model in models/<name>.onnx.
 # The viewer serves it via web/scripts/sync-assets.mjs (copies here -> gitignored public/{data,models}
 # on predev/prebuild), not from a committed public dir. (bd cardiac-seg-ra3)
-OUT = Path(data_root("meshes")) / "cardioview"
+OUT = Path(Config.data_root("meshes")) / "cardioview"
 
 
 def publish_model(model_name: str) -> None:  # pragma: no cover  (shutil.copyfile of the ONNX artifact — file-copy shell)
@@ -78,13 +78,13 @@ def heldout_set(model_name: str) -> set[str]:
     run = model_dir(MODELS[model_name])
     cfg_path = run / "config.json"
     if cfg_path.exists():  # pragma: no cover  (reads a real run config.json + consolidated store — registry/data dependency)
-        dc = from_json(cfg_path).generator.data
+        dc = Hparams.from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
-        _, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
+        _, val, test = splits.Splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
                                          val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
         # "held out" = anything the model did NOT train on (val OR test) — ACDC is now val, still unseen.
         return set(val.get_column("subject_id").to_list()) | set(test.get_column("subject_id").to_list())
-    _, val = split_patients(list(acdc_cases()), 0.2, 0)
+    _, val = Splits.split_patients(list(AcdcAdapter().cases()), 0.2, 0)
     return {c.name for c in val}
 
 
@@ -111,7 +111,7 @@ def shared_crop(masks: dict, spacing, margin_mm: float = MARGIN_MM):
 def volumes(masks: dict, spacing) -> dict:
     """EDV (ml full), ESV (ml empty), EF (%) from the LV cavity — full-res, real spacing."""
     if "ED" in masks and "ES" in masks:
-        ef, edv, esv = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
+        ef, edv, esv = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
         return {"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}
     return {}
 
@@ -148,7 +148,7 @@ def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — 
 
 def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
     """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
-    cfg = parse_info_cfg(pdir)
+    cfg = AcdcAdapter._parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
@@ -157,14 +157,14 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
-        case = preprocess_case(pdir, loader=load_ed_es)
+        case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
         spacing = tuple(float(s) for s in case["spacing"])
         masks = build_masks(case, source, ctx.model, ctx.device)
         crop_masks, iso = shared_crop(masks, spacing)
         glb = {}
         for tag, m in crop_masks.items():
             fn = f"{name}_{tag}_{source}.gltf"
-            export_glb(m, spacing, OUT / fn)
+            Mesh.export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
         entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source=source,
                      pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
@@ -187,8 +187,8 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     frames_t = list(range(0, vol.shape[0], stride))
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
-        img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
-        masks[k] = largest_cc_per_class(predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
+        img = Preprocess.zscore(Preprocess.resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
+        masks[k] = Postprocess.largest_cc_per_class(Inference.predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
 
@@ -220,13 +220,13 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     files = []
     for k in range(len(frames_t)):
         fn = f"{name}_f{k:02d}_pred.gltf"
-        export_glb(crop_masks[k], rspacing, OUT / fn)
+        Mesh.export_glb(crop_masks[k], rspacing, OUT / fn)
         files.append(fn)
     edi, esi = frame_indices(pdir)
     ed_k = nearest_index(frames_t, edi)
     es_k = nearest_index(frames_t, esi)
-    ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-    case = preprocess_case(pdir, loader=load_ed_es)
+    ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
+    case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
     entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                  pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,

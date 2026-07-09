@@ -19,65 +19,70 @@ import polars as pl
 import torch
 
 from core.config import FLAGSHIP_REF
-from core.data.ingest.splits import resolve_cfg
+from core.data.ingest.splits import Splits
 from core.data.static import splits
-from core.data.static.store import build as store
-from core.obs import setup
-from core.registry import resolve
-from core.run import load_run
+from core.data.static.store.build import Build as store
+from core.obs import Obs
+from core.registry import Registry
+from core.run import Run
 
-from ..tracking import track_run
-from .uncertainty import ece
+from ..tracking import Tracker
+from .uncertainty import Uncertainty
 from .validate import EvalCfg, Evaluator
 
 log = logging.getLogger("cardioseg.calibrate")
 
 
-def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
-    """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
-    z = torch.tensor(logits, dtype=torch.float32, device=device)
-    y = torch.tensor(labels, dtype=torch.long, device=device)
-    logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
-    opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
-    nll = torch.nn.CrossEntropyLoss()
+class Calibrate:
+    """Temperature scaling (Guo 2017): fit one scalar T on val (LBFGS/NLL), report ECE before/after per
+    axis. The free helpers folded in as staticmethods — the fit and the ECE-at-T evaluation."""
 
-    def closure():
-        opt.zero_grad()
-        loss = nll(z / logT.exp(), y)
-        loss.backward()
-        return loss
+    @staticmethod
+    def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
+        """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
+        z = torch.tensor(logits, dtype=torch.float32, device=device)
+        y = torch.tensor(labels, dtype=torch.long, device=device)
+        logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
+        opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
+        nll = torch.nn.CrossEntropyLoss()
 
-    opt.step(closure)
-    return float(logT.exp().detach())
+        def closure():
+            opt.zero_grad()
+            loss = nll(z / logT.exp(), y)
+            loss.backward()
+            return loss
 
+        opt.step(closure)
+        return float(logT.exp().detach())
 
-def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
-    """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
-    z = logits / T
-    z = z - z.max(1, keepdims=True)
-    p = np.exp(z); p /= p.sum(1, keepdims=True)
-    conf, pred = p.max(1), p.argmax(1)
-    return ece(conf, (pred == labels).astype(float))[0]
+    @staticmethod
+    def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
+        """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
+        z = logits / T
+        z = z - z.max(1, keepdims=True)
+        p = np.exp(z); p /= p.sum(1, keepdims=True)
+        conf, pred = p.max(1), p.argmax(1)
+        return Uncertainty.ece(conf, (pred == labels).astype(float))[0]
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     args = ap.parse_args()
-    run = resolve(args.run)
-    model, cfg, device = load_run(run)
+    run = Registry.resolve(args.run)
+    model, cfg, device = Run.load_run(run)
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
     if d.split:                                           # coded split -> its resolved val/test
-        r = resolve_cfg(d, meta)
+        r = Splits.resolve_cfg(d, meta)
         val, test = r.val.frame, r.test.frame
     else:
-        _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+        _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
     ev = Evaluator(model, device, EvalCfg(size=d.size))   # state (model/device/size) once; call many
-    val_logits, val_labels = ev.gather(splits.paths(val))
-    T = fit_temperature(val_logits, val_labels, device)
+    val_logits, val_labels = ev.gather(splits.Splits.paths(val))
+    T = Calibrate.fit_temperature(val_logits, val_labels, device)
 
     axes = {"val": val}
     for v in d.test_vendors:                         # report each test vendor separately
@@ -87,15 +92,15 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     for name, df in axes.items():
         if not len(df):
             continue
-        lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.paths(df))
-        e0, e1 = _ece_at(lg, lb, 1.0), _ece_at(lg, lb, T)
+        lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.Splits.paths(df))
+        e0, e1 = Calibrate._ece_at(lg, lb, 1.0), Calibrate._ece_at(lg, lb, T)
         report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
         log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")
     (run / "plots").mkdir(parents=True, exist_ok=True)
     (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
     log.info(f"-> {run}/plots/calibration.json")
 
-    trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+    trk = Tracker.track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     trk.metric("temp_T", T)
     for name, ax in report["axes"].items():
         trk.metric(f"{name}_ece_uncal", ax["ece_uncal"]); trk.metric(f"{name}_ece_temp", ax["ece_temp"])

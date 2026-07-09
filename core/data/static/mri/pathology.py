@@ -22,8 +22,13 @@ _MAP = {
 }
 
 
-def harmonize(raw: str | None) -> str:
-    """Map a raw pathology code to the coarse scheme. None/unknown -> 'other'."""
-    if raw is None:
-        return "other"
-    return _MAP.get(str(raw).strip().upper(), "other")
+class Pathology:
+    """Coarse pathology harmonization across the three datasets' vocabularies (the free helper folded in
+    as a staticmethod)."""
+
+    @staticmethod
+    def harmonize(raw: str | None) -> str:
+        """Map a raw pathology code to the coarse scheme. None/unknown -> 'other'."""
+        if raw is None:
+            return "other"
+        return _MAP.get(str(raw).strip().upper(), "other")

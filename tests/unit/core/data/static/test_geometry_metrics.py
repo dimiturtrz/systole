@@ -8,9 +8,9 @@ import numpy as np
 from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.labels import MYO as LV_MYO
 from core.data.static.labels import RV as RV_CAVITY
-from core.data.static.mri.base import identify_lv_cavity
-from core.evaluate import dice
-from core.measure import ejection_fraction, expected_volume_ml, label_volume_ml, voxel_volume_ml
+from core.data.static.mri.base import Base
+from core.evaluate import Evaluate
+from core.measure import Measure
 
 
 def test_expected_volume_equals_count_when_binary():
@@ -18,9 +18,9 @@ def test_expected_volume_equals_count_when_binary():
     contributes its fraction (the late-collapse soft readout)."""
     sp = (8.0, 1.5, 1.5)
     prob = np.zeros((1, 4, 4), np.float32); prob[0, :2, :2] = 1.0    # 4 whole voxels
-    assert abs(expected_volume_ml(prob, sp) - 4 * voxel_volume_ml(sp)) < 1e-9
+    assert abs(Measure.expected_volume_ml(prob, sp) - 4 * Measure.voxel_volume_ml(sp)) < 1e-9
     prob[0, 0, 2] = 0.5                                              # one half voxel
-    assert abs(expected_volume_ml(prob, sp) - 4.5 * voxel_volume_ml(sp)) < 1e-9
+    assert abs(Measure.expected_volume_ml(prob, sp) - 4.5 * Measure.voxel_volume_ml(sp)) < 1e-9
 
 
 def _enclosed_lv():
@@ -36,18 +36,18 @@ def _enclosed_lv():
 
 def test_voxel_volume_mm3_to_ml():
     # 8 * 1.5 * 1.5 mm = 18 mm^3 = 0.018 mL
-    assert abs(voxel_volume_ml((8.0, 1.5, 1.5)) - 0.018) < 1e-9
+    assert abs(Measure.voxel_volume_ml((8.0, 1.5, 1.5)) - 0.018) < 1e-9
 
 
 def test_label_volume_scales_with_spacing():
     m = _enclosed_lv()
-    v1 = label_volume_ml(m, LV_CAVITY, (8.0, 1.5, 1.5))
-    v2 = label_volume_ml(m, LV_CAVITY, (16.0, 1.5, 1.5))
+    v1 = Measure.label_volume_ml(m, LV_CAVITY, (8.0, 1.5, 1.5))
+    v2 = Measure.label_volume_ml(m, LV_CAVITY, (16.0, 1.5, 1.5))
     assert abs(v2 - 2 * v1) < 1e-6           # double slice thickness -> double volume
 
 
 def test_identify_lv_cavity_is_label_3_geometrically():
-    lv, scores = identify_lv_cavity(_enclosed_lv())
+    lv, scores = Base.identify_lv_cavity(_enclosed_lv())
     assert lv == LV_CAVITY == 3
     assert scores[LV_CAVITY] > scores[RV_CAVITY]   # LV more myo-enclosed than RV
 
@@ -55,29 +55,29 @@ def test_identify_lv_cavity_is_label_3_geometrically():
 def test_ejection_fraction_default_label_is_lv():
     ed = np.zeros((1, 7, 7), dtype=np.uint8); ed[0, 2:5, 2:5] = LV_CAVITY   # 9 vox
     es = np.zeros((1, 7, 7), dtype=np.uint8); es[0, 3, 3] = LV_CAVITY        # 1 vox
-    ef, edv, esv = ejection_fraction(ed, es, (8.0, 1.5, 1.5))               # default lv_label=3
+    ef, edv, esv = Measure.ejection_fraction(ed, es, (8.0, 1.5, 1.5))               # default lv_label=3
     assert edv > esv > 0
     assert abs(ef - (9 - 1) / 9 * 100) < 1e-6
 
 
 def test_ef_nan_when_edv_zero():
     empty = np.zeros((4, 8, 8), dtype=np.uint8)
-    ef, edv, esv = ejection_fraction(empty, empty, (8.0, 1.5, 1.5))
+    ef, edv, esv = Measure.ejection_fraction(empty, empty, (8.0, 1.5, 1.5))
     assert np.isnan(ef) and edv == 0
 
 
 def test_dice_perfect_and_disjoint():
     m = _enclosed_lv()
-    assert dice(m, m, LV_CAVITY) == 1.0
+    assert Evaluate.dice(m, m, LV_CAVITY) == 1.0
     a = np.zeros((4, 8, 8), dtype=np.uint8); a[0, 0, 0] = 1
     b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, 0, 1] = 1
-    assert dice(a, b, 1) == 0.0
+    assert Evaluate.dice(a, b, 1) == 0.0
 
 
 def test_dice_empty_and_partial_classes():
     z = np.zeros((4, 8, 8), dtype=np.uint8)
-    assert dice(z, z, 3) == 1.0                  # both absent -> vacuously perfect (the convention)
+    assert Evaluate.dice(z, z, 3) == 1.0                  # both absent -> vacuously perfect (the convention)
     a = np.zeros((4, 8, 8), dtype=np.uint8); a[0, :4, :4] = 3   # 16 vox
-    assert dice(a, z, 3) == 0.0                  # one empty -> no overlap
+    assert Evaluate.dice(a, z, 3) == 0.0                  # one empty -> no overlap
     b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, :4, :2] = 3   # 8 vox, subset of a
-    assert abs(dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)
+    assert abs(Evaluate.dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)

@@ -66,99 +66,103 @@ class AugCfg(BaseModel):
     # research/deep_dives/2026-06-29_soft-labels-calibration-vs-ef.md).
     soft_label_sigma: float = Field(1.0, ge=0)
 
-_GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
+class Augmentor:
+    """GPU-batched augmentation engine (the free helpers folded in as staticmethods): the separable
+    Gaussian kernel, one-hot->soft target `soften`, and the per-sample geometric+intensity
+    `augment_batch`. Hyperparams from the injected AugCfg. Uses torch's global RNG — seed it
+    (torch.manual_seed) for reproducibility."""
 
+    _GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
+    _FLIP_PROB = 0.5   # per-sample probability of a horizontal / vertical flip
 
-def _gaussian_kernel(sigma: float) -> torch.Tensor:
-    """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
-    r = max(1, int(math.ceil(3.0 * sigma)))
-    xs = torch.arange(-r, r + 1, dtype=torch.float32)
-    g = torch.exp(-(xs ** 2) / (2.0 * sigma * sigma))
-    g = g / g.sum()
-    return torch.outer(g, g)
+    @staticmethod
+    def _gaussian_kernel(sigma: float) -> torch.Tensor:
+        """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
+        r = max(1, int(math.ceil(3.0 * sigma)))
+        xs = torch.arange(-r, r + 1, dtype=torch.float32)
+        g = torch.exp(-(xs ** 2) / (2.0 * sigma * sigma))
+        g = g / g.sum()
+        return torch.outer(g, g)
 
+    @staticmethod
+    def soften(mask: torch.Tensor, sigma: float, n_classes: int) -> torch.Tensor:
+        """Hard integer mask [B, H, W] -> soft probabilistic target [B, C, H, W] (channels sum to 1).
 
-def soften(mask: torch.Tensor, sigma: float, n_classes: int) -> torch.Tensor:
-    """Hard integer mask [B, H, W] -> soft probabilistic target [B, C, H, W] (channels sum to 1).
+        One-hot, then per-class Gaussian blur (boundary-uncertainty width ≈ σ voxels), then renormalize
+        so each voxel's class probs sum to 1. Result is soft only at boundaries (blurred one-hots overlap
+        there) and stays ~hard in class interiors. σ is a principled width (~partial-volume scale), NOT a
+        knob tuned to EF. σ<=0 -> crisp one-hot (== hard target). The honest-target representation: a
+        boundary voxel is a mix, so its label is a distribution, not a 0/1."""
+        oh = F.one_hot(mask.long(), n_classes).permute(0, 3, 1, 2).float()   # [B, C, H, W]
+        if not sigma or sigma <= 0:
+            return oh
+        k = Augmentor._gaussian_kernel(sigma).to(oh.device, oh.dtype)
+        pad = k.shape[-1] // 2
+        kk = k.view(1, 1, *k.shape).expand(n_classes, 1, *k.shape)
+        oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)
+        return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
 
-    One-hot, then per-class Gaussian blur (boundary-uncertainty width ≈ σ voxels), then renormalize
-    so each voxel's class probs sum to 1. Result is soft only at boundaries (blurred one-hots overlap
-    there) and stays ~hard in class interiors. σ is a principled width (~partial-volume scale), NOT a
-    knob tuned to EF. σ<=0 -> crisp one-hot (== hard target). The honest-target representation: a
-    boundary voxel is a mix, so its label is a distribution, not a 0/1."""
-    oh = F.one_hot(mask.long(), n_classes).permute(0, 3, 1, 2).float()   # [B, C, H, W]
-    if not sigma or sigma <= 0:
-        return oh
-    k = _gaussian_kernel(sigma).to(oh.device, oh.dtype)
-    pad = k.shape[-1] // 2
-    kk = k.view(1, 1, *k.shape).expand(n_classes, 1, *k.shape)
-    oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)
-    return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
+    @staticmethod
+    def augment_batch(
+        img: torch.Tensor,
+        mask: torch.Tensor,
+        cfg: AugCfg | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
 
+        Per-sample flip * rotate * scale via a single affine grid_sample (bilinear image, nearest
+        mask so labels stay integer; out-of-frame -> 0/background). Per-sample gamma, contrast,
+        gaussian noise, and an occasional 3x3 blur on the image only. Hyperparams from the injected
+        AugCfg. Uses torch's global RNG — seed it (torch.manual_seed) for reproducibility.
+        """
+        cfg = cfg or AugCfg()
+        rot_deg, scale = cfg.rot_deg, cfg.scale
+        b, _, _, _ = img.shape
+        dev, dt = img.device, img.dtype
 
-_FLIP_PROB = 0.5   # per-sample probability of a horizontal / vertical flip
+        # --- geometric: per-sample affine (inverse map, as grid_sample expects) ---
+        ang = (torch.rand(b, device=dev) * 2 - 1) * (rot_deg * math.pi / 180.0)
+        inv = 1.0 / (torch.rand(b, device=dev) * (scale[1] - scale[0]) + scale[0])  # 1/scale
+        fx = torch.where(torch.rand(b, device=dev) < Augmentor._FLIP_PROB, -1.0, 1.0)  # horizontal flip
+        fy = torch.where(torch.rand(b, device=dev) < Augmentor._FLIP_PROB, -1.0, 1.0)  # vertical flip
+        cos, sin = torch.cos(ang), torch.sin(ang)
+        theta = torch.zeros(b, 2, 3, device=dev, dtype=dt)
+        theta[:, 0, 0] = fx * cos * inv
+        theta[:, 0, 1] = fx * -sin * inv
+        theta[:, 1, 0] = fy * sin * inv
+        theta[:, 1, 1] = fy * cos * inv
+        # translation: FOV-fraction shift -> normalized grid units ([-1,1] spans the full dim, so *2).
+        # Gives the synth heart real-like position spread (see AugCfg.translate); no-op at translate=0.
+        if cfg.translate > 0:
+            theta[:, 0, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
+            theta[:, 1, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
+        grid = F.affine_grid(theta, img.shape, align_corners=False)
+        img = F.grid_sample(img, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
+        mask = F.grid_sample(mask[:, None].to(dt), grid, mode="nearest", padding_mode="zeros",
+                             align_corners=False)[:, 0].long()
 
+        # --- intensity (image only), per-sample, vectorized ---
+        mn = img.amin((1, 2, 3), keepdim=True)
+        rng = (img.amax((1, 2, 3), keepdim=True) - mn).clamp_min(1e-6)
+        g_lo, g_hi = cfg.gamma
+        gamma = torch.rand(b, 1, 1, 1, device=dev) * (g_hi - g_lo) + g_lo
+        do_g = (torch.rand(b, 1, 1, 1, device=dev) < cfg.gamma_p).to(dt)
+        img = do_g * (((img - mn) / rng) ** gamma * rng + mn) + (1 - do_g) * img    # gamma where selected
 
-def augment_batch(
-    img: torch.Tensor,
-    mask: torch.Tensor,
-    cfg: AugCfg | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
+        k = Augmentor._GAUSS3.to(dev, dt).view(1, 1, 3, 3)
+        do_b = (torch.rand(b, 1, 1, 1, device=dev) < cfg.blur_p).to(dt)
+        img = do_b * F.conv2d(img, k, padding=1) + (1 - do_b) * img                 # occasional blur
 
-    Per-sample flip * rotate * scale via a single affine grid_sample (bilinear image, nearest
-    mask so labels stay integer; out-of-frame -> 0/background). Per-sample gamma, contrast,
-    gaussian noise, and an occasional 3x3 blur on the image only. Hyperparams from the injected
-    AugCfg. Uses torch's global RNG — seed it (torch.manual_seed) for reproducibility.
-    """
-    cfg = cfg or AugCfg()
-    rot_deg, scale = cfg.rot_deg, cfg.scale
-    b, _, _, _ = img.shape
-    dev, dt = img.device, img.dtype
+        # smooth bias-field modulation (scan bucket; the N4 dual). Coarse 4x4 random field -> bilinear
+        # upsample = low-freq, then multiply (1 +/- strength). On z-scored input this is a smooth
+        # across-FOV contrast drift, domain-randomization not physics-exact.
+        do_bf = (torch.rand(b, 1, 1, 1, device=dev) < cfg.bias_p).to(dt)
+        low = torch.rand(b, 1, 4, 4, device=dev, dtype=dt) * 2 - 1
+        field = 1.0 + cfg.bias_strength * F.interpolate(low, size=img.shape[-2:], mode="bilinear",
+                                                        align_corners=False)
+        img = do_bf * (img * field) + (1 - do_bf) * img
 
-    # --- geometric: per-sample affine (inverse map, as grid_sample expects) ---
-    ang = (torch.rand(b, device=dev) * 2 - 1) * (rot_deg * math.pi / 180.0)
-    inv = 1.0 / (torch.rand(b, device=dev) * (scale[1] - scale[0]) + scale[0])  # 1/scale
-    fx = torch.where(torch.rand(b, device=dev) < _FLIP_PROB, -1.0, 1.0)        # horizontal flip
-    fy = torch.where(torch.rand(b, device=dev) < _FLIP_PROB, -1.0, 1.0)        # vertical flip
-    cos, sin = torch.cos(ang), torch.sin(ang)
-    theta = torch.zeros(b, 2, 3, device=dev, dtype=dt)
-    theta[:, 0, 0] = fx * cos * inv
-    theta[:, 0, 1] = fx * -sin * inv
-    theta[:, 1, 0] = fy * sin * inv
-    theta[:, 1, 1] = fy * cos * inv
-    # translation: FOV-fraction shift -> normalized grid units ([-1,1] spans the full dim, so *2).
-    # Gives the synth heart real-like position spread (see AugCfg.translate); no-op at translate=0.
-    if cfg.translate > 0:
-        theta[:, 0, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
-        theta[:, 1, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
-    grid = F.affine_grid(theta, img.shape, align_corners=False)
-    img = F.grid_sample(img, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
-    mask = F.grid_sample(mask[:, None].to(dt), grid, mode="nearest", padding_mode="zeros",
-                         align_corners=False)[:, 0].long()
-
-    # --- intensity (image only), per-sample, vectorized ---
-    mn = img.amin((1, 2, 3), keepdim=True)
-    rng = (img.amax((1, 2, 3), keepdim=True) - mn).clamp_min(1e-6)
-    g_lo, g_hi = cfg.gamma
-    gamma = torch.rand(b, 1, 1, 1, device=dev) * (g_hi - g_lo) + g_lo
-    do_g = (torch.rand(b, 1, 1, 1, device=dev) < cfg.gamma_p).to(dt)
-    img = do_g * (((img - mn) / rng) ** gamma * rng + mn) + (1 - do_g) * img    # gamma where selected
-
-    k = _GAUSS3.to(dev, dt).view(1, 1, 3, 3)
-    do_b = (torch.rand(b, 1, 1, 1, device=dev) < cfg.blur_p).to(dt)
-    img = do_b * F.conv2d(img, k, padding=1) + (1 - do_b) * img                 # occasional blur
-
-    # smooth bias-field modulation (scan bucket; the N4 dual). Coarse 4x4 random field -> bilinear
-    # upsample = low-freq, then multiply (1 +/- strength). On z-scored input this is a smooth
-    # across-FOV contrast drift, domain-randomization not physics-exact.
-    do_bf = (torch.rand(b, 1, 1, 1, device=dev) < cfg.bias_p).to(dt)
-    low = torch.rand(b, 1, 4, 4, device=dev, dtype=dt) * 2 - 1
-    field = 1.0 + cfg.bias_strength * F.interpolate(low, size=img.shape[-2:], mode="bilinear",
-                                                    align_corners=False)
-    img = do_bf * (img * field) + (1 - do_bf) * img
-
-    c_lo, c_hi = cfg.contrast
-    contrast = torch.rand(b, 1, 1, 1, device=dev) * (c_hi - c_lo) + c_lo
-    img = img * contrast + torch.randn_like(img) * cfg.noise                    # contrast + noise
-    return img, mask
+        c_lo, c_hi = cfg.contrast
+        contrast = torch.rand(b, 1, 1, 1, device=dev) * (c_hi - c_lo) + c_lo
+        img = img * contrast + torch.randn_like(img) * cfg.noise                    # contrast + noise
+        return img, mask

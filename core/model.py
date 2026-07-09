@@ -29,21 +29,26 @@ class ModelCfg(BaseModel):
     #                                                (bd h8k: does input harmonization matter without instance-norm?).
 
 
-def build_unet(cfg: ModelCfg | None = None):
-    """4-class U-Net (bg, RV, myo, LV-cav) from a ModelCfg. Default cfg = 2D slice-wise."""
-    cfg = cfg or ModelCfg()
-    return UNet(
-        spatial_dims=cfg.spatial_dims,
-        in_channels=cfg.in_channels,
-        out_channels=cfg.out_channels,
-        channels=tuple(cfg.channels),
-        strides=tuple(cfg.strides),
-        num_res_units=cfg.res_units,
-        dropout=cfg.dropout,          # enables MC-dropout uncertainty at inference (iq7)
-        norm=(None if cfg.norm == "none" else cfg.norm),   # 'instance' (default) | 'batch' | 'none' (ablation)
-    )
+class Model:
+    """U-Net factory + device resolution (the free helpers folded in as staticmethods, public names
+    kept). ModelCfg (the injected shape) stays its own pydantic class above."""
 
+    @staticmethod
+    def build_unet(cfg: ModelCfg | None = None):
+        """4-class U-Net (bg, RV, myo, LV-cav) from a ModelCfg. Default cfg = 2D slice-wise."""
+        cfg = cfg or ModelCfg()
+        return UNet(
+            spatial_dims=cfg.spatial_dims,
+            in_channels=cfg.in_channels,
+            out_channels=cfg.out_channels,
+            channels=tuple(cfg.channels),
+            strides=tuple(cfg.strides),
+            num_res_units=cfg.res_units,
+            dropout=cfg.dropout,          # enables MC-dropout uncertainty at inference (iq7)
+            norm=(None if cfg.norm == "none" else cfg.norm),   # 'instance' (default) | 'batch' | 'none' (ablation)
+        )
 
-def resolve_device(preferred: str | None = None) -> str:
-    """Torch device string: explicit `preferred`, else 'cuda' if available, else 'cpu'."""
-    return preferred or ("cuda" if torch.cuda.is_available() else "cpu")
+    @staticmethod
+    def resolve_device(preferred: str | None = None) -> str:
+        """Torch device string: explicit `preferred`, else 'cuda' if available, else 'cpu'."""
+        return preferred or ("cuda" if torch.cuda.is_available() else "cpu")

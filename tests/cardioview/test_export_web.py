@@ -89,7 +89,7 @@ def test_manifest_with_upgrades_legacy_array():
 def test_heldout_set_fallback_split(monkeypatch, tmp_path):
     """Legacy-run class: a run dir with no config.json -> the 80/20 ACDC val split (deterministic set)."""
     monkeypatch.setattr(E, "model_dir", lambda ref: tmp_path)            # empty dir, no config.json
-    monkeypatch.setattr(E, "acdc_cases", lambda: [Path(f"p{i}") for i in range(10)])
+    monkeypatch.setattr(E.AcdcAdapter, "cases", lambda self: [Path(f"p{i}") for i in range(10)])
     held = heldout_set("gen")
     assert isinstance(held, set) and len(held) == 2   # 0.2 of 10
     assert held == heldout_set("gen")                 # deterministic

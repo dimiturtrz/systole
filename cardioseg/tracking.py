@@ -4,7 +4,7 @@ mlflow is a required dep; the only opt-out is CARDIOSEG_NO_MLFLOW, which makes e
 training/scoring never depend on it. It's the cross-run comparison UI (`mlflow ui`), not the source of
 truth — runs/<name>/{config,metrics}.json + RESULTS.json remain authoritative.
 
-    trk = start("cardioseg", run_name, params=cfg.model_dump())
+    trk = Tracker.start("cardioseg", run_name, params=cfg.model_dump())
     trk.metric("val_dice", vd, step=ep)
     trk.summary({"test": {...}}); trk.artifact("runs/x/metrics.json"); trk.end()
 """
@@ -19,25 +19,6 @@ import mlflow.pytorch
 _ROOT = Path(__file__).resolve().parents[1]
 _MLRUNS = _ROOT / "mlruns"                          # artifact store (default root)
 _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"   # metadata + registry (file store deprecated)
-
-
-def _mlflow():
-    """The mlflow module if tracking is enabled, else None (CARDIOSEG_NO_MLFLOW opt-out)."""
-    if os.environ.get("CARDIOSEG_NO_MLFLOW"):
-        return None
-    return mlflow
-
-
-def _flat(d: dict, prefix: str = "") -> dict:
-    """Flatten nested config dicts to dotted keys (mlflow params are scalar)."""
-    out = {}
-    for k, v in d.items():
-        key = f"{prefix}{k}"
-        if isinstance(v, dict):
-            out.update(_flat(v, key + "."))
-        else:
-            out[key] = v
-    return out
 
 
 class _Noop:
@@ -97,60 +78,83 @@ class _Live:
         except Exception: pass
 
 
-def start(experiment: str, run_name: str, params: dict | None = None, tags: dict | None = None):
-    """Begin a fresh tracked run (local mlruns/). Returns a handle; no-op if tracking is off."""
-    mlflow = _mlflow()
-    if mlflow is None:
-        return _Noop()
-    try:
-        _MLRUNS.mkdir(exist_ok=True)
-        mlflow.set_tracking_uri(_DB_URI)
-        mlflow.set_experiment(experiment)
-        try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
-        except Exception: pass
-        mlflow.start_run(run_name=run_name)
-        if params:
-            mlflow.log_params(_flat(params))
-        for k, v in (tags or {}).items():
-            mlflow.set_tag(k, str(v))
-        return _Live(mlflow)
-    except Exception:
-        return _Noop()      # tracking must never break a run
+class Tracker:
+    """Experiment-tracking entry points (the free factory/helpers folded in as staticmethods): the
+    enabled-mlflow gate, config flattening, and the two run-openers (`start` fresh, `track_run` resume)."""
 
+    MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line (registry lives in core.registry)
 
-def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None = None,
-              tags: dict | None = None):
-    """Resume the run tied to `run_dir` (via runs/<name>/.mlflow_run_id) if it exists, else start a
-    fresh one and persist its id there. Lets the post-hoc eval (results/uncertainty/calibrate) log the
-    CANONICAL numbers into the SAME run train.py created — so the UI compares real numbers, not just
-    training curves."""
-    mlflow = _mlflow()
-    if mlflow is None:
-        return _Noop()
-    try:
-        _MLRUNS.mkdir(exist_ok=True)
-        mlflow.set_tracking_uri(_DB_URI)
-        mlflow.set_experiment(experiment)
-        try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
-        except Exception: pass
-        idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
-        rid = idf.read_text().strip() if idf and idf.exists() else None
-        if rid:
-            mlflow.start_run(run_id=rid)                 # resume — don't re-log params
-        else:
+    @staticmethod
+    def _mlflow():
+        """The mlflow module if tracking is enabled, else None (CARDIOSEG_NO_MLFLOW opt-out)."""
+        if os.environ.get("CARDIOSEG_NO_MLFLOW"):
+            return None
+        return mlflow
+
+    @staticmethod
+    def _flat(d: dict, prefix: str = "") -> dict:
+        """Flatten nested config dicts to dotted keys (mlflow params are scalar)."""
+        out = {}
+        for k, v in d.items():
+            key = f"{prefix}{k}"
+            if isinstance(v, dict):
+                out.update(Tracker._flat(v, key + "."))
+            else:
+                out[key] = v
+        return out
+
+    @staticmethod
+    def start(experiment: str, run_name: str, params: dict | None = None, tags: dict | None = None):
+        """Begin a fresh tracked run (local mlruns/). Returns a handle; no-op if tracking is off."""
+        mlflow = Tracker._mlflow()
+        if mlflow is None:
+            return _Noop()
+        try:
+            _MLRUNS.mkdir(exist_ok=True)
+            mlflow.set_tracking_uri(_DB_URI)
+            mlflow.set_experiment(experiment)
+            try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
+            except Exception: pass
             mlflow.start_run(run_name=run_name)
             if params:
-                mlflow.log_params(_flat(params))
-            if idf:
-                idf.write_text(mlflow.active_run().info.run_id)
-        for k, v in (tags or {}).items():
-            mlflow.set_tag(k, str(v))
-        return _Live(mlflow)
-    except Exception:
-        return _Noop()
+                mlflow.log_params(Tracker._flat(params))
+            for k, v in (tags or {}).items():
+                mlflow.set_tag(k, str(v))
+            return _Live(mlflow)
+        except Exception:
+            return _Noop()      # tracking must never break a run
 
-
-MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line (registry lives in core.registry)
+    @staticmethod
+    def track_run(experiment: str, run_name: str, run_dir=None, params: dict | None = None,
+                  tags: dict | None = None):
+        """Resume the run tied to `run_dir` (via runs/<name>/.mlflow_run_id) if it exists, else start a
+        fresh one and persist its id there. Lets the post-hoc eval (results/uncertainty/calibrate) log the
+        CANONICAL numbers into the SAME run train.py created — so the UI compares real numbers, not just
+        training curves."""
+        mlflow = Tracker._mlflow()
+        if mlflow is None:
+            return _Noop()
+        try:
+            _MLRUNS.mkdir(exist_ok=True)
+            mlflow.set_tracking_uri(_DB_URI)
+            mlflow.set_experiment(experiment)
+            try: mlflow.enable_system_metrics_logging()      # GPU/CPU/mem if psutil+pynvml present
+            except Exception: pass
+            idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
+            rid = idf.read_text().strip() if idf and idf.exists() else None
+            if rid:
+                mlflow.start_run(run_id=rid)                 # resume — don't re-log params
+            else:
+                mlflow.start_run(run_name=run_name)
+                if params:
+                    mlflow.log_params(Tracker._flat(params))
+                if idf:
+                    idf.write_text(mlflow.active_run().info.run_id)
+            for k, v in (tags or {}).items():
+                mlflow.set_tag(k, str(v))
+            return _Live(mlflow)
+        except Exception:
+            return _Noop()
 
 
 # Model registration + resolution live in core.registry (the model store). train.py registers via

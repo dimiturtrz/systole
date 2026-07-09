@@ -22,10 +22,10 @@ import polars as pl
 from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
-from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
-from core.data.static.mri.pathology import harmonize
-from core.data.static.mri.registry import get_adapter
-from core.data.static.reference import reference_dir
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, Config
+from core.data.static.mri.pathology import Pathology
+from core.data.static.mri.registry import AdapterRegistry
+from core.data.static.reference import Reference
 from core.preprocessing.n4 import N4Cfg
 
 
@@ -104,72 +104,37 @@ _FIELD_1P5T = 1.5           # tesla; nominal low-field
 _FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T flip bucket
 
 
-def _region_of(country):
-    return _REGION.get(country) if country else None
+class Store:
+    """The store's cache-addressing + npz read primitives (the free store helpers folded in as
+    staticmethods): `param_key` encodes the preprocessing recipe into a cache dir name, `dataset_dir`
+    composes the processed/<dataset>/<paramkey>/ path, `load_arrays` reads one consolidated npz."""
 
+    @staticmethod
+    def param_key(inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
+                  nyul: bool = False, norm: str = "zscore") -> str:
+        """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
+        too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
+        cache is separate). norm='blood' -> '_blood' suffix (blood-anchored normalization, bd h8k)."""
+        key = f"inplane{str(inplane).replace('.', 'p')}"
+        if n4:
+            p = n4_params or N4Cfg()
+            key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
+        if nyul:
+            key += "_nyul"
+        if norm != "zscore":
+            key += f"_{norm}"
+        return key
 
-def _bsa(height, weight):
-    """Body surface area (m^2, Mosteller) from height(cm)+weight(kg). None if either missing."""
-    try:
-        h, w = float(height), float(weight)
-        return round((h * w / 3600.0) ** 0.5, 2) if h > 0 and w > 0 else None
-    except (TypeError, ValueError):
-        return None
+    @staticmethod
+    def dataset_dir(dataset: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
+                    n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
+        return Path(Config.data_root("processed")) / dataset / Store.param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
 
-
-def _age_band(age):
-    try:
-        a = float(age)
-    except (TypeError, ValueError):
-        return None
-    return ("<45" if a < _AGE_45 else "45-60" if a < _AGE_60
-            else "60-75" if a < _AGE_75 else "75+")
-
-
-def _norm_vendor(v):
-    if not v:
-        return None
-    s = str(v).upper()
-    for key, short in (("SIEMENS", "Siemens"), ("PHILIPS", "Philips"), ("GE", "GE"), ("CANON", "Canon")):
-        if key in s:
-            return short
-    return str(v)
-
-
-def _is_labelled(arrays: dict) -> bool:
-    """Usable masks = both ED and ES present with non-empty GT (M&Ms-1 zero-fills withheld GT)."""
-    ok = []
-    for tag in ("ed", "es"):
-        gt = arrays.get(f"{tag}_gt")
-        ok.append(gt is not None and bool((gt > 0).any()))
-    return all(ok)
-
-
-def param_key(inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
-              nyul: bool = False, norm: str = "zscore") -> str:
-    """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
-    too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
-    cache is separate). norm='blood' -> '_blood' suffix (blood-anchored normalization, bd h8k)."""
-    key = f"inplane{str(inplane).replace('.', 'p')}"
-    if n4:
-        p = n4_params or N4Cfg()
-        key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
-    if nyul:
-        key += "_nyul"
-    if norm != "zscore":
-        key += f"_{norm}"
-    return key
-
-
-def dataset_dir(dataset: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
-                n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
-
-
-def load_arrays(path: str | Path) -> dict:
-    """Load one consolidated subject npz -> dict (ed_img/ed_gt/es_img/es_gt/spacing/group)."""
-    z = np.load(path, allow_pickle=True)
-    return {k: (z[k].item() if k == "group" else z[k]) for k in z.files}   # group -> plain py scalar (0-d npz)
+    @staticmethod
+    def load_arrays(path: str | Path) -> dict:
+        """Load one consolidated subject npz -> dict (ed_img/ed_gt/es_img/es_gt/spacing/group)."""
+        z = np.load(path, allow_pickle=True)
+        return {k: (z[k].item() if k == "group" else z[k]) for k in z.files}   # group -> plain py scalar (0-d npz)
 
 
 class MetaBuilder:
@@ -181,22 +146,63 @@ class MetaBuilder:
     def __init__(self, name: str, adapter):
         self.name, self.adapter = name, adapter
 
+    @staticmethod
+    def _region_of(country):
+        return _REGION.get(country) if country else None
+
+    @staticmethod
+    def _bsa(height, weight):
+        """Body surface area (m^2, Mosteller) from height(cm)+weight(kg). None if either missing."""
+        try:
+            h, w = float(height), float(weight)
+            return round((h * w / 3600.0) ** 0.5, 2) if h > 0 and w > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _age_band(age):
+        try:
+            a = float(age)
+        except (TypeError, ValueError):
+            return None
+        return ("<45" if a < _AGE_45 else "45-60" if a < _AGE_60
+                else "60-75" if a < _AGE_75 else "75+")
+
+    @staticmethod
+    def _norm_vendor(v):
+        if not v:
+            return None
+        s = str(v).upper()
+        for key, short in (("SIEMENS", "Siemens"), ("PHILIPS", "Philips"), ("GE", "GE"), ("CANON", "Canon")):
+            if key in s:
+                return short
+        return str(v)
+
+    @staticmethod
+    def _is_labelled(arrays: dict) -> bool:
+        """Usable masks = both ED and ES present with non-empty GT (M&Ms-1 zero-fills withheld GT)."""
+        ok = []
+        for tag in ("ed", "es"):
+            gt = arrays.get(f"{tag}_gt")
+            ok.append(gt is not None and bool((gt > 0).any()))
+        return all(ok)
+
     def _row(self, case: Path, arrays: dict, meta: dict, file: str) -> dict:
         f = meta.get("field_T")
         return {
             "subject_id": case.name, "dataset": self.name, "file": file, "raw_path": str(case),
-            "vendor": _norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
-            "pathology": harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
+            "vendor": self._norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
+            "pathology": Pathology.harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
             "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
             # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
             # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
             "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
             "centre": meta.get("centre"), "country": meta.get("country"),
-            "region": _region_of(meta.get("country")), "institution": meta.get("institution"),
-            "age": meta.get("age"), "age_band": _age_band(meta.get("age")),
+            "region": self._region_of(meta.get("country")), "institution": meta.get("institution"),
+            "age": meta.get("age"), "age_band": self._age_band(meta.get("age")),
             "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
-            "bsa": _bsa(meta.get("height"), meta.get("weight")),
-            "motion_grade": meta.get("motion_grade"), "labelled": _is_labelled(arrays),
+            "bsa": self._bsa(meta.get("height"), meta.get("weight")),
+            "motion_grade": meta.get("motion_grade"), "labelled": self._is_labelled(arrays),
         }
 
     def write(self, data_dir: Path, out: Path) -> Path:
@@ -222,7 +228,7 @@ class MetaBuilder:
         """Re-emit meta.csv for already-built stores with the CURRENT META_FIELDS + adapter.meta() — NO
         image reload (sidecar parse only). Every processed/<name>/<paramkey>/ of a REGISTERED adapter is
         refreshed; unregistered dirs (anatomy pools etc.) skipped. `names` filters."""
-        base = Path(data_root("processed"))
+        base = Path(Config.data_root("processed"))
         out: list[Path] = []
         for meta_csv in sorted(base.glob("*/*/meta.csv")):
             param_dir = meta_csv.parent
@@ -230,7 +236,7 @@ class MetaBuilder:
             if names and name not in names:
                 continue
             try:
-                adapter = get_adapter(name)
+                adapter = AdapterRegistry.get_adapter(name)
             except KeyError:
                 continue                                         # not a registered dataset (e.g. mrxcat pools)
             out.append(MetaBuilder(name, adapter).write(param_dir / "data", param_dir))
@@ -273,14 +279,14 @@ class AcqReference:
         """Aggregate REAL DICOM acquisition from the built stores -> reference/acquisition.yaml. Only rows
         with real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are
         skipped, so the domain-randomization sweep survives for everything we lack real values for."""
-        base = Path(data_root("processed"))
+        base = Path(Config.data_root("processed"))
         metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
         if not metas:
             return {}
         acq = AcqReference.from_frame(pl.concat(metas, how="diagonal"))
         if not acq:
             return {}
-        out = reference_dir() / "acquisition.yaml"
+        out = Reference.reference_dir() / "acquisition.yaml"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("# Real per-(vendor,field) acquisition, DICOM-mined by AcqReference.fit.\n"
                        "# acquisition_for OVERRIDES the physics derivation with these where present (DAG compose).\n"

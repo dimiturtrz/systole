@@ -21,7 +21,7 @@ from core.config import _VALIDATE
 from core.data.static.store import DataCfg
 
 from .augment import AugCfg
-from .pipeline import Batch, build_pipeline
+from .pipeline import Batch, Pipeline
 from .synth import SynthCfg
 
 
@@ -57,7 +57,7 @@ class Generator:
         self.valid = valid
         # The transform recipe: synth-replace -> augment -> soften. A composable op list, not an
         # if-ladder — sweepable (physically-constrained diversity), and each op is unit-testable.
-        self.pipeline = build_pipeline(cfg, n_classes)
+        self.pipeline = Pipeline.build(cfg, n_classes)
 
     def batch(self, idx: torch.Tensor, *, pin: bool = False):
         """Collapsed batch for the resident indices: build the Batch, run it through the pipeline

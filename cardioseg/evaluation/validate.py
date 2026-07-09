@@ -14,15 +14,17 @@ import torch
 from pydantic import BaseModel
 
 from core.config import _VALIDATE
-from core.data.static.store import load_arrays
-from core.evaluate import CLASSES, surface_distances, surface_metrics
+from core.data.static.store import Store
+
+load_arrays = Store.load_arrays
+from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
-from core.inference import predict_volume  # re-export
-from core.measure import ejection_fraction
-from core.postprocess import largest_cc_per_class
-from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
+from core.inference import Inference
+from core.measure import Measure
+from core.postprocess import Postprocess
+from core.preprocessing.preprocess import SIZE, Preprocess
 
 log = logging.getLogger("cardioseg.validate")
 
@@ -70,9 +72,9 @@ class _ClassScores:
         if not self.boundary:                                           # Dice/EF-only sweep — skip the EDT cost
             return
         for cl in CLASS_NAMES:
-            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
+            sd = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if sd.size:
-                m = surface_metrics(sd)
+                m = Evaluate.surface_metrics(sd)
                 self.surf[cl]["hd95"].append(m["hd95"]); self.surf[cl]["assd"].append(m["assd"])
 
     def dice(self) -> dict[int, float]:
@@ -87,16 +89,6 @@ class _ClassScores:
                 for cl in CLASS_NAMES}
 
 
-def _foreground_samples(logits, y, per_vol, rng):
-    """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
-    (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
-    pred = logits.argmax(1)
-    idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
-    if idx.size > per_vol:
-        idx = rng.choice(idx, per_vol, replace=False)
-    return logits[idx], y[idx]
-
-
 class Evaluator:
     """Scores a trained model over subject npz files. Holds the model + device + EvalCfg as STATE —
     construct once, call `.validate(paths)` on any subject set. (Replaces the old
@@ -105,6 +97,16 @@ class Evaluator:
 
     def __init__(self, model, device: str, cfg: EvalCfg | None = None):
         self.model, self.device, self.cfg = model, device, cfg or EvalCfg()
+
+    @staticmethod
+    def _foreground_samples(logits, y, per_vol, rng):
+        """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
+        (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
+        pred = logits.argmax(1)
+        idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
+        if idx.size > per_vol:
+            idx = rng.choice(idx, per_vol, replace=False)
+        return logits[idx], y[idx]
 
     def validate(self, npz_paths) -> tuple[dict[int, float], list[dict], dict]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
@@ -122,15 +124,15 @@ class Evaluator:
             for tag in ("ED", "ES"):
                 if f"{tag.lower()}_img" not in case:
                     continue
-                pred = predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
+                pred = Inference.predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
-                    pred = largest_cc_per_class(pred)
-                gt = stack_slices(case[f"{tag.lower()}_gt"], size)
+                    pred = Postprocess.largest_cc_per_class(pred)
+                gt = Preprocess.stack_slices(case[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
-                ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
-                ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
+                ef_p, edv_p, _ = Measure.ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
+                ef_g, edv_g, _ = Measure.ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
                 ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
@@ -149,45 +151,46 @@ class Evaluator:
             for tag in ("ed", "es"):
                 if f"{tag}_img" not in case:
                     continue
-                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
-                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
+                xs = np.stack([Preprocess.fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
-                lg, y = _foreground_samples(logits, gt.reshape(-1), per_vol, rng)
+                lg, y = self._foreground_samples(logits, gt.reshape(-1), per_vol, rng)
                 L.append(lg); Y.append(y)
         return np.concatenate(L), np.concatenate(Y)
 
 
-def summarize(dice_per_class, ef_rows, surf_per_class=None):
-    """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
-    log.info("\n=== VAL Dice (per class, pooled over slices) ===")
-    for cl, name in CLASS_NAMES.items():
-        log.info(f"  {name:7} (label {cl}): {dice_per_class[cl]:.3f}")
-    mean_dice = float(np.nanmean([dice_per_class[c] for c in CLASS_NAMES]))
-    log.info(f"  mean: {mean_dice:.3f}")
-
-    if surf_per_class:
-        log.info("\n=== VAL boundary (median over volumes, mm) ===")
+    @staticmethod
+    def summarize(dice_per_class, ef_rows, surf_per_class=None):
+        """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
+        log.info("\n=== VAL Dice (per class, pooled over slices) ===")
         for cl, name in CLASS_NAMES.items():
-            log.info(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
+            log.info(f"  {name:7} (label {cl}): {dice_per_class[cl]:.3f}")
+        mean_dice = float(np.nanmean([dice_per_class[c] for c in CLASS_NAMES]))
+        log.info(f"  mean: {mean_dice:.3f}")
 
-    log.info("\n=== VAL EF: GT vs predicted ===")
-    errs = []
-    for r in ef_rows:
-        d = abs(r["ef_gt"] - r["ef_pred"])
-        errs.append(d)
-        log.info(f"  {r['patient']:11} {str(r['group']):5}  GT {r['ef_gt']:5.1f}%  "
-                 f"pred {r['ef_pred']:5.1f}%  |d| {d:4.1f}")
-    ef_mae = float(np.mean(errs)) if errs else float("nan")
-    if errs:
-        log.info(f"  EF MAE = {ef_mae:.1f}%  (n={len(errs)})")
+        if surf_per_class:
+            log.info("\n=== VAL boundary (median over volumes, mm) ===")
+            for cl, name in CLASS_NAMES.items():
+                log.info(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
 
-    return {
-        "dice": {CLASS_NAMES[c]: dice_per_class[c] for c in CLASS_NAMES},
-        "dice_mean": mean_dice,
-        "ef_mae": ef_mae,
-        "ef_rows": ef_rows,
-        "boundary": ({CLASS_NAMES[c]: surf_per_class[c] for c in CLASS_NAMES}
-                     if surf_per_class else None),
-    }
+        log.info("\n=== VAL EF: GT vs predicted ===")
+        errs = []
+        for r in ef_rows:
+            d = abs(r["ef_gt"] - r["ef_pred"])
+            errs.append(d)
+            log.info(f"  {r['patient']:11} {str(r['group']):5}  GT {r['ef_gt']:5.1f}%  "
+                     f"pred {r['ef_pred']:5.1f}%  |d| {d:4.1f}")
+        ef_mae = float(np.mean(errs)) if errs else float("nan")
+        if errs:
+            log.info(f"  EF MAE = {ef_mae:.1f}%  (n={len(errs)})")
+
+        return {
+            "dice": {CLASS_NAMES[c]: dice_per_class[c] for c in CLASS_NAMES},
+            "dice_mean": mean_dice,
+            "ef_mae": ef_mae,
+            "ef_rows": ef_rows,
+            "boundary": ({CLASS_NAMES[c]: surf_per_class[c] for c in CLASS_NAMES}
+                         if surf_per_class else None),
+        }

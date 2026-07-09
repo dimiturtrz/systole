@@ -3,7 +3,7 @@
 """
 import torch
 
-from core.data.dynamic.pipeline import Batch, Soften, SynthReplace, build_pipeline
+from core.data.dynamic.pipeline import Batch, Pipeline, Soften, SynthReplace
 from core.data.dynamic.synth import SynthCfg
 
 
@@ -30,7 +30,7 @@ def test_synth_replace_noop_when_off():
 
 
 def test_synth_replace_force_replaces_all(monkeypatch):
-    monkeypatch.setattr("core.data.dynamic.pipeline.synthesize_from_labels",
+    monkeypatch.setattr("core.data.dynamic.pipeline.SynthPainter.synthesize_from_labels",
                         lambda mask, cfg, n, real_img: (torch.ones_like(real_img), torch.full_like(mask, 2)))
     b = SynthReplace(SynthCfg(synth_p=0.0), 4)(_batch(force=torch.ones(2, dtype=torch.bool)))
     assert (b.x == 1).all() and (b.y == 2).all()           # every forced row painted synthetic
@@ -38,5 +38,5 @@ def test_synth_replace_force_replaces_all(monkeypatch):
 
 def test_build_pipeline_order():
     from core.data.dynamic.generator import GeneratorCfg
-    ops = build_pipeline(GeneratorCfg(), 4)
+    ops = Pipeline.build(GeneratorCfg(), 4)
     assert [type(o).__name__ for o in ops] == ["SynthReplace", "Augment", "Soften"]

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("SimpleITK")
-from core.preprocessing.n4 import N4Cfg, _n4_sitk, n4_bias
+from core.preprocessing.n4 import N4Cfg
 
 
 def _biased():
@@ -22,13 +22,13 @@ def _cov(a, fg):
 def test_removes_smooth_bias():
     base, biased = _biased()
     fg = base > 0
-    out = n4_bias(biased, (8.0, 1.5, 1.5))
+    out = N4Cfg.n4_bias(biased, (8.0, 1.5, 1.5))
     assert _cov(out, fg) < _cov(biased, fg) / 3   # markedly more uniform
 
 
 def test_shape_dtype_finite():
     _, biased = _biased()
-    out = n4_bias(biased, (8.0, 1.5, 1.5))
+    out = N4Cfg.n4_bias(biased, (8.0, 1.5, 1.5))
     assert out.shape == biased.shape
     assert out.dtype == np.float32
     assert np.isfinite(out).all()
@@ -36,7 +36,7 @@ def test_shape_dtype_finite():
 
 def test_flat_input_no_crash():
     flat = np.ones((4, 32, 32), np.float32)
-    out = n4_bias(flat)                  # no spacing, nothing to correct
+    out = N4Cfg.n4_bias(flat)                  # no spacing, nothing to correct
     assert out.shape == flat.shape and np.isfinite(out).all()
 
 
@@ -61,5 +61,5 @@ def test_n4_sitk_error_fallback(monkeypatch):
 
     monkeypatch.setattr(n4mod.sitk, "N4BiasFieldCorrectionImageFilter", _Boom)
     _, biased = _biased()
-    out = _n4_sitk(biased, (8.0, 1.5, 1.5))
+    out = N4Cfg._n4_sitk(biased, (8.0, 1.5, 1.5))
     np.testing.assert_array_equal(out, biased.astype(np.float32))

@@ -6,16 +6,16 @@ import logging
 import polars as pl
 
 from core.config import DEFAULT_INPLANE
-from core.data.static.store.build import load
+from core.data.static.store.build import Build
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import AcqReference, MetaBuilder
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.store")
 
 
 def main():
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")
     ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
     ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
@@ -44,7 +44,7 @@ def main():
         for p in paths:
             log.info(f"  {p}")
         raise SystemExit
-    df = load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
+    df = Build.load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
     log.info(f"\n=== data cloud: {len(df)} subjects ===")
     log.info(df.group_by("dataset").agg(pl.len().alias("n"),
           pl.col("labelled").sum().alias("labelled")).sort("dataset"))

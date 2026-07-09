@@ -22,12 +22,14 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from core.data.static.store import load_arrays
-from core.obs import progress
+from core.data.static.store import Store
+
+load_arrays = Store.load_arrays
+from core.obs import Obs
 
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
-from core.preprocessing.preprocess import SIZE, fit_square
+from core.preprocessing.preprocess import SIZE, Preprocess
 from core.types import Slice2D
 
 
@@ -53,7 +55,7 @@ class ACDCSliceDataset(Dataset):
         self.owners: list[int] = []                      # per-slice index into npz_paths (for per-slice meta)
         self.frames = frames
         self.augment = augment
-        for pi, p in enumerate(progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
+        for pi, p in enumerate(Obs.progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
             case = load_arrays(p)
             for tag in frames:
                 img = case.get(f"{tag.lower()}_img")     # [D, H, W]
@@ -72,45 +74,45 @@ class ACDCSliceDataset(Dataset):
 
     def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
         img, m = self.items[i]
-        img = fit_square(img, self.size, pad_value=0.0)          # [size, size]
-        m = fit_square(m, self.size, pad_value=0)                # [size, size]
+        img = Preprocess.fit_square(img, self.size, pad_value=0.0)          # [size, size]
+        m = Preprocess.fit_square(m, self.size, pad_value=0)                # [size, size]
         # Augmentation is applied GPU-batched in the training loop (see training.augment), not
         # here — the per-item path stays cheap so DataLoader workers don't bottleneck the GPU.
         # img -> [1, size, size] (add channel); mask -> [size, size] int64
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
+    @staticmethod
+    def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
+        """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
 
-def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
-    """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
+        The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training
+        loop indexes these tensors on the GPU each epoch — zero per-epoch CPU / disk / host↔device copy
+        (everything after setup runs on the GPU). The cardiac slice set fits VRAM easily (~3 GB at 256px
+        on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
+        (CI / no-GPU) — same index-batched loop, just on CPU. `return_owners` also returns a per-slice
+        LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask).
 
-    The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training
-    loop indexes these tensors on the GPU each epoch — zero per-epoch CPU / disk / host↔device copy
-    (everything after setup runs on the GPU). The cardiac slice set fits VRAM easily (~3 GB at 256px
-    on a 32 GB card). Masks kept uint8 to save VRAM; cast to long per batch. device='cpu' works too
-    (CI / no-GPU) — same index-batched loop, just on CPU. `return_owners` also returns a per-slice
-    LongTensor [N] indexing npz_paths — for attaching per-slice meta (e.g. the partial-label mask).
+        (frames/keep_empty are ACDCSliceDataset knobs no caller ever overrode here — dropped rather than
+        threaded as dead params; construct the dataset directly if you ever need them.)"""
+        ds = ACDCSliceDataset(npz_paths, size=size)
+        if not ds.items:
+            z = torch.zeros((0, size, size))
+            empty = (z[:, None].to(device), z.to(torch.uint8).to(device))
+            return (*empty, torch.zeros(0, dtype=torch.long, device=device)) if return_owners else empty
+        imgs = np.stack([Preprocess.fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
+        msks = np.stack([Preprocess.fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
+        X, Y = torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
+        if return_owners:
+            return X, Y, torch.tensor(ds.owners, dtype=torch.long, device=device)
+        return X, Y
 
-    (frames/keep_empty are ACDCSliceDataset knobs no caller ever overrode here — dropped rather than
-    threaded as dead params; construct the dataset directly if you ever need them.)"""
-    ds = ACDCSliceDataset(npz_paths, size=size)
-    if not ds.items:
-        z = torch.zeros((0, size, size))
-        empty = (z[:, None].to(device), z.to(torch.uint8).to(device))
-        return (*empty, torch.zeros(0, dtype=torch.long, device=device)) if return_owners else empty
-    imgs = np.stack([fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
-    msks = np.stack([fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
-    X, Y = torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
-    if return_owners:
-        return X, Y, torch.tensor(ds.owners, dtype=torch.long, device=device)
-    return X, Y
+    @staticmethod
+    def datasets(train_paths: list[str], val_paths: list[str], size: int = SIZE
+                 ) -> tuple["ACDCSliceDataset", "ACDCSliceDataset"]:
+        """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
 
-
-def datasets(train_paths: list[str], val_paths: list[str], size: int = SIZE
-             ) -> tuple[ACDCSliceDataset, ACDCSliceDataset]:
-    """(train_ds [augmented], val_ds) from two lists of consolidated-subject npz paths.
-
-    The split itself is a query over the data store's meta frame (data/splits.py) — this just
-    turns the chosen subject paths into augmented/plain slice datasets.
-    """
-    return (ACDCSliceDataset(train_paths, size=size, augment=True),
-            ACDCSliceDataset(val_paths, size=size, augment=False))
+        The split itself is a query over the data store's meta frame (data/splits.py) — this just
+        turns the chosen subject paths into augmented/plain slice datasets.
+        """
+        return (ACDCSliceDataset(train_paths, size=size, augment=True),
+                ACDCSliceDataset(val_paths, size=size, augment=False))

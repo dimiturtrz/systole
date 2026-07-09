@@ -21,9 +21,23 @@ from pydantic import BaseModel, Field
 from core.config import _VALIDATE
 
 
-def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
-    """MONAI compound Dice + CE for integer label maps (0/1/2/3)."""
-    return DiceCELoss(to_onehot_y=to_onehot_y, softmax=softmax, **kw)
+class Losses:
+    """Loss helpers that aren't themselves loss objects (the free functions folded in as staticmethods,
+    public names kept): the MONAI Dice+CE builder + Kendall uncertainty weighting."""
+
+    @staticmethod
+    def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
+        """MONAI compound Dice + CE for integer label maps (0/1/2/3)."""
+        return DiceCELoss(to_onehot_y=to_onehot_y, softmax=softmax, **kw)
+
+    @staticmethod
+    def uncertainty_weighted(loss_terms, log_vars):
+        """Kendall (2018) homoscedastic-uncertainty weighting: Σ exp(-s_i)·L_i + s_i, with s_i = log σ_i²
+        LEARNABLE. The net auto-balances the tasks (lower s_i -> higher weight on L_i); the +s_i penalty
+        stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
+        scale-free (paired with the dimensionless vol_loss). Pass the learnable log-vars as parameters in
+        the optimizer."""
+        return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
 
 
 class DiceCEHD:
@@ -111,7 +125,7 @@ class DiceCEHER:
     but HER is GPU-cheap)."""
 
     def __init__(self, her_weight=0.5, alpha=2.0, erosions=10, warmup=5, ramp=5):
-        self.dce = dice_ce_loss()
+        self.dce = Losses.dice_ce_loss()
         self.her = HausdorffERLoss(alpha=alpha, erosions=erosions)
         self.her_weight, self.warmup, self.ramp, self.epoch = her_weight, warmup, ramp, 0
 
@@ -184,15 +198,6 @@ class PartialLabelDiceCE:
         return self.ld * dice_loss + self.lce * ce
 
 
-def uncertainty_weighted(loss_terms, log_vars):
-    """Kendall (2018) homoscedastic-uncertainty weighting: Σ exp(-s_i)·L_i + s_i, with s_i = log σ_i²
-    LEARNABLE. The net auto-balances the tasks (lower s_i -> higher weight on L_i); the +s_i penalty
-    stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
-    scale-free (paired with the dimensionless vol_loss). Pass the learnable log-vars as parameters in
-    the optimizer."""
-    return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
-
-
 # ── Loss config = a discriminated union; each variant BUILDS its own loss (polymorphism, no dispatch) ──
 class LossCfg(BaseModel):
     """Base seg-loss cfg. `build()` is the template: subclasses implement `_build()` (construct their
@@ -213,7 +218,7 @@ class DiceCECfg(LossCfg):
     kind: Literal["dice_ce"] = "dice_ce"
 
     def _build(self):
-        return dice_ce_loss()
+        return Losses.dice_ce_loss()
 
 
 class DiceCETverskyCfg(LossCfg):

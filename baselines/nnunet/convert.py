@@ -54,12 +54,12 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     """Export the battery split to nnU-Net raw: Tr = train+val pool, Ts = acdc+canon held-out."""
     import polars as pl
     from core.data.static import store, splits
-    from core.data.static.mri.registry import get_adapter
+    from core.data.static.mri.registry import AdapterRegistry
     from core.data.static.store import DataCfg
 
     dc = DataCfg()                                           # the generalization criteria (Canon+GE test, ACDC val)
     meta = store.load(list(dc.sources))
-    train_df, val_df, test_df = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
+    train_df, val_df, test_df = splits.Splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
                                                   val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
     tr = train_df                                            # nnU-Net trains on our TRAIN (Si+Ph); does its
     #                                                          own internal CV. ACDC=val is NOT given to it
@@ -74,8 +74,8 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
     for sub in ("imagesTr", "labelsTr", "imagesTs", "labelsTs"):
         (ds / sub).mkdir(parents=True, exist_ok=True)
 
-    n_tr = _write_cases(tr.iter_rows(named=True), ds / "imagesTr", ds / "labelsTr", get_adapter)
-    n_ts = _write_cases(test_df.iter_rows(named=True), ds / "imagesTs", ds / "labelsTs", get_adapter)
+    n_tr = _write_cases(tr.iter_rows(named=True), ds / "imagesTr", ds / "labelsTr", AdapterRegistry.get_adapter)
+    n_ts = _write_cases(test_df.iter_rows(named=True), ds / "imagesTs", ds / "labelsTs", AdapterRegistry.get_adapter)
 
     # axis manifest: which held-out test cases are the centre-shift (acdc) vs unseen-vendor (canon)
     manifest = {}
@@ -97,7 +97,7 @@ def convert_battery(out_root: str, dataset_id: int = 29, n_patients: int = 0) ->
 
 
 def main():
-    from core.config import data_root
+    from core.config import Config
 
     ap = argparse.ArgumentParser(description=__doc__)
     # Default to the data-namespaced raw dir (<data>/nnunet/raw) derived from cardioseg's path
@@ -106,7 +106,7 @@ def main():
     ap.add_argument("--id", type=int, default=29, help="nnU-Net dataset id")
     ap.add_argument("--n-patients", type=int, default=0, help="0 = all (debug cap)")
     a = ap.parse_args()
-    out = a.out or str(Path(data_root("nnunet")) / "raw")
+    out = a.out or str(Path(Config.data_root("nnunet")) / "raw")
     convert_battery(out, a.id, a.n_patients)
 
 

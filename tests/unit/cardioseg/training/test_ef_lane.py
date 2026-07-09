@@ -10,17 +10,19 @@ import torch
 
 import cardioseg.training.ef_lane as EL
 from cardioseg.training.ef_lane import (
+    EfLane,
     KaggleEF,
     VolConsistency,
-    _cav_volume,
-    _stack,
-    _zscore,
-    build_aux,
-    ef_ratio,
-    ef_ratio_loss,
 )
+
+_cav_volume = EfLane._cav_volume
+_stack = EfLane._stack
+_zscore = EfLane._zscore
+build_aux = EfLane.build_aux
+ef_ratio = EfLane.ef_ratio
+ef_ratio_loss = EfLane.ef_ratio_loss
 from core.data.static.labels import LV_CAV
-from core.model import build_unet
+from core.model import Model
 
 
 def test_ef_ratio_matches_hand_formula():
@@ -116,7 +118,7 @@ SIZE = 32
 
 def _cpu_model():
     torch.manual_seed(0)
-    return build_unet().eval()
+    return Model.build_unet().eval()
 
 
 def _fake_case(dz=2, seed=0):
@@ -169,7 +171,7 @@ def _fake_sax(L=2, P=3, seed=0):
 def test_kaggleef_builds_pool_and_losses(monkeypatch):
     """KaggleEF: stubbed load_sax fills the host-RAM cine pool (cases with an EF target kept); loss()
     phase-finds + two CPU forwards -> a finite grad-carrying ef_ratio Huber."""
-    monkeypatch.setattr(EL, "load_sax", lambda _c: _fake_sax())
+    monkeypatch.setattr(EL.KaggleDsbAdapter, "load_sax", staticmethod(lambda _c: _fake_sax()))
     cases = [Path("1"), Path("2")]
     ef_targets = {"1": {"ef": 55.0}, "2": {"ef": 62.0}}
     lane = KaggleEF(cases, ef_targets, SIZE, "cpu", k=2, pool=8, seed=0)
@@ -180,6 +182,6 @@ def test_kaggleef_builds_pool_and_losses(monkeypatch):
 
 def test_kaggleef_skips_cases_without_ef_target(monkeypatch):
     """Filter class: a case absent from ef_targets (or ef missing) is skipped; no targets -> loss None."""
-    monkeypatch.setattr(EL, "load_sax", lambda _c: _fake_sax())
+    monkeypatch.setattr(EL.KaggleDsbAdapter, "load_sax", staticmethod(lambda _c: _fake_sax()))
     lane = KaggleEF([Path("1")], {"1": {"ef": None}}, SIZE, "cpu", k=1, pool=8)
     assert lane.n == 0 and lane.loss(_cpu_model(), amp=False) is None

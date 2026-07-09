@@ -14,9 +14,9 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import KNOWN_DATASETS, data_root
-from core.data.static.mri.registry import get_adapter
-from core.obs import setup
+from core.config import KNOWN_DATASETS, Config
+from core.data.static.mri.registry import AdapterRegistry
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.persist")
 
@@ -24,44 +24,49 @@ _DATASETS = KNOWN_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"
 
 
-def _overlay() -> dict:
-    return OmegaConf.to_container(OmegaConf.load(_SOURCES)) if _SOURCES.exists() else {}
+class Persist:
+    """Dataset acquisition-meta persistence: merge the adapter AUTO tier with the paper overlay and
+    serialize provenance-tagged fields (the free helpers folded in as staticmethods)."""
 
+    @staticmethod
+    def _overlay() -> dict:
+        return OmegaConf.to_container(OmegaConf.load(_SOURCES)) if _SOURCES.exists() else {}
 
-def _prov(field: str, auto_src: dict, paper: dict) -> dict:
-    """Provenance for one field: the paper overlay wins (cited + verified flag), else the adapter's
-    _source map (parsed = deterministic = verified)."""
-    p = paper.get(field)
-    if isinstance(p, dict):
-        return {"source": p.get("source", "paper"), "by": "paper", "verified": bool(p.get("verified"))}
-    src = auto_src.get(field) or auto_src.get("rest") or auto_src.get("all") or "unknown"
-    return {"source": src, "by": "auto", "verified": True}
+    @staticmethod
+    def _prov(field: str, auto_src: dict, paper: dict) -> dict:
+        """Provenance for one field: the paper overlay wins (cited + verified flag), else the adapter's
+        _source map (parsed = deterministic = verified)."""
+        p = paper.get(field)
+        if isinstance(p, dict):
+            return {"source": p.get("source", "paper"), "by": "paper", "verified": bool(p.get("verified"))}
+        src = auto_src.get(field) or auto_src.get("rest") or auto_src.get("all") or "unknown"
+        return {"source": src, "by": "auto", "verified": True}
 
+    @staticmethod
+    def persist_meta(dataset: str) -> Path:
+        a = AdapterRegistry.get_adapter(dataset)
+        paper = Persist._overlay().get(dataset) or {}
+        subjects = {}
+        for case in a.cases():
+            m = dict(a.meta(case))
+            auto_src = m.pop("_source", {}) or {}
+            subjects[case.name] = {k: {"value": v, **Persist._prov(k, auto_src, paper)} for k, v in m.items()}
+        out = Path(Config.data_root("raw")) / dataset / "meta" / f"{dataset}.yaml"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        OmegaConf.save(OmegaConf.create({"dataset": dataset, "n": len(subjects),
+                                         "paper_layer": paper, "subjects": subjects}), out)
+        log.info(f"{dataset}: {len(subjects)} subjects -> {out}")
+        return out
 
-def persist_meta(dataset: str) -> Path:
-    a = get_adapter(dataset)
-    paper = _overlay().get(dataset) or {}
-    subjects = {}
-    for case in a.cases():
-        m = dict(a.meta(case))
-        auto_src = m.pop("_source", {}) or {}
-        subjects[case.name] = {k: {"value": v, **_prov(k, auto_src, paper)} for k, v in m.items()}
-    out = Path(data_root("raw")) / dataset / "meta" / f"{dataset}.yaml"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    OmegaConf.save(OmegaConf.create({"dataset": dataset, "n": len(subjects),
-                                     "paper_layer": paper, "subjects": subjects}), out)
-    log.info(f"{dataset}: {len(subjects)} subjects -> {out}")
-    return out
-
-
-def main():
-    setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
-    args = ap.parse_args()
-    for ds in (_DATASETS if args.dataset == "all" else [args.dataset]):
-        persist_meta(ds)
+    @staticmethod
+    def main():
+        Obs.setup()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
+        args = ap.parse_args()
+        for ds in (_DATASETS if args.dataset == "all" else [args.dataset]):
+            Persist.persist_meta(ds)
 
 
 if __name__ == "__main__":
-    main()
+    Persist.main()

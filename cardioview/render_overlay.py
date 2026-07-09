@@ -39,10 +39,10 @@ from render_volume import normalize, to_imagedata
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
-from core.data.static.mri.acdc import acdc_cases, load_ed_es
-from core.data.static.splits import split_patients
-from core.measure import ejection_fraction
-from core.preprocessing.preprocess import preprocess_case
+from core.data.static.mri.acdc import AcdcAdapter
+from core.data.static.splits import Splits
+from core.measure import Measure
+from core.preprocessing.preprocess import Preprocess
 
 log = logging.getLogger("cardioview.render_overlay")
 
@@ -88,7 +88,7 @@ class OverlayCfg:
 
 def _split_tag(patient: str) -> str:
     """Honesty tag: was this patient in the model's training set? (warns on TRAIN-seen preds)."""
-    _, val = split_patients(list(acdc_cases()), 0.2, 0)
+    _, val = Splits.split_patients(list(AcdcAdapter().cases()), 0.2, 0)
     held = patient in {c.name for c in val}
     if not held:
         log.warning("%s was in training — pred overstates the model. Use a held-out patient.", patient)
@@ -99,8 +99,8 @@ def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
     """EF (both phases) for the scene title — pred vs GT."""
     if "ED" not in masks or "ES" not in masks:
         return ""
-    ef, _, _ = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
-    ef_g, _, _ = ejection_fraction(
+    ef, _, _ = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
+    ef_g, _, _ = Measure.ejection_fraction(
         *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
     return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 
@@ -150,7 +150,7 @@ def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: 
 
 
 def render(cfg: OverlayCfg) -> None:  # pragma: no cover  (preprocess_case disk read + load_model + pyvista — render shell)
-    case = preprocess_case(patient_dir(cfg.patient), loader=load_ed_es)
+    case = Preprocess.preprocess_case(patient_dir(cfg.patient), loader=AcdcAdapter().load_ed_es)
     spacing = tuple(float(s) for s in case["spacing"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = None if cfg.source == "gt" else load_model(MODELS[cfg.model_name], device)

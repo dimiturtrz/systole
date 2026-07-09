@@ -26,56 +26,57 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.config import FLAGSHIP_REF
-from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.static import splits
 from core.data.static.labels import CLASSES
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
-from core.obs import setup
-from core.registry import resolve
-from core.run import load_run
+from core.obs import Obs
+from core.registry import Registry
+from core.run import Run
 
 log = logging.getLogger("cardioseg.attribution")
 
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
 
-def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
-    """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
-    absent GT classes are left zero. Pure (no model) -> unit-testable."""
-    M = torch.zeros(n_classes, n_classes)
-    for g in range(n_classes):
-        gm = gt == g
-        tot = int(gm.sum())
-        if tot == 0:
-            continue
-        pg = pred[gm]
-        for p in range(n_classes):
-            M[g, p] = (pg == p).float().mean()
-    return M
-
-
-def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
-    model.eval()
-    with torch.no_grad():
-        return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
-                          for i in range(0, X.shape[0], batch)])
-
-
 class Attribution:
     """Model-interpretability diagnostic (confusion recall + captum saliency) for a trained model.
     Holds model + device + n_classes as STATE (bd 01fh: they were threaded as args); .run(X, Y, out_dir)
-    takes only the data + output location that vary."""
+    takes only the data + output location that vary. The model-free helpers (class_confusion, _predict)
+    are folded in as staticmethods."""
 
     def __init__(self, model, device: str, n_classes: int):
         self.model, self.device, self.n_classes = model, device, n_classes
+
+    @staticmethod
+    def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
+        """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
+        absent GT classes are left zero. Pure (no model) -> unit-testable."""
+        M = torch.zeros(n_classes, n_classes)
+        for g in range(n_classes):
+            gm = gt == g
+            tot = int(gm.sum())
+            if tot == 0:
+                continue
+            pg = pred[gm]
+            for p in range(n_classes):
+                M[g, p] = (pg == p).float().mean()
+        return M
+
+    @staticmethod
+    def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
+        model.eval()
+        with torch.no_grad():
+            return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
+                              for i in range(0, X.shape[0], batch)])
 
     def run(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out = Path(out_dir)
-        pred = _predict(self.model, X, self.device)          # on cpu
-        conf = class_confusion(pred, Y.cpu(), self.n_classes)
+        pred = self._predict(self.model, X, self.device)          # on cpu
+        conf = self.class_confusion(pred, Y.cpu(), self.n_classes)
         # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
         summary = {
             "names": _NAMES[:self.n_classes],
@@ -119,13 +120,13 @@ def _main():
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
     args = ap.parse_args()
-    setup()
-    run_dir = resolve(args.run)
-    model, cfg, device = load_run(run_dir)
+    Obs.setup()
+    run_dir = Registry.resolve(args.run)
+    model, cfg, device = Run.load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
-    X, Y = load_to_gpu(splits.paths(va), d.size, device)
+    va = splits.Splits.model_val(d, meta)                   # coded split's val if set, else criteria
+    X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, device)
     s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, args.out or run_dir)
     log.info(json.dumps(s, indent=2))
 

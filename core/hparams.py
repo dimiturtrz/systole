@@ -43,7 +43,7 @@ from core.preprocessing.n4 import N4Cfg
 # resolves. TrainCfg (whole-run composition root) stays here.
 __all__ = ["ModelCfg", "AugCfg", "SynthCfg", "N4Cfg", "DataCfg", "GeneratorCfg", "LossCfg",
            "AnyLossCfg", "DiceCECfg", "DiceCETverskyCfg", "DiceCEHERCfg", "DiceCEHDCfg", "LOSS_VARIANTS",
-           "TrainCfg", "apply_overrides", "to_json", "from_json"]
+           "TrainCfg", "Hparams"]
 
 
 # LossCfg (discriminated union) + variants live in core.losses, co-located with the loss classes so
@@ -102,51 +102,56 @@ class TrainCfg(BaseModel):
     residency: Literal["gpu", "cpu"] = "gpu"
 
 
-def _coerce(val: str, cur):
-    """Parse an override string to the current field's type (tuples via literal_eval). pydantic's
-    validate_assignment then enforces the bounds when we setattr the result."""
-    if isinstance(cur, bool):
-        return val.lower() in ("1", "true", "yes", "on")
-    if isinstance(cur, int):
-        return int(val)
-    if isinstance(cur, float):
-        return float(val)
-    if isinstance(cur, (tuple, list)):
-        return ast.literal_eval(val)
-    if cur is None:                                       # Optional[str] field (device, out_dir)
-        return None if val.lower() in ("none", "null", "") else val
-    return val
-
-
 # discriminator field name -> {tag: variant cls}, for --set switching of a union field's variant.
 _UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": {**ACQ_VARIANTS, **BG_VARIANTS}}
 
 
-def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
-    """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'data.test_vendors=(\"GE\",)').
-    Each setattr is validated (validate_assignment) -> an out-of-bounds/typo value raises immediately."""
-    for it in items or []:
-        key, _, val = it.partition("=")
-        *parents, leaf = key.strip().split(".")
-        # a discriminated-union field is chosen by its tag ('kind'/'mode'); a setattr can't cross variant
-        # types, so overriding the tag REBUILDS the whole variant on its container.
-        if leaf in _UNION_VARIANTS and parents:
-            container = cfg
-            for p in parents[:-1]:
-                container = getattr(container, p)
-            setattr(container, parents[-1], _UNION_VARIANTS[leaf][val.strip()]())
-            continue
-        obj = cfg
-        for p in parents:
-            obj = getattr(obj, p)
-        setattr(obj, leaf, _coerce(val.strip(), getattr(obj, leaf)))
-    return cfg
+class Hparams:
+    """Run-config helpers (free functions folded in as staticmethods; public names kept): override
+    parsing/application + config.json (de)serialization for TrainCfg."""
 
+    @staticmethod
+    def _coerce(val: str, cur):
+        """Parse an override string to the current field's type (tuples via literal_eval). pydantic's
+        validate_assignment then enforces the bounds when we setattr the result."""
+        if isinstance(cur, bool):
+            return val.lower() in ("1", "true", "yes", "on")
+        if isinstance(cur, int):
+            return int(val)
+        if isinstance(cur, float):
+            return float(val)
+        if isinstance(cur, (tuple, list)):
+            return ast.literal_eval(val)
+        if cur is None:                                       # Optional[str] field (device, out_dir)
+            return None if val.lower() in ("none", "null", "") else val
+        return val
 
-def to_json(cfg: TrainCfg, path: str | Path) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(cfg.model_dump_json(indent=2))
+    @staticmethod
+    def apply_overrides(cfg: TrainCfg, items: list[str]) -> TrainCfg:
+        """Apply `a.b=val` dotted overrides in place (e.g. 'aug.gamma_p=0.5', 'data.test_vendors=(\"GE\",)').
+        Each setattr is validated (validate_assignment) -> an out-of-bounds/typo value raises immediately."""
+        for it in items or []:
+            key, _, val = it.partition("=")
+            *parents, leaf = key.strip().split(".")
+            # a discriminated-union field is chosen by its tag ('kind'/'mode'); a setattr can't cross variant
+            # types, so overriding the tag REBUILDS the whole variant on its container.
+            if leaf in _UNION_VARIANTS and parents:
+                container = cfg
+                for p in parents[:-1]:
+                    container = getattr(container, p)
+                setattr(container, parents[-1], _UNION_VARIANTS[leaf][val.strip()]())
+                continue
+            obj = cfg
+            for p in parents:
+                obj = getattr(obj, p)
+            setattr(obj, leaf, Hparams._coerce(val.strip(), getattr(obj, leaf)))
+        return cfg
 
+    @staticmethod
+    def to_json(cfg: TrainCfg, path: str | Path) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(cfg.model_dump_json(indent=2))
 
-def from_json(path: str | Path) -> TrainCfg:
-    return TrainCfg.model_validate_json(Path(path).read_text())
+    @staticmethod
+    def from_json(path: str | Path) -> TrainCfg:
+        return TrainCfg.model_validate_json(Path(path).read_text())

@@ -64,7 +64,11 @@ def test_undersized_exempts_structural_files():
 
 def test_load_structure_cfg_defaults_when_absent():
     cfg = load_structure_cfg("does_not_exist.toml")
-    assert cfg == _DEFAULTS and cfg["file_max"] == 750
+    assert cfg == _DEFAULTS and cfg["file_max"] == 750 and cfg["file_min"] == 0
+
+
+def test_undersized_floor_off_when_zero():
+    assert _undersized([("tiny.py", 3), ("mid.py", 100)], 0) == []   # file_min=0 -> floor disabled
 
 
 def test_unmirrored_flags_module_without_test_and_exempts_plumbing(tmp_path, monkeypatch):

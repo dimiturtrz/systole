@@ -18,16 +18,16 @@ import numpy as np
 import polars as pl
 from mlflow.exceptions import MlflowException
 
-from cardioseg.evaluation.distribution import _pooled, collect, strata_table
+from cardioseg.evaluation.distribution import Distribution
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
-from core.data.static.store import build as store
-from core.evaluate import CLASSES, surface_metrics
-from core.hparams import from_json
-from core.measure import ef_statistics
-from core.model import resolve_device
-from core.obs import setup
-from core.registry import _DB_URI, _run_id_for, resolve
+from core.data.static.store.build import Build as store
+from core.evaluate import CLASSES, Evaluate
+from core.hparams import Hparams
+from core.measure import Measure
+from core.model import Model
+from core.obs import Obs
+from core.registry import _DB_URI, Registry
 
 log = logging.getLogger("cardioseg.results")
 
@@ -45,63 +45,68 @@ EFFICIENCY = {"ours": {"params": "1.6 M", "flops": "0.8 G"},
 _NAMES = [CLASSES[c][0] for c in CLASSES]  # RV, LV-myo, LV-cav
 
 
-def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: dict) -> dict:
-    """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
-    stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
-    EF MAE/bias/LoA). No model, no store — extracted from `_axis` so the exact JSON shape + rounding
-    (the thing the docs read) is testable off synthetic pooled arrays; `_axis` supplies these from the
-    GPU `collect` (the shell) and appends `strata` after."""
-    dice, hd95, assd = {}, {}, {}
-    for cl, (name, _) in CLASSES.items():
-        pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
-        m = surface_metrics(pooled) if pooled.size else {"hd95": float("nan"), "assd": float("nan")}
-        dice[name] = round(float(np.mean(dice_acc[cl])), 3)
-        hd95[name] = round(float(m["hd95"]), 1)
-        assd[name] = round(float(m["assd"]), 2)
-    return {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
-            "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats["mae"], 1),
-            "ef_bias": round(ef_stats["bias"], 1),
-            "ef_loa": [round(ef_stats["loa"][0], 1), round(ef_stats["loa"][1], 1)]}
+class Results:
+    """Emits the canonical RESULTS.json axes: pure axis-record assembly (`axis_dict`) + the GPU-shell
+    `_axis`/`build` that feed it. Grouped so the published-JSON shape lives with the eval that fills it."""
 
+    @staticmethod
+    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: dict) -> dict:
+        """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
+        stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
+        EF MAE/bias/LoA). No model, no store — extracted from `_axis` so the exact JSON shape + rounding
+        (the thing the docs read) is testable off synthetic pooled arrays; `_axis` supplies these from the
+        GPU `collect` (the shell) and appends `strata` after."""
+        dice, hd95, assd = {}, {}, {}
+        for cl, (name, _) in CLASSES.items():
+            pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
+            m = Evaluate.surface_metrics(pooled) if pooled.size else {"hd95": float("nan"), "assd": float("nan")}
+            dice[name] = round(float(np.mean(dice_acc[cl])), 3)
+            hd95[name] = round(float(m["hd95"]), 1)
+            assd[name] = round(float(m["assd"]), 2)
+        return {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
+                "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats["mae"], 1),
+                "ef_bias": round(ef_stats["bias"], 1),
+                "ef_loa": [round(ef_stats["loa"][0], 1), round(ef_stats["loa"][1], 1)]}
 
-def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
-    rows = collect(run, device, df.iter_rows(named=True))
-    dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
-    out = axis_dict(len(rows), dists, dice_acc, ef_statistics(ef_gt, ef_pred))
-    if with_strata:
-        out["strata"] = strata_table(rows, "pathology")
-    return out
+    @staticmethod
+    def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
+        rows = Distribution.collect(run, device, df.iter_rows(named=True))
+        dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+        out = Results.axis_dict(len(rows), dists, dice_acc, Measure.ef_statistics(ef_gt, ef_pred))
+        if with_strata:
+            out["strata"] = Distribution.strata_table(rows, "pathology")
+        return out
 
-
-def build(run: Path) -> dict:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
-    """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
-    TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
-    the run actually held out."""
-    device = resolve_device()
-    d = from_json(run / "config.json").generator.data
-    meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
-    _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                     val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-    flagship = {"acdc": _axis(run, device, val, with_strata=True)}   # val = ACDC, with strata
-    for v in d.test_vendors:                                         # test = unseen vendors, each its own axis
-        flagship[v.lower()] = _axis(run, device, test.filter(pl.col("vendor") == v), with_strata=False)
-    return {
-        "_note": "Canonical published numbers — generated by cardioseg.evaluation.results; do not hand-edit.",
-        "run": run.name,
-        "split": {"val": "acdc (held-out centre)", "test": "+".join(d.test_vendors) + " (unseen vendors)"},
-        "flagship": flagship,
-        "nnunet": NNUNET,        # NOTE: still on the OLD split (ACDC-as-test) until re-run — provisional
-        "efficiency": EFFICIENCY,
-    }
+    @staticmethod
+    def build(run: Path) -> dict:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
+        """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
+        TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
+        the run actually held out."""
+        device = Model.resolve_device()
+        d = Hparams.from_json(run / "config.json").generator.data
+        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
+        _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+                                         val_datasets=d.val_datasets, val_vendors=d.val_vendors)
+        flagship = {"acdc": Results._axis(run, device, val, with_strata=True)}   # val = ACDC, with strata
+        for v in d.test_vendors:                                         # test = unseen vendors, each its own axis
+            flagship[v.lower()] = Results._axis(run, device, test.filter(pl.col("vendor") == v), with_strata=False)
+        return {
+            "_note": "Canonical published numbers — generated by cardioseg.evaluation.results; do not hand-edit.",
+            "run": run.name,
+            "split": {"val": "acdc (held-out centre)", "test": "+".join(d.test_vendors) + " (unseen vendors)"},
+            "flagship": flagship,
+            "nnunet": NNUNET,        # NOTE: still on the OLD split (ACDC-as-test) until re-run — provisional
+            "efficiency": EFFICIENCY,
+        }
 
 
 def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
     args = ap.parse_args()
-    res = build(resolve(args.run))
+    res = Results.build(Registry.resolve(args.run))
     Path(args.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
     log.info(f"wrote {args.out}: " + " · ".join(
@@ -110,7 +115,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
     try:
         mlflow.set_tracking_uri(_DB_URI)
-        with mlflow.start_run(run_id=_run_id_for(args.run)):
+        with mlflow.start_run(run_id=Registry._run_id_for(args.run)):
             for ax, v in f.items():
                 mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])

@@ -4,11 +4,12 @@ test_lock drift guard. StaticMain's real-data parity vs the old xvendor split is
 """
 import polars as pl
 
-from core.data.ingest.source import StaticSource, ids_hash
-from core.data.ingest.split import SplitDef, _complement, _latest, resolve
-from core.data.ingest.splits import list_splits, load_split
+from core.data.ingest.source import StaticSource, SubjectIds
+from core.data.ingest.split import SplitDef, SplitResolver
+from core.data.ingest.splits import Splits
 
 V = pl.col
+ids_hash = SubjectIds.ids_hash
 
 
 def _cloud():
@@ -42,12 +43,12 @@ def test_complement_is_labelled_rest():
     c = _cloud()
     test = _Fam.versions["1.0.0"].test(c)      # c1
     val = _Fam.versions["1.0.0"].val(c)        # s1, s2
-    train = _complement(c, [test, val])
+    train = SplitResolver._complement(c, [test, val])
     assert set(train.subjects()) == {("mnms1", "g1")}          # labelled rest; u1 (unlabelled) excluded
 
 
 def test_resolve_builds_triple_and_complement_train():
-    r = resolve(_Fam(), _cloud())
+    r = SplitResolver.resolve(_Fam(), _cloud())
     assert set(r.test.subjects()) == {("mnms1", "c1")}
     assert set(r.val.subjects()) == {("acdc", "s1"), ("acdc", "s2")}
     assert set(r.train.subjects()) == {("mnms1", "g1")}        # no test/val leak
@@ -56,12 +57,12 @@ def test_resolve_builds_triple_and_complement_train():
 
 
 def test_latest_picks_highest_semver():
-    assert _latest({"1.0.0": None, "1.10.0": None, "1.2.0": None}) == "1.10.0"
+    assert SplitResolver._latest({"1.0.0": None, "1.10.0": None, "1.2.0": None}) == "1.10.0"
 
 
 def test_static_source_resident_is_raw_real(monkeypatch):
     import torch
-    monkeypatch.setattr("core.data.dynamic.dataset.load_to_gpu",
+    monkeypatch.setattr("core.data.dynamic.dataset.ACDCSliceDataset.load_to_gpu",
                         lambda paths, size, device: (torch.zeros(len(paths), 1, size, size), torch.zeros(len(paths), size, size)))
     X, Y = StaticSource(_cloud().filter(V("labelled"))).resident(8, "cpu")
     assert X.shape == (4, 1, 8, 8) and Y.shape == (4, 8, 8)     # raw real, no transforms
@@ -72,7 +73,7 @@ def test_dynamic_resident_zero_input_force_paints_all(monkeypatch):
     import torch
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
     X, Y, fs = DynamicSource(pool="p")._resident(8, "cpu")
     assert X.shape == (5, 1, 8, 8) and (X == 0).all()          # no real pixels
     assert fs.dtype == torch.bool and bool(fs.all())           # every row force-painted
@@ -83,7 +84,7 @@ def test_dynamic_resident_seeded_is_composite(monkeypatch):
     import torch
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
 
     class _Seed:                                               # 2 real rows, exposes resident() (no materialize)
         def resident(self, size, device):
@@ -124,7 +125,7 @@ def test_dynamic_source_cap_bounds_resident(monkeypatch):
     import numpy as np
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((100, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((100, 8, 8), np.int64))
     X, Y, fs = DynamicSource(pool="p", cap=30)._resident(8, "cpu")
     assert X.shape[0] == 30 and Y.shape[0] == 30 and fs.shape[0] == 30      # capped
     assert DynamicSource(pool="p")._resident(8, "cpu")[0].shape[0] == 100   # no cap = full
@@ -135,9 +136,8 @@ def test_synth_composite_split_resolves_to_composite_source():
     """The registered synth_composite split's train is a CompositeSource of SSM + pathology sources —
     the real consumer of the composition mechanism (so it isn't dead code)."""
     from core.data.dynamic.source import CompositeSource
-    from core.data.ingest.splits import list_splits, load_split
-    assert "synth_composite" in list_splits()
-    train = load_split("synth_composite").versions["1.0.0"].train(None)   # synth train ignores the cloud
+    assert "synth_composite" in Splits.list_splits()
+    train = Splits.load_split("synth_composite").versions["1.0.0"].train(None)   # synth train ignores the cloud
     assert isinstance(train, CompositeSource) and len(train.sources) == 2
     assert train.provenance()["kind"] == "composite"
 
@@ -151,7 +151,7 @@ def test_composite_source_unions_children(monkeypatch):
     from core.data.dynamic.synth import FlatBgCfg, ProceduralBgCfg
     from core.hparams import TrainCfg
     sizes = {"a": 4, "b": 3}
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool",
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool",
                         lambda p: np.zeros((sizes[p], 8, 8), np.int64))
     src = CompositeSource([DynamicSource(pool="a", bg=ProceduralBgCfg()),
                            DynamicSource(pool="b", bg=FlatBgCfg())])   # different painters per source
@@ -170,7 +170,7 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
     from core.data.dynamic.generator import GeneratorCfg
     from core.data.dynamic.source import DynamicSource
     from core.data.dynamic.synth import ProceduralBgCfg
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
     cfg = GeneratorCfg()
     orig_bg = cfg.synth.bg.mode
     gen = DynamicSource(pool="p", bg=ProceduralBgCfg(), synth_p=1.0).train_gen(8, "cpu", cfg, 4)
@@ -209,8 +209,8 @@ def test_generator_batch_slices_valid():
 
 def test_static_main_registered_with_locked_testset():
     from core.data.ingest.testsets import STATIC_MAIN_TEST
-    assert "static_main" in list_splits()
-    d = load_split("static_main").versions["1.0.0"]
+    assert "static_main" in Splits.list_splits()
+    d = Splits.load_split("static_main").versions["1.0.0"]
     assert d.train is None                                     # train = complement
     assert STATIC_MAIN_TEST.lock.startswith("sha256:") and len(STATIC_MAIN_TEST.lock) > 20
 
@@ -218,8 +218,8 @@ def test_static_main_registered_with_locked_testset():
 def test_synth_main_registered_with_locked_testset():
     from core.data.ingest.splits.synth_main import POOL
     from core.data.ingest.testsets import SYNTH_MAIN_TEST
-    assert "synth_main" in list_splits()
-    d = load_split("synth_main").versions["1.0.0"]
+    assert "synth_main" in Splits.list_splits()
+    d = Splits.load_split("synth_main").versions["1.0.0"]
     assert d.train is not None                                 # explicit dynamic train (not complement)
     assert POOL                                                # named constant, not a bare literal
     assert SYNTH_MAIN_TEST.lock.startswith("sha256:") and len(SYNTH_MAIN_TEST.lock) > 20

@@ -6,34 +6,34 @@ import numpy as np
 import pytest
 
 from core.data.static.labels import LV_CAV as LV_CAVITY
-from core.data.static.mri.acdc import acdc_cases, load_ed_es
-from core.data.static.mri.base import identify_lv_cavity
-from core.evaluate import dice
-from core.measure import ejection_fraction
+from core.data.static.mri.acdc import AcdcAdapter
+from core.data.static.mri.base import Base
+from core.evaluate import Evaluate
+from core.measure import Measure
 
-_CASES = acdc_cases()
+_CASES = AcdcAdapter().cases()
 needs_data = pytest.mark.skipif(not _CASES, reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
 
 
 @needs_data
 def test_real_patient_labels_and_lv_identification():
-    d = load_ed_es(_CASES[0])
+    d = AcdcAdapter().load_ed_es(_CASES[0])
     gt = d["ED"]["gt"]
     assert set(np.unique(gt).tolist()).issubset({0, 1, 2, 3})
-    lv, scores = identify_lv_cavity(gt)
+    lv, scores = Base.identify_lv_cavity(gt)
     assert lv == LV_CAVITY == 3                      # LV cavity is label 3 on real masks
     assert scores[LV_CAVITY] == max(scores.values())
 
 
 @needs_data
 def test_real_ef_is_physiological():
-    d = load_ed_es(_CASES[0])
-    ef, edv, esv = ejection_fraction(d["ED"]["gt"], d["ES"]["gt"], d["spacing"])
+    d = AcdcAdapter().load_ed_es(_CASES[0])
+    ef, edv, esv = Measure.ejection_fraction(d["ED"]["gt"], d["ES"]["gt"], d["spacing"])
     assert edv > esv > 0                              # diastole larger than systole
     assert 0 < ef < 100
 
 
 @needs_data
 def test_dice_perfect_on_real_mask_self():
-    gt = load_ed_es(_CASES[0])["ED"]["gt"]
-    assert dice(gt, gt, LV_CAVITY) == 1.0
+    gt = AcdcAdapter().load_ed_es(_CASES[0])["ED"]["gt"]
+    assert Evaluate.dice(gt, gt, LV_CAVITY) == 1.0

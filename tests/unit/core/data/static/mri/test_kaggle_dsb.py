@@ -3,16 +3,16 @@ computation + CSV target parsing; the DICOM image reads are integration (skipped
 import polars as pl
 import pytest
 
-from core.data.static.mri.kaggle_dsb import (
-    COUNTRY,
-    _base,
-    _ef,
-    _split_dir,
-    build_kaggle_meta,
-    kaggle_cases,
-    kaggle_ef,
-    kaggle_meta,
-)
+from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
+
+COUNTRY = KaggleDsbAdapter.COUNTRY
+_base = KaggleDsbAdapter._base
+_ef = KaggleDsbAdapter._ef
+_split_dir = KaggleDsbAdapter._split_dir
+build_kaggle_meta = KaggleDsbAdapter.build_kaggle_meta
+kaggle_cases = KaggleDsbAdapter.kaggle_cases
+kaggle_ef = KaggleDsbAdapter.kaggle_ef
+kaggle_meta = KaggleDsbAdapter.kaggle_meta
 
 
 def test_ef_computation():

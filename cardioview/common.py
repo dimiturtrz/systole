@@ -11,12 +11,12 @@ from pathlib import Path
 
 import numpy as np
 
-from core.config import FLAGSHIP_REF, data_root
-from core.inference import predict_volume
-from core.postprocess import largest_cc_per_class
-from core.preprocessing.preprocess import fit_square
-from core.registry import resolve
-from core.run import load_run
+from core.config import FLAGSHIP_REF, Config
+from core.inference import Inference
+from core.postprocess import Postprocess
+from core.preprocessing.preprocess import Preprocess
+from core.registry import Registry
+from core.run import Run
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
 CHAMBERS = {
@@ -46,7 +46,7 @@ def log_setup(level: int = logging.INFO) -> None:  # pragma: no cover  (stdout l
 
 def model_dir(ref: str):  # pragma: no cover  (mlflow registry resolve + artifact download — registry shell)
     """Resolve a registry ref to its local artifact dir (model.pth + config.json + …)."""
-    return resolve(ref)
+    return Registry.resolve(ref)
 
 
 def patient_dir(patient: str, root: str | None = None) -> Path:
@@ -55,7 +55,7 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
     p = Path(patient)
     if p.is_dir():
         return p
-    base = Path(root or data_root("raw")) / "acdc"
+    base = Path(root or Config.data_root("raw")) / "acdc"
     for split in ("training", "testing"):
         d = base / split / patient
         if d.is_dir():
@@ -66,13 +66,13 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
 def load_model(ref: str, device):  # pragma: no cover  (load_run reads model.pth weights + GPU — registry/model shell)
     """Load the trained U-Net for a registry ref (arch from its config.json, so it can't mismatch a
     default). `ref` = an mlflow registry ref (alias|version|run-id) resolved to its artifact dir."""
-    model, _, _ = load_run(model_dir(ref), device)
+    model, _, _ = Run.load_run(model_dir(ref), device)
     return model
 
 
 def square_stack(vol_zyx, dtype=None):
     """Center pad/crop each slice to the SIZE square grid the model expects."""
-    out = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
+    out = np.stack([Preprocess.fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
     return out.astype(dtype) if dtype else out
 
 
@@ -90,6 +90,6 @@ def masks(case: dict, source: str, model=None, device=None) -> dict:
         out[tag] = (
             square_stack(case[f"{k}_gt"], np.uint8)
             if source == "gt"
-            else largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device))
+            else Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device))
         )
     return out

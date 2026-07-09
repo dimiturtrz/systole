@@ -21,57 +21,59 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.data.static.mri.acdc import (
-    DATA_ROOT,
-    acdc_cases,
-    load_ed_es,
-)
-from core.data.static.mri.base import identify_lv_cavity
-from core.obs import setup
+from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
+from core.data.static.mri.base import Base
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.eda")
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "_eda_out"
 
 
-def summarize_patient(patient_dir):
-    d = load_ed_es(patient_dir)
-    sp = d["spacing"]
-    log.info(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
-    for tag in ("ED", "ES"):
-        if tag not in d:
-            continue
-        img, gt = d[tag]["img"], d[tag]["gt"]
-        anis = max(sp) / min(sp)
-        lv, scores = identify_lv_cavity(gt)
-        log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
-              f"{tuple(round(float(s),2) for s in sp)} mm  anisotropy={anis:.1f}x")
-        log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
-        log.info(f"      myo-enclosure score={ {k: round(v,2) for k,v in scores.items()} }"
-              f"  -> LV cavity = label {lv}")
-    return d
+class Eda:
+    """ACDC reality-check + first data viz — the free helpers folded in as staticmethods:
+    per-patient summary (shape/spacing/labels + geometric LV-cavity disambiguation) and the
+    ED/ES base/mid/apex overlay figure."""
 
+    @staticmethod
+    def summarize_patient(patient_dir):
+        d = AcdcAdapter().load_ed_es(patient_dir)
+        sp = d["spacing"]
+        log.info(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
+        for tag in ("ED", "ES"):
+            if tag not in d:
+                continue
+            img, gt = d[tag]["img"], d[tag]["gt"]
+            anis = max(sp) / min(sp)
+            lv, scores = Base.identify_lv_cavity(gt)
+            log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
+                  f"{tuple(round(float(s),2) for s in sp)} mm  anisotropy={anis:.1f}x")
+            log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
+            log.info(f"      myo-enclosure score={ {k: round(v,2) for k,v in scores.items()} }"
+                  f"  -> LV cavity = label {lv}")
+        return d
 
-def save_viz(patient_dir, d, out_png):
-    rows = [t for t in ("ED", "ES") if t in d]
-    if not rows:
-        return
-    fig, axes = plt.subplots(len(rows), 3, figsize=(9, 3 * len(rows)), squeeze=False)
-    for ri, tag in enumerate(rows):
-        img, gt = d[tag]["img"], d[tag]["gt"]
-        D = img.shape[0]
-        for ci, (name, z) in enumerate(
-            (("base", int(D * 0.25)), ("mid", D // 2), ("apex", int(D * 0.75)))
-        ):
-            ax = axes[ri][ci]
-            ax.imshow(img[z], cmap="gray")
-            ax.imshow(np.ma.masked_where(gt[z] == 0, gt[z]), cmap="jet",
-                      alpha=0.4, vmin=0, vmax=3)
-            ax.set_title(f"{tag} {name} z={z}")
-            ax.axis("off")
-    fig.tight_layout()
-    fig.savefig(out_png, dpi=90)
-    log.info(f"  saved {out_png}")
+    @staticmethod
+    def save_viz(patient_dir, d, out_png):
+        rows = [t for t in ("ED", "ES") if t in d]
+        if not rows:
+            return
+        fig, axes = plt.subplots(len(rows), 3, figsize=(9, 3 * len(rows)), squeeze=False)
+        for ri, tag in enumerate(rows):
+            img, gt = d[tag]["img"], d[tag]["gt"]
+            D = img.shape[0]
+            for ci, (name, z) in enumerate(
+                (("base", int(D * 0.25)), ("mid", D // 2), ("apex", int(D * 0.75)))
+            ):
+                ax = axes[ri][ci]
+                ax.imshow(img[z], cmap="gray")
+                ax.imshow(np.ma.masked_where(gt[z] == 0, gt[z]), cmap="jet",
+                          alpha=0.4, vmin=0, vmax=3)
+                ax.set_title(f"{tag} {name} z={z}")
+                ax.axis("off")
+        fig.tight_layout()
+        fig.savefig(out_png, dpi=90)
+        log.info(f"  saved {out_png}")
 
 
 def main():
@@ -80,9 +82,9 @@ def main():
     ap.add_argument("--n", type=int, default=3)
     ap.add_argument("--root", default=None)
     args = ap.parse_args()
-    setup()
+    Obs.setup()
 
-    cases = acdc_cases(args.root)
+    cases = AcdcAdapter(root=args.root).cases()
     log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
     if not cases:
         log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
@@ -92,8 +94,8 @@ def main():
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for pd in cases[: args.n]:
-        d = summarize_patient(pd)
-        save_viz(pd, d, OUT_DIR / f"{pd.name}_overlay.png")
+        d = Eda.summarize_patient(pd)
+        Eda.save_viz(pd, d, OUT_DIR / f"{pd.name}_overlay.png")
 
 
 if __name__ == "__main__":
