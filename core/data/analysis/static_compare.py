@@ -22,7 +22,7 @@ from core.data.dynamic.anatomy import load_pool
 from core.obs import setup
 
 from .shape_coverage import ShapeCoverage
-from .synth_fidelity import wasserstein1d  # reuse the W1 the color analysis uses
+from .synth_fidelity import SynthFidelity
 
 log = logging.getLogger("cardioseg.static_compare")
 
@@ -72,7 +72,7 @@ class StaticCompare:
         out = {}
         for k in R:
             r, s = torch.tensor(R[k]), torch.tensor(S[k])
-            out[k] = {"w1": round(wasserstein1d(r, s), 3),
+            out[k] = {"w1": round(SynthFidelity.wasserstein1d(r, s), 3),
                       "real_median": round(float(np.median(R[k])), 2),
                       "synth_median": round(float(np.median(S[k])), 2)}
         return out
