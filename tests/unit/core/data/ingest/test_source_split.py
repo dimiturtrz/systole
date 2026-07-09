@@ -61,7 +61,7 @@ def test_latest_picks_highest_semver():
 
 def test_static_source_resident_is_raw_real(monkeypatch):
     import torch
-    monkeypatch.setattr("core.data.dynamic.dataset.load_to_gpu",
+    monkeypatch.setattr("core.data.dynamic.dataset.ACDCSliceDataset.load_to_gpu",
                         lambda paths, size, device: (torch.zeros(len(paths), 1, size, size), torch.zeros(len(paths), size, size)))
     X, Y = StaticSource(_cloud().filter(V("labelled"))).resident(8, "cpu")
     assert X.shape == (4, 1, 8, 8) and Y.shape == (4, 8, 8)     # raw real, no transforms

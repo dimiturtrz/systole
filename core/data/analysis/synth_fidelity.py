@@ -20,7 +20,7 @@ import numpy as np
 import polars as pl
 import torch
 
-from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.synth import MatchedAcqCfg, synthesize_from_labels
 from core.data.static import splits
 from core.data.static.labels import CLASSES
@@ -140,7 +140,7 @@ class SynthFidelity:
         per_vendor = {}
         for v in sorted(meta.get_column("vendor").unique().to_list()):
             sub = meta.filter(pl.col("vendor") == v)
-            X, Y = load_to_gpu(splits.paths(sub), size, "cpu")
+            X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(sub), size, "cpu")
             n = int(X.shape[0])
             if n < _MIN_VENDOR_SUBJECTS:
                 continue
@@ -220,7 +220,7 @@ class SynthFidelity:
         out = {}
         for v in sorted(meta.get_column("vendor").unique().to_list()):
             sub = meta.filter(pl.col("vendor") == v)
-            X, Y = load_to_gpu(splits.paths(sub), self.size, "cpu")
+            X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(sub), self.size, "cpu")
             n = int(X.shape[0])
             if n < min_slices:
                 out[v] = {"skipped": f"{n} slices < {min_slices}"}
@@ -266,7 +266,7 @@ def _main():
         real_df = splits.model_val(d, meta)          # coded split's val if set, else criteria
     else:
         real_df = meta.filter(pl.col("labelled"))
-    X, Y = load_to_gpu(splits.paths(real_df), d.size, "cpu")
+    X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(real_df), d.size, "cpu")
     n = int(X.shape[0])
     if n > args.max_slices:
         idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:args.max_slices]

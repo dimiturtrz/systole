@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as F
 
 from core.data.static.labels import LV_CAV
-from core.data.static.mri.kaggle_dsb import kaggle_cases, kaggle_ef, load_sax
+from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import load_arrays
 from core.measure import label_volume_ml, voxel_volume_ml
 from core.preprocessing.preprocess import fit_square
@@ -125,7 +125,7 @@ class KaggleEF:
             t = ef_targets.get(c.name)
             if not t or not t.get("ef"):
                 continue
-            sax = load_sax(c)
+            sax = KaggleDsbAdapter.load_sax(c)
             if not sax:
                 continue
             P, L = min(v.shape[0] for v, _, _ in sax), len(sax)
@@ -171,6 +171,6 @@ def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
     size = cfg.generator.data.size
     lanes: list = [VolConsistency(splits.paths(train_df), size, device, cfg.ef_subjects)]
     if cfg.ef_kaggle:
-        lanes.append(KaggleEF(kaggle_cases("train"), kaggle_ef("train"), size, device,
+        lanes.append(KaggleEF(KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
                               cfg.ef_kaggle_subjects, seed=cfg.seed))
     return lanes

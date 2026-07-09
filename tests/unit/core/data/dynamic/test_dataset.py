@@ -64,8 +64,8 @@ def _fake_npz(tmp_path):
 def test_load_to_gpu_shapes_dtype_device(tmp_path):
     import pytest
     torch = pytest.importorskip("torch")
-    from core.data.dynamic.dataset import load_to_gpu
-    imgs, msks = load_to_gpu([_fake_npz(tmp_path)], size=64, device="cpu")
+    from core.data.dynamic.dataset import ACDCSliceDataset
+    imgs, msks = ACDCSliceDataset.load_to_gpu([_fake_npz(tmp_path)], size=64, device="cpu")
     assert imgs.shape[1:] == (1, 64, 64) and imgs.dtype == torch.float32   # [N,1,size,size] f32
     assert msks.shape[1:] == (64, 64) and msks.dtype == torch.uint8        # [N,size,size] u8 (VRAM-lean)
     assert imgs.shape[0] == msks.shape[0] == 6                              # 3 slices x ED+ES
@@ -75,6 +75,6 @@ def test_load_to_gpu_shapes_dtype_device(tmp_path):
 def test_load_to_gpu_empty_paths():
     import pytest
     pytest.importorskip("torch")
-    from core.data.dynamic.dataset import load_to_gpu
-    imgs, msks = load_to_gpu([], size=64, device="cpu")
+    from core.data.dynamic.dataset import ACDCSliceDataset
+    imgs, msks = ACDCSliceDataset.load_to_gpu([], size=64, device="cpu")
     assert imgs.shape == (0, 1, 64, 64) and msks.shape == (0, 64, 64)

@@ -14,7 +14,7 @@ import torch
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.synth import FlatBgCfg, PartitionBgCfg, SynthCfg, synthesize_from_labels
 from core.data.static import splits
 from core.data.static.labels import CLASSES
@@ -39,7 +39,7 @@ class Render:
         n = len(CLASSES) + 1
         meta = store.load_cfg(d, workers=4)              # ALL preprocessing params (nyul/norm too)
         va = splits.model_val(d, meta)                   # held-out real slices (coded split's val if set)
-        X, Y = load_to_gpu(splits.paths(va), d.size, "cpu")
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(va), d.size, "cpu")
         good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[good], Y[good]
         torch.manual_seed(1); Sf, _ = synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)

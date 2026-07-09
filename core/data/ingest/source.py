@@ -70,14 +70,14 @@ class StaticSource:
     def resident(self, size: int, device: str):
         """Raw resident (X [N,1,H,W], Y [N,H,W]) — real slices, no transforms. Used for val/test scoring
         and as a train_gen's seed."""
-        return _dataset.load_to_gpu(self.paths(), size, device)
+        return _dataset.ACDCSliceDataset.load_to_gpu(self.paths(), size, device)
 
     def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
         """The source's own batch engine (owns its resident tensors + transform chain). Static = real
         pixels + the configured aug/DR-synth (gen_cfg.synth as-is: synth_p>0 -> physics-recontrast DR on
         real labels; the flagship recipe). No force_synth. Carries a per-slice partial-label mask when
         the source mixes datasets that annotate different classes (e.g. SCD = LV-only)."""
-        X, Y, owners = _dataset.load_to_gpu(self.paths(), size, device, return_owners=True)
+        X, Y, owners = _dataset.ACDCSliceDataset.load_to_gpu(self.paths(), size, device, return_owners=True)
         return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None,
                          valid=self._valid_mask(owners, n_classes, device))
 

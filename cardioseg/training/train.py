@@ -20,7 +20,7 @@ from mlflow.exceptions import MlflowException
 
 from core.data.analysis.attribution import Attribution
 from core.data.dynamic.anatomy import load_pool
-from core.data.dynamic.dataset import load_to_gpu
+from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.generator import Generator
 from core.data.dynamic.synth import excise_heart
 from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
@@ -304,7 +304,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     if d.anatomy_pool:
         Ys = torch.as_tensor(load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
         if d.anatomy_mode == "mix":
-            Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+            Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
             Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
             Xtr = torch.cat([Xr, Xsy]); Ytr = torch.cat([Yr, Ys])
             force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
@@ -318,13 +318,13 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
                 Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
                 log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg.mode)
             else:                                                    # Rodero heart on real bg (excised)
-                Xr, Yr = load_to_gpu(splits.paths(train_df), d.size, data_device)
+                Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
                 Xr = excise_heart(Xr, Yr)
                 Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
                 log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
     else:
-        Xtr, Ytr = load_to_gpu(splits.paths(train_df), d.size, data_device)
-    Xva, Yva = load_to_gpu(splits.paths(val_df), d.size, data_device)
+        Xtr, Ytr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
+    Xva, Yva = ACDCSliceDataset.load_to_gpu(splits.paths(val_df), d.size, data_device)
     gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
     return gen, Xva, Yva
 
