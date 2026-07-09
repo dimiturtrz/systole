@@ -25,7 +25,7 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
 from core.hparams import TrainCfg
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.sim2real")
 
@@ -66,7 +66,7 @@ def main():
     ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")
     ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     d = TrainCfg().generator.data
     n_classes = len(CLASSES) + 1
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)

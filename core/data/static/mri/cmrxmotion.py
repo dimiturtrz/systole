@@ -15,7 +15,7 @@ the unified store grew a column for (null on the other datasets).
 import os
 from pathlib import Path
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     DatasetAdapter,
@@ -45,7 +45,7 @@ class CmrxMotionAdapter(DatasetAdapter):
         bases = [Path(env)] if env else []
         if root is not None:
             bases.append(Path(root))
-        raw = Path(data_root("raw"))
+        raw = Path(Config.data_root("raw"))
         bases += [raw / "cmrxmotion", raw, raw.parent]
         subs = ("data", ".", "cmrxmotion/data")
         for base in bases:

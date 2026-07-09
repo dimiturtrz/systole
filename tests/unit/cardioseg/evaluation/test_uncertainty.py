@@ -12,7 +12,7 @@ torch = pytest.importorskip("torch")
 
 import cardioseg.evaluation.uncertainty as U
 from cardioseg.evaluation.uncertainty import Uncertainty
-from core.model import build_unet
+from core.model import Model
 from core.preprocessing.preprocess import SIZE as PSIZE
 
 SIZE = 32
@@ -69,7 +69,7 @@ def test_tta_uncertainty_decomposition():
     """total = aleatoric + epistemic, epistemic >= 0 (BALD/Jensen), conf in [0,1], shapes match input.
     Run on a real CPU U-net over a 2-slice synthetic volume."""
     torch.manual_seed(0)
-    model = build_unet().eval()
+    model = Model.build_unet().eval()
     vol = np.random.RandomState(0).randn(2, SIZE, SIZE).astype(np.float32)
     pred, total, conf, ale, epi = Uncertainty.tta_uncertainty(model, vol, SIZE, "cpu")
     assert pred.shape == (2, SIZE, SIZE)
@@ -143,7 +143,7 @@ def test_collect_uncertainty_pools_samples(monkeypatch, tmp_path):
     """Orchestration (non-acdc, no overlay PNG): _collect_uncertainty folds TTA entropy per ED/ES frame
     -> pooled sample lists + one case dict per frame. eval_name='canon' skips the overlay branch."""
     monkeypatch.setattr(U.store, "load_arrays", lambda p: _fake_case())
-    torch.manual_seed(0); model = build_unet().eval()
+    torch.manual_seed(0); model = Model.build_unet().eval()
     df = _DF([{"path": "subj0.npz"}])
     confs, corrects, ents, ales, epis, bnd_u, int_u, cases = Uncertainty._collect_uncertainty(
         model, df, "cpu", tmp_path, "canon")
@@ -156,7 +156,7 @@ def test_collect_uncertainty_pools_samples(monkeypatch, tmp_path):
 def test_collect_uncertainty_acdc_saves_overlay(monkeypatch, tmp_path):
     """acdc/ED branch: exactly one overlay PNG is written (highest-fg slice), once (saved latch)."""
     monkeypatch.setattr(U.store, "load_arrays", lambda p: _fake_case())
-    torch.manual_seed(0); model = build_unet().eval()
+    torch.manual_seed(0); model = Model.build_unet().eval()
     df = _DF([{"path": "subj0.npz"}, {"path": "subj1.npz"}])
     Uncertainty._collect_uncertainty(model, df, "cpu", tmp_path, "acdc")
     assert (tmp_path / "uncertainty_map.png").exists()
@@ -166,6 +166,6 @@ def test_collect_uncertainty_skips_missing_frame(monkeypatch, tmp_path):
     """Missing-frame class: an ES-only case makes _collect_uncertainty skip the absent ED tag."""
     case = _fake_case(); del case["ed_img"], case["ed_gt"]
     monkeypatch.setattr(U.store, "load_arrays", lambda p: case)
-    torch.manual_seed(0); model = build_unet().eval()
+    torch.manual_seed(0); model = Model.build_unet().eval()
     out = Uncertainty._collect_uncertainty(model, _DF([{"path": "s.npz"}]), "cpu", tmp_path, "canon")
     assert len(out[-1]) == 1 and out[-1][0]["case"].endswith("_ES")   # only ES frame collected

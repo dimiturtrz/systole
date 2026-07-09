@@ -28,23 +28,28 @@ _cfg = OmegaConf.load(_PATHS_FILE) if _PATHS_FILE.exists() else OmegaConf.create
 _FALLBACK_ROOT = "data"   # repo-relative (gitignored) if nothing configured
 
 
-def _root() -> str:
-    """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback, then
-    adapted to the current OS by core.paths.resolve_data_root — translates a Windows drive path to/
-    from its WSL mount, and raises (never silently relative) for an untranslatable foreign path."""
-    raw = str(os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT)
-    return resolve_data_root(raw)
+class Config:
+    """Central path config: resolves the one data root and per-kind roots (the free helpers folded in
+    as staticmethods, public names kept)."""
 
+    @staticmethod
+    def _root() -> str:
+        """The one data root: env CARDIAC_DATA -> paths.yaml `data` -> repo-relative fallback, then
+        adapted to the current OS by core.paths.resolve_data_root — translates a Windows drive path to/
+        from its WSL mount, and raises (never silently relative) for an untranslatable foreign path."""
+        raw = str(os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT)
+        return resolve_data_root(raw)
 
-def data_root(kind: str = "raw") -> str:
-    """Absolute root for a data kind ('raw' inputs, 'processed' cache, 'reference', 'meshes', …).
-    Default `<data>/<kind>`, but a top-level `paths.yaml` key named `kind` overrides it — so e.g.
-    `meshes: /big/scratch/meshes` in paths.yaml redirects exports off the data root (still OS-adapted,
-    still never silently relative)."""
-    override = OmegaConf.select(_cfg, kind)
-    if override:
-        return resolve_data_root(str(override))
-    return str(Path(_root()) / kind)
+    @staticmethod
+    def data_root(kind: str = "raw") -> str:
+        """Absolute root for a data kind ('raw' inputs, 'processed' cache, 'reference', 'meshes', …).
+        Default `<data>/<kind>`, but a top-level `paths.yaml` key named `kind` overrides it — so e.g.
+        `meshes: /big/scratch/meshes` in paths.yaml redirects exports off the data root (still OS-adapted,
+        still never silently relative)."""
+        override = OmegaConf.select(_cfg, kind)
+        if override:
+            return resolve_data_root(str(override))
+        return str(Path(Config._root()) / kind)
 
 
 # The flagship is the `production`-aliased version in the mlflow model registry (core.registry) —

@@ -22,7 +22,7 @@ import polars as pl
 from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
-from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, Config
 from core.data.static.mri.pathology import Pathology
 from core.data.static.mri.registry import get_adapter
 from core.data.static.reference import Reference
@@ -163,7 +163,7 @@ def param_key(inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: 
 
 def dataset_dir(dataset: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
                 n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
-    return Path(data_root("processed")) / dataset / param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
+    return Path(Config.data_root("processed")) / dataset / param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
 
 
 def load_arrays(path: str | Path) -> dict:
@@ -222,7 +222,7 @@ class MetaBuilder:
         """Re-emit meta.csv for already-built stores with the CURRENT META_FIELDS + adapter.meta() — NO
         image reload (sidecar parse only). Every processed/<name>/<paramkey>/ of a REGISTERED adapter is
         refreshed; unregistered dirs (anatomy pools etc.) skipped. `names` filters."""
-        base = Path(data_root("processed"))
+        base = Path(Config.data_root("processed"))
         out: list[Path] = []
         for meta_csv in sorted(base.glob("*/*/meta.csv")):
             param_dir = meta_csv.parent
@@ -273,7 +273,7 @@ class AcqReference:
         """Aggregate REAL DICOM acquisition from the built stores -> reference/acquisition.yaml. Only rows
         with real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are
         skipped, so the domain-randomization sweep survives for everything we lack real values for."""
-        base = Path(data_root("processed"))
+        base = Path(Config.data_root("processed"))
         metas = [pl.read_csv(str(f), infer_schema_length=0) for f in base.glob("*/*/meta.csv")]
         if not metas:
             return {}

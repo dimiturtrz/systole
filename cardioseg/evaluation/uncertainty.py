@@ -28,10 +28,10 @@ from core.config import FLAGSHIP_REF
 from core.data.static import splits, store
 from core.data.static.labels import overlay_cmap
 from core.inference import Inference
-from core.obs import setup
+from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 from ..tracking import Tracker
 
@@ -155,13 +155,13 @@ class Uncertainty:
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
     args = ap.parse_args()
     run = resolve(args.run)
-    model, _, device = load_run(run)
+    model, _, device = Run.load_run(run)
 
     df = splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import polars as pl
 
-from core.config import data_root
+from core.config import Config
 from core.data.dynamic.source import DynamicSource
 from core.data.dynamic.synth import ProceduralBgCfg
 from core.data.ingest.source import StaticSource
@@ -35,7 +35,7 @@ POOL = "pool_1000_bal"
 def _pool(name: str) -> str:
     """Resolve a built anatomy pool by name under the meshes root (paths.yaml `meshes:` key; the
     Rodero SSM anatomy lives beside the MRI root, not under it). No machine path in code."""
-    return str(Path(data_root("meshes")) / "processed" / "rodero_anatomy" / f"{name}.npz")
+    return str(Path(Config.data_root("meshes")) / "processed" / "rodero_anatomy" / f"{name}.npz")
 
 
 class SynthMain:

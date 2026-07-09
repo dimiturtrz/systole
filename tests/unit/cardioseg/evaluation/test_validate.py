@@ -20,7 +20,7 @@ from cardioseg.evaluation.validate import (
     _foreground_samples,
     summarize,
 )
-from core.model import build_unet
+from core.model import Model
 
 SP = (1.0, 1.0, 1.0)   # isotropic spacing (mm); Dice is spacing-free, surface uses it
 SIZE = 32
@@ -180,7 +180,7 @@ def _fake_case(seed=0):
 @pytest.fixture
 def _model():
     torch.manual_seed(0)
-    return build_unet().eval()
+    return Model.build_unet().eval()
 
 
 def test_evaluator_validate_end_to_end(monkeypatch, _model):

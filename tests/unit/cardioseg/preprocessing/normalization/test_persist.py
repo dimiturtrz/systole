@@ -50,7 +50,7 @@ class _FakeAdapter:
 def test_persist_writes_provenance_yaml(monkeypatch, tmp_path):
     """persist_meta pipeline: fake adapter -> yaml written under raw/, provenance-tagged as expected."""
     monkeypatch.setattr(P, "get_adapter", lambda _ds: _FakeAdapter())
-    monkeypatch.setattr(P, "data_root", lambda _kind="raw": str(tmp_path))
+    monkeypatch.setattr(P.Config, "data_root", staticmethod(lambda _kind="raw": str(tmp_path)))
     monkeypatch.setattr(P.Persist, "_overlay",
                         lambda: {"acdc": {"scanner": {"source": "Bernard 2018", "verified": True}}})
 
@@ -75,7 +75,7 @@ def test_overlay_absent_is_empty(monkeypatch, tmp_path):
 
 def test_main_single_dataset(monkeypatch):
     """main class: --dataset X -> persist_meta called for that one dataset."""
-    monkeypatch.setattr(P, "setup", lambda: None)
+    monkeypatch.setattr(P.Obs, "setup", staticmethod(lambda: None))
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
     monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))
@@ -86,7 +86,7 @@ def test_main_single_dataset(monkeypatch):
 
 def test_main_all_datasets(monkeypatch):
     """main boundary: default 'all' -> persist_meta over every known dataset."""
-    monkeypatch.setattr(P, "setup", lambda: None)
+    monkeypatch.setattr(P.Obs, "setup", staticmethod(lambda: None))
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
     monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))

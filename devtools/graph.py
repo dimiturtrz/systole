@@ -25,9 +25,9 @@ from pathlib import Path
 import grimp
 import networkx as nx
 
-from core.obs import setup
+from core.obs import Obs
 
-log = logging.getLogger("cardioseg.devtools.graph")   # child of the "cardioseg" logger setup() configures
+log = logging.getLogger("cardioseg.devtools.graph")   # child of the "cardioseg" logger Obs.setup() configures
 
 # Fitness thresholds (overridable in pyproject [tool.structure]). Defaults chosen against the CURRENT
 # graph so the blocking rules start CLEAN and ratchet: fan-in&out both>8 (0 today), file>750 (0 today),
@@ -162,7 +162,7 @@ def main():
     ap.add_argument("--assert", action="store_true", dest="assert_",
                     help="fitness GATE: exit 1 on a god-module / import cycle / god-file (advisory: line floor, chokepoint)")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     if args.assert_:
         raise SystemExit(_run_assert(args.packages))
     log.info("\n%s", report(build_graph(args.packages), args.top))

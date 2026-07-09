@@ -36,7 +36,7 @@ def test_root_delegates_to_resolver(monkeypatch):
     the env + the resolver leaves an OS-native path unchanged."""
     import core.config as cfg
     monkeypatch.setenv("CARDIAC_DATA", "/data/foo/bar")
-    assert "foo/bar" in cfg._root()                    # env honored + resolved (no crash)
+    assert "foo/bar" in cfg.Config._root()             # env honored + resolved (no crash)
 
 
 def test_cmrxmotion_held_out_by_default():

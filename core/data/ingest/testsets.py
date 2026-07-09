@@ -99,8 +99,8 @@ if __name__ == "__main__":
     import argparse
 
     from core.data.static.store import build as store
-    from core.obs import setup
-    setup()
+    from core.obs import Obs
+    Obs.setup()
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
     ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
     ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")

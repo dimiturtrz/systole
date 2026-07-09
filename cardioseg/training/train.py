@@ -29,9 +29,9 @@ from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
 from core.export_onnx import ExportOnnx
 from core.hparams import TrainCfg, apply_overrides, to_json
-from core.losses import PartialLabelDiceCE, SoftDiceCE, uncertainty_weighted
-from core.model import build_unet, resolve_device
-from core.obs import progress, setup, timed
+from core.losses import Losses, PartialLabelDiceCE, SoftDiceCE
+from core.model import Model
+from core.obs import Obs, timed
 from core.registry import MODEL_NAME, save_model
 
 from ..evaluation.modelcard import ModelCard
@@ -128,11 +128,11 @@ class SeedTrainer:
         cfg.seed = seed
         self.out = seed_out_dir(sh["base_out"], seed, single=sh["single"])
         self.out.mkdir(parents=True, exist_ok=True)
-        self.log = setup(self.out / "train.log")
+        self.log = Obs.setup(self.out / "train.log")
         to_json(cfg, self.out / "config.json")
         torch.manual_seed(seed)
         np.random.seed(seed)
-        self.model = build_unet(cfg.model).to(self.device)
+        self.model = Model.build_unet(cfg.model).to(self.device)
         self.partial, self.loss_fn = self._build_loss()
         self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
@@ -187,7 +187,7 @@ class SeedTrainer:
             loss_fn.epoch = ep                                 # drives the HD-warmup ramp (dice_ce_hd); no-op for others
             tot = 0.0
             perm = torch.randperm(gen.n, device=gen.device)   # shuffle on the data's device
-            for bi in progress(range(nb), f"epoch {ep}", total=nb):
+            for bi in Obs.progress(range(nb), f"epoch {ep}", total=nb):
                 idx = perm[bi * cfg.batch:(bi + 1) * cfg.batch]
                 x, yt, valid = gen.batch(idx, pin=pin)              # collapsed batch (+ partial-label mask)
                 opt.zero_grad(set_to_none=True)
@@ -206,7 +206,7 @@ class SeedTrainer:
                     opt.zero_grad(set_to_none=True)
                     with torch.autocast("cuda", enabled=pin):
                         seg = loss_fn(model(x), yt, valid) if partial else loss_fn(model(x), yt)
-                    loss_j = (uncertainty_weighted([seg, *auxs], list(log_sig)) if log_sig is not None
+                    loss_j = (Losses.uncertainty_weighted([seg, *auxs], list(log_sig)) if log_sig is not None
                               else seg + cfg.ef_lambda * sum(auxs))     # learned Kendall | fixed nudge
                     scaler.scale(loss_j).backward()
                     scaler.step(opt)
@@ -354,10 +354,10 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     # store). base_out itself only holds the shared load log; each seed gets base_out(_s<seed>).
     base_out = Path(cfg.out_dir or ".staging/run")
     base_out.mkdir(parents=True, exist_ok=True)
-    log = setup(base_out / "load.log")          # shared data-loading phase (per-seed logs are separate)
+    log = Obs.setup(base_out / "load.log")          # shared data-loading phase (per-seed logs are separate)
     seeds = resolve_seeds(cfg.seed, seeds)
     check_multiseed_split(seeds, d.split)
-    device = resolve_device(cfg.device)
+    device = Model.resolve_device(cfg.device)
     torch.backends.cudnn.benchmark = True       # fixed input size -> autotune fastest convs
     log.info("device=%s torch=%s cudnn.benchmark=%s seeds=%s | split=%s | criteria datasets=%s vendors=%s",
              device, torch.__version__, torch.backends.cudnn.benchmark, seeds,

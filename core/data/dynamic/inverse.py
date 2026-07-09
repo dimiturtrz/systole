@@ -29,7 +29,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from core.obs import setup
+from core.obs import Obs
 
 from .mri_physics import MriPhysics
 
@@ -93,7 +93,7 @@ class Inverse:
 def _main():
     """Fit acquisition to one real ACDC slice (given its GT) and report recon + the identifiability check
     (fit flip-only vs fit tr+flip from two inits -> same recon, different params = under-determined)."""
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="FIT probe: recover acquisition from a real scan (bd ixea).")
     ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
     ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")

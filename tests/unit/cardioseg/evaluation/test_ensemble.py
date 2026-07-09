@@ -12,14 +12,14 @@ torch = pytest.importorskip("torch")
 import cardioseg.evaluation.ensemble as E
 from cardioseg.evaluation.ensemble import Ensemble
 from core.data.static.labels import FOREGROUND
-from core.model import build_unet
+from core.model import Model
 
 SIZE = 32
 
 
 def test_ensemble_decomposition():
-    torch.manual_seed(0); m1 = build_unet().eval()
-    torch.manual_seed(1); m2 = build_unet().eval()        # different weights -> a real ensemble
+    torch.manual_seed(0); m1 = Model.build_unet().eval()
+    torch.manual_seed(1); m2 = Model.build_unet().eval()        # different weights -> a real ensemble
     vol = np.random.RandomState(0).randn(2, SIZE, SIZE).astype(np.float32)
     pred, total, ale, epi = Ensemble.decompose([m1, m2], vol, SIZE, "cpu")
     assert pred.shape == (2, SIZE, SIZE)
@@ -122,7 +122,7 @@ def _fake_case(seed=0):
 def _models(k=2):
     ms = []
     for s in range(k):
-        torch.manual_seed(s); ms.append(build_unet().eval())
+        torch.manual_seed(s); ms.append(Model.build_unet().eval())
     return ms
 
 

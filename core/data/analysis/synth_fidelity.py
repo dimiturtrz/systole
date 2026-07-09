@@ -26,8 +26,8 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
 from core.hparams import TrainCfg, apply_overrides
-from core.model import resolve_device
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.synth_fidelity")
 
@@ -248,11 +248,11 @@ def _main():
     ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
                     "sample-size-agnostic; bounds VRAM)")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     cfg = TrainCfg()
     apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
     cfg.generator.synth.synth_p = 1.0
-    device = resolve_device(None)
+    device = Model.resolve_device(None)
     d = cfg.generator.data
     sc, nc = cfg.generator.synth, cfg.model.out_channels
     fid = SynthFidelity(sc, nc, device, d.size)

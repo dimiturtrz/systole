@@ -25,8 +25,8 @@ from core.data.static.store import load_arrays
 from core.hparams import from_json
 from core.inference import Inference
 from core.measure import Measure
-from core.model import build_unet
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import stack_slices
 from core.registry import resolve
@@ -86,7 +86,7 @@ class Overlay:
 
 
 def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
@@ -95,7 +95,7 @@ def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + ma
     run = resolve(args.run)
     cfg = from_json(run / "config.json")
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = build_unet(cfg.model).to(device)
+    model = Model.build_unet(cfg.model).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))
     d = cfg.generator.data
     size = d.size

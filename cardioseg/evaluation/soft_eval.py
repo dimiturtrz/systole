@@ -26,12 +26,12 @@ from core.data.static.store import build as store
 from core.hparams import from_json
 from core.inference import Inference
 from core.measure import Measure
-from core.model import resolve_device
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 log = logging.getLogger("cardioseg.soft_eval")
 
@@ -54,8 +54,8 @@ class SoftEval:
 
     @staticmethod
     def evaluate(run: Path):  # pragma: no cover  (loads the model + runs GPU inference over real val cases)
-        dev = resolve_device()
-        model, _, _ = load_run(run, dev)
+        dev = Model.resolve_device()
+        model, _, _ = Run.load_run(run, dev)
         rows, conf_all, corr_all = [], [], []
         for r in SoftEval._val(run).iter_rows(named=True):
             case = store.load_arrays(r["path"])
@@ -85,7 +85,7 @@ class SoftEval:
 
 
 def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
     args = ap.parse_args()

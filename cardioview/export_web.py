@@ -33,7 +33,7 @@ from common import (
 from geometry import bbox_slices, nearest_index
 from PIL import Image
 
-from core.config import data_root
+from core.config import Config
 from core.data.static import splits, store
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
@@ -54,7 +54,7 @@ CINE_BBOX_MARGIN = 14      # in-plane crop margin (voxels) around the whole-cine
 # This is the single external home: glb/manifest/slices here + the exact model in models/<name>.onnx.
 # The viewer serves it via web/scripts/sync-assets.mjs (copies here -> gitignored public/{data,models}
 # on predev/prebuild), not from a committed public dir. (bd cardiac-seg-ra3)
-OUT = Path(data_root("meshes")) / "cardioview"
+OUT = Path(Config.data_root("meshes")) / "cardioview"
 
 
 def publish_model(model_name: str) -> None:  # pragma: no cover  (shutil.copyfile of the ONNX artifact — file-copy shell)

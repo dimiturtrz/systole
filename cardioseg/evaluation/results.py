@@ -25,8 +25,8 @@ from core.data.static.store import build as store
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import from_json
 from core.measure import Measure
-from core.model import resolve_device
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 from core.registry import _DB_URI, _run_id_for, resolve
 
 log = logging.getLogger("cardioseg.results")
@@ -82,7 +82,7 @@ class Results:
         """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
         TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
         the run actually held out."""
-        device = resolve_device()
+        device = Model.resolve_device()
         d = from_json(run / "config.json").generator.data
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
         _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
@@ -101,7 +101,7 @@ class Results:
 
 
 def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")

@@ -14,7 +14,7 @@ import logging
 import re
 from pathlib import Path
 
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.sync_numbers")
 
@@ -130,7 +130,7 @@ TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
 
 
 def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
-    setup()
+    Obs.setup()
     total = 0
     for f in TARGETS:
         p = ROOT / f

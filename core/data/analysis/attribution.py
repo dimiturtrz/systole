@@ -31,9 +31,9 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
 from core.hparams import TrainCfg
-from core.obs import setup
+from core.obs import Obs
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 log = logging.getLogger("cardioseg.attribution")
 
@@ -120,9 +120,9 @@ def _main():
     ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     run_dir = resolve(args.run)
-    model, cfg, device = load_run(run_dir)
+    model, cfg, device = Run.load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
     va = splits.model_val(d, meta)                   # coded split's val if set, else criteria

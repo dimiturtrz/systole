@@ -20,10 +20,10 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
 from core.data.static.store import build as store
-from core.obs import setup
+from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, fit_square
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 log = logging.getLogger("cardioseg.export_onnx")
 
@@ -38,7 +38,7 @@ class ExportOnnx:
     @staticmethod
     def _load_model(run: Path):
         """Load run weights on CPU for export — architecture from the run's saved config.json."""
-        return load_run(run, "cpu")[0]
+        return Run.load_run(run, "cpu")[0]
 
     @staticmethod
     def _parity(model, onnx_path: Path, npz_path) -> float:
@@ -87,7 +87,7 @@ class ExportOnnx:
 
     @staticmethod
     def main() -> None:
-        setup()
+        Obs.setup()
         ap = argparse.ArgumentParser(description=__doc__)
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
         ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")

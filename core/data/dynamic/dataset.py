@@ -23,7 +23,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from core.data.static.store import load_arrays
-from core.obs import progress
+from core.obs import Obs
 
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
@@ -53,7 +53,7 @@ class ACDCSliceDataset(Dataset):
         self.owners: list[int] = []                      # per-slice index into npz_paths (for per-slice meta)
         self.frames = frames
         self.augment = augment
-        for pi, p in enumerate(progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
+        for pi, p in enumerate(Obs.progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
             case = load_arrays(p)
             for tag in frames:
                 img = case.get(f"{tag.lower()}_img")     # [D, H, W]

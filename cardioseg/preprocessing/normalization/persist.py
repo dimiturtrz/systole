@@ -14,9 +14,9 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import KNOWN_DATASETS, data_root
+from core.config import KNOWN_DATASETS, Config
 from core.data.static.mri.registry import get_adapter
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.persist")
 
@@ -51,7 +51,7 @@ class Persist:
             m = dict(a.meta(case))
             auto_src = m.pop("_source", {}) or {}
             subjects[case.name] = {k: {"value": v, **Persist._prov(k, auto_src, paper)} for k, v in m.items()}
-        out = Path(data_root("raw")) / dataset / "meta" / f"{dataset}.yaml"
+        out = Path(Config.data_root("raw")) / dataset / "meta" / f"{dataset}.yaml"
         out.parent.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(OmegaConf.create({"dataset": dataset, "n": len(subjects),
                                          "paper_layer": paper, "subjects": subjects}), out)
@@ -60,7 +60,7 @@ class Persist:
 
     @staticmethod
     def main():
-        setup()
+        Obs.setup()
         ap = argparse.ArgumentParser(description=__doc__)
         ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
         args = ap.parse_args()

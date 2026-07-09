@@ -20,9 +20,9 @@ import pyvista as pv
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
-from core.obs import setup
+from core.obs import Obs
 from core.postprocess import Postprocess
 
 log = logging.getLogger("cardioseg.mesh")
@@ -88,7 +88,7 @@ class Mesh:
                       iso: float = MESH_MM, root: str | Path | None = None) -> Path:
         """Write chamber meshes for one subject to <data>/meshes/<subject>/ (or `root`). GLB (colored
         scene) + STL (per chamber) by default. Returns the subject dir."""
-        out = Path(root or data_root("meshes")) / subject
+        out = Path(root or Config.data_root("meshes")) / subject
         out.mkdir(parents=True, exist_ok=True)
         if "glb" in formats:
             Mesh.export_glb(mask, spacing, out / f"{subject}.glb", iso)
@@ -100,7 +100,7 @@ class Mesh:
 def main():
     """Export chamber meshes for one consolidated subject npz. Location layering: default is
     <data>/meshes/ (config — the paths.yaml data root); --out overrides per invocation (argv)."""
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="Export chamber meshes (GLB + STL) from a subject npz.")
     ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
     ap.add_argument("--frame", default="ed", choices=["ed", "es"])

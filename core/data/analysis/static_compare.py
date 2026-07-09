@@ -19,7 +19,7 @@ import torch
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
 from core.data.dynamic.anatomy import Anatomy
-from core.obs import setup
+from core.obs import Obs
 
 from .shape_coverage import ShapeCoverage
 from .synth_fidelity import SynthFidelity
@@ -83,7 +83,7 @@ def main():
     ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
     log.info(json.dumps(res, indent=2))
     worst = max(res, key=lambda k: res[k]["w1"])

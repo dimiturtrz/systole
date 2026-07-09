@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
 from core.data.static.mri.base import identify_lv_cavity
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.eda")
 
@@ -82,7 +82,7 @@ def main():
     ap.add_argument("--n", type=int, default=3)
     ap.add_argument("--root", default=None)
     args = ap.parse_args()
-    setup()
+    Obs.setup()
 
     cases = AcdcAdapter(root=args.root).cases()
     log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")

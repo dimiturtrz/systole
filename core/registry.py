@@ -6,12 +6,12 @@ store the state_dict + config as artifacts (NOT a pickled mlflow.pytorch model) 
 robust across torch/monai versions: rebuild the arch from config, load_state_dict.
 
 `resolve(ref)` downloads a version's artifacts to a local cache dir and returns that dir — so every
-existing dir-consumer (`core.run.load_run`, `results.build`, modelcard, export) works UNCHANGED on
+existing dir-consumer (`core.run.Run.load_run`, `results.build`, modelcard, export) works UNCHANGED on
 the cached dir. `ref` = alias ('production') | version number | run-id.
 
     from core.registry import resolve, save_model
     run_dir = resolve("production")          # cached dir with model.pth + config.json + ...
-    model, cfg, device = load_run(run_dir)
+    model, cfg, device = Run.load_run(run_dir)
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _run_id_for(ref: str) -> str:
 
 def resolve(ref: str = PRODUCTION) -> Path:
     """Download the model version's artifacts to a cache dir and return it (a dir with model.pth +
-    config.json + …, ready for core.run.load_run). ref = alias | version | run-id — OR an existing
+    config.json + …, ready for core.run.Run.load_run). ref = alias | version | run-id — OR an existing
     dir (returned as-is, so callers can pass a path too)."""
     p = Path(ref)
     if (p / "model.pth").exists():                     # already a dir (back-compat / explicit path)

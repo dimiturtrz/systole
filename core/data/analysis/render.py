@@ -20,7 +20,7 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
 from core.hparams import TrainCfg
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.render")
 
@@ -62,5 +62,5 @@ class Render:
 
 
 if __name__ == "__main__":
-    setup()
+    Obs.setup()
     Render.render_synth_vs_real()

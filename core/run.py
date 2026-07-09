@@ -8,18 +8,22 @@ from pathlib import Path
 import torch
 
 from core.hparams import from_json
-from core.model import build_unet, resolve_device
+from core.model import Model
 
 
-def load_run(run, device: str | None = None):
-    """Load a trained run into eval mode. The architecture is rebuilt from the run's saved
-    config.json (so weights can't mismatch a wrong default arch); older runs without a config
-    fall back to the default ModelCfg. Returns (model, cfg | None, device)."""
-    run = Path(run)
-    cfg_path = run / "config.json"
-    cfg = from_json(cfg_path) if cfg_path.exists() else None
-    device = resolve_device(device)
-    model = build_unet(cfg.model if cfg else None).to(device)
-    model.load_state_dict(torch.load(run / "model.pth", map_location=device))
-    model.eval()
-    return model, cfg, device
+class Run:
+    """Trained-run loader (the free helper folded in as a staticmethod, public name kept)."""
+
+    @staticmethod
+    def load_run(run, device: str | None = None):
+        """Load a trained run into eval mode. The architecture is rebuilt from the run's saved
+        config.json (so weights can't mismatch a wrong default arch); older runs without a config
+        fall back to the default ModelCfg. Returns (model, cfg | None, device)."""
+        run = Path(run)
+        cfg_path = run / "config.json"
+        cfg = from_json(cfg_path) if cfg_path.exists() else None
+        device = Model.resolve_device(device)
+        model = Model.build_unet(cfg.model if cfg else None).to(device)
+        model.load_state_dict(torch.load(run / "model.pth", map_location=device))
+        model.eval()
+        return model, cfg, device

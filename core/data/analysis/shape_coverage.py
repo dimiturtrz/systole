@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.dynamic.anatomy import Anatomy
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.shape_coverage")
 
@@ -103,7 +103,7 @@ def main():
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
     ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
     args = ap.parse_args()
-    setup()
+    Obs.setup()
     real = ShapeCoverage._feats_from_masks(ShapeCoverage._real_masks(args.real))
     synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
     log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))

@@ -11,12 +11,12 @@ from pathlib import Path
 
 import numpy as np
 
-from core.config import FLAGSHIP_REF, data_root
+from core.config import FLAGSHIP_REF, Config
 from core.inference import Inference
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import fit_square
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
 CHAMBERS = {
@@ -55,7 +55,7 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
     p = Path(patient)
     if p.is_dir():
         return p
-    base = Path(root or data_root("raw")) / "acdc"
+    base = Path(root or Config.data_root("raw")) / "acdc"
     for split in ("training", "testing"):
         d = base / split / patient
         if d.is_dir():
@@ -66,7 +66,7 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
 def load_model(ref: str, device):  # pragma: no cover  (load_run reads model.pth weights + GPU — registry/model shell)
     """Load the trained U-Net for a registry ref (arch from its config.json, so it can't mismatch a
     default). `ref` = an mlflow registry ref (alias|version|run-id) resolved to its artifact dir."""
-    model, _, _ = load_run(model_dir(ref), device)
+    model, _, _ = Run.load_run(model_dir(ref), device)
     return model
 
 

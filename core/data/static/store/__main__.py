@@ -9,13 +9,13 @@ from core.config import DEFAULT_INPLANE
 from core.data.static.store.build import load
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import AcqReference, MetaBuilder
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.store")
 
 
 def main():
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="consolidate datasets into processed/<ds>/<paramkey>/")
     ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
     ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)

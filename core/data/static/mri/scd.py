@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 from skimage.draw import polygon
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.mri.base import DatasetAdapter, PatientData, load_csv_info
 from core.data.static.mri.dicom import Dicom
 
@@ -41,7 +41,7 @@ class ScdAdapter(DatasetAdapter):
 
     @staticmethod
     def _root(root: str | Path | None = None) -> Path:
-        return Path(root) if root else Path(data_root("raw")) / "sunnybrook"
+        return Path(root) if root else Path(Config.data_root("raw")) / "sunnybrook"
 
     @staticmethod
     def _patient_csv(root: Path) -> dict[str, dict[str, str]]:

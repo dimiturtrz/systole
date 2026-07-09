@@ -32,12 +32,12 @@ from core.evaluate import CLASSES, Evaluate
 from core.hparams import from_json
 from core.inference import Inference
 from core.measure import LOA_Z, Measure
-from core.model import resolve_device
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 log = logging.getLogger("cardioseg.distribution")
 
@@ -54,7 +54,7 @@ class Distribution:
         `meta_rows` = iterable of meta dicts (e.g. polars df.iter_rows(named=True)) carrying `path`
         (the consolidated npz) + vendor/pathology/field_T columns.
         """
-        model, _, _ = load_run(run, device)
+        model, _, _ = Run.load_run(run, device)
 
         rows = []
         for r in meta_rows:
@@ -244,7 +244,7 @@ class Distribution:
 
 
 def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
     ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
@@ -253,7 +253,7 @@ def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     run = resolve(args.run)
-    device = resolve_device()
+    device = Model.resolve_device()
 
     df = splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
     # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing

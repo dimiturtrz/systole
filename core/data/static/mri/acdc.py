@@ -8,7 +8,7 @@ geometrically (see base.identify_lv_cavity). Scanner: Siemens Aera 1.5T / Trio T
 """
 from pathlib import Path
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.mri.base import (
     DatasetAdapter,
     PatientData,
@@ -17,7 +17,7 @@ from core.data.static.mri.base import (
 )
 
 # Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
-DATA_ROOT = str(Path(data_root("raw")) / "acdc")
+DATA_ROOT = str(Path(Config.data_root("raw")) / "acdc")
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 

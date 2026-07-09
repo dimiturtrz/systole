@@ -34,7 +34,7 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
-from core.obs import setup
+from core.obs import Obs
 from core.preprocessing.preprocess import fit_square
 
 
@@ -399,7 +399,7 @@ _CMDS = {
 
 def _main():  # pragma: no cover
     """Rodero SSM anatomy CLI: view a mesh montage, or build the (healthy / pathology) anatomy pools."""
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="Rodero SSM anatomy: view + offline pool build (bd 1vl/8pfl).")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

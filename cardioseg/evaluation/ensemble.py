@@ -23,12 +23,12 @@ from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
 from core.inference import Inference
 from core.measure import Measure
-from core.model import resolve_device
-from core.obs import setup
+from core.model import Model
+from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty
@@ -127,13 +127,13 @@ class Ensemble:
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
     args = ap.parse_args()
-    device = resolve_device()
-    loaded = [load_run(resolve(r), device) for r in args.runs]
+    device = Model.resolve_device()
+    loaded = [Run.load_run(resolve(r), device) for r in args.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
     trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",

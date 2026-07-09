@@ -1,6 +1,6 @@
 """Inference-primitive + run-loading tests: predict_volume(_probs), resolve_device, load_run.
 
-Uses an untrained build_unet() on CPU with random input — we assert shapes/invariants/consistency,
+Uses an untrained Model.build_unet() on CPU with random input — we assert shapes/invariants/consistency,
 not segmentation quality."""
 import numpy as np
 import pytest
@@ -8,8 +8,8 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from core.inference import Inference
-from core.model import build_unet, resolve_device
-from core.run import load_run
+from core.model import Model
+from core.run import Run
 
 SIZE = 32  # small grid; divisible by the 4 strides (2^4=16)
 
@@ -17,12 +17,12 @@ SIZE = 32  # small grid; divisible by the 4 strides (2^4=16)
 @pytest.fixture(scope="module")
 def model():
     torch.manual_seed(0)
-    return build_unet().eval()
+    return Model.build_unet().eval()
 
 
 def test_resolve_device_prefers_explicit():
-    assert resolve_device("cpu") == "cpu"          # explicit wins
-    assert resolve_device(None) in ("cuda", "cpu")  # auto, env-dependent
+    assert Model.resolve_device("cpu") == "cpu"          # explicit wins
+    assert Model.resolve_device(None) in ("cuda", "cpu")  # auto, env-dependent
 
 
 def test_predict_volume_probs_shapes_and_simplex(model):
@@ -67,7 +67,7 @@ def test_members_and_bald_decomposition(model):
 def _make_run(tmp_path, with_config):
     from core.hparams import TrainCfg, to_json
     run = tmp_path / "run"; run.mkdir()
-    torch.save(build_unet().state_dict(), run / "model.pth")
+    torch.save(Model.build_unet().state_dict(), run / "model.pth")
     if with_config:
         to_json(TrainCfg(), run / "config.json")
     return run
@@ -75,7 +75,7 @@ def _make_run(tmp_path, with_config):
 
 def test_load_run_with_config(tmp_path):
     run = _make_run(tmp_path, with_config=True)
-    model, cfg, device = load_run(run, "cpu")
+    model, cfg, device = Run.load_run(run, "cpu")
     assert cfg is not None and device == "cpu"
     assert not model.training                    # eval() mode
 
@@ -83,5 +83,5 @@ def test_load_run_with_config(tmp_path):
 def test_load_run_legacy_fallback(tmp_path):
     """A run without config.json still loads via the default ModelCfg (cfg is None)."""
     run = _make_run(tmp_path, with_config=False)
-    model, cfg, _ = load_run(run, "cpu")
+    model, cfg, _ = Run.load_run(run, "cpu")
     assert cfg is None and model is not None

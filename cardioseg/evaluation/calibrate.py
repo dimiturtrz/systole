@@ -22,9 +22,9 @@ from core.config import FLAGSHIP_REF
 from core.data.ingest.splits import resolve_cfg
 from core.data.static import splits
 from core.data.static.store import build as store
-from core.obs import setup
+from core.obs import Obs
 from core.registry import resolve
-from core.run import load_run
+from core.run import Run
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty
@@ -66,12 +66,12 @@ class Calibrate:
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", default=FLAGSHIP_REF)
     args = ap.parse_args()
     run = resolve(args.run)
-    model, cfg, device = load_run(run)
+    model, cfg, device = Run.load_run(run)
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
     if d.split:                                           # coded split -> its resolved val/test

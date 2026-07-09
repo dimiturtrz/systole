@@ -28,7 +28,7 @@ from core import run as run_mod
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
 from core.data.static import splits
 from core.data.static.store import build as store
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.matrix")
 
@@ -43,7 +43,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
     tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
     rows: list[dict] = []
     for ref in model_refs:
-        model, cfg, device = run_mod.load_run(registry_mod.resolve(ref))
+        model, cfg, device = run_mod.Run.load_run(registry_mod.resolve(ref))
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
@@ -73,7 +73,7 @@ def _print(rows: list[dict]):
 
 
 if __name__ == "__main__":
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="cross-domain generalization matrix over frozen TestSets")
     ap.add_argument("--models", nargs="+", required=True, help="registry refs (alias|version|run-id)")
     ap.add_argument("--testsets", nargs="*", default=None,

@@ -11,7 +11,7 @@ Labels: raw 1=LV-cav, 2=myo, 3=RV — opposite of ACDC. `label_map` remaps to ca
 import os
 from pathlib import Path
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     DatasetAdapter,
@@ -38,7 +38,7 @@ class Mnm2Adapter(DatasetAdapter):
         bases = [Path(env)] if env else []
         if root is not None:
             bases.append(Path(root))
-        raw = Path(data_root("raw"))
+        raw = Path(Config.data_root("raw"))
         bases += [raw, raw.parent]
         subs = (".", "mnm2/MnM2/dataset", "MnM2/dataset", "mnm2/dataset", "dataset",
                 "mri/mnm2/MnM2/dataset")

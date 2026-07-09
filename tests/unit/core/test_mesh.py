@@ -80,7 +80,7 @@ def test_main_cli_reads_npz_and_exports(monkeypatch, tmp_path):
         seen.update(mask=mask, spacing=spacing, subject=subject, formats=formats, root=root)
         return tmp_path / subject
 
-    monkeypatch.setattr(meshmod, "setup", lambda: None)
+    monkeypatch.setattr(meshmod.Obs, "setup", staticmethod(lambda: None))
     monkeypatch.setattr(meshmod.Mesh, "export_meshes", staticmethod(_fake_export))
     monkeypatch.setattr("sys.argv",
                         ["mesh", "--npz", str(npz), "--frame", "es", "--formats", "stl"])

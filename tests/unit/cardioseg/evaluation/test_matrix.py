@@ -36,7 +36,7 @@ def _stub(monkeypatch):
     cfg = types.SimpleNamespace(seed=0, generator=types.SimpleNamespace(
         data=DataCfg(test_vendors=("Canon",), test_datasets=(), val_datasets=())))
     monkeypatch.setattr("core.registry.resolve", lambda ref: ref)
-    monkeypatch.setattr("core.run.load_run", lambda run, device=None: (object(), cfg, "cpu"))
+    monkeypatch.setattr("core.run.Run.load_run", lambda run, device=None: (object(), cfg, "cpu"))
     monkeypatch.setattr("core.data.static.store.build.load", lambda *a, **k: _meta())
     monkeypatch.setattr("cardioseg.evaluation.validate.Evaluator.validate",
                         lambda self, npz_paths: ({1: 0.9, 2: 0.8, 3: 0.85}, [], {}))

@@ -30,7 +30,7 @@ from core.data.static.store.query import (  # noqa: F401  re-exported: `build as
     load_arrays,
     param_key,
 )
-from core.obs import progress
+from core.obs import Obs
 from core.preprocessing.n4 import N4Cfg
 
 log = logging.getLogger("cardioseg.store")
@@ -62,7 +62,7 @@ def build(name: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # n
         workers = workers or max(1, (os.cpu_count() or 4) - 2)
         log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, n4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            for _ in progress(ex.map(_one, todo), f"consolidate {name}", total=len(todo)):
+            for _ in Obs.progress(ex.map(_one, todo), f"consolidate {name}", total=len(todo)):
                 pass
 
     MetaBuilder(name, adapter).write(data_dir, out)          # (re)emit meta.csv (sidecar parse, no reload)

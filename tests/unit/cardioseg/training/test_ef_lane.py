@@ -20,7 +20,7 @@ from cardioseg.training.ef_lane import (
     ef_ratio_loss,
 )
 from core.data.static.labels import LV_CAV
-from core.model import build_unet
+from core.model import Model
 
 
 def test_ef_ratio_matches_hand_formula():
@@ -116,7 +116,7 @@ SIZE = 32
 
 def _cpu_model():
     torch.manual_seed(0)
-    return build_unet().eval()
+    return Model.build_unet().eval()
 
 
 def _fake_case(dz=2, seed=0):

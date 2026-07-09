@@ -19,10 +19,10 @@ from pathlib import Path
 
 import polars as pl
 
-from core.config import data_root
+from core.config import Config
 from core.data.static.mri.dicom import Dicom
 from core.data.static.store import _norm_vendor, _region_of
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.kaggle_dsb")
 
@@ -39,7 +39,7 @@ class KaggleDsbAdapter:
 
     @staticmethod
     def _base(root: str | Path | None = None) -> Path:
-        return Path(root) if root else Path(data_root("raw")) / "kaggle_dsb2015"
+        return Path(root) if root else Path(Config.data_root("raw")) / "kaggle_dsb2015"
 
     @staticmethod
     def _split_dir(split: str, root: str | Path | None = None) -> Path:
@@ -119,7 +119,7 @@ class KaggleDsbAdapter:
         ef = KaggleDsbAdapter.kaggle_ef(split, root)
         rows = [{"subject_id": c.name, "dataset": "kaggle", **KaggleDsbAdapter.kaggle_meta(c, ef)}
                 for c in KaggleDsbAdapter.kaggle_cases(split, root)]
-        out = Path(data_root("processed")) / "kaggle" / split
+        out = Path(Config.data_root("processed")) / "kaggle" / split
         out.mkdir(parents=True, exist_ok=True)
         pl.DataFrame(rows, strict=False).write_csv(out / "meta.csv")
         return out / "meta.csv"
@@ -128,7 +128,7 @@ class KaggleDsbAdapter:
     def _main():  # pragma: no cover
         """Kaggle DSB offline builder: extract per-case meta.csv into the store (fit_acquisition_reference
         then mines its tr_ms column, bSSFP-filtered — makes Kaggle location/vendor part of the data cloud)."""
-        setup()
+        Obs.setup()
         ap = argparse.ArgumentParser(description="Kaggle DSB 2015: offline meta.csv build (bd 8pfl pattern).")
         sub = ap.add_subparsers(dest="cmd", required=True)
         bm = sub.add_parser("build-meta", help="write processed/kaggle/<split>/meta.csv over a split's cases")

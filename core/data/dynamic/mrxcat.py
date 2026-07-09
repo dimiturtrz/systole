@@ -33,7 +33,7 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
-from core.obs import setup
+from core.obs import Obs
 from core.preprocessing.preprocess import fit_square
 
 from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
@@ -288,7 +288,7 @@ _CMDS = {
 
 def _main():  # pragma: no cover
     """MRXCAT2.0 CLI: fetch the external tool, probe a `.vti`, or build the (heart / FOV / SSM-FOV) pools."""
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="MRXCAT2.0 phantom: fetch + probe + offline pool build (bd hpy/8pfl).")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

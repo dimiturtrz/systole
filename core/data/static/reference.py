@@ -24,7 +24,7 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import data_root
+from core.config import Config
 
 _PROV_KEYS = {"value", "source", "based_on", "extracted_by", "verified"}
 
@@ -36,8 +36,8 @@ class Reference:
 
     @staticmethod
     def reference_dir() -> Path:
-        """`<data>/reference/` — sibling of raw/ and processed/ (data_root('reference'))."""
-        return Path(data_root("reference"))
+        """`<data>/reference/` — sibling of raw/ and processed/ (Config.data_root('reference'))."""
+        return Path(Config.data_root("reference"))
 
     @staticmethod
     def _is_prov(node) -> bool:

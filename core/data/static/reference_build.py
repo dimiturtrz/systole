@@ -18,7 +18,7 @@ from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference
 from core.data.static.store import build as store
 from core.measure import Measure
-from core.obs import setup
+from core.obs import Obs
 
 log = logging.getLogger("cardioseg.reference_build")
 
@@ -233,7 +233,7 @@ _MODES = {"acquisition": ReferenceBuild._mode_acquisition, "build": ReferenceBui
 
 
 def _main():
-    setup()
+    Obs.setup()
     ap = argparse.ArgumentParser(description="Derive reference values from processed/ (ground truth + images).")
     ap.add_argument("--build", action="store_true", help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
     ap.add_argument("--real-levels", action="store_true", dest="real_levels",
