@@ -10,14 +10,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 import cardioseg.evaluation.ensemble as E
-from cardioseg.evaluation.ensemble import (
-    _dice_fold,
-    _headroom,
-    _score_summary,
-    ensemble_decompose,
-    ensemble_score,
-    reducible_frac,
-)
+from cardioseg.evaluation.ensemble import Ensemble
 from core.data.static.labels import FOREGROUND
 from core.model import build_unet
 
@@ -28,7 +21,7 @@ def test_ensemble_decomposition():
     torch.manual_seed(0); m1 = build_unet().eval()
     torch.manual_seed(1); m2 = build_unet().eval()        # different weights -> a real ensemble
     vol = np.random.RandomState(0).randn(2, SIZE, SIZE).astype(np.float32)
-    pred, total, ale, epi = ensemble_decompose([m1, m2], vol, SIZE, "cpu")
+    pred, total, ale, epi = Ensemble.decompose([m1, m2], vol, SIZE, "cpu")
     assert pred.shape == (2, SIZE, SIZE)
     assert (epi >= -1e-6).all()                            # BALD >= 0
     assert np.allclose(total, ale + epi, atol=1e-5)        # total = aleatoric + epistemic
@@ -43,8 +36,8 @@ def test_dice_fold_perfect():
     """Perfect class: pred == gt -> per-class inter/den give Dice 1.0 on the finalize."""
     inter, den = _acc()
     gt = np.array([[1, 2, 3, 0]], np.uint8)
-    _dice_fold(gt.copy(), gt, inter, den)
-    out = _score_summary(inter, den, [])
+    Ensemble._dice_fold(gt.copy(), gt, inter, den)
+    out = Ensemble._score_summary(inter, den, [])
     assert abs(out["dice_mean"] - 1.0) < 1e-9
 
 
@@ -53,54 +46,54 @@ def test_dice_fold_disjoint():
     inter, den = _acc()
     pred = np.array([[1, 2, 3]], np.uint8)
     gt = np.array([[2, 3, 1]], np.uint8)     # every voxel a different label than pred
-    _dice_fold(pred, gt, inter, den)
-    assert _score_summary(inter, den, [])["dice_mean"] == 0.0
+    Ensemble._dice_fold(pred, gt, inter, den)
+    assert Ensemble._score_summary(inter, den, [])["dice_mean"] == 0.0
 
 
 def test_dice_fold_accumulates_two_cases():
     """Accumulator: two folds pool inter/den (pooled Dice, not per-case averaged)."""
     inter, den = _acc()
     a = np.array([[1, 1, 0, 0]], np.uint8)                       # label-1 perfect (2 vox)
-    _dice_fold(a.copy(), a, inter, den)
+    Ensemble._dice_fold(a.copy(), a, inter, den)
     b_gt = np.array([[1, 1, 0, 0]], np.uint8); b_pred = np.zeros((1, 4), np.uint8)  # all-miss
-    _dice_fold(b_pred, b_gt, inter, den)
+    Ensemble._dice_fold(b_pred, b_gt, inter, den)
     # label 1: inter=2*2=4, den=(2+2)+(0+2)=6 ; labels 2,3 absent both -> NaN, dropped by nanmean
     assert abs(np.nanmean([4 / 6, np.nan, np.nan]) - (4 / 6)) < 1e-9   # sanity of the expected
-    assert abs(_score_summary(inter, den, [])["dice_mean"] - round(4 / 6, 3)) < 1e-3
+    assert abs(Ensemble._score_summary(inter, den, [])["dice_mean"] - round(4 / 6, 3)) < 1e-3
 
 
 def test_score_summary_empty_absent_class_nan():
     """Empty-both across all classes -> every den 0 -> all Dice NaN -> nanmean NaN, EF MAE NaN."""
     inter, den = _acc()
-    out = _score_summary(inter, den, [])
+    out = Ensemble._score_summary(inter, den, [])
     assert np.isnan(out["dice_mean"]) and np.isnan(out["ef_mae"])
 
 
 def test_score_summary_ef_mae():
     """EF MAE = mean|diff| over collected ED/ES diffs, rounded to 0.1."""
     inter, den = _acc()
-    out = _score_summary(inter, den, [4.0, -2.0])
+    out = Ensemble._score_summary(inter, den, [4.0, -2.0])
     assert out["ef_mae"] == 3.0
 
 
 def test_reducible_frac_all_epistemic():
     """All-reducible class: aleatoric 0, epistemic > 0 -> fraction 1.0."""
-    assert abs(reducible_frac([np.zeros(4)], [np.full(4, 0.5)]) - 1.0) < 1e-9
+    assert abs(Ensemble.reducible_frac([np.zeros(4)], [np.full(4, 0.5)]) - 1.0) < 1e-9
 
 
 def test_reducible_frac_none_epistemic():
     """Irreducible class: epistemic 0 -> fraction 0.0."""
-    assert reducible_frac([np.full(4, 0.5)], [np.zeros(4)]) == 0.0
+    assert Ensemble.reducible_frac([np.full(4, 0.5)], [np.zeros(4)]) == 0.0
 
 
 def test_reducible_frac_half():
     """Balanced class: equal aleatoric and epistemic means -> fraction 0.5."""
-    assert abs(reducible_frac([np.full(4, 0.3)], [np.full(4, 0.3)]) - 0.5) < 1e-9
+    assert abs(Ensemble.reducible_frac([np.full(4, 0.3)], [np.full(4, 0.3)]) - 0.5) < 1e-9
 
 
 def test_reducible_frac_zero_guard():
     """Degenerate class: both terms 0 -> guarded denom (1e-9), no div-by-zero -> 0.0."""
-    assert reducible_frac([np.zeros(4)], [np.zeros(4)]) == 0.0
+    assert Ensemble.reducible_frac([np.zeros(4)], [np.zeros(4)]) == 0.0
 
 
 # --------- ensemble_score / _headroom orchestration: real CPU models, store.load_arrays stubbed ---------
@@ -136,7 +129,7 @@ def _models(k=2):
 def test_ensemble_score_end_to_end(monkeypatch):
     """Orchestration: ensemble_score over one case -> {dice_mean, ef_mae}, both finite floats."""
     monkeypatch.setattr(E.store, "load_arrays", lambda p: _fake_case())
-    out = ensemble_score(_models(2), _DF([{"path": "c.npz"}]), SIZE, "cpu")
+    out = Ensemble.score(_models(2), _DF([{"path": "c.npz"}]), SIZE, "cpu")
     assert set(out) == {"dice_mean", "ef_mae"}
     assert 0.0 <= out["dice_mean"] <= 1.0
 
@@ -145,14 +138,14 @@ def test_ensemble_score_es_only_no_ef(monkeypatch):
     """Missing-ED class: only ES present -> scored, no ED/ES pair -> EF MAE NaN (empty diffs)."""
     case = _fake_case(); del case["ed_img"], case["ed_gt"]
     monkeypatch.setattr(E.store, "load_arrays", lambda p: case)
-    out = ensemble_score(_models(1), _DF([{"path": "c.npz"}]), SIZE, "cpu")
+    out = Ensemble.score(_models(1), _DF([{"path": "c.npz"}]), SIZE, "cpu")
     assert np.isnan(out["ef_mae"])
 
 
 def test_headroom_returns_two_fractions(monkeypatch):
     """_headroom: ensemble reducible-frac + single-model (TTA) reducible-frac, both in [0,1]."""
     monkeypatch.setattr(E.store, "load_arrays", lambda p: _fake_case())
-    ef_red, tf_red = _headroom(_models(2), _DF([{"path": "c.npz"}]), SIZE, "cpu")
+    ef_red, tf_red = Ensemble._headroom(_models(2), _DF([{"path": "c.npz"}]), SIZE, "cpu")
     assert 0.0 <= ef_red <= 1.0 and 0.0 <= tf_red <= 1.0
 
 
@@ -160,5 +153,5 @@ def test_headroom_skips_missing_frame(monkeypatch):
     """Missing-frame class: an ES-only case makes _headroom skip the absent ED tag (the continue)."""
     case = _fake_case(); del case["ed_img"], case["ed_gt"]
     monkeypatch.setattr(E.store, "load_arrays", lambda p: case)
-    ef_red, tf_red = _headroom(_models(1), _DF([{"path": "c.npz"}]), SIZE, "cpu")
+    ef_red, tf_red = Ensemble._headroom(_models(1), _DF([{"path": "c.npz"}]), SIZE, "cpu")
     assert 0.0 <= ef_red <= 1.0 and 0.0 <= tf_red <= 1.0

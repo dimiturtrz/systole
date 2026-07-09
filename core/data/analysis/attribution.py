@@ -40,42 +40,43 @@ log = logging.getLogger("cardioseg.attribution")
 _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo","LV-cav"]
 
 
-def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
-    """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
-    absent GT classes are left zero. Pure (no model) -> unit-testable."""
-    M = torch.zeros(n_classes, n_classes)
-    for g in range(n_classes):
-        gm = gt == g
-        tot = int(gm.sum())
-        if tot == 0:
-            continue
-        pg = pred[gm]
-        for p in range(n_classes):
-            M[g, p] = (pg == p).float().mean()
-    return M
-
-
-def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
-    model.eval()
-    with torch.no_grad():
-        return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
-                          for i in range(0, X.shape[0], batch)])
-
-
 class Attribution:
     """Model-interpretability diagnostic (confusion recall + captum saliency) for a trained model.
     Holds model + device + n_classes as STATE (bd 01fh: they were threaded as args); .run(X, Y, out_dir)
-    takes only the data + output location that vary."""
+    takes only the data + output location that vary. The model-free helpers (class_confusion, _predict)
+    are folded in as staticmethods."""
 
     def __init__(self, model, device: str, n_classes: int):
         self.model, self.device, self.n_classes = model, device, n_classes
+
+    @staticmethod
+    def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
+        """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
+        absent GT classes are left zero. Pure (no model) -> unit-testable."""
+        M = torch.zeros(n_classes, n_classes)
+        for g in range(n_classes):
+            gm = gt == g
+            tot = int(gm.sum())
+            if tot == 0:
+                continue
+            pg = pred[gm]
+            for p in range(n_classes):
+                M[g, p] = (pg == p).float().mean()
+        return M
+
+    @staticmethod
+    def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
+        model.eval()
+        with torch.no_grad():
+            return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
+                              for i in range(0, X.shape[0], batch)])
 
     def run(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out = Path(out_dir)
-        pred = _predict(self.model, X, self.device)          # on cpu
-        conf = class_confusion(pred, Y.cpu(), self.n_classes)
+        pred = self._predict(self.model, X, self.device)          # on cpu
+        conf = self.class_confusion(pred, Y.cpu(), self.n_classes)
         # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
         summary = {
             "names": _NAMES[:self.n_classes],
