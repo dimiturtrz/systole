@@ -44,7 +44,7 @@ class SoftEval:
     def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
         d = Hparams.from_json(run / "config.json").generator.data
         meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
-        _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+        _, val, _ = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                       val_datasets=d.val_datasets, val_vendors=d.val_vendors)
         return val
 

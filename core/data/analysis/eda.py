@@ -22,7 +22,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
-from core.data.static.mri.base import identify_lv_cavity
+from core.data.static.mri.base import Base
 from core.obs import Obs
 
 log = logging.getLogger("cardioseg.eda")
@@ -45,7 +45,7 @@ class Eda:
                 continue
             img, gt = d[tag]["img"], d[tag]["gt"]
             anis = max(sp) / min(sp)
-            lv, scores = identify_lv_cavity(gt)
+            lv, scores = Base.identify_lv_cavity(gt)
             log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
                   f"{tuple(round(float(s),2) for s in sp)} mm  anisotropy={anis:.1f}x")
             log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")

@@ -26,7 +26,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 from core.config import FLAGSHIP_REF
 from core.data.static import splits, store
-from core.data.static.labels import overlay_cmap
+from core.data.static.labels import Labels
 from core.inference import Inference
 from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, Preprocess
@@ -144,7 +144,7 @@ class Uncertainty:
     @staticmethod
     def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913
         img = fit_square(vol[z].astype(np.float32), size, 0.0)
-        cmap = overlay_cmap()
+        cmap = Labels.overlay_cmap()
         fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
         ax[0].imshow(img, cmap="gray"); ax[0].set_title(f"{name} ED  z={z}")
         ax[1].imshow(img, cmap="gray"); ax[1].imshow(pred, cmap=cmap, vmin=0, vmax=3, interpolation="nearest"); ax[1].set_title("prediction")
@@ -163,7 +163,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     run = Registry.resolve(args.run)
     model, _, device = Run.load_run(run)
 
-    df = splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
+    df = splits.Splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
 
     out = run / "plots"
     out.mkdir(parents=True, exist_ok=True)

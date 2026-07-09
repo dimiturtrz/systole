@@ -47,7 +47,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
-        seen = splits.seen_keys(d, meta) if d else None      # subjects the model saw (train∪val); None = unknowable
+        seen = splits.Splits.seen_keys(d, meta) if d else None      # subjects the model saw (train∪val); None = unknowable
         for ts in tsets:
             src = ts.source(meta)                        # lock-checked; raises on drift
             paths, subj = src.paths(), set(src.subjects())

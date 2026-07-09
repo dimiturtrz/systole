@@ -40,7 +40,7 @@ from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from core.data.static.mri.acdc import AcdcAdapter
-from core.data.static.splits import split_patients
+from core.data.static.splits import Splits
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
 
@@ -88,7 +88,7 @@ class OverlayCfg:
 
 def _split_tag(patient: str) -> str:
     """Honesty tag: was this patient in the model's training set? (warns on TRAIN-seen preds)."""
-    _, val = split_patients(list(AcdcAdapter().cases()), 0.2, 0)
+    _, val = Splits.split_patients(list(AcdcAdapter().cases()), 0.2, 0)
     held = patient in {c.name for c in val}
     if not held:
         log.warning("%s was in training — pred overstates the model. Use a held-out patient.", patient)

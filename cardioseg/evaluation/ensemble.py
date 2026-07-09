@@ -97,8 +97,8 @@ class Ensemble:
         d = cfg.generator.data
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
         if which.lower() == "val":                          # the held-out val split (split-derived, not a literal)
-            return splits.model_val(d, meta)
-        test = splits.model_test(d, meta)                   # a vendor axis carves the frozen test by vendor
+            return splits.Splits.model_val(d, meta)
+        test = splits.Splits.model_test(d, meta)                   # a vendor axis carves the frozen test by vendor
         return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
     @staticmethod

@@ -4,7 +4,7 @@ NIfTI reads + CSV globbing are the integration shell."""
 import nibabel as nib
 import numpy as np
 
-from core.data.static.mri.base import MNM_LABEL_MAP, load_frames
+from core.data.static.mri.base import MNM_LABEL_MAP, Base
 from core.data.static.mri.mnm2 import Mnm2Adapter
 
 
@@ -65,7 +65,7 @@ def test_load_ed_es_resolve_remaps(tmp_path):
     def resolve(tag):
         return (tmp_path / f"{pid}_SA_{tag}.nii.gz", tmp_path / f"{pid}_SA_{tag}_gt.nii.gz", None)
 
-    out = load_frames("HCM", resolve, MNM_LABEL_MAP)
+    out = Base.load_frames("HCM", resolve, MNM_LABEL_MAP)
     assert "ED" in out and "ES" in out and out["group"] == "HCM"
     assert 3 in np.unique(out["ED"]["gt"])                     # raw 1 -> canonical 3
 

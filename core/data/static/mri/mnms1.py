@@ -13,11 +13,9 @@ from pathlib import Path
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    Base,
     DatasetAdapter,
     PatientData,
-    load_csv_info,
-    load_frames,
-    to_float,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
@@ -81,7 +79,7 @@ class Mnms1Adapter(DatasetAdapter):
         csvs = list(base.glob("*.csv")) + list(base.glob("*/*.csv"))
         if not csvs:
             return {}
-        return load_csv_info(csvs[0], "External code", alt_key_col="External_code")
+        return Base.load_csv_info(csvs[0], "External code", alt_key_col="External_code")
 
     @staticmethod
     def _sa(case: Path) -> tuple[Path, Path]:
@@ -122,8 +120,8 @@ class Mnms1Adapter(DatasetAdapter):
             "group": row.get("Pathology"),
             "vendor": row.get("VendorName") or row.get("Vendor"),
             "centre": name, "country": country,   # code -> readable site + country (paper map)
-            "age": to_float(row.get("Age")), "sex": row.get("Sex"),
-            "height": to_float(row.get("Height")), "weight": to_float(row.get("Weight")),
+            "age": Base.to_float(row.get("Age")), "sex": row.get("Sex"),
+            "height": Base.to_float(row.get("Height")), "weight": Base.to_float(row.get("Weight")),
             "scanner": None, "field_T": None,   # not in CSV (paper tables)
             "_source": {"all": "csv", "centre+country": "paper centre map", "field_T": "paper(unfilled)"},
         }
@@ -141,7 +139,7 @@ class Mnms1Adapter(DatasetAdapter):
             idx = Mnms1Adapter._frame_idx(row.get(tag))
             return None if idx is None else (img_p, gt_p, idx)   # 4D cine -> frame index from the CSV
 
-        return load_frames(row.get("Pathology"), resolve, LABEL_MAP)
+        return Base.load_frames(row.get("Pathology"), resolve, LABEL_MAP)
 
     def meta(self, case: Path) -> dict:
         """Acquisition + demographics — AUTO from the CSV (richest of the three)."""

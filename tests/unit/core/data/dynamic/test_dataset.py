@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from core.data.static.splits import split_patients
+from core.data.static.splits import Splits
 from core.preprocessing.preprocess import Preprocess
 
 
@@ -34,7 +34,7 @@ def _cases(n):
 
 def test_split_is_patient_level_and_disjoint():
     cases = _cases(20)
-    train, val = split_patients(cases, val_frac=0.2, seed=0)
+    train, val = Splits.split_patients(cases, val_frac=0.2, seed=0)
     tn = {c.name for c in train}
     vn = {c.name for c in val}
     assert tn.isdisjoint(vn)                         # no patient in both folds
@@ -44,8 +44,8 @@ def test_split_is_patient_level_and_disjoint():
 
 def test_split_is_deterministic():
     cases = _cases(20)
-    a = [c.name for c in split_patients(cases, seed=0)[1]]
-    b = [c.name for c in split_patients(cases, seed=0)[1]]
+    a = [c.name for c in Splits.split_patients(cases, seed=0)[1]]
+    b = [c.name for c in Splits.split_patients(cases, seed=0)[1]]
     assert a == b
 
 

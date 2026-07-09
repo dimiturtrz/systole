@@ -169,7 +169,7 @@ def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
     if cfg.ef_lambda <= 0 or not is_static:
         return []
     size = cfg.generator.data.size
-    lanes: list = [VolConsistency(splits.paths(train_df), size, device, cfg.ef_subjects)]
+    lanes: list = [VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects)]
     if cfg.ef_kaggle:
         lanes.append(KaggleEF(KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
                               cfg.ef_kaggle_subjects, seed=cfg.seed))

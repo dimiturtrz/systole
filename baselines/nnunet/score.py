@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core.data.static.mri.base import load_nifti
+from core.data.static.mri.base import Base
 from core.evaluate import Evaluate
 from core.measure import Measure
 
@@ -44,8 +44,8 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
         gf = gt_dir / pf.name
         if not gf.exists():
             continue
-        pred, sp = load_nifti(pf)
-        gt, _ = load_nifti(gf)
+        pred, sp = Base.load_nifti(pf)
+        gt, _ = Base.load_nifti(gf)
         stem = pf.name[:-7]                     # strip .nii.gz
         pid = stem.rsplit("_", 1)[0] if "_" in stem else stem
         for c in CLASSES:

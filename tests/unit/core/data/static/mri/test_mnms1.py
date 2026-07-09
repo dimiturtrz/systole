@@ -4,7 +4,7 @@ except the marker/path tests which touch tmp_path dirs (cheap, no dataset)."""
 import nibabel as nib
 import numpy as np
 
-from core.data.static.mri.base import MNM_LABEL_MAP, load_frames
+from core.data.static.mri.base import MNM_LABEL_MAP, Base
 from core.data.static.mri.mnms1 import CENTRES, Mnms1Adapter
 
 
@@ -96,7 +96,7 @@ def test_load_ed_es_skips_blank_es(tmp_path):
         idx = Mnms1Adapter._frame_idx(row.get(tag))
         return None if idx is None else (case / "codeR_sa.nii.gz", case / "codeR_sa_gt.nii.gz", idx)
 
-    out = load_frames(row["Pathology"], resolve, MNM_LABEL_MAP)
+    out = Base.load_frames(row["Pathology"], resolve, MNM_LABEL_MAP)
     assert "ED" in out and "ES" not in out                    # blank ES skipped
     assert 3 in np.unique(out["ED"]["gt"])                    # raw 1 -> canonical 3 (remapped)
 

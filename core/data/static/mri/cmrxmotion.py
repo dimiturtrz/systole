@@ -18,10 +18,9 @@ from pathlib import Path
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    Base,
     DatasetAdapter,
     PatientData,
-    load_csv_info,
-    load_frames,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
@@ -58,7 +57,7 @@ class CmrxMotionAdapter(DatasetAdapter):
     @staticmethod
     def _iqa(root: str | Path | None = None) -> dict[str, dict[str, str]]:
         """{image-id (e.g. 'P001-1-ED') -> {Image, Label}} from IQA.csv (motion-quality grade)."""
-        return load_csv_info(CmrxMotionAdapter._root(root).parent / "IQA.csv", "Image")
+        return Base.load_csv_info(CmrxMotionAdapter._root(root).parent / "IQA.csv", "Image")
 
     @staticmethod
     def _grade(case: Path) -> str | None:
@@ -86,7 +85,7 @@ class CmrxMotionAdapter(DatasetAdapter):
                 return None                                   # severe motion: no GT -> skip frame
             return case / f"{cid}-{tag}.nii.gz", gt, 0        # frame=0: drop trailing singleton
 
-        return load_frames(None, resolve, LABEL_MAP)          # healthy volunteers -> no pathology group
+        return Base.load_frames(None, resolve, LABEL_MAP)          # healthy volunteers -> no pathology group
 
     def meta(self, case: Path) -> dict:
         """Acquisition + the motion-grade axis — AUTO from IQA.csv (single fixed scanner)."""

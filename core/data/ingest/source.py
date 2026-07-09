@@ -19,7 +19,7 @@ import torch
 
 from core.data.dynamic import dataset as _dataset
 from core.data.dynamic.generator import Generator
-from core.data.static.labels import valid_row
+from core.data.static.labels import Labels
 
 
 def ids_hash(subjects: list[tuple[str, str]]) -> str:
@@ -85,7 +85,7 @@ class StaticSource:
         """Per-slice class-validity [N,C] bool (labels.valid_row of each slice's dataset). None if every
         slice is full-label — keeps the full-label path mask-free (loss stays on the standard recipe)."""
         ds = self._f.get_column("dataset").to_list()            # per-path dataset, aligned to paths()
-        rows = [valid_row(ds[o], n_classes) for o in owners.tolist()]
+        rows = [Labels.valid_row(ds[o], n_classes) for o in owners.tolist()]
         if all(all(r) for r in rows):
             return None
         return torch.tensor(rows, dtype=torch.bool, device=device)

@@ -36,7 +36,7 @@ from PIL import Image
 from core.config import Config
 from core.data.static import splits, store
 from core.data.static.mri.acdc import AcdcAdapter
-from core.data.static.splits import split_patients
+from core.data.static.splits import Splits
 from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
@@ -80,11 +80,11 @@ def heldout_set(model_name: str) -> set[str]:
     if cfg_path.exists():  # pragma: no cover  (reads a real run config.json + consolidated store — registry/data dependency)
         dc = Hparams.from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
-        _, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
+        _, val, test = splits.Splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
                                          val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
         # "held out" = anything the model did NOT train on (val OR test) — ACDC is now val, still unseen.
         return set(val.get_column("subject_id").to_list()) | set(test.get_column("subject_id").to_list())
-    _, val = split_patients(list(AcdcAdapter().cases()), 0.2, 0)
+    _, val = Splits.split_patients(list(AcdcAdapter().cases()), 0.2, 0)
     return {c.name for c in val}
 
 

@@ -125,8 +125,8 @@ def _main():
     model, cfg, device = Run.load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    va = splits.model_val(d, meta)                   # coded split's val if set, else criteria
-    X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(va), d.size, device)
+    va = splits.Splits.model_val(d, meta)                   # coded split's val if set, else criteria
+    X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, device)
     s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, args.out or run_dir)
     log.info(json.dumps(s, indent=2))
 

@@ -8,7 +8,7 @@ import numpy as np
 from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.labels import MYO as LV_MYO
 from core.data.static.labels import RV as RV_CAVITY
-from core.data.static.mri.base import identify_lv_cavity
+from core.data.static.mri.base import Base
 from core.evaluate import Evaluate
 from core.measure import Measure
 
@@ -47,7 +47,7 @@ def test_label_volume_scales_with_spacing():
 
 
 def test_identify_lv_cavity_is_label_3_geometrically():
-    lv, scores = identify_lv_cavity(_enclosed_lv())
+    lv, scores = Base.identify_lv_cavity(_enclosed_lv())
     assert lv == LV_CAVITY == 3
     assert scores[LV_CAVITY] > scores[RV_CAVITY]   # LV more myo-enclosed than RV
 

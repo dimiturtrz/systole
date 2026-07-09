@@ -47,21 +47,25 @@ LABELED_CLASSES: dict[str, tuple[int, ...]] = {
 }
 
 
-def valid_classes(dataset: str) -> tuple[int, ...]:
-    """The classes whose GT is trustworthy for a dataset (default: all four)."""
-    return LABELED_CLASSES.get(dataset, ALL_CLASSES)
+class Labels:
+    """The label-convention free helpers, folded in as staticmethods (partial-label validity + overlay cmap)."""
 
+    @staticmethod
+    def valid_classes(dataset: str) -> tuple[int, ...]:
+        """The classes whose GT is trustworthy for a dataset (default: all four)."""
+        return LABELED_CLASSES.get(dataset, ALL_CLASSES)
 
-def valid_row(dataset: str, n_classes: int = 4) -> list[bool]:
-    """Per-class validity flags [C] for a dataset — one row of the [N, C] partial-label mask."""
-    vc = set(valid_classes(dataset))
-    return [c in vc for c in range(n_classes)]
+    @staticmethod
+    def valid_row(dataset: str, n_classes: int = 4) -> list[bool]:
+        """Per-class validity flags [C] for a dataset — one row of the [N, C] partial-label mask."""
+        vc = set(Labels.valid_classes(dataset))
+        return [c in vc for c in range(n_classes)]
 
-
-def overlay_cmap(alpha: float = 0.5):
-    """Matplotlib ListedColormap for a label overlay: background transparent, each
-    foreground class its CLASSES color at `alpha`. Index i == label i (vmin=0, vmax=3)."""
-    colors = [(0.0, 0.0, 0.0, 0.0)]  # label 0 = background, fully transparent
-    for lab in FOREGROUND:
-        colors.append((*to_rgb(CLASSES[lab][1]), alpha))
-    return ListedColormap(colors)
+    @staticmethod
+    def overlay_cmap(alpha: float = 0.5):
+        """Matplotlib ListedColormap for a label overlay: background transparent, each
+        foreground class its CLASSES color at `alpha`. Index i == label i (vmin=0, vmax=3)."""
+        colors = [(0.0, 0.0, 0.0, 0.0)]  # label 0 = background, fully transparent
+        for lab in FOREGROUND:
+            colors.append((*to_rgb(CLASSES[lab][1]), alpha))
+        return ListedColormap(colors)

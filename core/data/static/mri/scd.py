@@ -24,7 +24,7 @@ import numpy as np
 from skimage.draw import polygon
 
 from core.config import Config
-from core.data.static.mri.base import DatasetAdapter, PatientData, load_csv_info
+from core.data.static.mri.base import Base, DatasetAdapter, PatientData
 from core.data.static.mri.dicom import Dicom
 
 _IRCCI = "contours-manual/IRCCI-expert"
@@ -45,7 +45,7 @@ class ScdAdapter(DatasetAdapter):
 
     @staticmethod
     def _patient_csv(root: Path) -> dict[str, dict[str, str]]:
-        return load_csv_info(root / "scd_patientdata.csv", key_col="PatientID")
+        return Base.load_csv_info(root / "scd_patientdata.csv", key_col="PatientID")
 
     @staticmethod
     def _contour_dir_name(original_id: str) -> str:

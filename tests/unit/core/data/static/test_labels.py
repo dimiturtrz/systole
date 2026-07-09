@@ -1,7 +1,7 @@
 """Canonical-label SSOT tests: the derived sets must stay consistent with CLASSES + the enum."""
 import numpy as np
 
-from core.data.static.labels import CLASS_NAMES, CLASSES, FOREGROUND, LV_CAV, Label, overlay_cmap
+from core.data.static.labels import CLASS_NAMES, CLASSES, FOREGROUND, LV_CAV, Label, Labels
 
 
 def test_enum_values():
@@ -20,7 +20,7 @@ def test_derived_sets_consistent_with_classes():
 def test_overlay_cmap_bg_transparent_and_tracks_classes():
     """4 colors (bg + 3 classes); bg fully transparent; fg colors come from CLASSES hex."""
     from matplotlib.colors import to_rgb
-    cm = overlay_cmap(alpha=0.5)
+    cm = Labels.overlay_cmap(alpha=0.5)
     assert cm.N == 1 + len(FOREGROUND) == 4
     assert cm(0) == (0.0, 0.0, 0.0, 0.0)                    # label 0 transparent
     # label 1 (RV) matches CLASSES color at the requested alpha

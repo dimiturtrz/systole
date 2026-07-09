@@ -234,12 +234,12 @@ class SeedTrainer:
         test_df = self.sh["test_df"]
         log.info("===== VALIDATION =====")
         ev = Evaluator(model, device, EvalCfg(size=d.size, boundary=not self.quick))  # skip HD95/ASSD on quick sweeps
-        dice_per_class, ef_rows, surf = ev.validate(splits.paths(self.sh["val_df"]))
+        dice_per_class, ef_rows, surf = ev.validate(splits.Splits.paths(self.sh["val_df"]))
         results = {"val": summarize(dice_per_class, ef_rows, surf)}
         if len(test_df):                                            # held-out test = the criteria split
             log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
                      list(d.test_datasets), list(d.test_vendors), len(test_df))
-            tdice, tef, tsurf = ev.validate(splits.paths(test_df))
+            tdice, tef, tsurf = ev.validate(splits.Splits.paths(test_df))
             results["test"] = summarize(tdice, tef, tsurf)
         return results
 
@@ -267,7 +267,7 @@ class SeedTrainer:
             s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
             log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
         with self._artifact_step("ONNX export"):
-            ExportOnnx.export(out, splits.paths(val_df)[0])    # ONNX + INT8, parity-gated
+            ExportOnnx.export(out, splits.Splits.paths(val_df)[0])    # ONNX + INT8, parity-gated
         with self._artifact_step("registry save"):
             rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
             split = "+".join(d.test_vendors) or "legacy"
@@ -304,7 +304,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     if d.anatomy_pool:
         Ys = torch.as_tensor(Anatomy.load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
         if d.anatomy_mode == "mix":
-            Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
+            Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(train_df), d.size, data_device)
             Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)
             Xtr = torch.cat([Xr, Xsy]); Ytr = torch.cat([Yr, Ys])
             force_synth = torch.cat([torch.zeros(Xr.shape[0], dtype=torch.bool, device=data_device),
@@ -318,13 +318,13 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
                 Xtr = torch.zeros((Ytr.shape[0], 1, d.size, d.size), device=data_device)  # ZERO-REAL
                 log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg.mode)
             else:                                                    # Rodero heart on real bg (excised)
-                Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
+                Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(train_df), d.size, data_device)
                 Xr = SynthPainter.excise_heart(Xr, Yr)
                 Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
                 log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
     else:
-        Xtr, Ytr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
-    Xva, Yva = ACDCSliceDataset.load_to_gpu(splits.paths(val_df), d.size, data_device)
+        Xtr, Ytr = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(train_df), d.size, data_device)
+    Xva, Yva = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_df), d.size, data_device)
     gen = Generator(cfg.generator, Xtr, Ytr, cfg.model.out_channels, device, force_synth=force_synth)
     return gen, Xva, Yva
 
@@ -381,7 +381,7 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
                      d.split.split("@")[0], r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
         else:
             train_src = val_src = None               # legacy: DataCfg criteria + inline anatomy block
-            train_df, val_df, test_df = splits.split_from_cfg(d, meta, seeds[0])   # single-seed only
+            train_df, val_df, test_df = splits.Splits.split_from_cfg(d, meta, seeds[0])   # single-seed only
     if cfg.n_patients:                          # debug cap — bound test + val (+ legacy train frame)
         n = cfg.n_patients
         test_df = test_df.head(n)

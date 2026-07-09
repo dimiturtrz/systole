@@ -20,7 +20,7 @@ import polars as pl
 
 from core.config import DEFAULT_INPLANE
 from core.data.static.geo import COUNTRY_CONTINENT
-from core.data.static.mri.registry import get_adapter
+from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import (  # noqa: F401  re-exported: `build as store` keeps store.<light-symbol> working
     SOURCE_DATASETS,
@@ -48,7 +48,7 @@ def build(name: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # n
     out = dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
     data_dir = out / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    adapter = get_adapter(name)
+    adapter = AdapterRegistry.get_adapter(name)
     cases = adapter.cases()
     todo = cases if rebuild else [c for c in cases if not (data_dir / f"{c.name}.npz").exists()]
     normalizer = Normalizer(inplane, n4=n4, n4_params=n4_params, nyul=nyul, nyul_standard=nyul_standard, norm=norm)

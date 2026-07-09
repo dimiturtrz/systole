@@ -75,7 +75,7 @@ def main():
         df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
         if df.height == 0:
             continue
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(df.head(args.n)), d.size, "cpu")
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), d.size, "cpu")
         real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
         b = Sim2Real.fit_acquisition(real, n_classes)
         real_z = [round(v, 2) for v in Sim2Real._standardize(real).tolist()]

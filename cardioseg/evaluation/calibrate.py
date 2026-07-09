@@ -78,10 +78,10 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
         r = resolve_cfg(d, meta)
         val, test = r.val.frame, r.test.frame
     else:
-        _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+        _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
     ev = Evaluator(model, device, EvalCfg(size=d.size))   # state (model/device/size) once; call many
-    val_logits, val_labels = ev.gather(splits.paths(val))
+    val_logits, val_labels = ev.gather(splits.Splits.paths(val))
     T = Calibrate.fit_temperature(val_logits, val_labels, device)
 
     axes = {"val": val}
@@ -92,7 +92,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     for name, df in axes.items():
         if not len(df):
             continue
-        lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.paths(df))
+        lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.Splits.paths(df))
         e0, e1 = Calibrate._ece_at(lg, lb, 1.0), Calibrate._ece_at(lg, lb, T)
         report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
         log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")

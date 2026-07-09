@@ -41,9 +41,9 @@ def test_soft_target_accepted():
 
 
 def test_valid_row_registry():
-    from core.data.static.labels import valid_row
-    assert valid_row("scd") == [False, False, True, True]      # LV-only: bg + RV untrusted
-    assert valid_row("acdc") == [True, True, True, True]       # full-label
+    from core.data.static.labels import Labels
+    assert Labels.valid_row("scd") == [False, False, True, True]      # LV-only: bg + RV untrusted
+    assert Labels.valid_row("acdc") == [True, True, True, True]       # full-label
 
 
 def test_per_sample_mask_mixes_full_and_partial():

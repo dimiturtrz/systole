@@ -6,6 +6,7 @@ from omegaconf import OmegaConf
 
 import cardioseg.preprocessing.normalization.persist as P
 from cardioseg.preprocessing.normalization.persist import Persist
+from core.data.static.mri.registry import AdapterRegistry
 
 
 def test_prov_paper_layer_wins():
@@ -49,7 +50,7 @@ class _FakeAdapter:
 
 def test_persist_writes_provenance_yaml(monkeypatch, tmp_path):
     """persist_meta pipeline: fake adapter -> yaml written under raw/, provenance-tagged as expected."""
-    monkeypatch.setattr(P, "get_adapter", lambda _ds: _FakeAdapter())
+    monkeypatch.setattr(AdapterRegistry, "get_adapter", lambda _ds: _FakeAdapter())
     monkeypatch.setattr(P.Config, "data_root", staticmethod(lambda _kind="raw": str(tmp_path)))
     monkeypatch.setattr(P.Persist, "_overlay",
                         lambda: {"acdc": {"scanner": {"source": "Bernard 2018", "verified": True}}})

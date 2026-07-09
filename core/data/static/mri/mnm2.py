@@ -14,11 +14,9 @@ from pathlib import Path
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    Base,
     DatasetAdapter,
     PatientData,
-    load_csv_info,
-    load_frames,
-    to_float,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
@@ -53,7 +51,7 @@ class Mnm2Adapter(DatasetAdapter):
     def _info(root: str | Path | None = None) -> dict[str, dict[str, str]]:
         """{subject_code (zero-padded NNN) -> {DISEASE, VENDOR, SCANNER, FIELD}}."""
         d = Mnm2Adapter._dataset_dir(root)
-        return load_csv_info(d.parent / "dataset_information.csv", "SUBJECT_CODE",
+        return Base.load_csv_info(d.parent / "dataset_information.csv", "SUBJECT_CODE",
                              key_transform=lambda c: c.zfill(3))
 
     @staticmethod
@@ -63,7 +61,7 @@ class Mnm2Adapter(DatasetAdapter):
         return {
             "group": info.get("DISEASE"),
             "vendor": info.get("VENDOR"), "scanner": info.get("SCANNER"),
-            "field_T": to_float(info.get("FIELD")),
+            "field_T": Base.to_float(info.get("FIELD")),
             # 3 Spanish hospitals; per-subject centre not published, but country is uniform.
             "centre": None, "country": "Spain",
             "age": None, "sex": None, "height": None, "weight": None,
@@ -85,7 +83,7 @@ class Mnm2Adapter(DatasetAdapter):
             return (patient_dir / f"{pid}_{view}_{tag}.nii.gz",
                     patient_dir / f"{pid}_{view}_{tag}_gt.nii.gz", None)
 
-        return load_frames(grp, resolve, LABEL_MAP)
+        return Base.load_frames(grp, resolve, LABEL_MAP)
 
     def meta(self, case: Path) -> dict:
         """Acquisition + disease — AUTO from dataset_information.csv."""

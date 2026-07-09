@@ -101,8 +101,8 @@ def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + ma
     size = d.size
 
     meta = store.load_cfg(d)                    # the run's own preprocessing params
-    val = splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
-    paths = splits.paths(val)
+    val = splits.Splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
+    paths = splits.Splits.paths(val)
 
     # score every case once: pick a clean low-error case + the worst-EF HCM case
     cases = [Overlay._case(model, p, size, device) for p in paths]

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, Config
 from core.data.static.mri.pathology import Pathology
-from core.data.static.mri.registry import get_adapter
+from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.reference import Reference
 from core.preprocessing.n4 import N4Cfg
 
@@ -230,7 +230,7 @@ class MetaBuilder:
             if names and name not in names:
                 continue
             try:
-                adapter = get_adapter(name)
+                adapter = AdapterRegistry.get_adapter(name)
             except KeyError:
                 continue                                         # not a registered dataset (e.g. mrxcat pools)
             out.append(MetaBuilder(name, adapter).write(param_dir / "data", param_dir))

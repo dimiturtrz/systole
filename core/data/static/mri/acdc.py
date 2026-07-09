@@ -10,10 +10,9 @@ from pathlib import Path
 
 from core.config import Config
 from core.data.static.mri.base import (
+    Base,
     DatasetAdapter,
     PatientData,
-    load_frames,
-    to_float,
 )
 
 # Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
@@ -73,14 +72,14 @@ class AcdcAdapter(DatasetAdapter):
             fno = cfg.get(tag)
             return (*self._frame_paths(patient_dir, fno), None) if fno is not None else None
 
-        return load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
+        return Base.load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
     def meta(self, case: Path) -> dict:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
         cfg = self._parse_info_cfg(case)
         return {
             "group": cfg.get("Group"),
-            "height": to_float(cfg.get("Height")), "weight": to_float(cfg.get("Weight")),
+            "height": Base.to_float(cfg.get("Height")), "weight": Base.to_float(cfg.get("Weight")),
             "age": None, "sex": None,
             "vendor": "Siemens", "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
             "scanner": "Siemens Aera/Trio",                # two units, not recorded per-subject

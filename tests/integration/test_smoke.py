@@ -7,7 +7,7 @@ import pytest
 
 from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.mri.acdc import AcdcAdapter
-from core.data.static.mri.base import identify_lv_cavity
+from core.data.static.mri.base import Base
 from core.evaluate import Evaluate
 from core.measure import Measure
 
@@ -20,7 +20,7 @@ def test_real_patient_labels_and_lv_identification():
     d = AcdcAdapter().load_ed_es(_CASES[0])
     gt = d["ED"]["gt"]
     assert set(np.unique(gt).tolist()).issubset({0, 1, 2, 3})
-    lv, scores = identify_lv_cavity(gt)
+    lv, scores = Base.identify_lv_cavity(gt)
     assert lv == LV_CAVITY == 3                      # LV cavity is label 3 on real masks
     assert scores[LV_CAVITY] == max(scores.values())
 

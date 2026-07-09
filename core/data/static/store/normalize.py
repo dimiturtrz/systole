@@ -11,7 +11,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from core.config import DEFAULT_INPLANE
-from core.data.static.mri.registry import get_adapter
+from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS
 from core.preprocessing.n4 import N4Cfg
@@ -56,7 +56,7 @@ class Normalizer:
         names = SOURCE_DATASETS if names is None else names
         rows = []
         for name in names:
-            adapter = get_adapter(name)
+            adapter = AdapterRegistry.get_adapter(name)
             for case in adapter.cases()[:per_dataset]:
                 d = adapter.load_ed_es(case)
                 if "ED" not in d:

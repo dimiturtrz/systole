@@ -15,7 +15,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 
 from core.config import KNOWN_DATASETS, Config
-from core.data.static.mri.registry import get_adapter
+from core.data.static.mri.registry import AdapterRegistry
 from core.obs import Obs
 
 log = logging.getLogger("cardioseg.persist")
@@ -44,7 +44,7 @@ class Persist:
 
     @staticmethod
     def persist_meta(dataset: str) -> Path:
-        a = get_adapter(dataset)
+        a = AdapterRegistry.get_adapter(dataset)
         paper = Persist._overlay().get(dataset) or {}
         subjects = {}
         for case in a.cases():
