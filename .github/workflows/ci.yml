@@ -92,3 +92,11 @@ jobs:
         if: always()
         continue-on-error: true
         run: uv run coverage report --fail-under=95 || echo "::warning::coverage below the 95% target"
+      # Architecture fitness — the METRIC arch axis (god-module = fan-in AND fan-out both over a degree /
+      # import cycle / god-file) as a GATE on the grimp+networkx import graph, the axis import-linter's
+      # categorical contracts can't express. BLOCKS on the rules clean today (they ratchet — a new
+      # god-module/cycle/oversized file fails CI); line-floor + chokepoint are advisory (logged, never
+      # fail). Thresholds in pyproject [tool.structure]. Runs here (tests job) for the synced devtools
+      # env (grimp/networkx). bd cardiac-seg-g0b2.
+      - name: Architecture fitness — enforced (devtools/graph.py --assert)
+        run: uv run python -m devtools.graph --assert

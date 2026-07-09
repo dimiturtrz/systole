@@ -1,5 +1,6 @@
-"""Import-graph architecture diagnostic (bd au0o) — the degree>0 view vulture (degree-0 dead code) can't
-give. grimp builds the honest import graph; networkx ranks structure:
+"""Import-graph architecture diagnostic + fitness gate (bd au0o / cardiac-seg-g0b2). grimp builds the
+honest import graph; networkx ranks structure and `--assert` turns the measurable properties into a
+RATCHETED gate (the metric arch axis import-linter's categorical contracts can't express):
 
   fan-in   (in_degree)   load-bearing        -> freeze its interface, test hardest
   fan-out  (out_degree)  orchestrating a lot -> decompose, hard to test isolated
@@ -7,15 +8,19 @@ give. grimp builds the honest import graph; networkx ranks structure:
   betweenness            chokepoint          -> where to place a boundary/interface
   cycles (SCC>1)         tangle              -> break (import-linter gates layer cycles)
 
-One-shot EXPLORER, not a CI gate — on a young solo repo the metrics surface 1-2 bottlenecks, not a pile;
-run after big structural changes. IMPORT-level only: function-level lies on the cfg.build()/registry
-dispatch. Dict-registered variants show as real edges, so a registry hub's fan-in reads expected-high —
-the signal you want is fan-in/out on LOGIC modules. `python -m devtools.graph`.
+`report` is the one-shot EXPLORER (ranked tables). `--assert` is the GATE: it fails when a module is a
+god-module (fan-in AND fan-out both over a degree), a new import cycle appears, or a file blows the line
+ceiling — plus advisory warnings (line floor, chokepoint) that never block. Thresholds live in
+`pyproject [tool.structure]`. Clean rules block; miscalibrated ones warn. IMPORT-level only: function-
+level lies on the cfg.build()/registry dispatch, so a registry hub's fan-in reads expected-high — the
+signal you want is fan-in/out on LOGIC modules. `python -m devtools.graph` | `... --assert`.
 """
 from __future__ import annotations
 
 import argparse
 import logging
+import tomllib
+from pathlib import Path
 
 import grimp
 import networkx as nx
@@ -23,6 +28,23 @@ import networkx as nx
 from core.obs import setup
 
 log = logging.getLogger("cardioseg.devtools.graph")   # child of the "cardioseg" logger setup() configures
+
+# Fitness thresholds (overridable in pyproject [tool.structure]). Defaults chosen against the CURRENT
+# graph so the blocking rules start CLEAN and ratchet: fan-in&out both>8 (0 today), file>750 (0 today),
+# cycles (0 today). The line FLOOR is advisory — most modules here are small cohesive leaves, so a hard
+# floor would fight the repo's own style; it surfaces "earn its keep?" without blocking.
+_DEFAULTS = {"bottleneck_degree": 8, "file_max": 750, "file_min": 250, "betweenness_max": 0.10}
+_ADVISORY_PREVIEW = 15                              # advisory lines shown before "… +N more" (avoid log spam)
+_STRUCTURAL = ("__init__.py", "__main__.py")        # package plumbing — exempt from the line floor (always small)
+
+
+def load_structure_cfg(pyproject: str = "pyproject.toml") -> dict:
+    """Fitness thresholds from pyproject [tool.structure], defaulted. One config home, like ruff/vulture."""
+    cfg = dict(_DEFAULTS)
+    p = Path(pyproject)
+    if p.exists():
+        cfg.update(tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("structure", {}))
+    return cfg
 
 
 def build_graph(packages: list[str]) -> nx.DiGraph:
@@ -34,6 +56,44 @@ def build_graph(packages: list[str]) -> nx.DiGraph:
             for dep in mods.find_modules_directly_imported_by(m):
                 g.add_edge(m, dep)
     return g
+
+
+def file_lines(packages: list[str]) -> list[tuple[str, int]]:
+    """(path, line-count) for every .py under the root packages — the file-shape axis the graph can't see."""
+    return [(str(f), f.read_text(encoding="utf-8").count("\n") + 1)
+            for pkg in packages for f in sorted(Path(pkg).rglob("*.py"))]
+
+
+def _god_modules(g: nx.DiGraph, degree: int) -> list[str]:
+    ind, outd = dict(g.in_degree()), dict(g.out_degree())
+    return [f"{n}: fan-in {ind[n]} x fan-out {outd[n]} (both > {degree}) — god-module, split by responsibility"
+            for n in g if ind[n] > degree and outd[n] > degree]
+
+
+def _cycles(g: nx.DiGraph) -> list[str]:
+    return [f"import cycle (SCC>1): {sorted(c)}" for c in nx.strongly_connected_components(g) if len(c) > 1]
+
+
+def _oversized(files: list[tuple[str, int]], mx: int) -> list[str]:
+    return [f"{f}: {n} lines > {mx} — god-file, split" for f, n in files if n > mx]
+
+
+def _undersized(files: list[tuple[str, int]], mn: int) -> list[str]:
+    return [f"{f}: {n} lines < {mn} — earn its keep? (fold, or accept a small leaf)"
+            for f, n in files if n < mn and not f.endswith(_STRUCTURAL)]
+
+
+def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
+    return [f"{n}: betweenness {v:.3f} > {mx} — chokepoint, consider a boundary here"
+            for n, v in nx.betweenness_centrality(g).items() if v > mx]
+
+
+def assert_fitness(g: nx.DiGraph, files: list[tuple[str, int]], cfg: dict) -> tuple[list[str], list[str]]:
+    """(blocking, advisory) fitness violations. BLOCKING = the rules clean today (god-module, cycle,
+    god-file) so they ratchet; ADVISORY = the miscalibrated/noisy ones (line floor, chokepoint)."""
+    blocking = (_god_modules(g, cfg["bottleneck_degree"]) + _cycles(g) + _oversized(files, cfg["file_max"]))
+    advisory = (_undersized(files, cfg["file_min"]) + _chokepoints(g, cfg["betweenness_max"]))
+    return blocking, advisory
 
 
 def _top(pairs, n: int):
@@ -61,12 +121,32 @@ def report(g: nx.DiGraph, top: int) -> str:
     return "\n".join(out)
 
 
+def _run_assert(packages: list[str]) -> int:
+    """The gate: log advisory warnings, log blocking errors, return exit code (1 if any blocking)."""
+    cfg = load_structure_cfg()
+    g, files = build_graph(packages), file_lines(packages)
+    blocking, advisory = assert_fitness(g, files, cfg)
+    if advisory:
+        shown = advisory[:_ADVISORY_PREVIEW]
+        extra = f"\n  … +{len(advisory) - _ADVISORY_PREVIEW} more" if len(advisory) > _ADVISORY_PREVIEW else ""
+        log.warning("architecture fitness — advisory (%d, non-blocking):\n  %s", len(advisory), "\n  ".join(shown) + extra)
+    if blocking:
+        log.error("architecture fitness — BLOCKING (%d):\n  %s", len(blocking), "\n  ".join(blocking))
+        return 1
+    log.info("architecture fitness: clean (0 god-modules / cycles / god-files; %d advisory)", len(advisory))
+    return 0
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Import-graph architecture diagnostic (fan-in/out/centrality).")
+    ap = argparse.ArgumentParser(description="Import-graph architecture diagnostic + fitness gate.")
     ap.add_argument("--packages", nargs="+", default=["core", "cardioseg"], help="root packages to graph")
     ap.add_argument("--top", type=int, default=10, help="rows per ranked table")
+    ap.add_argument("--assert", action="store_true", dest="assert_",
+                    help="fitness GATE: exit 1 on a god-module / import cycle / god-file (advisory: line floor, chokepoint)")
     args = ap.parse_args()
     setup()
+    if args.assert_:
+        raise SystemExit(_run_assert(args.packages))
     log.info("\n%s", report(build_graph(args.packages), args.top))
 
 

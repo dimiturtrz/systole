@@ -43,6 +43,17 @@ all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 testpaths = ["tests"]
 pythonpath = ["."]          # repo root importable -> top-level devtools/ (dev tooling, not a shipped package)
 
+# Architecture fitness thresholds (devtools/graph.py --assert, bd cardiac-seg-g0b2) — the METRIC arch
+# axis import-linter's categorical contracts can't express. BLOCKING rules start clean and ratchet:
+# god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
+# (never blocks): file < file_min (most modules here are small cohesive leaves — a hard floor would fight
+# the repo's style, so it only surfaces "earn its keep?"), betweenness > betweenness_max (noisy).
+[tool.structure]
+bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
+file_max = 750              # god-file ceiling (largest today ~548)
+file_min = 250              # advisory floor only — 83/92 files are under it, so it never blocks
+betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
+
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
 # style. Escape hatch is per-line `# noqa: <code>`, used sparingly. `ty`/type-checking is a separate,
