@@ -14,7 +14,7 @@ import numpy as np
 from scipy.ndimage import zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
-from core.preprocessing.n4 import N4Cfg, n4_bias
+from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import transform as nyul_transform
 from core.types import Image, Slice2D, Spacing, Volume
 
@@ -110,7 +110,7 @@ def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
         gt, _ = resample_inplane(d[tag]["gt"], sp, target_inplane, is_mask=True)
         if n4:
             p = n4_params or N4Cfg()
-            img = n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
+            img = N4Cfg.n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
         if nyul_standard is not None:
             img = nyul_transform(img, np.asarray(nyul_standard))
         out[f"{tag.lower()}_img"] = blood_anchor(img, gt) if norm == "blood" else zscore(img)

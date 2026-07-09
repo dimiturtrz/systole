@@ -3,7 +3,9 @@ on a mismatch, and batched == per-subject-mean (the vectorization invariant).
 """
 import torch
 
-from cardioseg.training.volumes import vol_loss
+from cardioseg.training.volumes import VolLoss
+
+vol_loss = VolLoss.vol_loss
 
 
 def test_vol_loss_zero_when_exact_and_positive_on_mismatch():

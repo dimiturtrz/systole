@@ -25,7 +25,7 @@ from core.data.static.store import load_arrays
 from core.measure import Measure
 from core.preprocessing.preprocess import fit_square
 
-from .volumes import vol_loss
+from .volumes import VolLoss
 
 
 # ---- shared primitives ------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class VolConsistency:
         es = torch.cat([self.es[int(i)] for i in idx])
         edv = _cav_volume(model, ed, sizes, self.lv, amp=amp) * vox     # [K] soft EDV (mL)
         esv = _cav_volume(model, es, sizes, self.lv, amp=amp) * vox
-        return vol_loss(edv, esv, self.edv_gt[idx], self.esv_gt[idx], delta)
+        return VolLoss.vol_loss(edv, esv, self.edv_gt[idx], self.esv_gt[idx], delta)
 
 
 class KaggleEF:
