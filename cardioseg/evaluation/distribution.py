@@ -27,7 +27,7 @@ from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.inference import Inference

@@ -19,7 +19,7 @@ import torch
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry

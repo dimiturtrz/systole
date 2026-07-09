@@ -22,7 +22,7 @@ import polars as pl
 from cardioseg.evaluation.uncertainty import Uncertainty
 from core.data.static import splits
 from core.data.static.labels import LV_CAV
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure

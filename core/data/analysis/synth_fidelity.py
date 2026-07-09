@@ -24,7 +24,7 @@ from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.synth import MatchedAcqCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.hparams import Hparams, TrainCfg
 from core.model import Model
 from core.obs import Obs

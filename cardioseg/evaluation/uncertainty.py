@@ -25,8 +25,9 @@ from scipy.ndimage import binary_erosion
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from core.config import FLAGSHIP_REF
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import Labels
+from core.data.static.store.build import Build as store
 from core.inference import Inference
 from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, Preprocess

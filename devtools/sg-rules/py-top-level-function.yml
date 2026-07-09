@@ -1,11 +1,11 @@
 # House rule (owner): everything meaningful is an object — a top-level function should be a method of the
-# class that owns its state/responsibility (a named, injectable seam), not a free function. `main` (the CLI
-# entrypoint) is exempt. NOTE: the `# struct:free` comment-marker exemption isn't expressible here (ast-grep
-# matches syntax, not adjacent comments) — the advisory list is the review surface; graduate per module.
+# class that owns its state/responsibility (a named, injectable seam), not a free function. `main`/`_main`
+# (the CLI entrypoint) is exempt. GRADUATED TO BLOCKING (bd cardiac-seg-y2fi): the whole codebase was
+# migrated (328 free funcs -> 0), so severity is now `error` and CI fails on any NEW top-level function.
 id: py-top-level-function
 language: python
-severity: warning
-message: "top-level function — prefer a method on the class that owns it (house rule; `main` exempt)"
+severity: error
+message: "top-level function — make it a method on the class that owns it (house rule; `main` exempt)"
 rule:
   kind: function_definition
   inside:

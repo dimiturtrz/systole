@@ -21,7 +21,7 @@ from mlflow.exceptions import MlflowException
 from cardioseg.evaluation.distribution import Distribution
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.measure import Measure

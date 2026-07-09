@@ -13,7 +13,7 @@ SYNTH train pool is mocked tiny (one load_pool patch) so the dynamic/composite e
 import numpy as np
 import pytest
 
-from cardioseg.training.train import train_seg
+from cardioseg.training.train import Train
 from core.data.ingest.source import StaticSource
 from core.data.static.mri.acdc import AcdcAdapter
 from core.hparams import TrainCfg
@@ -48,7 +48,7 @@ def test_train_seg_e2e_smoke(split, tmp_path, monkeypatch):
     cfg.generator.data.split = split
     cfg.generator.data.size = 32                          # tiny input — pool mock is 32², val resized to match
 
-    model, results = train_seg(cfg, quick=True, seeds=[0])
+    model, results = Train.train_seg(cfg, quick=True, seeds=[0])
 
     assert model is not None
     dm = results["val"]["dice_mean"]

@@ -20,8 +20,8 @@ from matplotlib.colors import ListedColormap
 
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
-from core.data.static.store import build as store
-from core.data.static.store import load_arrays
+from core.data.static.store import Store
+from core.data.static.store.build import Build as store
 from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
@@ -32,6 +32,8 @@ from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
 
 log = logging.getLogger("cardioseg.overlay")
+
+load_arrays = Store.load_arrays
 
 
 class Overlay:

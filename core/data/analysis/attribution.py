@@ -29,7 +29,7 @@ from core.config import FLAGSHIP_REF
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.static import splits
 from core.data.static.labels import CLASSES
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
 from core.obs import Obs
 from core.registry import Registry

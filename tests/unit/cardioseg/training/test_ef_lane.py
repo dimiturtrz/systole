@@ -10,15 +10,17 @@ import torch
 
 import cardioseg.training.ef_lane as EL
 from cardioseg.training.ef_lane import (
+    EfLane,
     KaggleEF,
     VolConsistency,
-    _cav_volume,
-    _stack,
-    _zscore,
-    build_aux,
-    ef_ratio,
-    ef_ratio_loss,
 )
+
+_cav_volume = EfLane._cav_volume
+_stack = EfLane._stack
+_zscore = EfLane._zscore
+build_aux = EfLane.build_aux
+ef_ratio = EfLane.ef_ratio
+ef_ratio_loss = EfLane.ef_ratio_loss
 from core.data.static.labels import LV_CAV
 from core.model import Model
 

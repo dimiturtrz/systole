@@ -17,9 +17,9 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from core.data.ingest.source import subject_keys
+from core.data.ingest.source import SubjectIds
 from core.data.ingest.splits import Splits as SplitRegistry
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 
 
 class Splits:
@@ -125,7 +125,7 @@ class Splits:
                 seen |= set(r.train.subjects())                     # dynamic/synth train = no real subjects
             return {f"{a}\t{b}" for a, b in seen}
         test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
-        return subject_keys(in_sources.filter(pl.col("labelled") & ~test))
+        return SubjectIds.subject_keys(in_sources.filter(pl.col("labelled") & ~test))
 
     @staticmethod
     def train_keys(d, meta: pl.DataFrame) -> set[str]:
@@ -139,7 +139,7 @@ class Splits:
             if r.train.kind != "static":
                 return set()                                        # dynamic/synth train touches no real subject
             return {f"{a}\t{b}" for a, b in r.train.subjects()}
-        return subject_keys(Splits.split_from_cfg(d, in_sources)[0])   # [0] = train partition (val carved off)
+        return SubjectIds.subject_keys(Splits.split_from_cfg(d, in_sources)[0])   # [0] = train partition (val carved off)
 
     @staticmethod
     def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0

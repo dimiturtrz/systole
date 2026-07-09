@@ -4,11 +4,12 @@ test_lock drift guard. StaticMain's real-data parity vs the old xvendor split is
 """
 import polars as pl
 
-from core.data.ingest.source import StaticSource, ids_hash
+from core.data.ingest.source import StaticSource, SubjectIds
 from core.data.ingest.split import SplitDef, SplitResolver
 from core.data.ingest.splits import Splits
 
 V = pl.col
+ids_hash = SubjectIds.ids_hash
 
 
 def _cloud():

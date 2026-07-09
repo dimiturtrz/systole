@@ -18,7 +18,7 @@ from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.synth import FlatBgCfg, PartitionBgCfg, SynthCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
 from core.obs import Obs
 

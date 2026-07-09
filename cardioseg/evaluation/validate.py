@@ -14,7 +14,9 @@ import torch
 from pydantic import BaseModel
 
 from core.config import _VALIDATE
-from core.data.static.store import load_arrays
+from core.data.static.store import Store
+
+load_arrays = Store.load_arrays
 from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);

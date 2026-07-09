@@ -22,7 +22,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from core.data.static.store import load_arrays
+from core.data.static.store import Store
+
+load_arrays = Store.load_arrays
 from core.obs import Obs
 
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the

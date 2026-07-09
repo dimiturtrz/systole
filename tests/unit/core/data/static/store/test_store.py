@@ -9,21 +9,23 @@ import polars as pl
 import pytest
 
 from core.data.static.mri.registry import AdapterRegistry
-from core.data.static.store import query
-from core.data.static.store.build import load
+from core.data.static.store.build import Build
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import (
     AcqReference,
     MetaBuilder,
-    _age_band,
-    _bsa,
-    _is_labelled,
-    _norm_vendor,
-    _region_of,
-    dataset_dir,
-    load_arrays,
-    param_key,
+    Store,
 )
+
+_region_of = MetaBuilder._region_of
+_bsa = MetaBuilder._bsa
+_age_band = MetaBuilder._age_band
+_norm_vendor = MetaBuilder._norm_vendor
+_is_labelled = MetaBuilder._is_labelled
+param_key = Store.param_key
+dataset_dir = Store.dataset_dir
+load_arrays = Store.load_arrays
+load = Build.load
 
 
 # --- _region_of: mapped country / unmapped / null ---

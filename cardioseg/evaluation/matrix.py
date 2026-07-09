@@ -27,7 +27,7 @@ from core import registry as registry_mod
 from core import run as run_mod
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
 from core.data.static import splits
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.obs import Obs
 
 log = logging.getLogger("cardioseg.matrix")

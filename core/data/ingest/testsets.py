@@ -98,7 +98,7 @@ EVAL_SOURCES = ["acdc", "mnm2", "mnms1", "cmrxmotion", "scd"]
 if __name__ == "__main__":
     import argparse
 
-    from core.data.static.store import build as store
+    from core.data.static.store.build import Build as store
     from core.obs import Obs
     Obs.setup()
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")

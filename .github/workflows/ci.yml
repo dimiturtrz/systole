@@ -54,18 +54,12 @@ jobs:
       # in [tool.importlinter]. Fails the day a new upward edge lands.
       - name: Import layers — enforced (import-linter)
         run: uvx --from import-linter lint-imports
-      # Module shape — ast-grep (bd cardiac-seg-d1fa): the SYNTACTIC axis ruff has no plugin API for.
-      # Rules are data (devtools/sg-rules/*.yml), zero-bag. ENFORCED: no side-effect call at module scope
-      # (severity error, clean today -> ratchets; matplotlib.use exempt). A new import-time call fails CI.
-      - name: "Module shape — enforced (ast-grep: no import-time side effects)"
-        run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml --filter py-top-level-side-effect core cardioseg
-      # ADVISORY: the "everything in a class" house rule is a big standing count (~328) — a one-line tally,
-      # not a spam dump; graduate as modules move to classes. Never blocks.
-      - name: "Module shape — advisory (ast-grep: top-level function tally)"
-        continue-on-error: true
-        run: |
-          n=$(uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml --filter py-top-level-function core cardioseg --json=compact | python3 -c "import sys,json;print(len(json.load(sys.stdin)))")
-          echo "::warning::$n top-level functions — in-a-class house rule (advisory, bd d1fa)"
+      # Module shape — ast-grep (bd cardiac-seg-d1fa/y2fi): the SYNTACTIC axis ruff has no plugin API for.
+      # Rules are data (devtools/sg-rules/*.yml), zero-bag, both severity=error (BLOCKING). Enforces the
+      # everything-in-a-class house rule (0 top-level funcs, migrated from 328 in y2fi; `main` exempt) + no
+      # import-time side-effect call (matplotlib.use exempt). A new top-level function or import-time call fails CI.
+      - name: "Module shape — enforced (ast-grep: in-a-class + no import-time side effects)"
+        run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core cardioseg
       # Duplication — the DRY axis (bd cardiac-seg-tte0), which the coupling tools (import-linter/graph)
       # can't see. jscpd over python + TS; threshold in .jscpd.json (repo is ~0.23%/0% today, so this is a
       # REGRESSION GUARD). ADVISORY while the Node step proves stable; graduate to blocking after.

@@ -20,7 +20,7 @@ import torch
 
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
-from core.data.static.store import build as store
+from core.data.static.store.build import Build as store
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model

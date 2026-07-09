@@ -8,17 +8,17 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from cardioseg.training.train import (
-    _val_dice,
-    apply_cli_args,
-    check_multiseed_split,
-    n_train_of,
-    parse_seeds,
-    resolve_seeds,
-    seed_out_dir,
-    split_tag_of,
-)
+from cardioseg.training.train import Train
 from core.hparams import TrainCfg
+
+_val_dice = Train._val_dice
+apply_cli_args = Train.apply_cli_args
+check_multiseed_split = Train.check_multiseed_split
+n_train_of = Train.n_train_of
+parse_seeds = Train.parse_seeds
+resolve_seeds = Train.resolve_seeds
+seed_out_dir = Train.seed_out_dir
+split_tag_of = Train.split_tag_of
 
 
 # --- parse_seeds: None/empty class vs csv class ---
