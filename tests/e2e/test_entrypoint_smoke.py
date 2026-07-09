@@ -13,10 +13,12 @@ import sys
 
 import pytest
 
-# The 5 CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
+# The CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
 # The group dispatchers (cardioseg.evaluation, core.data, core.data.analysis) run their package __main__.py.
+# cardioseg.pipeline is the target-driven DAG over the nodes (bd v4j6).
 _ARGPARSE_ENTRYPOINTS = [
     "cardioseg.evaluation",
+    "cardioseg.pipeline",
     "cardioseg.training.train",
     "core.data",
     "core.data.analysis",
