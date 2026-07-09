@@ -40,7 +40,7 @@ from core.data.static.splits import split_patients
 from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import ejection_fraction
-from core.mesh import export_glb  # reusable chamber-mesh tool (bd 7c9.1)
+from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
 from core.postprocess import largest_cc_per_class
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 
@@ -164,7 +164,7 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
         glb = {}
         for tag, m in crop_masks.items():
             fn = f"{name}_{tag}_{source}.gltf"
-            export_glb(m, spacing, OUT / fn)
+            Mesh.export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
         entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source=source,
                      pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
@@ -220,7 +220,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     files = []
     for k in range(len(frames_t)):
         fn = f"{name}_f{k:02d}_pred.gltf"
-        export_glb(crop_masks[k], rspacing, OUT / fn)
+        Mesh.export_glb(crop_masks[k], rspacing, OUT / fn)
         files.append(fn)
     edi, esi = frame_indices(pdir)
     ed_k = nearest_index(frames_t, edi)

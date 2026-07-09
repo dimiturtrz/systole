@@ -36,7 +36,7 @@ from core.registry import MODEL_NAME, save_model
 
 from ..evaluation.modelcard import generate
 from ..evaluation.validate import EvalCfg, Evaluator, summarize
-from ..tracking import track_run
+from ..tracking import Tracker
 from .ef_lane import build_aux
 
 
@@ -137,7 +137,7 @@ class SeedTrainer:
         self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
         split_tag = split_tag_of(self.d)
-        self.trk = track_run("cardioseg", self.out.name, run_dir=self.out,
+        self.trk = Tracker.track_run("cardioseg", self.out.name, run_dir=self.out,
                              params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
                              tags={"split": split_tag, "seed": seed})
         self.log_sig = None

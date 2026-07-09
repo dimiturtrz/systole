@@ -33,7 +33,7 @@ from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 from core.registry import resolve
 from core.run import load_run
 
-from ..tracking import track_run
+from ..tracking import Tracker
 
 log = logging.getLogger("cardioseg.uncertainty")
 
@@ -183,7 +183,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
              f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
     log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
-    trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+    trk = Tracker.track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     ev = args.eval
     trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
     trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)

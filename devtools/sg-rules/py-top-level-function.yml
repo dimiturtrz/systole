@@ -14,4 +14,4 @@ rule:
   not:
     has:
       field: name
-      regex: "^main$"
+      regex: "^_?main$"

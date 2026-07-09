@@ -26,7 +26,7 @@ from core.obs import setup
 from core.registry import resolve
 from core.run import load_run
 
-from ..tracking import track_run
+from ..tracking import Tracker
 from .uncertainty import ece
 from .validate import EvalCfg, Evaluator
 
@@ -95,7 +95,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
     log.info(f"-> {run}/plots/calibration.json")
 
-    trk = track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+    trk = Tracker.track_run("cardioseg", run.name, run_dir=run)      # resume the train run
     trk.metric("temp_T", T)
     for name, ax in report["axes"].items():
         trk.metric(f"{name}_ece_uncal", ax["ece_uncal"]); trk.metric(f"{name}_ece_temp", ax["ece_temp"])

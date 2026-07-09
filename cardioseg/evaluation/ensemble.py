@@ -30,7 +30,7 @@ from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
 from core.run import load_run
 
-from ..tracking import start
+from ..tracking import Tracker
 from .uncertainty import tta_uncertainty
 
 log = logging.getLogger("cardioseg.ensemble")
@@ -130,7 +130,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     loaded = [load_run(resolve(r), device) for r in args.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
-    trk = start("cardioseg", f"ensemble-{len(models)}seed",
+    trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",
                 {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
     for ax in args.eval:
         df = _eval_df(cfg, ax)
