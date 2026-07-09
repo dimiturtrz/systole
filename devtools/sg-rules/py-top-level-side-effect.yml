@@ -1,0 +1,22 @@
+# No side-effect LOGIC at module scope: a bare call at import time (e.g. `setup()` / `configure()` in the
+# module body) runs on import, couples import to execution, and hides work. Constants, class/def, imports,
+# `log = getLogger(...)` assignments, and the `if __name__ == "__main__"` block are fine — this targets a
+# top-level expression-statement that IS a call. `matplotlib.use(...)` is exempt: the Agg backend MUST be
+# selected at module scope before pyplot imports, so it's a required top-level call, not a smell.
+# BLOCKING (severity error): clean today, so it ratchets — a new accidental import-time call fails.
+id: py-top-level-side-effect
+language: python
+severity: error
+message: "top-level call runs at import — move it into a function/main (no side effects on import)"
+rule:
+  kind: expression_statement
+  has:
+    kind: call
+    stopBy: neighbor
+  inside:
+    kind: module
+    stopBy: neighbor
+  not:
+    has:
+      pattern: matplotlib.use($$$)
+      stopBy: neighbor

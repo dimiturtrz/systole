@@ -54,6 +54,18 @@ jobs:
       # in [tool.importlinter]. Fails the day a new upward edge lands.
       - name: Import layers — enforced (import-linter)
         run: uvx --from import-linter lint-imports
+      # Module shape — ast-grep (bd cardiac-seg-d1fa): the SYNTACTIC axis ruff has no plugin API for.
+      # Rules are data (devtools/sg-rules/*.yml), zero-bag. ENFORCED: no side-effect call at module scope
+      # (severity error, clean today -> ratchets; matplotlib.use exempt). A new import-time call fails CI.
+      - name: Module shape — enforced (ast-grep: no import-time side effects)
+        run: uvx --from ast-grep-cli ast-grep scan --filter py-top-level-side-effect core cardioseg
+      # ADVISORY: the "everything in a class" house rule is a big standing count (~328) — a one-line tally,
+      # not a spam dump; graduate as modules move to classes. Never blocks.
+      - name: Module shape — advisory (ast-grep: top-level function tally)
+        continue-on-error: true
+        run: |
+          n=$(uvx --from ast-grep-cli ast-grep scan --filter py-top-level-function core cardioseg --json=compact | python3 -c "import sys,json;print(len(json.load(sys.stdin)))")
+          echo "::warning::$n top-level functions — in-a-class house rule (advisory, bd d1fa)"
 
   tests:
     runs-on: ubuntu-latest
