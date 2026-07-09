@@ -23,7 +23,7 @@ from skimage.measure import marching_cubes
 from core.config import data_root
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
 from core.obs import setup
-from core.postprocess import largest_cc_binary
+from core.postprocess import Postprocess
 
 log = logging.getLogger("cardioseg.mesh")
 
@@ -44,7 +44,7 @@ class Mesh:
         """Smooth chamber surface (pyvista PolyData, world mm) or None if the chamber is absent/tiny.
         largest-CC -> isotropic linear resample (no z-staircase) -> zero-pad (cap open base/apex) ->
         marching cubes -> Taubin smooth -> decimate -> oriented normals."""
-        binary = largest_cc_binary(mask == label)
+        binary = Postprocess.largest_cc_binary(mask == label)
         if binary.sum() < _MIN_CHAMBER_VOXELS:
             return None
         soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)

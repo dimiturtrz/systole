@@ -25,7 +25,7 @@ from skimage.draw import polygon
 
 from core.config import data_root
 from core.data.static.mri.base import DatasetAdapter, PatientData, load_csv_info
-from core.data.static.mri.dicom import read_image
+from core.data.static.mri.dicom import Dicom
 
 _IRCCI = "contours-manual/IRCCI-expert"
 
@@ -127,7 +127,7 @@ class ScdAdapter(DatasetAdapter):
             dcm = next(iter(sax.glob(f"*-{inst}.dcm")), None)
             if dcm is None:
                 continue
-            img, (sy, sx), meta = read_image(dcm)            # pragma: no cover  reads a real SCD DICOM slice; mask/ED-ES cores (_rasterize, select_ed_es, _read_contour) tested with synthetic arrays/files
+            img, (sy, sx), meta = Dicom.read_image(dcm)      # pragma: no cover  reads a real SCD DICOM slice; mask/ED-ES cores (_rasterize, select_ed_es, _read_contour) tested with synthetic arrays/files
             loc = round(float(meta.get("slice_loc", "0")), 1)  # pragma: no cover
             endo = self._read_contour(ic)                    # pragma: no cover
             ocf = ic.with_name(ic.name.replace("icontour", "ocontour"))  # pragma: no cover
@@ -154,7 +154,7 @@ class ScdAdapter(DatasetAdapter):
         sax = self._sax_series_dir(case)                                  # real acquisition + scanner from DICOM —
         dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip/model the NIfTI sets lack
         if dcm is not None:                                              # pragma: no cover  reads a real SCD DICOM header for acquisition tags
-            _, _, d = read_image(dcm)
+            _, _, d = Dicom.read_image(dcm)
             m.update(tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
                      field_T=d.get("field_T"), scanner=d.get("scanner"), institution=d.get("institution"))
         return m

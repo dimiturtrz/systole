@@ -41,7 +41,7 @@ from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import ejection_fraction
 from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
-from core.postprocess import largest_cc_per_class
+from core.postprocess import Postprocess
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
 
 log = logging.getLogger("cardioview.export_web")
@@ -188,7 +188,7 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
         img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
-        masks[k] = largest_cc_per_class(predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
+        masks[k] = Postprocess.largest_cc_per_class(predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
 

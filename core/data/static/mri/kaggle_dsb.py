@@ -20,7 +20,7 @@ from pathlib import Path
 import polars as pl
 
 from core.config import data_root
-from core.data.static.mri.dicom import read_image, read_series
+from core.data.static.mri.dicom import Dicom
 from core.data.static.store import _norm_vendor, _region_of
 from core.obs import setup
 
@@ -73,11 +73,11 @@ def kaggle_cases(split: str, root: str | Path | None = None) -> list[Path]:
 def load_sax(case: str | Path) -> list[tuple]:  # pragma: no cover  reads real Kaggle SAX DICOM series from disk (read_series)
     """SAX cine of one case: list of (volume [phases,H,W], spacing (z,y,x), meta) — one entry per `sax_*`
     series (slice location), sorted apex→base by SliceLocation. Each series is the ~30-phase cine loop at
-    that slice. Uses `dicom.read_series`; broken/odd series skipped."""
+    that slice. Uses `Dicom.read_series`; broken/odd series skipped."""
     rows = []
     for sd in sorted((Path(case) / "study").glob("sax_*")):
         try:
-            vol, sp, meta = read_series(sd)
+            vol, sp, meta = Dicom.read_series(sd)
             rows.append((vol, sp, meta, float(meta.get("slice_loc") or 0)))
         except (RuntimeError, OSError, ValueError):   # sitk/IO/parse failure on a broken series -> skip
             continue
@@ -95,7 +95,7 @@ def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
     sd = next(iter((case / "study").glob("sax_*")), None)
     dcm = next(iter(sd.glob("*.dcm")), None) if sd else None
     if dcm is not None:                                       # pragma: no cover  reads a real Kaggle SAX DICOM header for vendor/acquisition
-        _, _, d = read_image(dcm)
+        _, _, d = Dicom.read_image(dcm)
         m.update(vendor=_norm_vendor(d.get("vendor")), scanner=d.get("scanner"), field_T=d.get("field_T"),
                  tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
                  institution=d.get("institution"))

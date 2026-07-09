@@ -28,7 +28,7 @@ from core.inference import predict_volume_probs
 from core.measure import ef_statistics, expected_volume_ml, label_volume_ml
 from core.model import resolve_device
 from core.obs import setup
-from core.postprocess import largest_cc_per_class
+from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
 from core.run import load_run
@@ -67,7 +67,7 @@ class SoftEval:
                 _, mean = predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
                 p = mean.float().cpu().numpy()
                 blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
-                hard = largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
+                hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
                 gate = hard == LV_CAV
                 gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
                 vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),

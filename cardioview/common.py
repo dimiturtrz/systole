@@ -13,7 +13,7 @@ import numpy as np
 
 from core.config import FLAGSHIP_REF, data_root
 from core.inference import predict_volume
-from core.postprocess import largest_cc_per_class
+from core.postprocess import Postprocess
 from core.preprocessing.preprocess import fit_square
 from core.registry import resolve
 from core.run import load_run
@@ -90,6 +90,6 @@ def masks(case: dict, source: str, model=None, device=None) -> dict:
         out[tag] = (
             square_stack(case[f"{k}_gt"], np.uint8)
             if source == "gt"
-            else largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device))
+            else Postprocess.largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device))
         )
     return out

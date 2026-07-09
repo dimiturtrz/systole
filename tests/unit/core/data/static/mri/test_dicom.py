@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 sitk = pytest.importorskip("SimpleITK")
-from core.data.static.mri.dicom import read_series, series_ids
+from core.data.static.mri.dicom import Dicom
 
 
 def _write_series(dirpath, vol, spacing_xyz, vendor="Siemens"):
@@ -28,8 +28,8 @@ def _write_series(dirpath, vol, spacing_xyz, vendor="Siemens"):
 def test_read_series_roundtrip(tmp_path):
     vol = (np.arange(5 * 8 * 8).reshape(5, 8, 8) % 97).astype(np.int16)   # [D,H,W]
     _write_series(tmp_path, vol, spacing_xyz=(1.5, 1.5, 8.0))
-    assert len(series_ids(tmp_path)) == 1
-    arr, spacing, meta = read_series(tmp_path)
+    assert len(Dicom.series_ids(tmp_path)) == 1
+    arr, spacing, meta = Dicom.read_series(tmp_path)
     assert arr.shape == (5, 8, 8)                                   # [D,H,W] preserved
     assert np.allclose(spacing, (8.0, 1.5, 1.5), atol=1e-3)         # (z,y,x); z from slice positions
     assert np.array_equal(arr, vol)                                 # voxels intact
@@ -38,4 +38,4 @@ def test_read_series_roundtrip(tmp_path):
 
 def test_no_series_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        read_series(tmp_path)
+        Dicom.read_series(tmp_path)

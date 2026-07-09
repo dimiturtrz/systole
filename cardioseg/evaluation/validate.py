@@ -21,7 +21,7 @@ from core.evaluate import CLASSES, surface_distances, surface_metrics
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
 from core.inference import predict_volume  # re-export
 from core.measure import ejection_fraction
-from core.postprocess import largest_cc_per_class
+from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 
 log = logging.getLogger("cardioseg.validate")
@@ -124,7 +124,7 @@ class Evaluator:
                     continue
                 pred = predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
-                    pred = largest_cc_per_class(pred)
+                    pred = Postprocess.largest_cc_per_class(pred)
                 gt = stack_slices(case[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)

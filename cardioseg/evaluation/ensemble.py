@@ -25,7 +25,7 @@ from core.inference import predict_volume_probs
 from core.measure import ejection_fraction
 from core.model import resolve_device
 from core.obs import setup
-from core.postprocess import largest_cc_per_class
+from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, stack_slices
 from core.registry import resolve
 from core.run import load_run
@@ -81,7 +81,7 @@ class Ensemble:
             for tag in ("ed", "es"):
                 if f"{tag}_img" not in case:
                     continue
-                pred = largest_cc_per_class(Ensemble.decompose(models, case[f"{tag}_img"], size, device)[0])
+                pred = Postprocess.largest_cc_per_class(Ensemble.decompose(models, case[f"{tag}_img"], size, device)[0])
                 gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
                 preds[tag], gts[tag] = pred, gt
                 Ensemble._dice_fold(pred, gt, inter, den)

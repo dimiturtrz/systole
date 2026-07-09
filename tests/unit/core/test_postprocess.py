@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from core.postprocess import _CUCIM_LABEL, largest_cc_per_class
+from core.postprocess import _CUCIM_LABEL, Postprocess
 
 
 def _blob(mask, lab, z, y, x, r):
@@ -14,7 +14,7 @@ def test_no_islands_unchanged():
     m = np.zeros((4, 32, 32), np.uint8)
     _blob(m, 1, 2, 8, 8, 3)
     _blob(m, 3, 2, 20, 20, 4)
-    out = largest_cc_per_class(m)
+    out = Postprocess.largest_cc_per_class(m)
     assert np.array_equal(out, m)
 
 
@@ -23,7 +23,7 @@ def test_island_dropped_largest_kept():
     m = np.zeros((4, 32, 32), np.uint8)
     _blob(m, 3, 2, 16, 16, 5)   # main blood pool
     m[0, 0, 0] = 3              # stray speck, disconnected
-    out = largest_cc_per_class(m)
+    out = Postprocess.largest_cc_per_class(m)
     assert out[0, 0, 0] == 0           # island gone
     assert (out == 3).sum() == (m[2] == 3).sum()  # main kept intact
 
@@ -34,7 +34,7 @@ def test_each_class_independent():
     _blob(m, 1, 2, 8, 8, 3)     # RV, single
     _blob(m, 2, 2, 20, 20, 4)   # myo, single
     m[3, 31, 31] = 1            # RV island
-    out = largest_cc_per_class(m)
+    out = Postprocess.largest_cc_per_class(m)
     assert (out == 2).sum() == (m == 2).sum()      # myo untouched
     assert out[3, 31, 31] == 0                      # RV island dropped
     assert (out == 3).sum() == 0                    # absent class stays absent
@@ -42,7 +42,7 @@ def test_each_class_independent():
 
 def test_empty_mask_returns_empty():
     m = np.zeros((3, 16, 16), np.uint8)
-    assert largest_cc_per_class(m).sum() == 0
+    assert Postprocess.largest_cc_per_class(m).sum() == 0
 
 
 @pytest.mark.skipif(_CUCIM_LABEL is None, reason="no cucim (GPU lane) — scipy path covered above")
@@ -66,4 +66,4 @@ def test_gpu_cucim_matches_cpu_parity():
         cc, n = cpu_label(b)
         s = np.bincount(cc.ravel()); s[0] = 0
         ref[cc == int(s.argmax())] = lab
-    assert np.array_equal(largest_cc_per_class(m), ref)   # cucim == scipy
+    assert np.array_equal(Postprocess.largest_cc_per_class(m), ref)   # cucim == scipy
