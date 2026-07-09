@@ -31,9 +31,9 @@ log = logging.getLogger("cardioseg.devtools.graph")   # child of the "cardioseg"
 
 # Fitness thresholds (overridable in pyproject [tool.structure]). Defaults chosen against the CURRENT
 # graph so the blocking rules start CLEAN and ratchet: fan-in&out both>8 (0 today), file>750 (0 today),
-# cycles (0 today). The line FLOOR is advisory — most modules here are small cohesive leaves, so a hard
-# floor would fight the repo's own style; it surfaces "earn its keep?" without blocking.
-_DEFAULTS = {"bottleneck_degree": 8, "file_max": 750, "file_min": 250, "betweenness_max": 0.10}
+# cycles (0 today). The line FLOOR is OFF (file_min=0) — owner decision: no honest floor exists, the small
+# files are SSOT/strategy/shared-vocab leaves; "too thin" is a responsibility judgment, not a line count.
+_DEFAULTS = {"bottleneck_degree": 8, "file_max": 750, "file_min": 0, "betweenness_max": 0.10}
 _ADVISORY_PREVIEW = 15                              # advisory lines shown before "… +N more" (avoid log spam)
 _STRUCTURAL = ("__init__.py", "__main__.py")        # package plumbing — exempt from the line floor (always small)
 
@@ -79,6 +79,8 @@ def _oversized(files: list[tuple[str, int]], mx: int) -> list[str]:
 
 
 def _undersized(files: list[tuple[str, int]], mn: int) -> list[str]:
+    if mn <= 0:                                     # floor OFF (owner: no honest line floor — small files are SSOT/strategy leaves)
+        return []
     return [f"{f}: {n} lines < {mn} — earn its keep? (fold, or accept a small leaf)"
             for f, n in files if n < mn and not f.endswith(_STRUCTURAL)]
 

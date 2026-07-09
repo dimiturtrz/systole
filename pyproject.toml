@@ -50,12 +50,14 @@ addopts = "--import-mode=importlib"
 # Architecture fitness thresholds (devtools/graph.py --assert, bd cardiac-seg-g0b2) — the METRIC arch
 # axis import-linter's categorical contracts can't express. BLOCKING rules start clean and ratchet:
 # god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
-# (never blocks): file < file_min (most modules here are small cohesive leaves — a hard floor would fight
-# the repo's style, so it only surfaces "earn its keep?"), betweenness > betweenness_max (noisy).
+# (never blocks): betweenness > betweenness_max (noisy).
 [tool.structure]
 bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
 file_max = 750              # god-file ceiling (largest today ~548)
-file_min = 250              # advisory floor only — 83/92 files are under it, so it never blocks
+file_min = 0                # OFF (owner decision): no honest floor exists — the small files are SSOT /
+#                             strategy-entry / shared-vocab leaves (geo.py 13, types.py 28, one-file-per-
+#                             split), which the repo's own principles produce; a floor would flag legit
+#                             leaves and miss real "too-thin" modules (a responsibility judgment, not lines).
 betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
