@@ -1,8 +1,11 @@
-"""data/mri/base shared-helper tests (equivalence classes): the primitives the 3 adapters reuse."""
+"""data/static/mri/base (class Base) shared-helper tests (equivalence classes): the primitives the
+adapters reuse — to_float, load_csv_info, load_nifti, load_frames, apply_label_map, and the geometric
+identify_lv_cavity."""
 import numpy as np
 import pytest
 
 from core.data.static.mri.base import (
+    LV_MYO,
     MNM_LABEL_MAP,
     Base,
 )
@@ -98,3 +101,28 @@ def test_load_frames_missing_file_skipped(tmp_path):
     out = Base.load_frames(None, lambda tag: (tmp_path / "nope.nii.gz", tmp_path / "nope_gt.nii.gz", None),
                            {0: 0})
     assert "ED" not in out and "ES" not in out
+
+
+# --- identify_lv_cavity: geometric pick of the label most enclosed by the myo ring ---
+def _ring_with_cavities():
+    """A 12x12 mask: a myo ring (LV_MYO=2) around a central cavity (3), plus a separate RV blob (1)
+    that does NOT touch the ring. Geometry -> 3 is the LV cavity, 1 is not."""
+    m = np.zeros((12, 12), np.uint8)
+    m[3:9, 3:9] = LV_MYO           # solid myo block
+    m[4:8, 4:8] = 3                # cavity carved inside -> ring of myo around it
+    m[0:2, 10:12] = 1             # detached RV blob in the corner
+    return m
+
+
+def test_identify_lv_cavity_picks_enclosed_label():
+    """Match class: the label whose shell is most surrounded by myo wins (3 here, not the detached 1)."""
+    lv, scores = Base.identify_lv_cavity(_ring_with_cavities())
+    assert lv == 3
+    assert scores[3] > scores[1]          # cavity shell touches myo; RV blob shell does not
+    assert scores[1] == 0.0               # detached blob: no myo contact
+
+
+def test_identify_lv_cavity_no_foreground_is_none():
+    """Empty class: nothing but background (or only myo) -> no candidate label -> None, {}."""
+    lv, scores = Base.identify_lv_cavity(np.zeros((4, 4), np.uint8))
+    assert lv is None and scores == {}

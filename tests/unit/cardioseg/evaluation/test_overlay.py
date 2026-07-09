@@ -12,6 +12,20 @@ def _lv_blob(d, h, w, r):
     return m
 
 
+# --- _mid_slice: most-foreground slice ---
+def test_mid_slice_picks_max_foreground():
+    """Mid-ventricle = the slice with the most non-zero GT voxels."""
+    vol = np.zeros((3, 4, 4), int)
+    vol[1, :2, :2] = 1        # slice 1: 4 fg
+    vol[2, 0, 0] = 1          # slice 2: 1 fg
+    assert ov.Overlay._mid_slice(vol) == 1
+
+
+def test_mid_slice_all_empty_returns_zero():
+    """Boundary: an all-background volume -> argmax of ties is index 0."""
+    assert ov.Overlay._mid_slice(np.zeros((3, 4, 4), int)) == 0
+
+
 def test_case_assembles_row_with_matching_ef(monkeypatch):
     """Assembly class: given a loaded case + prediction (stubbed pred==gt), _case returns the
     mid-slice panel dict; EF_pred == EF_gt since the stub predicts the GT exactly."""

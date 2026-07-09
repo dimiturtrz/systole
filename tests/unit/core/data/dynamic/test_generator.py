@@ -4,7 +4,7 @@ priors, augment and soften already applied. The train loop only calls batch().""
 import torch
 
 from core.data.dynamic.augment import AugCfg
-from core.data.dynamic.generator import Generator, GeneratorCfg
+from core.data.dynamic.generator import CompositeGenerator, Generator, GeneratorCfg
 from core.data.dynamic.synth import FlatBgCfg, SynthCfg
 
 N = 4
@@ -75,3 +75,32 @@ def test_force_synth_paints_flagged_rows_at_synth_p0():
     # synth output is z-scored per sample (std==1); real rows keep their source std (~1.15 here).
     assert (x[4:].std(dim=(1, 2, 3)) - 1.0).abs().max() < 1e-3     # forced rows = z-scored synth
     assert (x[:4].std(dim=(1, 2, 3)) - 1.0).abs().min() > 0.05     # unforced rows are NOT z-scored synth
+
+
+def test_batch_slices_valid():
+    """A per-slice valid [N,C] mask rides through batch() sliced to the batch rows, untouched."""
+    valid = torch.tensor([[True] * 4, [False, False, True, True], [True] * 4, [True] * 4])
+    g = Generator(GeneratorCfg(synth=SynthCfg(synth_p=0.0)), torch.zeros(N, 1, 8, 8),
+                  torch.zeros(N, 8, 8, dtype=torch.long), 4, "cpu", valid=valid)
+    _, _, v = g.batch(torch.tensor([1, 2]))
+    assert v.tolist() == [[False, False, True, True], [True, True, True, True]]   # sliced, untouched
+
+
+def test_composite_generator_dispatches_by_index_range():
+    """CompositeGenerator routes global indices to the right child gen (each its own painter) and
+    concatenates — n = Σ child n, and a mixed batch paints each row via its origin source."""
+    class _FakeGen:                                            # duck-types the batch() seam (n/device/batch)
+        def __init__(self, n, tag):
+            self.n, self.device, self.tag = n, "cpu", tag
+        def batch(self, idx, *, pin=False):
+            b = idx.shape[0]
+            return torch.full((b, 1, 2, 2), self.tag, dtype=torch.float), \
+                torch.full((b, 2, 2), self.tag, dtype=torch.long), None
+
+    cg = CompositeGenerator([_FakeGen(3, 1.0), _FakeGen(2, 2.0)])
+    assert cg.n == 5 and cg.valid is None
+    x, y, v = cg.batch(torch.arange(5))                       # all rows
+    assert x.shape == (5, 1, 2, 2) and v is None
+    assert int((x == 1.0).sum()) == 3 * 4 and int((x == 2.0).sum()) == 2 * 4   # 3 from child0, 2 from child1
+    x2, _, _ = cg.batch(torch.tensor([4, 0]))                 # one row from each child, shuffled
+    assert int((x2 == 1.0).sum()) == 4 and int((x2 == 2.0).sum()) == 4

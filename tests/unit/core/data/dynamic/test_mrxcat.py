@@ -2,8 +2,8 @@
 to_canonical — verified geometrically on the bundled phantom (myo ring encloses LV-cav); here we pin
 the equivalence classes of the code→canonical mapping so a scheme change can't silently corrupt pools."""
 import numpy as np
-import pyvista as pv
 import pytest
+import pyvista as pv
 
 from core.data.dynamic.mrxcat import Mrxcat
 

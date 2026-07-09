@@ -1,7 +1,8 @@
-"""Consolidated store pure logic (core.data.static.store) — equivalence classes over the meta-schema
-derivations (BSA, age-band, vendor-norm, region, labelled), the acquisition-mine grouping/gate, and
-the meta-row assembly. All I/O-free: fed synthetic dicts + in-memory polars frames (the fake-cloud
-idiom from test_source_split). The npz/glob shells (build/load/_write_meta reads) are integration."""
+"""Store READ + metadata surface (core.data.static.store.query) — equivalence classes over the
+meta-schema derivations (BSA, age-band, vendor-norm, region, labelled), the acquisition-mine
+grouping/gate, the meta-row assembly, the cache-key/dir composition, and the npz read + meta
+(re)write/migrate. All I/O-free: fed synthetic dicts + in-memory polars frames (the fake-cloud
+idiom), the npz/meta shells over a tmp_path + fake adapter."""
 from pathlib import Path
 
 import numpy as np
@@ -9,13 +10,12 @@ import polars as pl
 import pytest
 
 from core.data.static.mri.registry import AdapterRegistry
-from core.data.static.store.build import Build
-from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import (
     AcqReference,
     MetaBuilder,
     Store,
 )
+from core.preprocessing.n4 import N4Cfg
 
 _region_of = MetaBuilder._region_of
 _bsa = MetaBuilder._bsa
@@ -25,7 +25,6 @@ _is_labelled = MetaBuilder._is_labelled
 param_key = Store.param_key
 dataset_dir = Store.dataset_dir
 load_arrays = Store.load_arrays
-load = Build.load
 
 
 # --- _region_of: mapped country / unmapped / null ---
@@ -155,25 +154,37 @@ def test_acquisition_field_folding_and_flip_bucket():
     assert "flip_deg_3t" in acq["Siemens"] and "flip_deg_1p5t" not in acq["Siemens"]
 
 
-# --- load: labelled-boolean coercion + continent derive (I/O shell over a written meta.csv) ---
-def test_load_coerces_labelled_and_derives_continent(tmp_path, monkeypatch):
-    """store.load reads labelled as Boolean (not String) and derives continent from country."""
-    monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    pdir = tmp_path / "processed" / "acdc" / param_key(1.5)
-    (pdir / "data").mkdir(parents=True)
-    pl.DataFrame({"subject_id": ["a", "b"], "file": ["a.npz", "b.npz"],
-                  "labelled": ["true", "false"], "country": ["Spain", "China"]}).write_csv(pdir / "meta.csv")
-    df = load(["acdc"], inplane=1.5)
-    assert df.schema["labelled"] == pl.Boolean
-    assert df.filter(pl.col("labelled")).height == 1
-    assert df.filter(pl.col("continent") == "Asia").height == 1
+# --- param_key: no-n4 back-compat / n4-encodes-params / distinct-params-distinct / suffixes ---
+def test_no_n4_key_unchanged():
+    """n4=False -> the original 'inplaneXpY' (no suffix) — existing caches still load."""
+    assert param_key(1.5, n4=False) == "inplane1p5"
+    assert param_key(1.23, n4=False) == "inplane1p23"
 
 
-def test_load_nyul_without_reference_raises(tmp_path, monkeypatch):
-    """nyul=True with no reference/nyul.yaml -> RuntimeError (can't harmonize without the standard)."""
-    monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    with pytest.raises(RuntimeError, match="fit it first"):
-        load(["acdc"], nyul=True)
+def test_n4_key_encodes_params():
+    assert param_key(1.5, n4=True).startswith("inplane1p5_n4")
+    assert param_key(1.5, n4=True, n4_params=N4Cfg()) == "inplane1p5_n4-s4-i50x50x50-f0p15"
+
+
+def test_n4_distinct_params_distinct_keys():
+    """Different N4 settings -> different cache dirs (no stale-cache collision)."""
+    base = param_key(1.5, n4=True, n4_params=N4Cfg())
+    assert base != param_key(1.5, n4=True, n4_params=N4Cfg(shrink=2))
+    assert base != param_key(1.5, n4=True, n4_params=N4Cfg(fwhm=0.3))
+    assert base != param_key(1.5, n4=True, n4_params=N4Cfg(iters=(30, 30, 30)))
+
+
+def test_nyul_suffix():
+    """nyul=True appends '_nyul' (harmonized cache is separate); combines with n4."""
+    assert param_key(1.5, nyul=True) == "inplane1p5_nyul"
+    assert param_key(1.5, n4=True, nyul=True).endswith("_nyul")   # n4 then nyul, both present
+
+
+def test_norm_suffix_only_when_nonzscore():
+    """norm='zscore' (default) adds NO suffix; any other norm appends '_<norm>' (blood-anchored cache)."""
+    assert param_key(1.5, norm="zscore") == "inplane1p5"          # default -> no suffix
+    assert param_key(1.5, norm="blood") == "inplane1p5_blood"
+    assert param_key(1.5, nyul=True, norm="blood") == "inplane1p5_nyul_blood"   # both suffixes, ordered
 
 
 # --- dataset_dir: paramkey folder composition ---
@@ -192,7 +203,7 @@ def test_load_arrays_group_scalar(tmp_path):
     assert d["ed_img"].shape == (2, 2)
 
 
-# --- _write_meta: materializes meta.csv over written subjects via a fake adapter ---
+# --- write: materializes meta.csv over written subjects via a fake adapter ---
 class _FakeAdapter:
     def __init__(self, cases):
         self._cases = cases
@@ -218,7 +229,28 @@ def test_write_meta_over_written_subjects(tmp_path):
     assert df.filter(pl.col("labelled")).height == 2         # both gts non-empty
 
 
-# --- migrate_meta: skips unregistered processed dirs (no adapter) ---
+# --- write: adapter.meta() raising -> empty meta, row still emitted (not fatal) ---
+class _RaisingMetaAdapter:
+    def __init__(self, cases):
+        self._cases = cases
+
+    def cases(self):
+        return self._cases
+
+    def meta(self, case):
+        raise KeyError("missing sidecar field")
+
+
+def test_write_meta_tolerates_meta_error(tmp_path):
+    data_dir = tmp_path / "data"; data_dir.mkdir()
+    np.savez(data_dir / "s1.npz", ed_gt=np.array([[2, 3]]), es_gt=np.array([[2, 3]]))
+    out = MetaBuilder("acdc", _RaisingMetaAdapter([tmp_path / "s1"])).write(data_dir, tmp_path)
+    df = pl.read_csv(out, schema_overrides={"labelled": pl.Boolean})
+    assert df.height == 1 and df["subject_id"].to_list() == ["s1"]   # row emitted despite meta() raising
+    assert df["vendor"].to_list() == [None]                          # no meta -> null-derived fields
+
+
+# --- migrate: skips unregistered processed dirs (no adapter) ---
 def test_migrate_meta_skips_unregistered(tmp_path, monkeypatch):
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     pdir = tmp_path / "processed" / "mrxcat_pool" / "inplane1p5"   # not a registered adapter
@@ -252,30 +284,3 @@ def test_migrate_meta_names_filter(tmp_path, monkeypatch):
     _fake_processed(tmp_path, "acdc")
     monkeypatch.setattr(AdapterRegistry, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
     assert MetaBuilder.migrate(["mnm2"]) == []                       # acdc present but not in names -> skipped
-
-
-# --- _nyul_ref_path: reference-dir composition ---
-def test_nyul_ref_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    assert Normalizer.ref_path().name == "nyul.yaml"        # under the reference dir
-
-
-# --- _write_meta: adapter.meta() raising -> empty meta, row still emitted (not fatal) ---
-class _RaisingMetaAdapter:
-    def __init__(self, cases):
-        self._cases = cases
-
-    def cases(self):
-        return self._cases
-
-    def meta(self, case):
-        raise KeyError("missing sidecar field")
-
-
-def test_write_meta_tolerates_meta_error(tmp_path):
-    data_dir = tmp_path / "data"; data_dir.mkdir()
-    np.savez(data_dir / "s1.npz", ed_gt=np.array([[2, 3]]), es_gt=np.array([[2, 3]]))
-    out = MetaBuilder("acdc", _RaisingMetaAdapter([tmp_path / "s1"])).write(data_dir, tmp_path)
-    df = pl.read_csv(out, schema_overrides={"labelled": pl.Boolean})
-    assert df.height == 1 and df["subject_id"].to_list() == ["s1"]   # row emitted despite meta() raising
-    assert df["vendor"].to_list() == [None]                          # no meta -> null-derived fields
