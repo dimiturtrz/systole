@@ -11,7 +11,6 @@ Usage:
     python -m core.data.static.mri.eda                 # summarize N patients + viz
     python -m core.data.static.mri.eda --patient patient001
 """
-import argparse
 import logging
 from pathlib import Path
 
@@ -23,7 +22,6 @@ import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
 from core.data.static.mri.base import Base
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.eda")
 
@@ -76,27 +74,23 @@ class Eda:
         log.info(f"  saved {out_png}")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--patient", default=None, help="e.g. patient001")
-    ap.add_argument("--n", type=int, default=3)
-    ap.add_argument("--root", default=None)
-    args = ap.parse_args()
-    Obs.setup()
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--patient", default=None, help="e.g. patient001")
+        ap.add_argument("--n", type=int, default=3)
+        ap.add_argument("--root", default=None)
 
-    cases = AcdcAdapter(root=args.root).cases()
-    log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
-    if not cases:
-        log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
-        return
-    if args.patient:
-        cases = [c for c in cases if c.name == args.patient] or cases[:1]
+    @staticmethod
+    def run(args):  # pragma: no cover
+        cases = AcdcAdapter(root=args.root).cases()
+        log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
+        if not cases:
+            log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
+            return
+        if args.patient:
+            cases = [c for c in cases if c.name == args.patient] or cases[:1]
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for pd in cases[: args.n]:
-        d = Eda.summarize_patient(pd)
-        Eda.save_viz(pd, d, OUT_DIR / f"{pd.name}_overlay.png")
-
-
-if __name__ == "__main__":
-    main()
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        for pd in cases[: args.n]:
+            d = Eda.summarize_patient(pd)
+            Eda.save_viz(pd, d, OUT_DIR / f"{pd.name}_overlay.png")

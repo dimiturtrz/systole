@@ -13,7 +13,6 @@ pyvista + vtk are the `viz` extra (imported lazily). ED-only, CT-derived (see bd
 """
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
@@ -34,7 +33,6 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
-from core.obs import Obs
 from core.preprocessing.preprocess import Preprocess
 
 
@@ -388,6 +386,34 @@ class Anatomy:
         n = Anatomy.convert_binary(args.mesh_dir, args.workers)
         log.info(f"converted {n} meshes under {args.mesh_dir}")
 
+    @staticmethod
+    def add_args(ap):
+        sub = ap.add_subparsers(dest="cmd", required=True)
+
+        v = sub.add_parser("view", help="voxelize one mesh -> SAX label montage PNG")
+        v.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
+        v.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
+        v.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
+
+        bp = sub.add_parser("build-pool", help="voxelize a mesh dir -> healthy anatomy pool npz")
+        bp.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk/.vtu meshes")
+        bp.add_argument("--out", required=True, help="output pool npz")
+        bp.add_argument("--size", type=int, default=DEFAULT_SIZE)
+        bp.add_argument("--workers", type=int, default=0)
+        bp.add_argument("--scale-reps", type=int, default=1)
+
+        pp = sub.add_parser("build-pathology-pool", help="healthy pool -> DCM/HCM/RV pathology pool npz")
+        pp.add_argument("--pool", required=True, help="input healthy pool npz")
+        pp.add_argument("--out", required=True, help="output pathology pool npz")
+
+        cb = sub.add_parser("convert-binary", help="write binary .vtu beside each ASCII .vtk (faster load)")
+        cb.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk meshes")
+        cb.add_argument("--workers", type=int, default=0)
+
+    @staticmethod
+    def run(args):  # pragma: no cover
+        _CMDS[args.cmd](args)
+
 
 _CMDS = {
     "view": Anatomy._cmd_view,
@@ -395,37 +421,3 @@ _CMDS = {
     "build-pathology-pool": Anatomy._cmd_build_pathology_pool,
     "convert-binary": Anatomy._cmd_convert_binary,
 }
-
-
-def _main():  # pragma: no cover
-    """Rodero SSM anatomy CLI: view a mesh montage, or build the (healthy / pathology) anatomy pools."""
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="Rodero SSM anatomy: view + offline pool build (bd 1vl/8pfl).")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-
-    v = sub.add_parser("view", help="voxelize one mesh -> SAX label montage PNG")
-    v.add_argument("--mesh", required=True, help="path to a Rodero .vtk mesh")
-    v.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
-    v.add_argument("--out", default=None, help="montage PNG (default: <mesh>_sax.png)")
-
-    bp = sub.add_parser("build-pool", help="voxelize a mesh dir -> healthy anatomy pool npz")
-    bp.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk/.vtu meshes")
-    bp.add_argument("--out", required=True, help="output pool npz")
-    bp.add_argument("--size", type=int, default=DEFAULT_SIZE)
-    bp.add_argument("--workers", type=int, default=0)
-    bp.add_argument("--scale-reps", type=int, default=1)
-
-    pp = sub.add_parser("build-pathology-pool", help="healthy pool -> DCM/HCM/RV pathology pool npz")
-    pp.add_argument("--pool", required=True, help="input healthy pool npz")
-    pp.add_argument("--out", required=True, help="output pathology pool npz")
-
-    cb = sub.add_parser("convert-binary", help="write binary .vtu beside each ASCII .vtk (faster load)")
-    cb.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk meshes")
-    cb.add_argument("--workers", type=int, default=0)
-
-    args = ap.parse_args()
-    _CMDS[args.cmd](args)
-
-
-if __name__ == "__main__":
-    _main()

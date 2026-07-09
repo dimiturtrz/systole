@@ -10,7 +10,6 @@ ED->ES DEFORMATION. Those require a contraction model to generate ES from ED (fl
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 
@@ -19,7 +18,6 @@ import torch
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
 from core.data.dynamic.anatomy import Anatomy
-from core.obs import Obs
 
 from .shape_coverage import ShapeCoverage
 from .synth_fidelity import SynthFidelity
@@ -78,17 +76,14 @@ class StaticCompare:
         return out
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Static geometry/biomarker panel: synth vs real (uy4d).")
-    ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
-    ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
-    args = ap.parse_args()
-    Obs.setup()
-    res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
-    log.info(json.dumps(res, indent=2))
-    worst = max(res, key=lambda k: res[k]["w1"])
-    log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
+        ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
 
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
+        log.info(json.dumps(res, indent=2))
+        worst = max(res, key=lambda k: res[k]["w1"])
+        log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")

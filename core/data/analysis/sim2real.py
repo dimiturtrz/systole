@@ -12,7 +12,6 @@ acquisition calibration is NOT the fidelity lever (the gap is composition/z-norm
 """
 from __future__ import annotations
 
-import argparse
 import logging
 import math
 
@@ -25,7 +24,6 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.sim2real")
 
@@ -62,26 +60,23 @@ class Sim2Real:
         return best
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Per-vendor sim2real acquisition fit.")
-    ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
-    args = ap.parse_args()
-    Obs.setup()
-    d = TrainCfg().generator.data
-    n_classes = len(CLASSES) + 1
-    meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
-    for vendor in ("Siemens", "Philips", "GE", "Canon"):
-        df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
-        if df.height == 0:
-            continue
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), d.size, "cpu")
-        real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
-        b = Sim2Real.fit_acquisition(real, n_classes)
-        real_z = [round(v, 2) for v in Sim2Real._standardize(real).tolist()]
-        log.info(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
-              f"{b['residual']:.4f} | real {real_z} synth {b['synth_z']}")
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
 
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        d = TrainCfg().generator.data
+        n_classes = len(CLASSES) + 1
+        meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
+        log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
+        for vendor in ("Siemens", "Philips", "GE", "Canon"):
+            df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
+            if df.height == 0:
+                continue
+            X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), d.size, "cpu")
+            real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
+            b = Sim2Real.fit_acquisition(real, n_classes)
+            real_z = [round(v, 2) for v in Sim2Real._standardize(real).tolist()]
+            log.info(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
+                  f"{b['residual']:.4f} | real {real_z} synth {b['synth_z']}")

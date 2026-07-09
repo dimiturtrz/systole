@@ -8,7 +8,6 @@ under the run dir. Gated by argmax parity vs PyTorch on a real patient; if a con
 """
 from __future__ import annotations
 
-import argparse
 import logging
 import shutil
 from pathlib import Path
@@ -20,7 +19,6 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
 from core.data.static.store.build import Build as store
-from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
@@ -86,19 +84,15 @@ class ExportOnnx:
         return path
 
     @staticmethod
-    def main() -> None:
-        Obs.setup()
-        ap = argparse.ArgumentParser(description=__doc__)
+    def add_args(ap):
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
         ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
         ap.add_argument("--no-quantize", dest="quantize", action="store_false")
         ap.add_argument("--opset", type=int, default=OPSET, help=f"ONNX opset (default {OPSET})")
         ap.add_argument("--parity-min", type=float, default=PARITY_MIN,
                         help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
-        args = ap.parse_args()
+
+    @staticmethod
+    def run(args):
         verify = args.verify if args.verify else store.load(["acdc"]).get_column("path")[0]
         ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)
-
-
-if __name__ == "__main__":
-    ExportOnnx.main()

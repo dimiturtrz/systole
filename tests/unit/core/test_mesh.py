@@ -1,5 +1,7 @@
 """Chamber mesh export (core.mesh, bd 7c9.1). marching-cubes surface + STL are GL-free (tested here);
 GLB needs an OpenGL context (smoke at call time, not unit-tested)."""
+import argparse
+
 import numpy as np
 import pytest
 
@@ -80,11 +82,9 @@ def test_main_cli_reads_npz_and_exports(monkeypatch, tmp_path):
         seen.update(mask=mask, spacing=spacing, subject=subject, formats=formats, root=root)
         return tmp_path / subject
 
-    monkeypatch.setattr(meshmod.Obs, "setup", staticmethod(lambda: None))
     monkeypatch.setattr(meshmod.Mesh, "export_meshes", staticmethod(_fake_export))
-    monkeypatch.setattr("sys.argv",
-                        ["mesh", "--npz", str(npz), "--frame", "es", "--formats", "stl"])
-    meshmod.main()
+    meshmod.Mesh.run(argparse.Namespace(npz=str(npz), frame="es", subject=None,
+                                        out=None, formats=["stl"]))
     assert seen["subject"] == "case001"                  # default stem = npz filename
     assert seen["formats"] == ("stl",)
     assert seen["spacing"] == (2.0, 1.0, 1.0)            # spacing floats from npz

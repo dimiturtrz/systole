@@ -4,7 +4,6 @@ blobs, cartoon backgrounds, blood-too-bright). Saves a PNG grid. Companion to sy
 and sim2real (per-vendor fit)."""
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
 
@@ -21,7 +20,6 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.render")
 
@@ -62,11 +60,10 @@ class Render:
             log.info(f"  {_NAMES[c]:8} real {rm.mean():+.2f}±{rm.std():.2f}   synth {sm.mean():+.2f}±{sm.std():.2f}")
 
 
-def main():
-    argparse.ArgumentParser(description="render synth-vs-real diagnostic panels").parse_args()
-    Obs.setup()
-    Render.render_synth_vs_real()
+    @staticmethod
+    def add_args(ap):
+        pass
 
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        Render.render_synth_vs_real()

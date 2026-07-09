@@ -12,7 +12,6 @@ numpy-only (SVD for PCA); no sklearn/umap dependency.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -24,7 +23,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.dynamic.anatomy import Anatomy
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.shape_coverage")
 
@@ -97,30 +95,27 @@ class ShapeCoverage:
         }
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Shape coverage: does generated anatomy encompass real? (uy4d)")
-    ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
-    ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
-    ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
-    args = ap.parse_args()
-    Obs.setup()
-    real = ShapeCoverage._feats_from_masks(ShapeCoverage._real_masks(args.real))
-    synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
-    log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))
-    # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
-    mu, sd = real.mean(0), real.std(0) + 1e-9
-    R, S = (real - mu) / sd, (synth - mu) / sd
-    U = np.concatenate([R, S])
-    _, _, vt = np.linalg.svd(U - U.mean(0), full_matrices=False)
-    pr, ps = (R - U.mean(0)) @ vt[:2].T, (S - U.mean(0)) @ vt[:2].T
-    plt.figure(figsize=(6, 6))
-    plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
-    plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
-    plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
-    out = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
-    plt.savefig(out, dpi=110, bbox_inches="tight")
-    log.info(f"wrote {out}")
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
+        ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
+        ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
 
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        real = ShapeCoverage._feats_from_masks(ShapeCoverage._real_masks(args.real))
+        synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
+        log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))
+        # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
+        mu, sd = real.mean(0), real.std(0) + 1e-9
+        R, S = (real - mu) / sd, (synth - mu) / sd
+        U = np.concatenate([R, S])
+        _, _, vt = np.linalg.svd(U - U.mean(0), full_matrices=False)
+        pr, ps = (R - U.mean(0)) @ vt[:2].T, (S - U.mean(0)) @ vt[:2].T
+        plt.figure(figsize=(6, 6))
+        plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
+        plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
+        plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
+        out = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
+        plt.savefig(out, dpi=110, bbox_inches="tight")
+        log.info(f"wrote {out}")

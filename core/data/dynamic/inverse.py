@@ -19,7 +19,6 @@ but the digital-twin needs multi-acquisition input; one-frame heart fit is degen
 """
 from __future__ import annotations
 
-import argparse
 import logging
 import math
 from pathlib import Path
@@ -28,8 +27,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-
-from core.obs import Obs
 
 from .mri_physics import MriPhysics
 
@@ -89,44 +86,38 @@ class Inverse:
         return {"tr": float(tr.detach()), "flip": float(flip.detach()), "recon_loss": float(loss.detach()),
                 "fit_params": fit_params, "recon": recon.detach()}
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
+        ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")
+        ap.add_argument("--field", type=float, default=1.5)
+        ap.add_argument("--out", default=None, help="montage PNG (real | recon)")
 
-def _main():
-    """Fit acquisition to one real ACDC slice (given its GT) and report recon + the identifiability check
-    (fit flip-only vs fit tr+flip from two inits -> same recon, different params = under-determined)."""
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="FIT probe: recover acquisition from a real scan (bd ixea).")
-    ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
-    ap.add_argument("--slice", type=int, default=None, help="slice index (default: largest-fg ED slice)")
-    ap.add_argument("--field", type=float, default=1.5)
-    ap.add_argument("--out", default=None, help="montage PNG (real | recon)")
-    args = ap.parse_args()
-    d = np.load(args.npz)
-    img, gt = d["ed_img"], d["ed_gt"]
-    k = args.slice if args.slice is not None else int(np.argmax([(gt[i] > 0).sum() for i in range(gt.shape[0])]))
-    ti = torch.as_tensor(img[k], dtype=torch.float32)[None, None]
-    ti = (ti - ti.mean()) / ti.std().clamp_min(1e-6)               # z-score like the training input
-    tg = torch.as_tensor(gt[k], dtype=torch.long)[None]
-    n = int(gt.max()) + 1
-    flip_only = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("flip",))
-    both_a = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
-    both_b = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
-    log.info(f"slice {k}  n_classes {n}")
-    log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
-    log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
-    log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
-    log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
-    heart = (tg[0] > 0).numpy()
-    def show(t):
-        v = t[0, 0].numpy().copy()
-        m = v[heart]
-        v = (v - m.mean()) / (m.std() + 1e-6)
-        v = np.clip((v + 2) / 4, 0, 1); v[~heart] = 0
-        return (v * 255).astype(np.uint8)
-    montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
-    out = args.out or (str(Path(args.npz).with_suffix("")) + "_fit.png")
-    Image.fromarray(montage).save(out)
-    log.info(f"  wrote {out}  (real | recon, heart region)")
-
-
-if __name__ == "__main__":
-    _main()
+    @staticmethod
+    def run(args):
+        d = np.load(args.npz)
+        img, gt = d["ed_img"], d["ed_gt"]
+        k = args.slice if args.slice is not None else int(np.argmax([(gt[i] > 0).sum() for i in range(gt.shape[0])]))
+        ti = torch.as_tensor(img[k], dtype=torch.float32)[None, None]
+        ti = (ti - ti.mean()) / ti.std().clamp_min(1e-6)               # z-score like the training input
+        tg = torch.as_tensor(gt[k], dtype=torch.long)[None]
+        n = int(gt.max()) + 1
+        flip_only = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("flip",))
+        both_a = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
+        both_b = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
+        log.info(f"slice {k}  n_classes {n}")
+        log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
+        log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
+        log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
+        log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
+        heart = (tg[0] > 0).numpy()
+        def show(t):
+            v = t[0, 0].numpy().copy()
+            m = v[heart]
+            v = (v - m.mean()) / (m.std() + 1e-6)
+            v = np.clip((v + 2) / 4, 0, 1); v[~heart] = 0
+            return (v * 255).astype(np.uint8)
+        montage = np.concatenate([show(ti), show(flip_only["recon"])], axis=1)
+        out = args.out or (str(Path(args.npz).with_suffix("")) + "_fit.png")
+        Image.fromarray(montage).save(out)
+        log.info(f"  wrote {out}  (real | recon, heart region)")

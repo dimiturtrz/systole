@@ -4,35 +4,23 @@ didn't break CLI wiring — `--help` short-circuits argparse BEFORE any real wor
 import + module-level class-dispatch + parser setup with no data/GPU. In-process via runpy (no subprocess
 spawn) so it stays fast.
 
-Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremental fill under bd j4m2 —
-plus a standing note that 28 entry points is probably too many, consolidating (bd axri).
+Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremental fill under bd j4m2.
+The 28->5 entry-point consolidation (bd axri) folded the eval/data/analysis/export one-offs into group
+dispatchers — each `python -m <group> <subcommand>` shares one argparse router.
 """
 import runpy
 import sys
 
 import pytest
 
-# All 18 CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
-# `core.data.static.store` runs its package __main__.py.
+# The 5 CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
+# The group dispatchers (cardioseg.evaluation, core.data, core.data.analysis) run their package __main__.py.
 _ARGPARSE_ENTRYPOINTS = [
     "cardioseg.evaluation",
     "cardioseg.training.train",
-    "core.data.analysis.attribution",
-    "core.data.analysis.eda",
-    "core.data.analysis.render",
-    "core.data.analysis.shape_coverage",
-    "core.data.analysis.sim2real",
-    "core.data.analysis.static_compare",
-    "core.data.analysis.synth_fidelity",
-    "core.data.dynamic.anatomy",
-    "core.data.dynamic.inverse",
-    "core.data.dynamic.mrxcat",
-    "core.data.ingest.testsets",
-    "core.data.static.mri.kaggle_dsb",
-    "core.data.static.reference_build",
-    "core.data.static.store",
-    "core.export_onnx",
-    "core.mesh",
+    "core.data",
+    "core.data.analysis",
+    "core.export",
 ]
 
 @pytest.mark.parametrize("mod", _ARGPARSE_ENTRYPOINTS)

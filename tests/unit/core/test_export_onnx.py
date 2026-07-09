@@ -13,8 +13,9 @@ from core.export_onnx import ExportOnnx
 
 
 def test_export_surface_is_callable():
-    """The parity-gated exporter + its helpers + main are present and callable."""
+    """The parity-gated exporter + its helpers + CLI surface are present and callable."""
     assert callable(ExportOnnx.export)
-    assert callable(ExportOnnx.main)
+    assert callable(ExportOnnx.run)
+    assert callable(ExportOnnx.add_args)
     assert callable(ExportOnnx._parity)
     assert callable(ExportOnnx._load_model)

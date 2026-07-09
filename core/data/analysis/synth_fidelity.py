@@ -11,7 +11,6 @@ Companion to attribution.py (what the MODEL learns) — this is what the DATA lo
 """
 from __future__ import annotations
 
-import argparse
 import copy
 import json
 import logging
@@ -27,7 +26,6 @@ from core.data.static.labels import CLASSES
 from core.data.static.store.build import Build as store
 from core.hparams import Hparams, TrainCfg
 from core.model import Model
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.synth_fidelity")
 
@@ -234,53 +232,48 @@ class SynthFidelity:
         return out
 
 
-def _main():
-    ap = argparse.ArgumentParser(description="Synth fidelity: per-class synth-vs-real intensity analysis. "
-                                 "distance=W1 faithfulness | separability=d' distinguishability | "
-                                 "variance=per-knob spread attribution vs real (all on VAL, test untouched).")
-    ap.add_argument("--mode", choices=("distance", "separability", "variance"), default="distance")
-    ap.add_argument("--set", nargs="*", default=[], dest="overrides", help="synth cfg overrides, e.g. synth.bg_tiers=8")
-    ap.add_argument("--by-vendor", action="store_true", help="distance mode: break down per scanner vendor")
-    ap.add_argument("--by-field", action="store_true", help="variance mode: stratify by field (1.5/3T) too")
-    ap.add_argument("--val-only", action="store_true", help="target = acdc-val only (default: ALL labelled "
-                    "real, all vendors — the fair multi-vendor spread for a diversity synth; DIAGNOSTIC, "
-                    "not a tuning target)")
-    ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
-                    "sample-size-agnostic; bounds VRAM)")
-    args = ap.parse_args()
-    Obs.setup()
-    cfg = TrainCfg()
-    Hparams.apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
-    cfg.generator.synth.synth_p = 1.0
-    device = Model.resolve_device(None)
-    d = cfg.generator.data
-    sc, nc = cfg.generator.synth, cfg.model.out_channels
-    fid = SynthFidelity(sc, nc, device, d.size)
-    meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    if args.mode == "distance" and args.by_vendor:
-        log.info(json.dumps(fid.by_vendor(meta.filter(pl.col("labelled"))), indent=2))
-        return
-    # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
-    # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
-    if args.val_only:
-        real_df = splits.Splits.model_val(d, meta)          # coded split's val if set, else criteria
-    else:
-        real_df = meta.filter(pl.col("labelled"))
-    X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(real_df), d.size, "cpu")
-    n = int(X.shape[0])
-    if n > args.max_slices:
-        idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:args.max_slices]
-        X, Y = X[idx], Y[idx]
-    if args.mode == "separability":
-        s = SynthFidelity.separability(X, Y, sc, nc, device)
-    elif args.mode == "variance":
-        fields = (None, 1.5, 3.0) if args.by_field else (None,)
-        s = {str(f or "sweep"): fid.variance(X, Y, field=f) for f in fields}
-        s["real_vendor_bands"] = SynthFidelity.real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
-    else:
-        s = fid.distance(X, Y)
-    log.info(json.dumps(s, indent=2))
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--mode", choices=("distance", "separability", "variance"), default="distance")
+        ap.add_argument("--set", nargs="*", default=[], dest="overrides", help="synth cfg overrides, e.g. synth.bg_tiers=8")
+        ap.add_argument("--by-vendor", action="store_true", help="distance mode: break down per scanner vendor")
+        ap.add_argument("--by-field", action="store_true", help="variance mode: stratify by field (1.5/3T) too")
+        ap.add_argument("--val-only", action="store_true", help="target = acdc-val only (default: ALL labelled "
+                        "real, all vendors — the fair multi-vendor spread for a diversity synth; DIAGNOSTIC, "
+                        "not a tuning target)")
+        ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
+                        "sample-size-agnostic; bounds VRAM)")
 
-
-if __name__ == "__main__":
-    _main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        cfg = TrainCfg()
+        Hparams.apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
+        cfg.generator.synth.synth_p = 1.0
+        device = Model.resolve_device(None)
+        d = cfg.generator.data
+        sc, nc = cfg.generator.synth, cfg.model.out_channels
+        fid = SynthFidelity(sc, nc, device, d.size)
+        meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
+        if args.mode == "distance" and args.by_vendor:
+            log.info(json.dumps(fid.by_vendor(meta.filter(pl.col("labelled"))), indent=2))
+            return
+        # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
+        # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
+        if args.val_only:
+            real_df = splits.Splits.model_val(d, meta)          # coded split's val if set, else criteria
+        else:
+            real_df = meta.filter(pl.col("labelled"))
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(real_df), d.size, "cpu")
+        n = int(X.shape[0])
+        if n > args.max_slices:
+            idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[:args.max_slices]
+            X, Y = X[idx], Y[idx]
+        if args.mode == "separability":
+            s = SynthFidelity.separability(X, Y, sc, nc, device)
+        elif args.mode == "variance":
+            fields = (None, 1.5, 3.0) if args.by_field else (None,)
+            s = {str(f or "sweep"): fid.variance(X, Y, field=f) for f in fields}
+            s["real_vendor_bands"] = SynthFidelity.real_spread_bands(meta.filter(pl.col("labelled")), nc, d.size)
+        else:
+            s = fid.distance(X, Y)
+        log.info(json.dumps(s, indent=2))

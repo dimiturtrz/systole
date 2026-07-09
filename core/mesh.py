@@ -11,7 +11,6 @@ Ref: Lorensen & Cline (marching cubes) 1987.
 """
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
 
@@ -22,7 +21,6 @@ from skimage.measure import marching_cubes
 
 from core.config import Config
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
-from core.obs import Obs
 from core.postprocess import Postprocess
 
 log = logging.getLogger("cardioseg.mesh")
@@ -96,24 +94,18 @@ class Mesh:
             Mesh.export_stl(mask, spacing, out, subject, iso)
         return out
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
+        ap.add_argument("--frame", default="ed", choices=["ed", "es"])
+        ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
+        ap.add_argument("--out", default=None, help="output root (default: <data>/meshes/ from paths.yaml)")
+        ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
 
-def main():
-    """Export chamber meshes for one consolidated subject npz. Location layering: default is
-    <data>/meshes/ (config — the paths.yaml data root); --out overrides per invocation (argv)."""
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="Export chamber meshes (GLB + STL) from a subject npz.")
-    ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
-    ap.add_argument("--frame", default="ed", choices=["ed", "es"])
-    ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
-    ap.add_argument("--out", default=None, help="output root (default: <data>/meshes/ from paths.yaml)")
-    ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
-    args = ap.parse_args()
-    z = np.load(args.npz, allow_pickle=True)
-    mask, spacing = z[f"{args.frame}_gt"], tuple(float(s) for s in z["spacing"])
-    subject = args.subject or Path(args.npz).stem
-    out = Mesh.export_meshes(mask, spacing, subject, tuple(args.formats), root=args.out)
-    log.info(f"wrote {args.formats} for {subject} -> {out}")
-
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):
+        z = np.load(args.npz, allow_pickle=True)
+        mask, spacing = z[f"{args.frame}_gt"], tuple(float(s) for s in z["spacing"])
+        subject = args.subject or Path(args.npz).stem
+        out = Mesh.export_meshes(mask, spacing, subject, tuple(args.formats), root=args.out)
+        log.info(f"wrote {args.formats} for {subject} -> {out}")
