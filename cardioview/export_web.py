@@ -37,12 +37,12 @@ from core.config import Config
 from core.data.static import splits, store
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
+from core.preprocessing.preprocess import Preprocess
 
 log = logging.getLogger("cardioview.export_web")
 
@@ -78,7 +78,7 @@ def heldout_set(model_name: str) -> set[str]:
     run = model_dir(MODELS[model_name])
     cfg_path = run / "config.json"
     if cfg_path.exists():  # pragma: no cover  (reads a real run config.json + consolidated store — registry/data dependency)
-        dc = from_json(cfg_path).generator.data
+        dc = Hparams.from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
         _, val, test = splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
                                          val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
@@ -157,7 +157,7 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
-        case = preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
+        case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
         spacing = tuple(float(s) for s in case["spacing"])
         masks = build_masks(case, source, ctx.model, ctx.device)
         crop_masks, iso = shared_crop(masks, spacing)
@@ -187,7 +187,7 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     frames_t = list(range(0, vol.shape[0], stride))
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
-        img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
+        img = Preprocess.zscore(Preprocess.resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
         masks[k] = Postprocess.largest_cc_per_class(Inference.predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
@@ -226,7 +226,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     ed_k = nearest_index(frames_t, edi)
     es_k = nearest_index(frames_t, esi)
     ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-    case = preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
+    case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
     entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                  pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,

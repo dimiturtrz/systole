@@ -29,8 +29,8 @@ from core.data.static import splits, store
 from core.data.static.labels import overlay_cmap
 from core.inference import Inference
 from core.obs import Obs
-from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
-from core.registry import resolve
+from core.preprocessing.preprocess import SIZE, Preprocess
+from core.registry import Registry
 from core.run import Run
 
 from ..tracking import Tracker
@@ -116,7 +116,7 @@ class Uncertainty:
                 if f"{tag}_img" not in case:
                     continue
                 pred, ent, conf, ale, epi = Uncertainty.tta_uncertainty(model, case[f"{tag}_img"], SIZE, device)
-                gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
                 cf, ok, en, al, ep, score = Uncertainty.foreground_uncertainty(pred, gt, (ent, conf, ale, epi))
                 confs.append(cf); corrects.append(ok); ents.append(en); ales.append(al); epis.append(ep)
                 cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}", "uncertainty": score})
@@ -124,7 +124,7 @@ class Uncertainty:
                 bnd_u.extend(b); int_u.extend(i)
                 if not saved and eval_name == "acdc" and tag == "ed":  # one overlay PNG
                     z = int(np.argmax([(g > 0).sum() for g in gt]))
-                    Uncertainty._save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", fit_square, SIZE, plt)
+                    Uncertainty._save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", Preprocess.fit_square, SIZE, plt)
                     saved = True
         return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 
@@ -160,7 +160,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
     args = ap.parse_args()
-    run = resolve(args.run)
+    run = Registry.resolve(args.run)
     model, _, device = Run.load_run(run)
 
     df = splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)

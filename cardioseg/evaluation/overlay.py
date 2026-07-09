@@ -22,14 +22,14 @@ from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
 from core.data.static.store import load_arrays
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
 from core.obs import Obs
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import stack_slices
-from core.registry import resolve
+from core.preprocessing.preprocess import Preprocess
+from core.registry import Registry
 
 log = logging.getLogger("cardioseg.overlay")
 
@@ -75,10 +75,10 @@ class Overlay:
         spacing = tuple(float(s) for s in case["spacing"])
         pred_ed = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["ed_img"], size, device, tta=True))
         pred_es = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["es_img"], size, device, tta=True))
-        gt_ed = stack_slices(case["ed_gt"], size)
-        img_ed = stack_slices(case["ed_img"], size, 0.0)
+        gt_ed = Preprocess.stack_slices(case["ed_gt"], size)
+        img_ed = Preprocess.stack_slices(case["ed_img"], size, 0.0)
         ef_p, _, _ = Measure.ejection_fraction(pred_ed, pred_es, spacing)
-        gt_es = stack_slices(case["es_gt"], size)
+        gt_es = Preprocess.stack_slices(case["es_gt"], size)
         ef_g, _, _ = Measure.ejection_fraction(gt_ed, gt_es, spacing)
         z = Overlay._mid_slice(gt_ed)
         return dict(group=case.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
@@ -92,8 +92,8 @@ def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + ma
     ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
     args = ap.parse_args()
 
-    run = resolve(args.run)
-    cfg = from_json(run / "config.json")
+    run = Registry.resolve(args.run)
+    cfg = Hparams.from_json(run / "config.json")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = Model.build_unet(cfg.model).to(device)
     model.load_state_dict(torch.load(run / "model.pth", map_location=device))

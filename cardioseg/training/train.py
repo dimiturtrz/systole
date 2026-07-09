@@ -28,11 +28,11 @@ from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
 from core.export_onnx import ExportOnnx
-from core.hparams import TrainCfg, apply_overrides, to_json
+from core.hparams import Hparams, TrainCfg
 from core.losses import Losses, PartialLabelDiceCE, SoftDiceCE
 from core.model import Model
 from core.obs import Obs, timed
-from core.registry import MODEL_NAME, save_model
+from core.registry import MODEL_NAME, Registry
 
 from ..evaluation.modelcard import ModelCard
 from ..evaluation.validate import EvalCfg, Evaluator, summarize
@@ -93,7 +93,7 @@ def apply_cli_args(cfg: TrainCfg, args) -> TrainCfg:
         cfg.ef_kaggle = True
     if a.get("out"):
         cfg.out_dir = a["out"]
-    apply_overrides(cfg, a.get("overrides") or [])
+    Hparams.apply_overrides(cfg, a.get("overrides") or [])
     return cfg
 
 
@@ -129,7 +129,7 @@ class SeedTrainer:
         self.out = seed_out_dir(sh["base_out"], seed, single=sh["single"])
         self.out.mkdir(parents=True, exist_ok=True)
         self.log = Obs.setup(self.out / "train.log")
-        to_json(cfg, self.out / "config.json")
+        Hparams.to_json(cfg, self.out / "config.json")
         torch.manual_seed(seed)
         np.random.seed(seed)
         self.model = Model.build_unet(cfg.model).to(self.device)
@@ -272,7 +272,7 @@ class SeedTrainer:
             rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
             split = "+".join(d.test_vendors) or "legacy"
             kind = "flagship" if alias == "production" else "candidate"
-            save_model(out, run_name=out.name, run_id=rid, alias=alias,
+            Registry.save_model(out, run_name=out.name, run_id=rid, alias=alias,
                        description=f"{out.name} · split={split} · seed={seed}",
                        tags={"kind": kind, "split": split, "seed": seed})
             log.info("registered to mlflow registry '%s'%s", MODEL_NAME, f" (alias={alias})" if alias else "")

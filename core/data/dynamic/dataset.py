@@ -27,7 +27,7 @@ from core.obs import Obs
 
 # fit_square + SIZE are model-grid preprocessing primitives — they live in core now (shared by the
 # training Dataset here and inference), single-sourced in core.preprocessing.preprocess.
-from core.preprocessing.preprocess import SIZE, fit_square
+from core.preprocessing.preprocess import SIZE, Preprocess
 from core.types import Slice2D
 
 
@@ -72,8 +72,8 @@ class ACDCSliceDataset(Dataset):
 
     def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
         img, m = self.items[i]
-        img = fit_square(img, self.size, pad_value=0.0)          # [size, size]
-        m = fit_square(m, self.size, pad_value=0)                # [size, size]
+        img = Preprocess.fit_square(img, self.size, pad_value=0.0)          # [size, size]
+        m = Preprocess.fit_square(m, self.size, pad_value=0)                # [size, size]
         # Augmentation is applied GPU-batched in the training loop (see training.augment), not
         # here — the per-item path stays cheap so DataLoader workers don't bottleneck the GPU.
         # img -> [1, size, size] (add channel); mask -> [size, size] int64
@@ -97,8 +97,8 @@ class ACDCSliceDataset(Dataset):
             z = torch.zeros((0, size, size))
             empty = (z[:, None].to(device), z.to(torch.uint8).to(device))
             return (*empty, torch.zeros(0, dtype=torch.long, device=device)) if return_owners else empty
-        imgs = np.stack([fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
-        msks = np.stack([fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
+        imgs = np.stack([Preprocess.fit_square(im, size, 0.0) for im, _ in ds.items]).astype(np.float32)
+        msks = np.stack([Preprocess.fit_square(m, size, 0) for _, m in ds.items]).astype(np.uint8)
         X, Y = torch.from_numpy(imgs)[:, None].to(device), torch.from_numpy(msks).to(device)
         if return_owners:
             return X, Y, torch.tensor(ds.owners, dtype=torch.long, device=device)

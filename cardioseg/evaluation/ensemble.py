@@ -26,8 +26,8 @@ from core.measure import Measure
 from core.model import Model
 from core.obs import Obs
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import SIZE, stack_slices
-from core.registry import resolve
+from core.preprocessing.preprocess import SIZE, Preprocess
+from core.registry import Registry
 from core.run import Run
 
 from ..tracking import Tracker
@@ -82,7 +82,7 @@ class Ensemble:
                 if f"{tag}_img" not in case:
                     continue
                 pred = Postprocess.largest_cc_per_class(Ensemble.decompose(models, case[f"{tag}_img"], size, device)[0])
-                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
                 preds[tag], gts[tag] = pred, gt
                 Ensemble._dice_fold(pred, gt, inter, den)
             if "ed" in preds and "es" in preds:
@@ -118,7 +118,7 @@ class Ensemble:
                 if f"{tag}_img" not in case:
                     continue
                 pred, _, ale, epi = Ensemble.decompose(models, case[f"{tag}_img"], size, device)
-                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
                 fg = (pred > 0) | (gt > 0)
                 ea.append(ale[fg]); ee.append(epi[fg])
                 _, _, _, sa, se_ = Uncertainty.tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
@@ -133,7 +133,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
     args = ap.parse_args()
     device = Model.resolve_device()
-    loaded = [Run.load_run(resolve(r), device) for r in args.runs]
+    loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
     models = [m for m, _, _ in loaded]
     cfg = loaded[0][1]
     trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",

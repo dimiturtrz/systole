@@ -42,7 +42,7 @@ from skimage.measure import marching_cubes
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
 from core.measure import Measure
-from core.preprocessing.preprocess import preprocess_case
+from core.preprocessing.preprocess import Preprocess
 
 log = logging.getLogger("cardioview.render_overlay")
 
@@ -150,7 +150,7 @@ def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: 
 
 
 def render(cfg: OverlayCfg) -> None:  # pragma: no cover  (preprocess_case disk read + load_model + pyvista — render shell)
-    case = preprocess_case(patient_dir(cfg.patient), loader=AcdcAdapter().load_ed_es)
+    case = Preprocess.preprocess_case(patient_dir(cfg.patient), loader=AcdcAdapter().load_ed_es)
     spacing = tuple(float(s) for s in case["spacing"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = None if cfg.source == "gt" else load_model(MODELS[cfg.model_name], device)

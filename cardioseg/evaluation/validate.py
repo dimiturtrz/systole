@@ -22,7 +22,7 @@ from core.evaluate import CLASSES, Evaluate
 from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
+from core.preprocessing.preprocess import SIZE, Preprocess
 
 log = logging.getLogger("cardioseg.validate")
 
@@ -125,7 +125,7 @@ class Evaluator:
                 pred = Inference.predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
                     pred = Postprocess.largest_cc_per_class(pred)
-                gt = stack_slices(case[f"{tag.lower()}_gt"], size)
+                gt = Preprocess.stack_slices(case[f"{tag.lower()}_gt"], size)
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
@@ -149,8 +149,8 @@ class Evaluator:
             for tag in ("ed", "es"):
                 if f"{tag}_img" not in case:
                     continue
-                xs = np.stack([fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
-                gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
+                xs = np.stack([Preprocess.fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]

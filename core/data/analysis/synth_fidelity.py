@@ -25,7 +25,7 @@ from core.data.dynamic.synth import MatchedAcqCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
-from core.hparams import TrainCfg, apply_overrides
+from core.hparams import Hparams, TrainCfg
 from core.model import Model
 from core.obs import Obs
 
@@ -250,7 +250,7 @@ def _main():
     args = ap.parse_args()
     Obs.setup()
     cfg = TrainCfg()
-    apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
+    Hparams.apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
     cfg.generator.synth.synth_p = 1.0
     device = Model.resolve_device(None)
     d = cfg.generator.data

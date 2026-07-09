@@ -14,8 +14,8 @@ import numpy as np
 from core.config import FLAGSHIP_REF, Config
 from core.inference import Inference
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import fit_square
-from core.registry import resolve
+from core.preprocessing.preprocess import Preprocess
+from core.registry import Registry
 from core.run import Run
 
 # Label convention (verified on real masks): 1=RV, 2=LV-myo, 3=LV-cavity.
@@ -46,7 +46,7 @@ def log_setup(level: int = logging.INFO) -> None:  # pragma: no cover  (stdout l
 
 def model_dir(ref: str):  # pragma: no cover  (mlflow registry resolve + artifact download — registry shell)
     """Resolve a registry ref to its local artifact dir (model.pth + config.json + …)."""
-    return resolve(ref)
+    return Registry.resolve(ref)
 
 
 def patient_dir(patient: str, root: str | None = None) -> Path:
@@ -72,7 +72,7 @@ def load_model(ref: str, device):  # pragma: no cover  (load_run reads model.pth
 
 def square_stack(vol_zyx, dtype=None):
     """Center pad/crop each slice to the SIZE square grid the model expects."""
-    out = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
+    out = np.stack([Preprocess.fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
     return out.astype(dtype) if dtype else out
 
 

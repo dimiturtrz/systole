@@ -23,14 +23,14 @@ from cardioseg.evaluation.uncertainty import Uncertainty
 from core.data.static import splits
 from core.data.static.labels import LV_CAV
 from core.data.static.store import build as store
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
 from core.obs import Obs
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import SIZE, stack_slices
-from core.registry import resolve
+from core.preprocessing.preprocess import SIZE, Preprocess
+from core.registry import Registry
 from core.run import Run
 
 log = logging.getLogger("cardioseg.soft_eval")
@@ -42,7 +42,7 @@ class SoftEval:
 
     @staticmethod
     def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
-        d = from_json(run / "config.json").generator.data
+        d = Hparams.from_json(run / "config.json").generator.data
         meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
         _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                       val_datasets=d.val_datasets, val_vendors=d.val_vendors)
@@ -69,7 +69,7 @@ class SoftEval:
                 blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
                 hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
                 gate = hard == LV_CAV
-                gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
+                gt = Preprocess.stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
                 vols[tag] = {"hard": Measure.label_volume_ml(hard, LV_CAV, sp),
                              "soft": Measure.expected_volume_ml(blood * gate, sp),
                              "gt": Measure.label_volume_ml(gt, LV_CAV, sp)}
@@ -89,7 +89,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
     args = ap.parse_args()
-    arr, e = SoftEval.evaluate(resolve(args.run))
+    arr, e = SoftEval.evaluate(Registry.resolve(args.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
     log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
     log.info(f"ECE: {e:.4f}")

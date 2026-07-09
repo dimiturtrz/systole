@@ -35,7 +35,7 @@ from scipy.ndimage import zoom as _zoom
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
 from core.obs import Obs
-from core.preprocessing.preprocess import fit_square
+from core.preprocessing.preprocess import Preprocess
 
 
 class MeshError(Exception):
@@ -313,7 +313,7 @@ class Anatomy:
                 # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
                 if min_cav_frac > 0 and int(((s == RV) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
                     continue
-                out.append(fit_square(s, size, 0).astype(np.uint8))
+                out.append(Preprocess.fit_square(s, size, 0).astype(np.uint8))
         return out
 
     @staticmethod

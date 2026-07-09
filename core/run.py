@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.model import Model
 
 
@@ -21,7 +21,7 @@ class Run:
         fall back to the default ModelCfg. Returns (model, cfg | None, device)."""
         run = Path(run)
         cfg_path = run / "config.json"
-        cfg = from_json(cfg_path) if cfg_path.exists() else None
+        cfg = Hparams.from_json(cfg_path) if cfg_path.exists() else None
         device = Model.resolve_device(device)
         model = Model.build_unet(cfg.model if cfg else None).to(device)
         model.load_state_dict(torch.load(run / "model.pth", map_location=device))

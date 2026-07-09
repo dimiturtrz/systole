@@ -23,11 +23,11 @@ from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
 from core.evaluate import CLASSES, Evaluate
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.measure import Measure
 from core.model import Model
 from core.obs import Obs
-from core.registry import _DB_URI, _run_id_for, resolve
+from core.registry import _DB_URI, Registry
 
 log = logging.getLogger("cardioseg.results")
 
@@ -83,7 +83,7 @@ class Results:
         TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
         the run actually held out."""
         device = Model.resolve_device()
-        d = from_json(run / "config.json").generator.data
+        d = Hparams.from_json(run / "config.json").generator.data
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
         _, val, test = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
@@ -106,7 +106,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow
     ap.add_argument("--run", default=FLAGSHIP_REF)
     ap.add_argument("--out", default="cardioseg/RESULTS.json")
     args = ap.parse_args()
-    res = Results.build(resolve(args.run))
+    res = Results.build(Registry.resolve(args.run))
     Path(args.out).write_text(json.dumps(res, indent=2))
     f = res["flagship"]
     log.info(f"wrote {args.out}: " + " · ".join(
@@ -115,7 +115,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow
     # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
     try:
         mlflow.set_tracking_uri(_DB_URI)
-        with mlflow.start_run(run_id=_run_id_for(args.run)):
+        with mlflow.start_run(run_id=Registry._run_id_for(args.run)):
             for ax, v in f.items():
                 mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
                 mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])

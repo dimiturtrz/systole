@@ -35,7 +35,7 @@ def _stub(monkeypatch):
     # a model whose DataCfg holds out Canon -> train = Siemens (s1, s2)
     cfg = types.SimpleNamespace(seed=0, generator=types.SimpleNamespace(
         data=DataCfg(test_vendors=("Canon",), test_datasets=(), val_datasets=())))
-    monkeypatch.setattr("core.registry.resolve", lambda ref: ref)
+    monkeypatch.setattr("core.registry.Registry.resolve", lambda ref: ref)
     monkeypatch.setattr("core.run.Run.load_run", lambda run, device=None: (object(), cfg, "cpu"))
     monkeypatch.setattr("core.data.static.store.build.load", lambda *a, **k: _meta())
     monkeypatch.setattr("cardioseg.evaluation.validate.Evaluator.validate",

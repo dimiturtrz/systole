@@ -23,7 +23,7 @@ from core.data.static.labels import LV_CAV
 from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import load_arrays
 from core.measure import Measure
-from core.preprocessing.preprocess import fit_square
+from core.preprocessing.preprocess import Preprocess
 
 from .volumes import VolLoss
 
@@ -31,7 +31,7 @@ from .volumes import VolLoss
 # ---- shared primitives ------------------------------------------------------------------------
 def _stack(vol, size: int, device: str) -> torch.Tensor:
     """[D,H,W] numpy -> [D,1,size,size] float32 on device (grid-fit, no augmentation)."""
-    slices = [torch.from_numpy(fit_square(vol[z], size, 0.0)) for z in range(vol.shape[0])]
+    slices = [torch.from_numpy(Preprocess.fit_square(vol[z], size, 0.0)) for z in range(vol.shape[0])]
     return torch.stack(slices)[:, None].to(device)
 
 
@@ -129,7 +129,7 @@ class KaggleEF:
             if not sax:
                 continue
             P, L = min(v.shape[0] for v, _, _ in sax), len(sax)
-            arr = np.array([[fit_square(_zscore(vol[p]), size, 0.0) for p in range(P)]
+            arr = np.array([[Preprocess.fit_square(_zscore(vol[p]), size, 0.0) for p in range(P)]
                             for vol, _, _ in sax])                      # [L,P,H,W]
             # Kept on CPU (host RAM): the pool is large and each cine is touched rarely (k sampled/
             # epoch). Residing it in VRAM hoards ~tens of GB and thrashes the card — the big rarely-hit

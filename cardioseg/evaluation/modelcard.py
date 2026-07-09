@@ -20,7 +20,7 @@ from pathlib import Path
 from core.data.static.labels import CLASS_NAMES
 from core.data.static.reference import Reference
 from core.obs import Obs
-from core.registry import resolve
+from core.registry import Registry
 
 log = logging.getLogger("cardioseg.modelcard")
 
@@ -146,7 +146,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + generate the card 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
     args = ap.parse_args()
-    log.info(f"wrote {ModelCard.generate(resolve(args.run))}")
+    log.info(f"wrote {ModelCard.generate(Registry.resolve(args.run))}")
 
 
 if __name__ == "__main__":

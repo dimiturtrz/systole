@@ -32,7 +32,7 @@ from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
 from core.hparams import TrainCfg
 from core.obs import Obs
-from core.registry import resolve
+from core.registry import Registry
 from core.run import Run
 
 log = logging.getLogger("cardioseg.attribution")
@@ -121,7 +121,7 @@ def _main():
     ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
     args = ap.parse_args()
     Obs.setup()
-    run_dir = resolve(args.run)
+    run_dir = Registry.resolve(args.run)
     model, cfg, device = Run.load_run(run_dir)
     d = (cfg.generator.data if cfg else TrainCfg().generator.data)
     meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)

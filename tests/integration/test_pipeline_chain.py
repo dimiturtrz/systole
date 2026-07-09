@@ -17,7 +17,7 @@ import pytest
 from core.evaluate import Evaluate
 from core.inference import Inference
 from core.measure import Measure
-from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
+from core.preprocessing.preprocess import Preprocess
 
 
 def _cube(d, hw, half, label=3, value=None):
@@ -49,10 +49,10 @@ def _cube(d, hw, half, label=3, value=None):
 ])
 def test_resample_then_fit_square_lands_on_grid(spacing_in, note):
     vol = np.random.rand(3, 48, 56).astype(np.float32)
-    res, sp = resample_inplane(vol, spacing_in, target_inplane=1.5)
+    res, sp = Preprocess.resample_inplane(vol, spacing_in, target_inplane=1.5)
     assert sp == (10.0, 1.5, 1.5)                       # spacing convention carried through
     size = 64
-    stack = np.stack([fit_square(s, size) for s in res])
+    stack = np.stack([Preprocess.fit_square(s, size) for s in res])
     assert stack.shape == (3, size, size), note         # both crop & pad paths reach the grid
     assert stack.dtype == res.dtype
 
@@ -60,8 +60,8 @@ def test_resample_then_fit_square_lands_on_grid(spacing_in, note):
 def test_mask_chain_preserves_integer_labels():
     """A label volume through resample(is_mask) -> fit_square stays integer-labelled (no blur)."""
     mask = _cube(3, 48, 10, label=3)
-    res, _ = resample_inplane(mask, (10.0, 3.0, 3.0), target_inplane=1.5, is_mask=True)
-    stack = np.stack([fit_square(s, 128) for s in res])  # 128 > resampled H,W -> pad path
+    res, _ = Preprocess.resample_inplane(mask, (10.0, 3.0, 3.0), target_inplane=1.5, is_mask=True)
+    stack = np.stack([Preprocess.fit_square(s, 128) for s in res])  # 128 > resampled H,W -> pad path
     assert set(np.unique(stack).tolist()).issubset({0, 3})
     assert stack.shape == (3, 128, 128)
 
@@ -69,9 +69,9 @@ def test_mask_chain_preserves_integer_labels():
 def test_zscore_then_fit_square_pad_is_background():
     """zscore centres the volume at ~0; fit_square pads with 0 -> padding == the mean (no bias)."""
     vol = (np.random.rand(2, 30, 30) * 50 + 100).astype(np.float32)  # uncalibrated intensities
-    z = zscore(vol)
+    z = Preprocess.zscore(vol)
     assert abs(float(z.mean())) < 1e-4
-    padded = np.stack([fit_square(s, 80) for s in z])   # 80 > 30 -> all-pad border
+    padded = np.stack([Preprocess.fit_square(s, 80) for s in z])   # 80 > 30 -> all-pad border
     border = padded[:, 0, 0]                              # a corner that is pure padding
     assert np.allclose(border, 0.0)                      # pad value sits at the z-score mean
 
@@ -80,8 +80,8 @@ def test_zscore_then_fit_square_pad_is_background():
 # fit_square'd label stacks are valid Dice inputs (same shape both sides -> no error).
 
 def test_squared_stacks_are_valid_dice_inputs():
-    a = np.stack([fit_square(_cube(1, 40, 8)[0], 64) for _ in range(4)])
-    b = np.stack([fit_square(_cube(1, 40, 5)[0], 64) for _ in range(4)])
+    a = np.stack([Preprocess.fit_square(_cube(1, 40, 8)[0], 64) for _ in range(4)])
+    b = np.stack([Preprocess.fit_square(_cube(1, 40, 5)[0], 64) for _ in range(4)])
     assert Evaluate.dice(a, a, 3) == 1.0                           # identity
     disjoint = np.zeros_like(a); disjoint[a == 0] = 3     # never overlaps a
     assert Evaluate.dice(a, disjoint, 3) == 0.0                    # disjoint

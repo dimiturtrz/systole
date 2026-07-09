@@ -43,7 +43,7 @@ def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
     tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
     rows: list[dict] = []
     for ref in model_refs:
-        model, cfg, device = run_mod.Run.load_run(registry_mod.resolve(ref))
+        model, cfg, device = run_mod.Run.load_run(registry_mod.Registry.resolve(ref))
         d = cfg.generator.data if cfg else None
         size = d.size if d else 256
         meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)

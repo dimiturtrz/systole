@@ -29,14 +29,14 @@ from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
 from core.evaluate import CLASSES, Evaluate
-from core.hparams import from_json
+from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import LOA_Z, Measure
 from core.model import Model
 from core.obs import Obs
 from core.postprocess import Postprocess
-from core.preprocessing.preprocess import SIZE, stack_slices
-from core.registry import resolve
+from core.preprocessing.preprocess import SIZE, Preprocess
+from core.registry import Registry
 from core.run import Run
 
 log = logging.getLogger("cardioseg.distribution")
@@ -74,7 +74,7 @@ class Distribution:
                 if f"{k}_img" not in case:
                     continue
                 pred = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
-                gt = stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
+                gt = Preprocess.stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
                 # made the boundary/Dice numbers optimistic.
@@ -252,12 +252,12 @@ def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot
     ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    run = resolve(args.run)
+    run = Registry.resolve(args.run)
     device = Model.resolve_device()
 
     df = splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
     # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
-    d_model = from_json(run / "config.json").generator.data
+    d_model = Hparams.from_json(run / "config.json").generator.data
     trained = splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
     kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
     n_excl = len(df) - len(kept)

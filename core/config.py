@@ -14,7 +14,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from pydantic import ConfigDict
 
-from core.paths import resolve_data_root
+from core.paths import Paths
 
 # Shared pydantic config used by every dispersed cfg (ModelCfg/AugCfg/…): setattr (used by the
 # `--set` overrides) re-validates the field. Lives here — a leaf module both core.hparams and the
@@ -38,7 +38,7 @@ class Config:
         adapted to the current OS by core.paths.resolve_data_root — translates a Windows drive path to/
         from its WSL mount, and raises (never silently relative) for an untranslatable foreign path."""
         raw = str(os.environ.get("CARDIAC_DATA") or OmegaConf.select(_cfg, "data") or _FALLBACK_ROOT)
-        return resolve_data_root(raw)
+        return Paths.resolve_data_root(raw)
 
     @staticmethod
     def data_root(kind: str = "raw") -> str:
@@ -48,7 +48,7 @@ class Config:
         still never silently relative)."""
         override = OmegaConf.select(_cfg, kind)
         if override:
-            return resolve_data_root(str(override))
+            return Paths.resolve_data_root(str(override))
         return str(Path(Config._root()) / kind)
 
 

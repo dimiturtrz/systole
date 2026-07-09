@@ -34,7 +34,7 @@ from scipy.ndimage import zoom as _zoom
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.obs import Obs
-from core.preprocessing.preprocess import fit_square
+from core.preprocessing.preprocess import Preprocess
 
 from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
 
@@ -120,7 +120,7 @@ class Mrxcat:
         f = target_px / max(max(crop.shape), 1)
         if abs(f - 1.0) > _ZOOM_NOOP_EPS:
             crop = _zoom(crop, f, order=0)
-        return fit_square(crop, size, 0).astype(np.uint8)
+        return Preprocess.fit_square(crop, size, 0).astype(np.uint8)
 
     @staticmethod
     def build_pool(vti_dir: str | Path, out_path: str | Path,
@@ -167,7 +167,7 @@ class Mrxcat:
         y0, y1 = max(0, cy - half), min(s.shape[0], cy + half)
         x0, x1 = max(0, cx - half), min(s.shape[1], cx + half)
         win = _zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0)
-        return fit_square(win, size, 0).astype(np.uint8)
+        return Preprocess.fit_square(win, size, 0).astype(np.uint8)
 
     @staticmethod
     def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,

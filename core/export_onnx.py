@@ -21,8 +21,8 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 from core.config import FLAGSHIP_REF
 from core.data.static.store import build as store
 from core.obs import Obs
-from core.preprocessing.preprocess import SIZE, fit_square
-from core.registry import resolve
+from core.preprocessing.preprocess import SIZE, Preprocess
+from core.registry import Registry
 from core.run import Run
 
 log = logging.getLogger("cardioseg.export_onnx")
@@ -45,7 +45,7 @@ class ExportOnnx:
         """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
         sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
         case = store.load_arrays(npz_path)
-        imgs = np.stack([fit_square(s.astype(np.float32), SIZE, 0.0) for s in case["ed_img"]])
+        imgs = np.stack([Preprocess.fit_square(s.astype(np.float32), SIZE, 0.0) for s in case["ed_img"]])
         agree = total = 0
         for s in imgs:
             x = s[None, None].astype(np.float32)
@@ -97,7 +97,7 @@ class ExportOnnx:
                         help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
         args = ap.parse_args()
         verify = args.verify if args.verify else store.load(["acdc"]).get_column("path")[0]
-        ExportOnnx.export(resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)
+        ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)
 
 
 if __name__ == "__main__":

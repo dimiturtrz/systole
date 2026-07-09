@@ -4,19 +4,19 @@ fallthrough, digit detection) is exercised."""
 from mlflow.exceptions import MlflowException
 
 import core.registry as reg
-from core.registry import _flat, resolve
+from core.registry import Registry
 
 
 def test_flat_nested():
     """_flat class: nested dict -> dotted scalar keys."""
-    assert _flat({"a": 1, "b": {"c": 2}}) == {"a": 1, "b.c": 2}
+    assert Registry._flat({"a": 1, "b": {"c": 2}}) == {"a": 1, "b.c": 2}
 
 
 def test_mlflow_sets_tracking_uri_and_returns_module(monkeypatch):
     """_mlflow class: sets the sqlite tracking URI on the mlflow module, returns it."""
     seen = {}
     monkeypatch.setattr(reg.mlflow, "set_tracking_uri", lambda uri: seen.setdefault("uri", uri))
-    m = reg._mlflow()
+    m = Registry._mlflow()
     assert m is reg.mlflow
     assert seen["uri"] == reg._DB_URI
 
@@ -25,14 +25,14 @@ def test_client_builds_from_mlflow(monkeypatch):
     """_client class: constructs an MlflowClient off the (URI-set) mlflow module."""
     sentinel = object()
     fake_tracking = type("T", (), {"MlflowClient": staticmethod(lambda: sentinel)})()
-    monkeypatch.setattr(reg, "_mlflow", lambda: type("M", (), {"tracking": fake_tracking})())
-    assert reg._client() is sentinel
+    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: type("M", (), {"tracking": fake_tracking})())
+    assert Registry._client() is sentinel
 
 
 def test_resolve_existing_dir_passthrough(tmp_path):
     """resolve class: a dir that already holds model.pth is returned as-is (no mlflow)."""
     (tmp_path / "model.pth").write_bytes(b"x")
-    assert resolve(tmp_path) == tmp_path
+    assert Registry.resolve(tmp_path) == tmp_path
 
 
 class _MV:
@@ -56,27 +56,27 @@ class _FakeClient:
 
 def test_run_id_for_alias(monkeypatch):
     """_run_id_for class: a known alias resolves via get_model_version_by_alias."""
-    monkeypatch.setattr(reg, "_client", _FakeClient)
-    assert reg._run_id_for("production") == "RID_PROD"
+    monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
+    assert Registry._run_id_for("production") == "RID_PROD"
 
 
 def test_run_id_for_version_number(monkeypatch):
     """_run_id_for class: alias miss + digit ref -> get_model_version."""
-    monkeypatch.setattr(reg, "_client", _FakeClient)
-    assert reg._run_id_for("7") == "RID_V7"
+    monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
+    assert Registry._run_id_for("7") == "RID_V7"
 
 
 def test_run_id_for_raw_run_id(monkeypatch):
     """_run_id_for boundary: alias miss + non-digit -> assumed to already be a run-id."""
-    monkeypatch.setattr(reg, "_client", _FakeClient)
-    assert reg._run_id_for("abc123def") == "abc123def"
+    monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
+    assert Registry._run_id_for("abc123def") == "abc123def"
 
 
 def test_resolve_downloads_and_flattens(monkeypatch, tmp_path):
     """resolve class: non-dir ref -> resolve id, download once, flatten model/ subdir if present."""
-    monkeypatch.setattr(reg, "_client", _FakeClient)
+    monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
     monkeypatch.setattr(reg, "_CACHE", tmp_path)
-    monkeypatch.setattr(reg, "_mlflow", lambda: None)
+    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: None)
 
     calls = []
 
@@ -87,23 +87,23 @@ def test_resolve_downloads_and_flattens(monkeypatch, tmp_path):
         (inner / "model.pth").write_bytes(b"w")
 
     monkeypatch.setattr(reg.mlflow.artifacts, "download_artifacts", _fake_download)
-    out = resolve("production")
+    out = Registry.resolve("production")
     assert out == tmp_path / "RID_PROD" / "model"      # flattened to inner model/ dir
     assert calls == ["RID_PROD"]
 
 
 def test_resolve_flattens_to_dst_when_no_inner(monkeypatch, tmp_path):
     """resolve boundary: artifacts land directly under dst (no model/ subdir) -> return dst."""
-    monkeypatch.setattr(reg, "_client", _FakeClient)
+    monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
     monkeypatch.setattr(reg, "_CACHE", tmp_path)
-    monkeypatch.setattr(reg, "_mlflow", lambda: None)
+    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: None)
 
     def _fake_download(*, run_id, artifact_path, dst_path):
         (tmp_path / run_id).mkdir(parents=True, exist_ok=True)
         (tmp_path / run_id / "model.pth").write_bytes(b"w")
 
     monkeypatch.setattr(reg.mlflow.artifacts, "download_artifacts", _fake_download)
-    out = resolve("production")
+    out = Registry.resolve("production")
     assert out == tmp_path / "RID_PROD"
 
 
@@ -144,10 +144,10 @@ def test_save_model_reuses_run_id(monkeypatch, tmp_path):
     (staging / "sub").mkdir()                           # dir entry skipped (only files logged)
 
     client = _SaveClient()
-    monkeypatch.setattr(reg, "_mlflow", _SaveMlflow)
-    monkeypatch.setattr(reg, "_client", lambda: client)
+    monkeypatch.setattr(reg.Registry, "_mlflow", _SaveMlflow)
+    monkeypatch.setattr(reg.Registry, "_client", lambda: client)
 
-    rid = reg.save_model(staging, run_name="r", run_id="RID9",
+    rid = Registry.save_model(staging, run_name="r", run_id="RID9",
                          alias="production", description="flagship", tags={"dice": 0.9})
     assert rid == "RID9"
     assert len(client.artifacts) == 2                   # 2 files, dir skipped
@@ -177,10 +177,10 @@ def test_save_model_owns_run(monkeypatch, tmp_path):
 
     m = _OwnRunMlflow()
     client = _SaveClient()
-    monkeypatch.setattr(reg, "_mlflow", lambda: m)
-    monkeypatch.setattr(reg, "_client", lambda: client)
+    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: m)
+    monkeypatch.setattr(reg.Registry, "_client", lambda: client)
 
-    rid = reg.save_model(staging, run_name="r", params={"model": {"ch": 8}})
+    rid = Registry.save_model(staging, run_name="r", params={"model": {"ch": 8}})
     assert rid == "AUTOID"
     assert m.started and m.ended
     assert m.params == {"model.ch": 8}                  # flattened params logged

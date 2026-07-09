@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.data.dynamic.augment import AugCfg
-from core.hparams import TrainCfg, apply_overrides, from_json, to_json
+from core.hparams import Hparams, TrainCfg
 
 
 # --- accept: valid defaults + roundtrip ---
@@ -22,8 +22,8 @@ def test_defaults_valid():
 def test_json_roundtrip(tmp_path):
     cfg = TrainCfg()
     p = tmp_path / "config.json"
-    to_json(cfg, p)
-    assert from_json(p) == cfg               # serialize -> load reproduces the config exactly
+    Hparams.to_json(cfg, p)
+    assert Hparams.from_json(p) == cfg               # serialize -> load reproduces the config exactly
 
 
 # --- reject: out-of-bounds / wrong enum, one per constraint class ---
@@ -63,23 +63,23 @@ def test_reject_bad_spatial_dims():
 
 # --- apply_overrides: valid applies (incl tuple), invalid rejected at assignment ---
 def test_override_valid_scalar_and_tuple():
-    cfg = apply_overrides(TrainCfg(), ["generator.aug.gamma_p=0.5", "generator.data.test_vendors=('GE',)"])
+    cfg = Hparams.apply_overrides(TrainCfg(), ["generator.aug.gamma_p=0.5", "generator.data.test_vendors=('GE',)"])
     assert cfg.generator.aug.gamma_p == 0.5 and cfg.generator.data.test_vendors == ("GE",)
 
 
 def test_override_out_of_bounds_rejected():
     with pytest.raises(ValidationError):
-        apply_overrides(TrainCfg(), ["generator.aug.gamma_p=5"])   # validate_assignment fires
+        Hparams.apply_overrides(TrainCfg(), ["generator.aug.gamma_p=5"])   # validate_assignment fires
 
 
 # --- _coerce on Optional[str] fields (currently-None): "none"-literal -> None, else string ---
 def test_override_optional_none_literal():
-    cfg = apply_overrides(TrainCfg(), ["device=None"])
+    cfg = Hparams.apply_overrides(TrainCfg(), ["device=None"])
     assert cfg.device is None                            # not the string "None"
 
 
 def test_override_optional_string_preserved():
-    cfg = apply_overrides(TrainCfg(), ["device=cuda"])
+    cfg = Hparams.apply_overrides(TrainCfg(), ["device=cuda"])
     assert cfg.device == "cuda"                          # real value still passes through
 
 
@@ -87,8 +87,8 @@ def test_override_optional_string_preserved():
 def test_n4cfg_in_config_roundtrip(tmp_path):
     cfg = TrainCfg()
     assert "n4_params" in cfg.model_dump()["generator"]["data"]   # recorded even when n4=False
-    p = tmp_path / "c.json"; to_json(cfg, p)
-    assert from_json(p) == cfg
+    p = tmp_path / "c.json"; Hparams.to_json(cfg, p)
+    assert Hparams.from_json(p) == cfg
 
 
 def test_flat_config_backcompat():

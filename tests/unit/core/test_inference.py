@@ -65,11 +65,11 @@ def test_members_and_bald_decomposition(model):
 
 # --- load_run: rebuilds arch from config.json; falls back when absent ---
 def _make_run(tmp_path, with_config):
-    from core.hparams import TrainCfg, to_json
+    from core.hparams import Hparams, TrainCfg
     run = tmp_path / "run"; run.mkdir()
     torch.save(Model.build_unet().state_dict(), run / "model.pth")
     if with_config:
-        to_json(TrainCfg(), run / "config.json")
+        Hparams.to_json(TrainCfg(), run / "config.json")
     return run
 
 

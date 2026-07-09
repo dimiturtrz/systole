@@ -8,7 +8,7 @@ K-member ensemble for the aleatoric/epistemic (BALD) split.
 import numpy as np
 import torch
 
-from core.preprocessing.preprocess import fit_square
+from core.preprocessing.preprocess import Preprocess
 from core.types import Volume
 
 _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
@@ -20,7 +20,7 @@ class Inference:
     @staticmethod
     def _stack_slices(vol_img: Volume, size: int) -> np.ndarray:
         """Square-fit every slice of a [D, H, W] volume -> [D, size, size] float array (model input grid)."""
-        return np.stack([fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
+        return np.stack([Preprocess.fit_square(vol_img[z].astype(np.float32), size, 0.0) for z in range(vol_img.shape[0])])
 
     @staticmethod
     def predict_volume_members(model, vol_img: Volume, size: int, device: str):

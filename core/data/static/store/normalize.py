@@ -16,7 +16,7 @@ from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import LANDMARKS, Nyul
-from core.preprocessing.preprocess import preprocess_case, resample_inplane
+from core.preprocessing.preprocess import Preprocess
 
 
 class Normalizer:
@@ -33,7 +33,7 @@ class Normalizer:
 
     def apply_case(self, case: Path, loader) -> dict:
         """Consolidate ONE raw case to the recipe's processed arrays (resample [+N4] [+Nyúl] + norm)."""
-        return preprocess_case(case, target_inplane=self.inplane, loader=loader,
+        return Preprocess.preprocess_case(case, target_inplane=self.inplane, loader=loader,
                                n4=self.n4, n4_params=self.n4_params,
                                nyul_standard=self.nyul_standard if self.nyul else None, norm=self.norm)
 
@@ -61,7 +61,7 @@ class Normalizer:
                 d = adapter.load_ed_es(case)
                 if "ED" not in d:
                     continue
-                img, _ = resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
+                img, _ = Preprocess.resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
                 rows.append(Nyul.image_landmarks(img))
         std = Nyul.fit_standard(np.stack(rows))
         p = Normalizer.ref_path(); p.parent.mkdir(parents=True, exist_ok=True)
