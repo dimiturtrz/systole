@@ -8,18 +8,20 @@ import numpy as np
 import polars as pl
 import pytest
 
-from core.data.static import store
-from core.data.static.store import (
+from core.data.static.store import query
+from core.data.static.store.build import load
+from core.data.static.store.normalize import Normalizer
+from core.data.static.store.query import (
+    AcqReference,
+    MetaBuilder,
     _age_band,
     _bsa,
     _is_labelled,
-    _meta_row,
     _norm_vendor,
     _region_of,
-    _write_meta,
-    acquisition_from_frame,
+    dataset_dir,
     load_arrays,
-    migrate_meta,
+    param_key,
 )
 
 
@@ -97,7 +99,7 @@ def test_meta_row_derivations():
     meta = {"vendor": "SIEMENS", "group": "DCM", "country": "France", "age": 50,
             "height": 180, "weight": 80, "field_T": 1.5}
     arrays = {"ed_gt": np.array([[2, 3]]), "es_gt": np.array([[2, 3]])}
-    r = _meta_row("acdc", case, arrays, meta, "subjX.npz")
+    r = MetaBuilder("acdc", None)._row(case, arrays, meta, "subjX.npz")
     assert r["subject_id"] == "subjX" and r["dataset"] == "acdc" and r["raw_path"] == str(case)
     assert r["vendor"] == "Siemens"                    # normalized
     assert r["region"] == "Europe" and r["age_band"] == "45-60"
@@ -107,7 +109,7 @@ def test_meta_row_derivations():
 
 def test_meta_row_field_list_joined():
     """field_T as a list (multi-field dataset) -> slash-joined string, not a raw list."""
-    r = _meta_row("mnm2", Path("/x/s"), {"ed_gt": np.zeros((1, 2), int)},
+    r = MetaBuilder("mnm2", None)._row(Path("/x/s"), {"ed_gt": np.zeros((1, 2), int)},
                   {"field_T": [1.5, 3.0]}, "s.npz")
     assert r["field_T"] == "1.5/3.0" and r["labelled"] is False   # empty gt -> unlabelled
 
@@ -119,7 +121,7 @@ def _acq_frame(rows):
 
 
 def test_acquisition_no_tr_column():
-    assert acquisition_from_frame(pl.DataFrame({"vendor": ["GE"]})) == {}   # no tr_ms -> {}
+    assert AcqReference.from_frame(pl.DataFrame({"vendor": ["GE"]})) == {}   # no tr_ms -> {}
 
 
 def test_acquisition_gate_rejects_out_of_range_and_nulls():
@@ -130,7 +132,7 @@ def test_acquisition_gate_rejects_out_of_range_and_nulls():
         {"vendor": None, "field_T": "1.5", "tr_ms": "3.1", "te_ms": "1.5", "flip_deg": "50"},  # null vendor
         {"vendor": "GE", "field_T": "1.5", "tr_ms": None, "te_ms": "1.5", "flip_deg": "50"},   # null tr
     ])
-    acq = acquisition_from_frame(df)
+    acq = AcqReference.from_frame(df)
     assert set(acq) == {"GE"}
     assert acq["GE"]["tr_ms"]["value"] == 3.0                        # only the kept row's median
     assert acq["GE"]["tr_ms"]["source"] == "DICOM-measured" and acq["GE"]["tr_ms"]["verified"] is True
@@ -144,7 +146,7 @@ def test_acquisition_field_folding_and_flip_bucket():
         {"vendor": "GE", "field_T": "1.500000", "tr_ms": "4.0", "te_ms": "1.5", "flip_deg": "60"},
         {"vendor": "Siemens", "field_T": "3.0", "tr_ms": "3.0", "te_ms": "1.5", "flip_deg": "45"},
     ])
-    acq = acquisition_from_frame(df)
+    acq = AcqReference.from_frame(df)
     assert acq["GE"]["tr_ms"]["value"] == 3.5                        # median(3,4) — ONE folded group
     assert "flip_deg_1p5t" in acq["GE"] and "flip_deg_3t" not in acq["GE"]
     assert "flip_deg_3t" in acq["Siemens"] and "flip_deg_1p5t" not in acq["Siemens"]
@@ -154,11 +156,11 @@ def test_acquisition_field_folding_and_flip_bucket():
 def test_load_coerces_labelled_and_derives_continent(tmp_path, monkeypatch):
     """store.load reads labelled as Boolean (not String) and derives continent from country."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    pdir = tmp_path / "processed" / "acdc" / store.param_key(1.5)
+    pdir = tmp_path / "processed" / "acdc" / param_key(1.5)
     (pdir / "data").mkdir(parents=True)
     pl.DataFrame({"subject_id": ["a", "b"], "file": ["a.npz", "b.npz"],
                   "labelled": ["true", "false"], "country": ["Spain", "China"]}).write_csv(pdir / "meta.csv")
-    df = store.load(["acdc"], inplane=1.5)
+    df = load(["acdc"], inplane=1.5)
     assert df.schema["labelled"] == pl.Boolean
     assert df.filter(pl.col("labelled")).height == 1
     assert df.filter(pl.col("continent") == "Asia").height == 1
@@ -168,13 +170,13 @@ def test_load_nyul_without_reference_raises(tmp_path, monkeypatch):
     """nyul=True with no reference/nyul.yaml -> RuntimeError (can't harmonize without the standard)."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     with pytest.raises(RuntimeError, match="fit it first"):
-        store.load(["acdc"], nyul=True)
+        load(["acdc"], nyul=True)
 
 
 # --- dataset_dir: paramkey folder composition ---
 def test_dataset_dir_encodes_paramkey(tmp_path, monkeypatch):
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    d = store.dataset_dir("acdc", 1.5, n4=True)
+    d = dataset_dir("acdc", 1.5, n4=True)
     assert d.name.startswith("inplane1p5_n4") and d.parent.name == "acdc"
 
 
@@ -205,7 +207,7 @@ def test_write_meta_over_written_subjects(tmp_path):
         np.savez(data_dir / f"{name}.npz", ed_gt=np.array([[2, 3]]), es_gt=np.array([[2, 3]]))
     case_missing = tmp_path / "s3"                            # no npz -> skipped
     adapter = _FakeAdapter([data_dir.parent / "s1", data_dir.parent / "s2", case_missing])
-    out = _write_meta("acdc", adapter, data_dir, tmp_path)
+    out = MetaBuilder("acdc", adapter).write(data_dir, tmp_path)
     df = pl.read_csv(out, schema_overrides={"labelled": pl.Boolean})
     assert df.height == 2                                     # s3 (no npz) skipped
     assert set(df["subject_id"]) == {"s1", "s2"}
@@ -219,7 +221,7 @@ def test_migrate_meta_skips_unregistered(tmp_path, monkeypatch):
     pdir = tmp_path / "processed" / "mrxcat_pool" / "inplane1p5"   # not a registered adapter
     (pdir / "data").mkdir(parents=True)
     (pdir / "meta.csv").write_text("subject_id\nx\n")
-    assert migrate_meta() == []                              # unregistered -> skipped, no crash
+    assert MetaBuilder.migrate() == []                              # unregistered -> skipped, no crash
 
 
 def _fake_processed(tmp_path, name):
@@ -234,8 +236,8 @@ def test_migrate_meta_rewrites_registered(tmp_path, monkeypatch):
     """A registered adapter's processed dir is re-emitted with the current schema (no image reload)."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     _fake_processed(tmp_path, "acdc")
-    monkeypatch.setattr(store, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
-    out = migrate_meta()
+    monkeypatch.setattr(query, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
+    out = MetaBuilder.migrate()
     assert len(out) == 1 and out[0].name == "meta.csv"
     df = pl.read_csv(out[0], schema_overrides={"labelled": pl.Boolean})
     assert df["subject_id"].to_list() == ["s1"] and df["vendor"].to_list() == ["Siemens"]
@@ -245,14 +247,14 @@ def test_migrate_meta_names_filter(tmp_path, monkeypatch):
     """`names` restricts which stores refresh; a non-matching processed dir is skipped."""
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
     _fake_processed(tmp_path, "acdc")
-    monkeypatch.setattr(store, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
-    assert migrate_meta(["mnm2"]) == []                       # acdc present but not in names -> skipped
+    monkeypatch.setattr(query, "get_adapter", lambda n: _FakeAdapter([tmp_path / "processed" / n / "inplane1p5" / "data" / "s1"]))
+    assert MetaBuilder.migrate(["mnm2"]) == []                       # acdc present but not in names -> skipped
 
 
 # --- _nyul_ref_path: reference-dir composition ---
 def test_nyul_ref_path(tmp_path, monkeypatch):
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path))
-    assert store._nyul_ref_path().name == "nyul.yaml"        # under the reference dir
+    assert Normalizer.ref_path().name == "nyul.yaml"        # under the reference dir
 
 
 # --- _write_meta: adapter.meta() raising -> empty meta, row still emitted (not fatal) ---
@@ -270,7 +272,7 @@ class _RaisingMetaAdapter:
 def test_write_meta_tolerates_meta_error(tmp_path):
     data_dir = tmp_path / "data"; data_dir.mkdir()
     np.savez(data_dir / "s1.npz", ed_gt=np.array([[2, 3]]), es_gt=np.array([[2, 3]]))
-    out = _write_meta("acdc", _RaisingMetaAdapter([tmp_path / "s1"]), data_dir, tmp_path)
+    out = MetaBuilder("acdc", _RaisingMetaAdapter([tmp_path / "s1"])).write(data_dir, tmp_path)
     df = pl.read_csv(out, schema_overrides={"labelled": pl.Boolean})
     assert df.height == 1 and df["subject_id"].to_list() == ["s1"]   # row emitted despite meta() raising
     assert df["vendor"].to_list() == [None]                          # no meta -> null-derived fields

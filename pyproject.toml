@@ -42,6 +42,21 @@ all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]          # repo root importable -> top-level devtools/ (dev tooling, not a shipped package)
+# tests/unit/ MIRRORS the source tree (bd cardiac-seg-h7vy.1) -> same-named test modules in different
+# dirs (two test_pipeline_chain.py). importlib import mode resolves those by path (the default 'prepend'
+# needs unique basenames + __init__ packages, which a mirror breaks).
+addopts = "--import-mode=importlib"
+
+# Architecture fitness thresholds (devtools/graph.py --assert, bd cardiac-seg-g0b2) — the METRIC arch
+# axis import-linter's categorical contracts can't express. BLOCKING rules start clean and ratchet:
+# god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
+# (never blocks): file < file_min (most modules here are small cohesive leaves — a hard floor would fight
+# the repo's style, so it only surfaces "earn its keep?"), betweenness > betweenness_max (noisy).
+[tool.structure]
+bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
+file_max = 750              # god-file ceiling (largest today ~548)
+file_min = 250              # advisory floor only — 83/92 files are under it, so it never blocks
+betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
@@ -134,6 +149,16 @@ name = "cardioview depends only on core (never the trainer)"
 type = "forbidden"
 source_modules = ["cardioview"]
 forbidden_modules = ["cardioseg"]
+
+# The store's read/query surface stays preprocessing-free: `query` (DataCfg, load_arrays, MetaBuilder…)
+# must not import the N4/Nyúl pipeline. Normalization is a DOWNSTREAM stage (`build`/`normalize` own it),
+# so read-only consumers never transitively drag it. The N4Cfg *config* is fine (co-located in n4.py);
+# this forbids the pipeline LOGIC modules only. bd cardiac-seg-4hdt.
+[[tool.importlinter.contracts]]
+name = "store read surface (query) is preprocessing-free (normalization is a downstream stage)"
+type = "forbidden"
+source_modules = ["core.data.static.store.query"]
+forbidden_modules = ["core.preprocessing.preprocess", "core.preprocessing.nyul"]
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

@@ -19,9 +19,9 @@ from core.data.dynamic.mri_physics import (
     acquisition_for,
     derive_acquisition,
 )
-from core.data.static import store
 from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference, reference_dir
+from core.data.static.store import build as store
 from core.measure import ejection_fraction
 from core.obs import setup
 

@@ -19,7 +19,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
 from core.config import FLAGSHIP_REF
-from core.data.static import splits, store
+from core.data.static import splits
+from core.data.static.store import build as store
 from core.data.static.store import load_arrays
 from core.hparams import from_json
 from core.inference import predict_volume

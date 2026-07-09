@@ -93,7 +93,7 @@ def compute_locks(cloud: pl.DataFrame) -> dict[str, str]:
 if __name__ == "__main__":
     import argparse
 
-    from core.data.static import store
+    from core.data.static.store import build as store
     from core.obs import setup
     setup()
     ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")

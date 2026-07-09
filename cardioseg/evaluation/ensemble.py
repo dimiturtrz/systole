@@ -18,8 +18,9 @@ import numpy as np
 import polars as pl
 import torch
 
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import FOREGROUND
+from core.data.static.store import build as store
 from core.inference import predict_volume_probs
 from core.measure import ejection_fraction
 from core.model import resolve_device

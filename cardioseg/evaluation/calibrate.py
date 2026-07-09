@@ -20,7 +20,8 @@ import torch
 
 from core.config import FLAGSHIP_REF
 from core.data.ingest.splits import resolve_cfg
-from core.data.static import splits, store
+from core.data.static import splits
+from core.data.static.store import build as store
 from core.obs import setup
 from core.registry import resolve
 from core.run import load_run

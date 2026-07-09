@@ -21,8 +21,9 @@ import torch
 
 from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import CLASSES
+from core.data.static.store import build as store
 from core.hparams import TrainCfg
 from core.obs import setup
 

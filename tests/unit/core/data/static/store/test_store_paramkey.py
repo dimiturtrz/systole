@@ -2,7 +2,7 @@
 while the no-n4 key stays back-compatible (existing flagship cache resolves)."""
 import polars as pl
 
-from core.data.static import store
+from core.data.static.store.build import load
 from core.data.static.store import param_key
 from core.preprocessing.n4 import N4Cfg
 
@@ -18,7 +18,7 @@ def test_load_coerces_labelled_to_boolean(tmp_path, monkeypatch):
     pl.DataFrame({"subject_id": ["a", "b"], "file": ["a.npz", "b.npz"],
                   "labelled": ["true", "false"], "country": ["Spain", "China"]}).write_csv(pdir / "meta.csv")
 
-    df = store.load(["acdc"], inplane=1.5)
+    df = load(["acdc"], inplane=1.5)
     assert df.schema["labelled"] == pl.Boolean                    # not String
     assert df.filter(pl.col("labelled")).height == 1              # the truthy filter works
     assert df.filter(pl.col("continent") == "Asia").height == 1   # continent derived from country

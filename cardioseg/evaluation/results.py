@@ -20,7 +20,8 @@ from mlflow.exceptions import MlflowException
 
 from cardioseg.evaluation.distribution import _pooled, collect, strata_table
 from core.config import FLAGSHIP_REF
-from core.data.static import splits, store
+from core.data.static import splits
+from core.data.static.store import build as store
 from core.evaluate import CLASSES, surface_metrics
 from core.hparams import from_json
 from core.measure import ef_statistics

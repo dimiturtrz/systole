@@ -19,7 +19,7 @@ import polars as pl
 
 from core.data.ingest.source import subject_keys
 from core.data.ingest.splits import resolve_cfg
-from core.data.static import store
+from core.data.static.store import build as store
 
 
 def eval_set(name: str, *, holdout: bool = False, seed: int = 0) -> pl.DataFrame:

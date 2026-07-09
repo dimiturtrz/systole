@@ -1,0 +1,5 @@
+# ast-grep (bd cardiac-seg-d1fa): the SYNTACTIC module-shape axis ruff can't express (no plugin API).
+# Rules are data (sg-rules/*.yml, relative to this file), zero-bag: only what we author fires.
+# Run: `ast-grep scan -c devtools/sgconfig.yml <paths>`.
+ruleDirs:
+  - sg-rules

@@ -24,8 +24,9 @@ from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.generator import Generator
 from core.data.dynamic.synth import excise_heart
 from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import FOREGROUND
+from core.data.static.store import build as store
 from core.export_onnx import export
 from core.hparams import TrainCfg, apply_overrides, to_json
 from core.losses import PartialLabelDiceCE, SoftDiceCE, uncertainty_weighted
