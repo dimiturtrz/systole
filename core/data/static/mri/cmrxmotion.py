@@ -32,68 +32,61 @@ VENDOR, FIELD_T, SCANNER = "Siemens", 3.0, "MAGNETOM Vida"
 CENTRE, COUNTRY = "Fudan (Shanghai)", "China"
 
 
-def _root(root: str | Path | None = None) -> Path:
-    """Resolve the dir holding the P###-n/ folders. Override with CARDIAC_CMRX_ROOT."""
-    env = os.environ.get("CARDIAC_CMRX_ROOT")
-    bases = [Path(env)] if env else []
-    if root is not None:
-        bases.append(Path(root))
-    raw = Path(data_root("raw"))
-    bases += [raw / "cmrxmotion", raw, raw.parent]
-    subs = ("data", ".", "cmrxmotion/data")
-    for base in bases:
-        for sub in subs:
-            cand = base if sub == "." else base / sub
-            if cand.is_dir() and any(cand.glob("P[0-9][0-9][0-9]-[0-9]")):
-                return cand
-    return raw / "cmrxmotion" / "data"
-
-
-def _iqa(root: str | Path | None = None) -> dict[str, dict[str, str]]:
-    """{image-id (e.g. 'P001-1-ED') -> {Image, Label}} from IQA.csv (motion-quality grade)."""
-    return load_csv_info(_root(root).parent / "IQA.csv", "Image")
-
-
-def cmrx_cases(root: str | Path | None = None) -> list[Path]:
-    """List acquisition dirs (P###-n: volunteer × breathing condition)."""
-    d = _root(root)
-    return sorted((p for p in d.glob("P[0-9][0-9][0-9]-[0-9]") if p.is_dir()), key=lambda p: p.name)
-
-
-def _grade(case: Path) -> str | None:
-    """Worst motion grade across the case's ED/ES frames (conservative case-level severity)."""
-    iqa = _iqa(case.parent.parent)
-    gs = [iqa.get(f"{case.name}-{t}", {}).get("Label") for t in ("ED", "ES")]
-    gs = [g for g in gs if g]
-    return max(gs) if gs else None
-
-
-def load_ed_es(case: str | Path) -> PatientData:
-    """Load ED + ES short-axis frames + canonical-remapped masks for one acquisition.
-    Image is 4D with a trailing singleton -> frame=0 squeezes it; label is 3D. A frame whose
-    label file is absent (grade-3 severe) is skipped -> the store marks the case unlabelled."""
-    case = Path(case)
-    cid = case.name
-
-    def resolve(tag):
-        gt = case / f"{cid}-{tag}-label.nii.gz"
-        if not gt.exists():
-            return None                                   # severe motion: no GT -> skip frame
-        return case / f"{cid}-{tag}.nii.gz", gt, 0        # frame=0: drop trailing singleton
-
-    return load_frames(None, resolve, LABEL_MAP)          # healthy volunteers -> no pathology group
-
-
 class CmrxMotionAdapter(DatasetAdapter):
-    """CMRxMotion: single-vendor motion-robustness axis; labels remapped to canonical."""
+    """CMRxMotion: single-vendor motion-robustness axis; owns its acquisition-dir search, IQA-grade
+    lookup, and 4D-singleton frame load (folded in as staticmethods). Labels remapped to canonical."""
     name = "cmrxmotion"
     label_map = LABEL_MAP
 
+    @staticmethod
+    def _root(root: str | Path | None = None) -> Path:
+        """Resolve the dir holding the P###-n/ folders. Override with CARDIAC_CMRX_ROOT."""
+        env = os.environ.get("CARDIAC_CMRX_ROOT")
+        bases = [Path(env)] if env else []
+        if root is not None:
+            bases.append(Path(root))
+        raw = Path(data_root("raw"))
+        bases += [raw / "cmrxmotion", raw, raw.parent]
+        subs = ("data", ".", "cmrxmotion/data")
+        for base in bases:
+            for sub in subs:
+                cand = base if sub == "." else base / sub
+                if cand.is_dir() and any(cand.glob("P[0-9][0-9][0-9]-[0-9]")):
+                    return cand
+        return raw / "cmrxmotion" / "data"
+
+    @staticmethod
+    def _iqa(root: str | Path | None = None) -> dict[str, dict[str, str]]:
+        """{image-id (e.g. 'P001-1-ED') -> {Image, Label}} from IQA.csv (motion-quality grade)."""
+        return load_csv_info(CmrxMotionAdapter._root(root).parent / "IQA.csv", "Image")
+
+    @staticmethod
+    def _grade(case: Path) -> str | None:
+        """Worst motion grade across the case's ED/ES frames (conservative case-level severity)."""
+        iqa = CmrxMotionAdapter._iqa(case.parent.parent)
+        gs = [iqa.get(f"{case.name}-{t}", {}).get("Label") for t in ("ED", "ES")]
+        gs = [g for g in gs if g]
+        return max(gs) if gs else None
+
     def cases(self) -> list[Path]:
-        return cmrx_cases()
+        """List acquisition dirs (P###-n: volunteer × breathing condition)."""
+        d = self._root()
+        return sorted((p for p in d.glob("P[0-9][0-9][0-9]-[0-9]") if p.is_dir()), key=lambda p: p.name)
 
     def load_ed_es(self, case: Path) -> PatientData:
-        return load_ed_es(case)
+        """Load ED + ES short-axis frames + canonical-remapped masks for one acquisition.
+        Image is 4D with a trailing singleton -> frame=0 squeezes it; label is 3D. A frame whose
+        label file is absent (grade-3 severe) is skipped -> the store marks the case unlabelled."""
+        case = Path(case)
+        cid = case.name
+
+        def resolve(tag):
+            gt = case / f"{cid}-{tag}-label.nii.gz"
+            if not gt.exists():
+                return None                                   # severe motion: no GT -> skip frame
+            return case / f"{cid}-{tag}.nii.gz", gt, 0        # frame=0: drop trailing singleton
+
+        return load_frames(None, resolve, LABEL_MAP)          # healthy volunteers -> no pathology group
 
     def meta(self, case: Path) -> dict:
         """Acquisition + the motion-grade axis — AUTO from IQA.csv (single fixed scanner)."""
@@ -101,7 +94,7 @@ class CmrxMotionAdapter(DatasetAdapter):
             "group": None, "vendor": VENDOR, "scanner": SCANNER, "field_T": FIELD_T,
             "centre": CENTRE, "country": COUNTRY,
             "age": None, "sex": None, "height": None, "weight": None,
-            "motion_grade": _grade(case),
+            "motion_grade": self._grade(case),
             "_source": {"vendor": "challenge", "scanner": "challenge", "country": "challenge",
                         "motion_grade": "IQA.csv"},
         }

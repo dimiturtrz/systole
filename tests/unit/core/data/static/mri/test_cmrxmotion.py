@@ -6,7 +6,7 @@ import pytest
 
 nib = pytest.importorskip("nibabel")
 
-from core.data.static.mri import cmrxmotion as cm
+from core.data.static.mri.cmrxmotion import CmrxMotionAdapter
 
 
 def _nii(path, arr):
@@ -38,12 +38,13 @@ def root(tmp_path, monkeypatch):
 
 
 def test_cases_listed_sorted(root):
-    cases = cm.cmrx_cases()
+    cases = CmrxMotionAdapter().cases()
     assert [c.name for c in cases] == ["P001-1", "P001-2"]
 
 
 def test_load_ed_es_squeeze_and_label_flip(root):
-    pd = cm.load_ed_es(cm.cmrx_cases()[0])             # P001-1: both frames labelled
+    a = CmrxMotionAdapter()
+    pd = a.load_ed_es(a.cases()[0])                     # P001-1: both frames labelled
     assert "ED" in pd and "ES" in pd
     assert pd["ED"]["img"].ndim == 3                    # 4D singleton -> 3D (frame=0)
     # raw 1<->3 swap reaches canonical (LV-cav 1->3, RV 3->1)
@@ -52,23 +53,25 @@ def test_load_ed_es_squeeze_and_label_flip(root):
 
 
 def test_missing_label_frame_skipped(root):
-    pd = cm.load_ed_es(cm.cmrx_cases()[1])             # P001-2: ES has no label (severe)
+    a = CmrxMotionAdapter()
+    pd = a.load_ed_es(a.cases()[1])                     # P001-2: ES has no label (severe)
     assert "ED" in pd and "ES" not in pd               # severe frame dropped -> store marks unlabelled
 
 
 def test_motion_grade_worst_of_ed_es(root):
-    a = cm.CmrxMotionAdapter()
-    cases = {c.name: c for c in cm.cmrx_cases()}
+    a = CmrxMotionAdapter()
+    cases = {c.name: c for c in a.cases()}
     assert a.meta(cases["P001-1"])["motion_grade"] == "2"   # max(ED=1, ES=2)
     assert a.meta(cases["P001-2"])["motion_grade"] == "3"   # max(3, 3)
 
 
 def test_meta_fixed_scanner_fields(root):
-    m = cm.CmrxMotionAdapter().meta(cm.cmrx_cases()[0])
+    a = CmrxMotionAdapter()
+    m = a.meta(a.cases()[0])
     assert m["vendor"] == "Siemens" and m["field_T"] == 3.0 and m["scanner"] == "MAGNETOM Vida"
     assert m["country"] == "China" and m["centre"] == "Fudan (Shanghai)"
 
 
 def test_label_map_is_the_shared_mnm_flip():
     from core.data.static.mri.base import MNM_LABEL_MAP
-    assert cm.CmrxMotionAdapter().label_map == MNM_LABEL_MAP == {0: 0, 1: 3, 2: 2, 3: 1}
+    assert CmrxMotionAdapter().label_map == MNM_LABEL_MAP == {0: 0, 1: 3, 2: 2, 3: 1}
