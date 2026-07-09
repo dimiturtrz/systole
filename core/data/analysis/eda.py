@@ -21,11 +21,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.data.static.mri.acdc import (
-    DATA_ROOT,
-    acdc_cases,
-    load_ed_es,
-)
+from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
 from core.data.static.mri.base import identify_lv_cavity
 from core.obs import setup
 
@@ -35,7 +31,7 @@ OUT_DIR = Path(__file__).resolve().parents[2] / "scripts" / "_eda_out"
 
 
 def summarize_patient(patient_dir):
-    d = load_ed_es(patient_dir)
+    d = AcdcAdapter().load_ed_es(patient_dir)
     sp = d["spacing"]
     log.info(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
     for tag in ("ED", "ES"):
@@ -82,7 +78,7 @@ def main():
     args = ap.parse_args()
     setup()
 
-    cases = acdc_cases(args.root)
+    cases = AcdcAdapter(root=args.root).cases()
     log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
     if not cases:
         log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
