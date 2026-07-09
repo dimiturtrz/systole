@@ -66,6 +66,15 @@ jobs:
         run: |
           n=$(uvx --from ast-grep-cli ast-grep scan --filter py-top-level-function core cardioseg --json=compact | python3 -c "import sys,json;print(len(json.load(sys.stdin)))")
           echo "::warning::$n top-level functions — in-a-class house rule (advisory, bd d1fa)"
+      # Duplication — the DRY axis (bd cardiac-seg-tte0), which the coupling tools (import-linter/graph)
+      # can't see. jscpd over python + TS; threshold in .jscpd.json (repo is ~0.23%/0% today, so this is a
+      # REGRESSION GUARD). ADVISORY while the Node step proves stable; graduate to blocking after.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Duplication — advisory (jscpd, DRY axis)
+        continue-on-error: true
+        run: npx --yes jscpd --config .jscpd.json
 
   tests:
     runs-on: ubuntu-latest
