@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from core.config import _VALIDATE
 from core.data.static.store import load_arrays
-from core.evaluate import CLASSES, surface_distances, surface_metrics
+from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
@@ -70,9 +70,9 @@ class _ClassScores:
         if not self.boundary:                                           # Dice/EF-only sweep — skip the EDT cost
             return
         for cl in CLASS_NAMES:
-            sd = surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
+            sd = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if sd.size:
-                m = surface_metrics(sd)
+                m = Evaluate.surface_metrics(sd)
                 self.surf[cl]["hd95"].append(m["hd95"]); self.surf[cl]["assd"].append(m["assd"])
 
     def dice(self) -> dict[int, float]:

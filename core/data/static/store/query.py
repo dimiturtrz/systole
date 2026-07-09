@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
 from core.data.static.mri.pathology import Pathology
 from core.data.static.mri.registry import get_adapter
-from core.data.static.reference import reference_dir
+from core.data.static.reference import Reference
 from core.preprocessing.n4 import N4Cfg
 
 
@@ -280,7 +280,7 @@ class AcqReference:
         acq = AcqReference.from_frame(pl.concat(metas, how="diagonal"))
         if not acq:
             return {}
-        out = reference_dir() / "acquisition.yaml"
+        out = Reference.reference_dir() / "acquisition.yaml"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("# Real per-(vendor,field) acquisition, DICOM-mined by AcqReference.fit.\n"
                        "# acquisition_for OVERRIDES the physics derivation with these where present (DAG compose).\n"

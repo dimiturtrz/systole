@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.dynamic.dataset import ACDCSliceDataset
-from core.data.dynamic.synth import FlatBgCfg, PartitionBgCfg, SynthCfg, synthesize_from_labels
+from core.data.dynamic.synth import FlatBgCfg, PartitionBgCfg, SynthCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
@@ -42,8 +42,8 @@ class Render:
         X, Y = ACDCSliceDataset.load_to_gpu(splits.paths(va), d.size, "cpu")
         good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[good], Y[good]
-        torch.manual_seed(1); Sf, _ = synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)
-        torch.manual_seed(2); Sp, _ = synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=PartitionBgCfg()), n, real_img=X)
+        torch.manual_seed(1); Sf, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)
+        torch.manual_seed(2); Sp, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=PartitionBgCfg()), n, real_img=X)
 
         rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", Sf[:, 0]), ("synth partition", Sp[:, 0])]
         fig, ax = plt.subplots(len(rows), len(good), figsize=(3 * len(good), 3 * len(rows)), squeeze=False)

@@ -14,7 +14,7 @@ from typing import Protocol
 import torch
 
 from .augment import AugCfg, Augmentor
-from .synth import SynthCfg, synthesize_from_labels
+from .synth import SynthCfg, SynthPainter
 
 
 @dataclass
@@ -44,7 +44,7 @@ class SynthReplace:
         on = self.cfg.synth_p > 0 or (b.force is not None and bool(b.force.any()))
         if not on:
             return b
-        xs, ys = synthesize_from_labels(b.y, self.cfg, self.n_classes, real_img=b.x)
+        xs, ys = SynthPainter.synthesize_from_labels(b.y, self.cfg, self.n_classes, real_img=b.x)
         pick = torch.rand(b.x.shape[0], device=b.x.device) < self.cfg.synth_p
         if b.force is not None:
             pick = pick | b.force

@@ -28,7 +28,7 @@ from scipy.stats import gaussian_kde
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
-from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
+from core.evaluate import CLASSES, Evaluate
 from core.hparams import from_json
 from core.inference import predict_volume
 from core.measure import LOA_Z, Measure
@@ -79,8 +79,8 @@ class Distribution:
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
                 # made the boundary/Dice numbers optimistic.
                 for cl in CLASSES:
-                    sd_acc[cl].append(surface_distances(pred, gt, cl, sp))
-                    di_acc[cl].append(dice(pred, gt, cl))
+                    sd_acc[cl].append(Evaluate.surface_distances(pred, gt, cl, sp))
+                    di_acc[cl].append(Evaluate.dice(pred, gt, cl))
             if any(di_acc[cl] for cl in CLASSES):
                 rec["sd"] = {cl: (np.concatenate(sd_acc[cl]) if sd_acc[cl] else np.array([])) for cl in CLASSES}
                 rec["dice"] = {cl: float(np.mean(di_acc[cl])) for cl in CLASSES if di_acc[cl]}
@@ -112,7 +112,7 @@ class Distribution:
             sd = np.concatenate([d for d in dists[cl] if d.size])
             if sd.size < 2:  # noqa: PLR2004 (KDE needs >=2 points)
                 continue
-            m = surface_metrics(sd)
+            m = Evaluate.surface_metrics(sd)
             ax.plot(xs, gaussian_kde(sd)(xs), color=color, lw=2,
                     label=f"{name}  ASSD {m['assd']:.1f} · HD95 {m['hd95']:.1f} mm")
         ax.set_xlabel("boundary distance (mm)")
@@ -277,7 +277,7 @@ def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot
     log.info(f"=== per-class surface metrics (pooled){label} ===")
     for cl, (name, _) in CLASSES.items():
         pooled = np.concatenate([d for d in dists[cl] if d.size])
-        m = surface_metrics(pooled)
+        m = Evaluate.surface_metrics(pooled)
         log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
     log.info(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{Distribution.lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
 

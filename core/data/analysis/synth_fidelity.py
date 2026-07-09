@@ -21,7 +21,7 @@ import polars as pl
 import torch
 
 from core.data.dynamic.dataset import ACDCSliceDataset
-from core.data.dynamic.synth import MatchedAcqCfg, synthesize_from_labels
+from core.data.dynamic.synth import MatchedAcqCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
@@ -96,7 +96,7 @@ class SynthFidelity:
         """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
         and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
         synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
-        Xs, _ = synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
+        Xs, _ = SynthPainter.synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
         Xr, Xs = X[:, 0].to(device), Xs[:, 0]
         ym = Y.to(device)
         def per_slice(x1c):
@@ -160,7 +160,7 @@ class SynthFidelity:
         """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
         SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
         (z-units) + the mean and worst class — the break localized."""
-        Xs, _ = synthesize_from_labels(Y.to(self.device), self.cfg, self.n_classes, real_img=X.to(self.device))
+        Xs, _ = SynthPainter.synthesize_from_labels(Y.to(self.device), self.cfg, self.n_classes, real_img=X.to(self.device))
         rx, sx = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
         ym = Y.reshape(-1).cpu()
         # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
@@ -191,7 +191,7 @@ class SynthFidelity:
         if field is not None:
             base.fields = (field,)
         def synth_spread(c):
-            Xs, _ = synthesize_from_labels(Ydev, c, self.n_classes, real_img=X.to(self.device))
+            Xs, _ = SynthPainter.synthesize_from_labels(Ydev, c, self.n_classes, real_img=X.to(self.device))
             return self._spread(Xs[:, 0], Ydev, self.n_classes)
         out = {"field": field or "sweep",
                "real_target": self._spread(Xdev, Ydev, self.n_classes),

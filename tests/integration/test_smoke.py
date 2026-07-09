@@ -8,7 +8,7 @@ import pytest
 from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.mri.base import identify_lv_cavity
-from core.evaluate import dice
+from core.evaluate import Evaluate
 from core.measure import Measure
 
 _CASES = AcdcAdapter().cases()
@@ -36,4 +36,4 @@ def test_real_ef_is_physiological():
 @needs_data
 def test_dice_perfect_on_real_mask_self():
     gt = AcdcAdapter().load_ed_es(_CASES[0])["ED"]["gt"]
-    assert dice(gt, gt, LV_CAVITY) == 1.0
+    assert Evaluate.dice(gt, gt, LV_CAVITY) == 1.0

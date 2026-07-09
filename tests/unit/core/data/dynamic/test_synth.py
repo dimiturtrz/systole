@@ -14,8 +14,10 @@ from core.data.dynamic.synth import (
     PartitionBgCfg,
     ProceduralBgCfg,
     SynthCfg,
-    synthesize_from_labels,
+    SynthPainter,
 )
+
+synthesize_from_labels = SynthPainter.synthesize_from_labels
 
 N = 4  # canonical classes: 0 bg, 1 RV, 2 LV-myo, 3 LV-cav
 
@@ -233,10 +235,9 @@ def test_background_strategy_dispatch_and_zero_real():
 def test_excise_heart_removes_the_heart():
     """excise_heart zeros+inpaints the gt>0 region so a real image can be a clean bg for a DIFFERENT
     heart (bd mirs). The bright heart signal must be gone; non-heart pixels untouched."""
-    from core.data.dynamic.synth import excise_heart
     img = torch.zeros(2, 1, 16, 16); img[:, :, 6:10, 6:10] = 5.0    # bright "heart" blob
     gt = torch.zeros(2, 16, 16, dtype=torch.long); gt[:, 6:10, 6:10] = 3
-    out = excise_heart(img, gt)
+    out = SynthPainter.excise_heart(img, gt)
     assert out[:, :, 6:10, 6:10].abs().max() < 1.0                  # heart signal inpainted away
     keep = gt[:, None].expand_as(out) == 0
     assert torch.equal(out[keep], img[keep])                       # non-heart pixels untouched

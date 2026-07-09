@@ -14,13 +14,7 @@ classes (upsample/downsample/identity; pad/crop; normal/zero/full/degenerate EF)
 import numpy as np
 import pytest
 
-from core.evaluate import (
-    assd,
-    dice,
-    hd95,
-    surface_distances,
-    surface_metrics,
-)
+from core.evaluate import Evaluate
 from core.inference import predict_volume
 from core.measure import Measure
 from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
@@ -88,10 +82,10 @@ def test_zscore_then_fit_square_pad_is_background():
 def test_squared_stacks_are_valid_dice_inputs():
     a = np.stack([fit_square(_cube(1, 40, 8)[0], 64) for _ in range(4)])
     b = np.stack([fit_square(_cube(1, 40, 5)[0], 64) for _ in range(4)])
-    assert dice(a, a, 3) == 1.0                           # identity
+    assert Evaluate.dice(a, a, 3) == 1.0                           # identity
     disjoint = np.zeros_like(a); disjoint[a == 0] = 3     # never overlaps a
-    assert dice(a, disjoint, 3) == 0.0                    # disjoint
-    assert 0.0 < dice(a, b, 3) < 1.0                      # partial (b inside a)
+    assert Evaluate.dice(a, disjoint, 3) == 0.0                    # disjoint
+    assert 0.0 < Evaluate.dice(a, b, 3) < 1.0                      # partial (b inside a)
 
 
 # === model -> measure / evaluate ==========================================
@@ -135,8 +129,8 @@ def test_predict_matches_groundtruth_threshold():
     vol = _cube(6, 64, 10, value=1.0)
     pred = predict_volume(model, vol, size=64, device="cpu")
     gt = np.where(vol > 0.5, 3, 0).astype(np.uint8)        # what the threshold model "should" give
-    assert dice(pred, gt, 3) == 1.0
-    assert hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance
+    assert Evaluate.dice(pred, gt, 3) == 1.0
+    assert Evaluate.hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance
 
 
 # === measure <-> evaluate (one mask pair feeds both) ======================
@@ -147,9 +141,9 @@ def test_one_mask_pair_feeds_ef_and_overlap():
     ef, edv, esv = Measure.ejection_fraction(ed, es, spacing)
     assert edv > esv > 0 and 0 < ef < 100
     assert np.isclose(edv, Measure.label_volume_ml(ed, 3, spacing))
-    assert dice(ed, ed, 3) == 1.0
-    assert dice(ed, es, 3) < 1.0
-    assert assd(ed, es, 3) > 0
+    assert Evaluate.dice(ed, ed, 3) == 1.0
+    assert Evaluate.dice(ed, es, 3) < 1.0
+    assert Evaluate.assd(ed, es, 3) > 0
 
 
 @pytest.mark.parametrize("ed_half,es_half,lo,hi", [
@@ -170,8 +164,8 @@ def test_degenerate_ed_propagates_nan_not_crash():
     es = _cube(8, 64, 6)
     ef, edv, _ = Measure.ejection_fraction(empty, es, (10.0, 1.5, 1.5))
     assert edv == 0 and np.isnan(ef)
-    assert dice(empty, empty, 3) == 1.0                   # vacuous overlap defined
-    sd = surface_distances(empty, es, 3)
+    assert Evaluate.dice(empty, empty, 3) == 1.0                   # vacuous overlap defined
+    sd = Evaluate.surface_distances(empty, es, 3)
     assert sd.size == 0 or np.all(np.isnan(sd))           # absent label -> empty/nan, not error
 
 
@@ -190,8 +184,8 @@ def test_surface_metric_ordering_is_consistent():
     """surface_distances -> surface_metrics agrees with the hd/hd95/assd helpers, mean<=p95<=max."""
     a = _cube(8, 64, 12)
     b = _cube(8, 64, 8)                                    # concentric -> a gap all around
-    sd = surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
-    m = surface_metrics(sd)
+    sd = Evaluate.surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
+    m = Evaluate.surface_metrics(sd)
     assert m["assd"] <= m["hd95"] <= m["hd"]               # mean <= 95th pct <= max
-    assert np.isclose(m["hd95"], hd95(a, b, 3, (1.5, 1.5, 1.5)))
-    assert np.isclose(m["assd"], assd(a, b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(m["hd95"], Evaluate.hd95(a, b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(m["assd"], Evaluate.assd(a, b, 3, (1.5, 1.5, 1.5)))

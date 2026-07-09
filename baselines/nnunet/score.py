@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from core.data.static.mri.base import load_nifti
-from core.evaluate import hd95, dice as dice1
+from core.evaluate import Evaluate
 from core.measure import Measure
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
@@ -49,8 +49,8 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
         stem = pf.name[:-7]                     # strip .nii.gz
         pid = stem.rsplit("_", 1)[0] if "_" in stem else stem
         for c in CLASSES:
-            percase[pid][c].append(dice1(pred, gt, c))    # per-frame dice (macro-aggregated below)
-            h = hd95(pred, gt, c, sp)
+            percase[pid][c].append(Evaluate.dice(pred, gt, c))    # per-frame dice (macro-aggregated below)
+            h = Evaluate.hd95(pred, gt, c, sp)
             if not np.isnan(h):
                 hds[c].append(h)
         if "_" in stem:

@@ -22,7 +22,7 @@ from core.data.analysis.attribution import Attribution
 from core.data.dynamic.anatomy import Anatomy
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.generator import Generator
-from core.data.dynamic.synth import excise_heart
+from core.data.dynamic.synth import SynthPainter
 from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
@@ -319,7 +319,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
                 log.info("ANATOMY POOL: %d slices, ZERO-REAL bg=%s", Ytr.shape[0], cfg.generator.synth.bg.mode)
             else:                                                    # Rodero heart on real bg (excised)
                 Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
-                Xr = excise_heart(Xr, Yr)
+                Xr = SynthPainter.excise_heart(Xr, Yr)
                 Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
                 log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
     else:

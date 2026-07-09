@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 
-from core.evaluate import assd, hd95, surface_distances, surface_metrics
+from core.evaluate import Evaluate
 
 
 def _square(n=30, lo=10, hi=20, shift=0, label=3):
@@ -13,19 +13,19 @@ def _square(n=30, lo=10, hi=20, shift=0, label=3):
 
 
 def _hd(a, b, label, spacing=None):
-    return surface_metrics(surface_distances(a, b, label, spacing))["hd"]
+    return Evaluate.surface_metrics(Evaluate.surface_distances(a, b, label, spacing))["hd"]
 
 
 def test_identical_is_zero():
     a = _square()
-    sd = surface_distances(a, a, 3)
+    sd = Evaluate.surface_distances(a, a, 3)
     assert sd.size > 0
-    m = surface_metrics(sd)
+    m = Evaluate.surface_metrics(sd)
     assert m["hd"] == 0 and m["hd95"] == 0 and m["assd"] == 0
 
 
 def test_metrics_ordered_assd_le_hd95_le_hd():
-    m = surface_metrics(surface_distances(_square(), _square(shift=3), 3))
+    m = Evaluate.surface_metrics(Evaluate.surface_distances(_square(), _square(shift=3), 3))
     assert m["assd"] <= m["hd95"] <= m["hd"]
 
 
@@ -39,7 +39,7 @@ def test_hd95_robust_to_one_outlier():
     a = _square()
     b = _square()
     b[0, 0] = 3  # a stray far speck
-    full, robust = _hd(a, b, 3), hd95(a, b, 3)
+    full, robust = _hd(a, b, 3), Evaluate.hd95(a, b, 3)
     assert full > robust  # HD detonates on the outlier, HD95 shrugs it off
 
 
@@ -53,5 +53,5 @@ def test_spacing_scales_to_mm():
 def test_absent_label_is_nan():
     a = np.zeros((10, 10), int)
     b = _square(n=10, lo=2, hi=5)
-    assert math.isnan(hd95(a, b, 3))
-    assert math.isnan(assd(a, b, 3))
+    assert math.isnan(Evaluate.hd95(a, b, 3))
+    assert math.isnan(Evaluate.assd(a, b, 3))

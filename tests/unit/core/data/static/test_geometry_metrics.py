@@ -9,7 +9,7 @@ from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.labels import MYO as LV_MYO
 from core.data.static.labels import RV as RV_CAVITY
 from core.data.static.mri.base import identify_lv_cavity
-from core.evaluate import dice
+from core.evaluate import Evaluate
 from core.measure import Measure
 
 
@@ -68,16 +68,16 @@ def test_ef_nan_when_edv_zero():
 
 def test_dice_perfect_and_disjoint():
     m = _enclosed_lv()
-    assert dice(m, m, LV_CAVITY) == 1.0
+    assert Evaluate.dice(m, m, LV_CAVITY) == 1.0
     a = np.zeros((4, 8, 8), dtype=np.uint8); a[0, 0, 0] = 1
     b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, 0, 1] = 1
-    assert dice(a, b, 1) == 0.0
+    assert Evaluate.dice(a, b, 1) == 0.0
 
 
 def test_dice_empty_and_partial_classes():
     z = np.zeros((4, 8, 8), dtype=np.uint8)
-    assert dice(z, z, 3) == 1.0                  # both absent -> vacuously perfect (the convention)
+    assert Evaluate.dice(z, z, 3) == 1.0                  # both absent -> vacuously perfect (the convention)
     a = np.zeros((4, 8, 8), dtype=np.uint8); a[0, :4, :4] = 3   # 16 vox
-    assert dice(a, z, 3) == 0.0                  # one empty -> no overlap
+    assert Evaluate.dice(a, z, 3) == 0.0                  # one empty -> no overlap
     b = np.zeros((4, 8, 8), dtype=np.uint8); b[0, :4, :2] = 3   # 8 vox, subset of a
-    assert abs(dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)
+    assert abs(Evaluate.dice(a, b, 3) - 2 * 8 / (16 + 8)) < 1e-9         # partial: 2|∩|/(|a|+|b|)

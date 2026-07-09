@@ -29,25 +29,25 @@ from core.config import data_root
 _PROV_KEYS = {"value", "source", "based_on", "extracted_by", "verified"}
 
 
-def reference_dir() -> Path:
-    """`<data>/reference/` — sibling of raw/ and processed/ (data_root('reference'))."""
-    return Path(data_root("reference"))
-
-
-def _is_prov(node) -> bool:
-    """A leaf provenance entry = a mapping with a 'value' key (plus the provenance fields)."""
-    return isinstance(node, dict) and "value" in node
-
-
 class Reference:
     """Loaded reference store. `get('a', 'b')` walks nested keys and returns the value only if the
     leaf is present AND (strict) verified; otherwise `default`. Missing store → every get() is the
     default, so callers fall back to the per-scan path with no branching."""
 
+    @staticmethod
+    def reference_dir() -> Path:
+        """`<data>/reference/` — sibling of raw/ and processed/ (data_root('reference'))."""
+        return Path(data_root("reference"))
+
+    @staticmethod
+    def _is_prov(node) -> bool:
+        """A leaf provenance entry = a mapping with a 'value' key (plus the provenance fields)."""
+        return isinstance(node, dict) and "value" in node
+
     def __init__(self, *, strict: bool = True, root: str | Path | None = None):
         self.strict = strict
         self._d: dict = {}
-        base = Path(root) if root is not None else reference_dir()
+        base = Path(root) if root is not None else self.reference_dir()
         if base.is_dir():
             # Merge every reference/*.yaml at the top level — files are just organization
             # (reference.yaml / acquisition.yaml / conventions.yaml); content keys are the namespace,
@@ -67,7 +67,7 @@ class Reference:
             if not isinstance(node, dict) or k not in node:
                 return default
             node = node[k]
-        if not _is_prov(node):
+        if not self._is_prov(node):
             return default                                   # not a leaf value
         if self.strict and not node.get("verified", False):
             return default                                   # unverified -> never used
@@ -81,7 +81,7 @@ class Reference:
             if not isinstance(node, dict) or k not in node:
                 return None
             node = node[k]
-        return node if _is_prov(node) else None
+        return node if self._is_prov(node) else None
 
 
 # The BUILD-side (derive ranges/levels from the store, emit the acquisition table) lives in

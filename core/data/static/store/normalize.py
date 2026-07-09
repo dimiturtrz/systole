@@ -12,7 +12,7 @@ from omegaconf import OmegaConf
 
 from core.config import DEFAULT_INPLANE
 from core.data.static.mri.registry import get_adapter
-from core.data.static.reference import Reference, reference_dir
+from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
@@ -39,7 +39,7 @@ class Normalizer:
 
     @staticmethod
     def ref_path() -> Path:
-        return reference_dir() / "nyul.yaml"
+        return Reference.reference_dir() / "nyul.yaml"
 
     @staticmethod
     def load_standard() -> "np.ndarray | None":

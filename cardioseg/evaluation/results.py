@@ -22,7 +22,7 @@ from cardioseg.evaluation.distribution import Distribution
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
-from core.evaluate import CLASSES, surface_metrics
+from core.evaluate import CLASSES, Evaluate
 from core.hparams import from_json
 from core.measure import Measure
 from core.model import resolve_device
@@ -59,7 +59,7 @@ class Results:
         dice, hd95, assd = {}, {}, {}
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
-            m = surface_metrics(pooled) if pooled.size else {"hd95": float("nan"), "assd": float("nan")}
+            m = Evaluate.surface_metrics(pooled) if pooled.size else {"hd95": float("nan"), "assd": float("nan")}
             dice[name] = round(float(np.mean(dice_acc[cl])), 3)
             hd95[name] = round(float(m["hd95"]), 1)
             assd[name] = round(float(m["assd"]), 2)
