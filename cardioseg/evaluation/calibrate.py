@@ -19,7 +19,7 @@ import polars as pl
 import torch
 
 from core.config import FLAGSHIP_REF
-from core.data.ingest.splits import resolve_cfg
+from core.data.ingest.splits import Splits
 from core.data.static import splits
 from core.data.static.store import build as store
 from core.obs import Obs
@@ -75,7 +75,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
     d = cfg.generator.data
     meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
     if d.split:                                           # coded split -> its resolved val/test
-        r = resolve_cfg(d, meta)
+        r = Splits.resolve_cfg(d, meta)
         val, test = r.val.frame, r.test.frame
     else:
         _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,

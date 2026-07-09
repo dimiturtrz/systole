@@ -47,25 +47,30 @@ class Resolution:
     test_hash: str
 
 
-def _latest(versions: dict[str, SplitDef]) -> str:
-    return max(versions, key=lambda v: tuple(int(x) for x in v.split(".")))
+class SplitResolver:
+    """Resolves a split family@version into (train, val, test) Sources (the free resolve/complement/
+    latest helpers folded in as staticmethods)."""
 
+    @staticmethod
+    def _latest(versions: dict[str, SplitDef]) -> str:
+        return max(versions, key=lambda v: tuple(int(x) for x in v.split(".")))
 
-def _complement(cloud: pl.DataFrame, exclude: list[Source]) -> StaticSource:
-    """Labelled rows not in any excluded source (the implicit train). Static only."""
-    used: set[str] = set()
-    for s in exclude:
-        used |= {f"{d}\t{sid}" for d, sid in s.subjects()}      # type: ignore[attr-defined]
-    k = pl.col("dataset") + "\t" + pl.col("subject_id").cast(pl.Utf8)
-    keep = cloud.filter(pl.col("labelled") & ~k.is_in(list(used)))
-    return StaticSource(keep, "complement (labelled rest)")
+    @staticmethod
+    def _complement(cloud: pl.DataFrame, exclude: list[Source]) -> StaticSource:
+        """Labelled rows not in any excluded source (the implicit train). Static only."""
+        used: set[str] = set()
+        for s in exclude:
+            used |= {f"{d}\t{sid}" for d, sid in s.subjects()}      # type: ignore[attr-defined]
+        k = pl.col("dataset") + "\t" + pl.col("subject_id").cast(pl.Utf8)
+        keep = cloud.filter(pl.col("labelled") & ~k.is_in(list(used)))
+        return StaticSource(keep, "complement (labelled rest)")
 
-
-def resolve(family: Split, cloud: pl.DataFrame, version: str | None = None) -> Resolution:
-    """Build (train, val, test) Sources for a family@version over `cloud`. The test is a TestSet source
-    which enforces its own content-hash lock (raises on drift) — no separate guard needed here."""
-    v = version or _latest(family.versions)
-    d = family.versions[v]
-    test, val = d.test(cloud), d.val(cloud)                      # test's TestSet lock is checked in .source()
-    train = d.train(cloud) if d.train is not None else _complement(cloud, [test, val])
-    return Resolution(train, val, test, v, test.ids_hash())      # type: ignore[attr-defined]
+    @staticmethod
+    def resolve(family: Split, cloud: pl.DataFrame, version: str | None = None) -> Resolution:
+        """Build (train, val, test) Sources for a family@version over `cloud`. The test is a TestSet source
+        which enforces its own content-hash lock (raises on drift) — no separate guard needed here."""
+        v = version or SplitResolver._latest(family.versions)
+        d = family.versions[v]
+        test, val = d.test(cloud), d.val(cloud)                      # test's TestSet lock is checked in .source()
+        train = d.train(cloud) if d.train is not None else SplitResolver._complement(cloud, [test, val])
+        return Resolution(train, val, test, v, test.ids_hash())      # type: ignore[attr-defined]

@@ -23,7 +23,7 @@ from core.data.dynamic.anatomy import Anatomy
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.generator import Generator
 from core.data.dynamic.synth import SynthPainter
-from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_cfg
+from core.data.ingest.splits import Splits
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
@@ -35,7 +35,7 @@ from core.obs import Obs, timed
 from core.registry import MODEL_NAME, Registry
 
 from ..evaluation.modelcard import ModelCard
-from ..evaluation.validate import EvalCfg, Evaluator, summarize
+from ..evaluation.validate import EvalCfg, Evaluator
 from ..tracking import Tracker
 from .ef_lane import build_aux
 
@@ -235,12 +235,12 @@ class SeedTrainer:
         log.info("===== VALIDATION =====")
         ev = Evaluator(model, device, EvalCfg(size=d.size, boundary=not self.quick))  # skip HD95/ASSD on quick sweeps
         dice_per_class, ef_rows, surf = ev.validate(splits.Splits.paths(self.sh["val_df"]))
-        results = {"val": summarize(dice_per_class, ef_rows, surf)}
+        results = {"val": Evaluator.summarize(dice_per_class, ef_rows, surf)}
         if len(test_df):                                            # held-out test = the criteria split
             log.info("===== HELD-OUT TEST: datasets=%s vendors=%s (n=%d) =====",
                      list(d.test_datasets), list(d.test_vendors), len(test_df))
             tdice, tef, tsurf = ev.validate(splits.Splits.paths(test_df))
-            results["test"] = summarize(tdice, tef, tsurf)
+            results["test"] = Evaluator.summarize(tdice, tef, tsurf)
         return results
 
     def _save(self, results: dict):  # pragma: no cover  (torch.save model.pth + metrics.json write + tracker summary)
@@ -367,12 +367,12 @@ def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, s
     # family may declare its own `sources` (e.g. static_all adds SCD) — load those, not just d.sources.
     srcs = list(d.sources)
     if d.split:
-        srcs = list(load_split(parse_ref(d.split)[0]).sources or d.sources)
+        srcs = list(Splits.load_split(Splits.parse_ref(d.split)[0]).sources or d.sources)
     with timed(log, "store.load + split"):
         meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
                           workers=cfg.workers, nyul=d.nyul, norm=d.norm)
         if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
-            r = resolve_cfg(d, meta)
+            r = Splits.resolve_cfg(d, meta)
             train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam
             test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
             val_df = r.val.frame                     # val is real -> its frame drives scoring/export/params
@@ -464,8 +464,8 @@ if __name__ == "__main__":
     cfg = TrainCfg()
     if args.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
         name = args.split.split("@", 1)[0]
-        if name not in list_splits():
-            raise SystemExit(f"unknown split {name!r}; known: {list_splits()}")
+        if name not in Splits.list_splits():
+            raise SystemExit(f"unknown split {name!r}; known: {Splits.list_splits()}")
         cfg.generator.data.split = args.split
     apply_cli_args(cfg, args)
     train_seg(cfg, alias=args.alias, quick=args.quick, seeds=parse_seeds(args.seeds))

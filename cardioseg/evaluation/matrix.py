@@ -35,41 +35,46 @@ log = logging.getLogger("cardioseg.matrix")
 _LV_ONLY = (2, 3)                                        # seg_lv reports myo + cav (no RV=1)
 
 
-def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
-                 *, tta: bool = True) -> list[dict]:
-    """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
-    model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
-    so npz match the weights."""
-    tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
-    rows: list[dict] = []
-    for ref in model_refs:
-        model, cfg, device = run_mod.Run.load_run(registry_mod.Registry.resolve(ref))
-        d = cfg.generator.data if cfg else None
-        size = d.size if d else 256
-        meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
-        seen = splits.Splits.seen_keys(d, meta) if d else None      # subjects the model saw (train∪val); None = unknowable
-        for ts in tsets:
-            src = ts.source(meta)                        # lock-checked; raises on drift
-            paths, subj = src.paths(), set(src.subjects())
-            ood = None if seen is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(seen)
-            dice, ef_rows, _ = Evaluator(model, device, EvalCfg(size=size, tta=tta)).validate(paths)
-            classes = _LV_ONLY if ts.task == "seg_lv" else tuple(dice)
-            dmean = float(np.nanmean([dice[c] for c in classes]))
-            ef_mae = (float(np.mean([abs(r["ef_gt"] - r["ef_pred"]) for r in ef_rows]))
-                      if ef_rows else float("nan"))
-            rows.append(dict(model=ref, testset=ts.name, task=ts.task, n=len(paths), ood=ood,
-                             dice_mean=round(dmean, 4),
-                             **{f"dice_{c}": round(dice[c], 4) for c in classes},
-                             ef_mae=round(ef_mae, 2)))
-    return rows
+class Matrix:
+    """Cross-domain generalization matrix — the free scoring/printing helpers folded in as staticmethods.
+    Pure inference over frozen TestSets; a cell is OOD when none of its subjects are in the model's SEEN set."""
 
+    @staticmethod
+    def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
+                     *, tta: bool = True) -> list[dict]:
+        """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
+        model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
+        so npz match the weights."""
+        tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
+        rows: list[dict] = []
+        for ref in model_refs:
+            model, cfg, device = run_mod.Run.load_run(registry_mod.Registry.resolve(ref))
+            d = cfg.generator.data if cfg else None
+            size = d.size if d else 256
+            meta = store.load_cfg(d, sources=EVAL_SOURCES) if d else store.load(EVAL_SOURCES)
+            seen = splits.Splits.seen_keys(d, meta) if d else None      # subjects the model saw (train∪val); None = unknowable
+            for ts in tsets:
+                src = ts.source(meta)                        # lock-checked; raises on drift
+                paths, subj = src.paths(), set(src.subjects())
+                ood = None if seen is None else {f"{a}\t{b}" for a, b in subj}.isdisjoint(seen)
+                dice, ef_rows, _ = Evaluator(model, device, EvalCfg(size=size, tta=tta)).validate(paths)
+                classes = _LV_ONLY if ts.task == "seg_lv" else tuple(dice)
+                dmean = float(np.nanmean([dice[c] for c in classes]))
+                ef_mae = (float(np.mean([abs(r["ef_gt"] - r["ef_pred"]) for r in ef_rows]))
+                          if ef_rows else float("nan"))
+                rows.append(dict(model=ref, testset=ts.name, task=ts.task, n=len(paths), ood=ood,
+                                 dice_mean=round(dmean, 4),
+                                 **{f"dice_{c}": round(dice[c], 4) for c in classes},
+                                 ef_mae=round(ef_mae, 2)))
+        return rows
 
-def _print(rows: list[dict]):
-    log.info(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
-    for r in rows:
-        flag = "OOD " if r.get("ood") else ("LEAK" if r.get("ood") is False else "?   ")
-        log.info(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
-              f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
+    @staticmethod
+    def _print(rows: list[dict]):
+        log.info(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
+        for r in rows:
+            flag = "OOD " if r.get("ood") else ("LEAK" if r.get("ood") is False else "?   ")
+            log.info(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
+                  f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
 
 
 if __name__ == "__main__":
@@ -81,8 +86,8 @@ if __name__ == "__main__":
     ap.add_argument("--no-tta", action="store_true")
     ap.add_argument("--out", default=None, help="write rows to this json")
     args = ap.parse_args()
-    rows = score_matrix(args.models, args.testsets, tta=not args.no_tta)
-    _print(rows)
+    rows = Matrix.score_matrix(args.models, args.testsets, tta=not args.no_tta)
+    Matrix._print(rows)
     if args.out:
         Path(args.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
         log.info(f"\nwrote {args.out}")

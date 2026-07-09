@@ -18,7 +18,7 @@ import numpy as np
 import polars as pl
 
 from core.data.ingest.source import subject_keys
-from core.data.ingest.splits import resolve_cfg
+from core.data.ingest.splits import Splits as SplitRegistry
 from core.data.static.store import build as store
 
 
@@ -95,7 +95,7 @@ class Splits:
         ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
         the coded splits' val — a trap this removes)."""
         if d.split:
-            return resolve_cfg(d, meta).val.frame
+            return SplitRegistry.resolve_cfg(d, meta).val.frame
         return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                  d.val_datasets, d.val_vendors, d.train_vendors)[1]
 
@@ -105,7 +105,7 @@ class Splits:
         `d.split` is set, else the DataCfg-criteria test. The test-side counterpart to `model_val`;
         per-axis (e.g. per-vendor) eval filters this rather than re-deriving the split from a literal."""
         if d.split:
-            return resolve_cfg(d, meta).test.frame
+            return SplitRegistry.resolve_cfg(d, meta).test.frame
         return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                  d.val_datasets, d.val_vendors, d.train_vendors)[2]
 
@@ -119,7 +119,7 @@ class Splits:
         The `dataset\\tsubject` key format matches `subject_keys`, so callers can set-difference directly."""
         in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
         if d.split:
-            r = resolve_cfg(d, in_sources)
+            r = SplitRegistry.resolve_cfg(d, in_sources)
             seen = set(r.val.subjects())                            # val is always a real StaticSource
             if r.train.kind == "static":
                 seen |= set(r.train.subjects())                     # dynamic/synth train = no real subjects
@@ -135,7 +135,7 @@ class Splits:
         train subjects (a dynamic/synth train = none). Old criteria: the train partition of split_from_cfg."""
         in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
         if d.split:
-            r = resolve_cfg(d, in_sources)
+            r = SplitRegistry.resolve_cfg(d, in_sources)
             if r.train.kind != "static":
                 return set()                                        # dynamic/synth train touches no real subject
             return {f"{a}\t{b}" for a, b in r.train.subjects()}

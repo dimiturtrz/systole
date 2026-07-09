@@ -17,8 +17,6 @@ from cardioseg.evaluation.validate import (
     EvalCfg,
     Evaluator,
     _ClassScores,
-    _foreground_samples,
-    summarize,
 )
 from core.model import Model
 
@@ -121,7 +119,7 @@ def test_foreground_samples_selects_fg_union():
                       dtype=np.float32)
     y = np.array([0, 1, 0])
     rng = np.random.RandomState(0)
-    lg, yy = _foreground_samples(logits, y, per_vol=100, rng=rng)
+    lg, yy = Evaluator._foreground_samples(logits, y, per_vol=100, rng=rng)
     assert len(yy) == 2 and set(yy.tolist()) == {1, 0}
 
 
@@ -130,7 +128,7 @@ def test_foreground_samples_subsamples_to_cap():
     n = 50
     logits = np.zeros((n, 4), np.float32); logits[:, 1] = 9.0   # all argmax 1 -> all foreground
     y = np.ones(n, np.int64)
-    lg, yy = _foreground_samples(logits, y, per_vol=10, rng=np.random.RandomState(1))
+    lg, yy = Evaluator._foreground_samples(logits, y, per_vol=10, rng=np.random.RandomState(1))
     assert len(yy) == 10 and lg.shape == (10, 4)
 
 
@@ -138,7 +136,7 @@ def test_foreground_samples_empty_when_all_background():
     """All-background class: no gt fg and every argmax is bg -> zero samples returned."""
     logits = np.zeros((5, 4), np.float32); logits[:, 0] = 9.0
     y = np.zeros(5, np.int64)
-    lg, yy = _foreground_samples(logits, y, per_vol=100, rng=np.random.RandomState(0))
+    lg, yy = Evaluator._foreground_samples(logits, y, per_vol=100, rng=np.random.RandomState(0))
     assert len(yy) == 0
 
 
@@ -150,7 +148,7 @@ def test_summarize_dict_and_mae(caplog):
                dict(patient="p2", group="B", ef_gt=60.0, ef_pred=58.0, edv_gt=1, edv_pred=1)]
     surf = {c: {"hd95": 3.0, "assd": 1.0} for c in CLASS_NAMES}
     with caplog.at_level(logging.INFO, logger="cardioseg.validate"):
-        out = summarize(dice, ef_rows, surf)
+        out = Evaluator.summarize(dice, ef_rows, surf)
     assert abs(out["dice_mean"] - (0.9 + 0.8 + 1.0) / 3) < 1e-9
     assert abs(out["ef_mae"] - 3.0) < 1e-9        # mean(|+4|,|-2|)
     assert out["dice"]["RV"] == 0.9
@@ -159,7 +157,7 @@ def test_summarize_dict_and_mae(caplog):
 
 def test_summarize_no_ef_rows_is_nan():
     """No EF pairs (single-frame cases) -> EF MAE NaN, boundary None when omitted."""
-    out = summarize({1: 0.5, 2: 0.5, 3: 0.5}, [])
+    out = Evaluator.summarize({1: 0.5, 2: 0.5, 3: 0.5}, [])
     assert np.isnan(out["ef_mae"])
     assert out["boundary"] is None
 

@@ -44,18 +44,18 @@ def _stub(monkeypatch):
 
 
 def test_ood_when_no_testset_subject_in_train(_stub):
-    [r] = matrix.score_matrix(["m"], ["canon"])
+    [r] = matrix.Matrix.score_matrix(["m"], ["canon"])
     assert r["ood"] is True and r["n"] == 2                 # Canon held out -> honest OOD
     assert r["dice_mean"] == pytest.approx((0.9 + 0.8 + 0.85) / 3, abs=1e-4)
 
 
 def test_leak_when_testset_subject_in_train(_stub):
-    [r] = matrix.score_matrix(["m"], ["siemens"])
+    [r] = matrix.Matrix.score_matrix(["m"], ["siemens"])
     assert r["ood"] is False                                # Siemens WAS trained on -> flagged leak
 
 
 def test_seg_lv_reports_myo_and_cav_only(_stub):
-    [r] = matrix.score_matrix(["m"], ["scd_lv"])
+    [r] = matrix.Matrix.score_matrix(["m"], ["scd_lv"])
     assert "dice_1" not in r                                # RV dropped for seg_lv
     assert r["dice_2"] == 0.8 and r["dice_3"] == 0.85
     assert r["dice_mean"] == pytest.approx((0.8 + 0.85) / 2, abs=1e-4)

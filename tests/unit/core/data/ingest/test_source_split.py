@@ -5,8 +5,8 @@ test_lock drift guard. StaticMain's real-data parity vs the old xvendor split is
 import polars as pl
 
 from core.data.ingest.source import StaticSource, ids_hash
-from core.data.ingest.split import SplitDef, _complement, _latest, resolve
-from core.data.ingest.splits import list_splits, load_split
+from core.data.ingest.split import SplitDef, SplitResolver
+from core.data.ingest.splits import Splits
 
 V = pl.col
 
@@ -42,12 +42,12 @@ def test_complement_is_labelled_rest():
     c = _cloud()
     test = _Fam.versions["1.0.0"].test(c)      # c1
     val = _Fam.versions["1.0.0"].val(c)        # s1, s2
-    train = _complement(c, [test, val])
+    train = SplitResolver._complement(c, [test, val])
     assert set(train.subjects()) == {("mnms1", "g1")}          # labelled rest; u1 (unlabelled) excluded
 
 
 def test_resolve_builds_triple_and_complement_train():
-    r = resolve(_Fam(), _cloud())
+    r = SplitResolver.resolve(_Fam(), _cloud())
     assert set(r.test.subjects()) == {("mnms1", "c1")}
     assert set(r.val.subjects()) == {("acdc", "s1"), ("acdc", "s2")}
     assert set(r.train.subjects()) == {("mnms1", "g1")}        # no test/val leak
@@ -56,7 +56,7 @@ def test_resolve_builds_triple_and_complement_train():
 
 
 def test_latest_picks_highest_semver():
-    assert _latest({"1.0.0": None, "1.10.0": None, "1.2.0": None}) == "1.10.0"
+    assert SplitResolver._latest({"1.0.0": None, "1.10.0": None, "1.2.0": None}) == "1.10.0"
 
 
 def test_static_source_resident_is_raw_real(monkeypatch):
@@ -135,9 +135,8 @@ def test_synth_composite_split_resolves_to_composite_source():
     """The registered synth_composite split's train is a CompositeSource of SSM + pathology sources —
     the real consumer of the composition mechanism (so it isn't dead code)."""
     from core.data.dynamic.source import CompositeSource
-    from core.data.ingest.splits import list_splits, load_split
-    assert "synth_composite" in list_splits()
-    train = load_split("synth_composite").versions["1.0.0"].train(None)   # synth train ignores the cloud
+    assert "synth_composite" in Splits.list_splits()
+    train = Splits.load_split("synth_composite").versions["1.0.0"].train(None)   # synth train ignores the cloud
     assert isinstance(train, CompositeSource) and len(train.sources) == 2
     assert train.provenance()["kind"] == "composite"
 
@@ -209,8 +208,8 @@ def test_generator_batch_slices_valid():
 
 def test_static_main_registered_with_locked_testset():
     from core.data.ingest.testsets import STATIC_MAIN_TEST
-    assert "static_main" in list_splits()
-    d = load_split("static_main").versions["1.0.0"]
+    assert "static_main" in Splits.list_splits()
+    d = Splits.load_split("static_main").versions["1.0.0"]
     assert d.train is None                                     # train = complement
     assert STATIC_MAIN_TEST.lock.startswith("sha256:") and len(STATIC_MAIN_TEST.lock) > 20
 
@@ -218,8 +217,8 @@ def test_static_main_registered_with_locked_testset():
 def test_synth_main_registered_with_locked_testset():
     from core.data.ingest.splits.synth_main import POOL
     from core.data.ingest.testsets import SYNTH_MAIN_TEST
-    assert "synth_main" in list_splits()
-    d = load_split("synth_main").versions["1.0.0"]
+    assert "synth_main" in Splits.list_splits()
+    d = Splits.load_split("synth_main").versions["1.0.0"]
     assert d.train is not None                                 # explicit dynamic train (not complement)
     assert POOL                                                # named constant, not a bare literal
     assert SYNTH_MAIN_TEST.lock.startswith("sha256:") and len(SYNTH_MAIN_TEST.lock) > 20

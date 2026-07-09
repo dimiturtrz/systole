@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 
-from core.data.ingest.splits import load_split
+from core.data.ingest.splits import Splits
 from core.hparams import TrainCfg
 
 _SIZE = 16
@@ -22,7 +22,7 @@ def test_coded_split_train_chain_emits_valid_batch(split, monkeypatch):
     shape — the split->source->generator->batch chain, end to end on tiny mocked pools."""
     monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool",
                         lambda p: np.zeros((20, _SIZE, _SIZE), np.int64))
-    src = load_split(split).versions["1.0.0"].train(None)     # synth train ignores the cloud
+    src = Splits.load_split(split).versions["1.0.0"].train(None)     # synth train ignores the cloud
     gen = src.train_gen(_SIZE, "cpu", TrainCfg().generator, 4)
     assert gen.n > 0
     idx = torch.arange(min(8, gen.n))
@@ -37,7 +37,7 @@ def test_composite_generator_batches_mix_both_sources(monkeypatch):
     full-range batch draws from each child's own painter (the CompositeGenerator dispatch, live)."""
     monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool",
                         lambda p: np.zeros((20, _SIZE, _SIZE), np.int64))
-    src = load_split("synth_composite").versions["1.0.0"].train(None)
+    src = Splits.load_split("synth_composite").versions["1.0.0"].train(None)
     gen = src.train_gen(_SIZE, "cpu", TrainCfg().generator, 4)
     assert gen.n == 40                                        # 2 sources x 20 (cap 5000 > 20 = no-op)
     x, _, _ = gen.batch(torch.arange(gen.n))

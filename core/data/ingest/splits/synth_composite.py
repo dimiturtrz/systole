@@ -14,7 +14,7 @@ from core.data.dynamic.source import CompositeSource, DynamicSource
 from core.data.dynamic.synth import ProceduralBgCfg
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
-from core.data.ingest.splits.synth_main import _pool
+from core.data.ingest.splits.synth_main import SynthMain
 from core.data.ingest.testsets import SYNTH_MAIN_TEST
 
 V = pl.col
@@ -33,18 +33,19 @@ _RESIDENT_BUDGET = 10000
 _CAP = _RESIDENT_BUDGET // 2            # per-source slice cap (SSM + pathology)
 
 
-def _synth_source(pool: str, note: str) -> DynamicSource:
-    return DynamicSource(pool=_pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
-
-
 class SynthComposite:
     name = "synth_composite"
     sources = ()                        # synth train adds no real store sources
+
+    @staticmethod
+    def _synth_source(pool: str, note: str) -> DynamicSource:
+        return DynamicSource(pool=SynthMain._pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
+
     versions = {
         "1.0.0": SplitDef(
             train=lambda c: CompositeSource(
-                [_synth_source(_SSM, "Rodero SSM (healthy manifold)"),
-                 _synth_source(_PATHOLOGY, "label-space pathology (DCM/HCM/RV tail)")],
+                [SynthComposite._synth_source(_SSM, "Rodero SSM (healthy manifold)"),
+                 SynthComposite._synth_source(_PATHOLOGY, "label-space pathology (DCM/HCM/RV tail)")],
                 note="SSM + pathology (source union, per-source painter)"),
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
                                        "ACDC real val (held from test)"),
