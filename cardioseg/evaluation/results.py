@@ -24,7 +24,7 @@ from core.data.static import splits
 from core.data.static.store import build as store
 from core.evaluate import CLASSES, surface_metrics
 from core.hparams import from_json
-from core.measure import ef_statistics
+from core.measure import Measure
 from core.model import resolve_device
 from core.obs import setup
 from core.registry import _DB_URI, _run_id_for, resolve
@@ -72,7 +72,7 @@ class Results:
     def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
         rows = collect(run, device, df.iter_rows(named=True))
         dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
-        out = Results.axis_dict(len(rows), dists, dice_acc, ef_statistics(ef_gt, ef_pred))
+        out = Results.axis_dict(len(rows), dists, dice_acc, Measure.ef_statistics(ef_gt, ef_pred))
         if with_strata:
             out["strata"] = strata_table(rows, "pathology")
         return out

@@ -22,7 +22,7 @@ from core.evaluate import (
     surface_metrics,
 )
 from core.inference import predict_volume
-from core.measure import ejection_fraction, label_volume_ml, voxel_volume_ml
+from core.measure import Measure
 from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
 
 
@@ -124,7 +124,7 @@ def test_predict_then_ejection_fraction():
     pred_es = predict_volume(model, es_vol, size=64, device="cpu")
     assert pred_ed.shape == (8, 64, 64)
     assert set(np.unique(pred_ed).tolist()) == {0, 3}     # model emits bg + LV-cav only
-    ef, edv, esv = ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
+    ef, edv, esv = Measure.ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
     assert edv > esv > 0 and 0 < ef < 100
 
 
@@ -144,9 +144,9 @@ def test_predict_matches_groundtruth_threshold():
 def test_one_mask_pair_feeds_ef_and_overlap():
     ed, es = _cube(8, 64, 10), _cube(8, 64, 6)
     spacing = (10.0, 1.5, 1.5)
-    ef, edv, esv = ejection_fraction(ed, es, spacing)
+    ef, edv, esv = Measure.ejection_fraction(ed, es, spacing)
     assert edv > esv > 0 and 0 < ef < 100
-    assert np.isclose(edv, label_volume_ml(ed, 3, spacing))
+    assert np.isclose(edv, Measure.label_volume_ml(ed, 3, spacing))
     assert dice(ed, ed, 3) == 1.0
     assert dice(ed, es, 3) < 1.0
     assert assd(ed, es, 3) > 0
@@ -160,7 +160,7 @@ def test_one_mask_pair_feeds_ef_and_overlap():
 def test_ef_equivalence_classes(ed_half, es_half, lo, hi):
     ed = _cube(8, 64, ed_half)
     es = _cube(8, 64, es_half) if es_half else np.zeros((8, 64, 64), np.uint8)
-    ef, _, _ = ejection_fraction(ed, es, (10.0, 1.5, 1.5))
+    ef, _, _ = Measure.ejection_fraction(ed, es, (10.0, 1.5, 1.5))
     assert lo <= ef <= hi
 
 
@@ -168,7 +168,7 @@ def test_degenerate_ed_propagates_nan_not_crash():
     """Empty ED (EDV==0) -> EF NaN; evaluate stays defined on the same input (no crash)."""
     empty = np.zeros((8, 64, 64), dtype=np.uint8)
     es = _cube(8, 64, 6)
-    ef, edv, _ = ejection_fraction(empty, es, (10.0, 1.5, 1.5))
+    ef, edv, _ = Measure.ejection_fraction(empty, es, (10.0, 1.5, 1.5))
     assert edv == 0 and np.isnan(ef)
     assert dice(empty, empty, 3) == 1.0                   # vacuous overlap defined
     sd = surface_distances(empty, es, 3)
@@ -178,10 +178,10 @@ def test_degenerate_ed_propagates_nan_not_crash():
 def test_ef_invariant_to_spacing_volumes_scale():
     """EF is a ratio -> spacing cancels; absolute volumes scale by the voxel-volume factor."""
     ed, es = _cube(8, 64, 10), _cube(8, 64, 6)
-    ef1, edv1, _ = ejection_fraction(ed, es, (10.0, 1.5, 1.5))
-    ef2, edv2, _ = ejection_fraction(ed, es, (5.0, 0.75, 0.75))  # every dim halved -> 1/8 volume
+    ef1, edv1, _ = Measure.ejection_fraction(ed, es, (10.0, 1.5, 1.5))
+    ef2, edv2, _ = Measure.ejection_fraction(ed, es, (5.0, 0.75, 0.75))  # every dim halved -> 1/8 volume
     assert np.isclose(ef1, ef2)
-    assert np.isclose(edv2 / edv1, voxel_volume_ml((5.0, 0.75, 0.75)) / voxel_volume_ml((10.0, 1.5, 1.5)))
+    assert np.isclose(edv2 / edv1, Measure.voxel_volume_ml((5.0, 0.75, 0.75)) / Measure.voxel_volume_ml((10.0, 1.5, 1.5)))
 
 
 # === surface chain: distances -> metrics -> hd/hd95/assd ==================

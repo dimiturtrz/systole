@@ -20,7 +20,7 @@ from core.evaluate import CLASSES, surface_distances, surface_metrics
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
 from core.inference import predict_volume  # re-export
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
 
@@ -129,8 +129,8 @@ class Evaluator:
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
-                ef_p, edv_p, _ = ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
-                ef_g, edv_g, _ = ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
+                ef_p, edv_p, _ = Measure.ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
+                ef_g, edv_g, _ = Measure.ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
                 ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
                                     ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)

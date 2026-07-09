@@ -25,7 +25,7 @@ from core.data.static.labels import LV_CAV
 from core.data.static.store import build as store
 from core.hparams import from_json
 from core.inference import predict_volume_probs
-from core.measure import ef_statistics, expected_volume_ml, label_volume_ml
+from core.measure import Measure
 from core.model import resolve_device
 from core.obs import setup
 from core.postprocess import Postprocess
@@ -70,9 +70,9 @@ class SoftEval:
                 hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
                 gate = hard == LV_CAV
                 gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
-                vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),
-                             "soft": expected_volume_ml(blood * gate, sp),
-                             "gt": label_volume_ml(gt, LV_CAV, sp)}
+                vols[tag] = {"hard": Measure.label_volume_ml(hard, LV_CAV, sp),
+                             "soft": Measure.expected_volume_ml(blood * gate, sp),
+                             "gt": Measure.label_volume_ml(gt, LV_CAV, sp)}
                 # calibration over foreground voxels (pred or gt non-bg)
                 fg = (gt > 0) | (hard > 0)
                 conf_all.append(p.max(1)[fg]); corr_all.append((p.argmax(1)[fg] == gt[fg]).astype(float))
@@ -94,7 +94,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
     log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
     log.info(f"ECE: {e:.4f}")
     for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
-        s = ef_statistics(gt, pred)
+        s = Measure.ef_statistics(gt, pred)
         log.info(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
 
 

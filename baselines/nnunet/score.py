@@ -24,7 +24,7 @@ import numpy as np
 
 from core.data.static.mri.base import load_nifti
 from core.evaluate import hd95, dice as dice1
-from core.measure import ejection_fraction
+from core.measure import Measure
 
 CLASSES = {1: "RV", 2: "LV-myo", 3: "LV-cav"}
 
@@ -74,8 +74,8 @@ def score(pred_dir: str, gt_dir: str, cases: list[str] | None = None) -> dict:
     for pid, ph in frames.items():
         if "ED" in ph and "ES" in ph:
             sp = ph["ED"][2]
-            ef_p, *_ = ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
-            ef_g, *_ = ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
+            ef_p, *_ = Measure.ejection_fraction(ph["ED"][0], ph["ES"][0], sp, lv_label=3)
+            ef_g, *_ = Measure.ejection_fraction(ph["ED"][1], ph["ES"][1], sp, lv_label=3)
             diffs.append(ef_p - ef_g)
     out = {"dice": {**dice, "mean": round(mean_dice, 3)}, "hd95": hd95d, "ef_mae": float("nan")}
     if diffs:

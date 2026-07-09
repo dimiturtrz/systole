@@ -3,7 +3,7 @@
 """
 import torch
 
-from core.data.dynamic.pipeline import Batch, Soften, SynthReplace, build_pipeline
+from core.data.dynamic.pipeline import Batch, Pipeline, Soften, SynthReplace
 from core.data.dynamic.synth import SynthCfg
 
 
@@ -38,5 +38,5 @@ def test_synth_replace_force_replaces_all(monkeypatch):
 
 def test_build_pipeline_order():
     from core.data.dynamic.generator import GeneratorCfg
-    ops = build_pipeline(GeneratorCfg(), 4)
+    ops = Pipeline.build(GeneratorCfg(), 4)
     assert [type(o).__name__ for o in ops] == ["SynthReplace", "Augment", "Soften"]

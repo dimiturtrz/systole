@@ -31,7 +31,7 @@ from core.data.static.store import build as store
 from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
 from core.hparams import from_json
 from core.inference import predict_volume
-from core.measure import LOA_Z, ef_statistics, ejection_fraction
+from core.measure import LOA_Z, Measure
 from core.model import resolve_device
 from core.obs import setup
 from core.postprocess import Postprocess
@@ -81,8 +81,8 @@ def collect(run: Path, device: str, meta_rows):  # pragma: no cover  (loads the 
             rec["sd"] = {cl: (np.concatenate(sd_acc[cl]) if sd_acc[cl] else np.array([])) for cl in CLASSES}
             rec["dice"] = {cl: float(np.mean(di_acc[cl])) for cl in CLASSES if di_acc[cl]}
         if "ED" in masks and "ES" in masks:
-            rec["ef_gt"] = ejection_fraction(masks["ED"][1], masks["ES"][1], sp)[0]
-            rec["ef_pred"] = ejection_fraction(masks["ED"][0], masks["ES"][0], sp)[0]
+            rec["ef_gt"] = Measure.ejection_fraction(masks["ED"][1], masks["ES"][1], sp)[0]
+            rec["ef_pred"] = Measure.ejection_fraction(masks["ED"][0], masks["ES"][0], sp)[0]
         rows.append(rec)
     return rows
 
@@ -125,7 +125,7 @@ def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cove
     upright on top; bias + 95% LoA as vertical lines (and in the title)."""
     mean = (ef_gt + ef_pred) / 2
     diff = ef_pred - ef_gt
-    s = ef_statistics(ef_gt, ef_pred)
+    s = Measure.ef_statistics(ef_gt, ef_pred)
     bias, sd, (lo, hi) = s["bias"], s["sd"], s["loa"]
 
     fig = plt.figure(figsize=(7, 5))
@@ -196,7 +196,7 @@ def strata_table(rows, key) -> dict:
     out = {}
     for grp, rs in g.items():
         d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
-        s = ef_statistics([r["ef_gt"] for r in rs], [r["ef_pred"] for r in rs])
+        s = Measure.ef_statistics([r["ef_gt"] for r in rs], [r["ef_pred"] for r in rs])
         mae, bias, gt_ef = s["mae"], s["bias"], s["mean_gt"]
         mean_d = float(np.mean(list(d.values())))
         flag = "  (small n)" if len(rs) < SMALL_N else ""

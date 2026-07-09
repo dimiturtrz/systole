@@ -39,7 +39,7 @@ from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
 from core.hparams import from_json
 from core.inference import predict_volume
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import preprocess_case, resample_inplane, zscore
@@ -111,7 +111,7 @@ def shared_crop(masks: dict, spacing, margin_mm: float = MARGIN_MM):
 def volumes(masks: dict, spacing) -> dict:
     """EDV (ml full), ESV (ml empty), EF (%) from the LV cavity — full-res, real spacing."""
     if "ED" in masks and "ES" in masks:
-        ef, edv, esv = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
+        ef, edv, esv = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
         return {"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}
     return {}
 
@@ -225,7 +225,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     edi, esi = frame_indices(pdir)
     ed_k = nearest_index(frames_t, edi)
     es_k = nearest_index(frames_t, esi)
-    ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
+    ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
     case = preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
     entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",

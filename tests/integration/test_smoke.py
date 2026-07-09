@@ -9,7 +9,7 @@ from core.data.static.labels import LV_CAV as LV_CAVITY
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.mri.base import identify_lv_cavity
 from core.evaluate import dice
-from core.measure import ejection_fraction
+from core.measure import Measure
 
 _CASES = AcdcAdapter().cases()
 needs_data = pytest.mark.skipif(not _CASES, reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
@@ -28,7 +28,7 @@ def test_real_patient_labels_and_lv_identification():
 @needs_data
 def test_real_ef_is_physiological():
     d = AcdcAdapter().load_ed_es(_CASES[0])
-    ef, edv, esv = ejection_fraction(d["ED"]["gt"], d["ES"]["gt"], d["spacing"])
+    ef, edv, esv = Measure.ejection_fraction(d["ED"]["gt"], d["ES"]["gt"], d["spacing"])
     assert edv > esv > 0                              # diastole larger than systole
     assert 0 < ef < 100
 

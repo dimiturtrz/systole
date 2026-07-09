@@ -41,7 +41,7 @@ from skimage.measure import marching_cubes
 
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.preprocessing.preprocess import preprocess_case
 
 log = logging.getLogger("cardioview.render_overlay")
@@ -99,8 +99,8 @@ def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
     """EF (both phases) for the scene title — pred vs GT."""
     if "ED" not in masks or "ES" not in masks:
         return ""
-    ef, _, _ = ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
-    ef_g, _, _ = ejection_fraction(
+    ef, _, _ = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
+    ef_g, _, _ = Measure.ejection_fraction(
         *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
     return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 

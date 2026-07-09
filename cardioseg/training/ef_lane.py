@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from core.data.static.labels import LV_CAV
 from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import load_arrays
-from core.measure import label_volume_ml, voxel_volume_ml
+from core.measure import Measure
 from core.preprocessing.preprocess import fit_square
 
 from .volumes import vol_loss
@@ -81,13 +81,13 @@ class VolConsistency:
             if "ed_img" not in case or "es_img" not in case:
                 continue
             spacing = tuple(float(s) for s in case["spacing"])
-            edv = label_volume_ml(case["ed_gt"], lv_label, spacing)
-            esv = label_volume_ml(case["es_gt"], lv_label, spacing)
+            edv = Measure.label_volume_ml(case["ed_gt"], lv_label, spacing)
+            esv = Measure.label_volume_ml(case["es_gt"], lv_label, spacing)
             if edv <= 0:
                 continue
             self.ed.append(_stack(case["ed_img"], size, device))
             self.es.append(_stack(case["es_img"], size, device))
-            edv_gt.append(edv); esv_gt.append(esv); vox.append(voxel_volume_ml(spacing))
+            edv_gt.append(edv); esv_gt.append(esv); vox.append(Measure.voxel_volume_ml(spacing))
         self.n = len(self.ed)
         self.counts = torch.tensor([t.shape[0] for t in self.ed], device=device)
         self.vox = torch.tensor(vox, device=device)

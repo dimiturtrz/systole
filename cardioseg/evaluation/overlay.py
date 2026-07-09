@@ -24,7 +24,7 @@ from core.data.static.store import build as store
 from core.data.static.store import load_arrays
 from core.hparams import from_json
 from core.inference import predict_volume
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.model import build_unet
 from core.obs import setup
 from core.postprocess import Postprocess
@@ -77,9 +77,9 @@ class Overlay:
         pred_es = Postprocess.largest_cc_per_class(predict_volume(model, case["es_img"], size, device, tta=True))
         gt_ed = stack_slices(case["ed_gt"], size)
         img_ed = stack_slices(case["ed_img"], size, 0.0)
-        ef_p, _, _ = ejection_fraction(pred_ed, pred_es, spacing)
+        ef_p, _, _ = Measure.ejection_fraction(pred_ed, pred_es, spacing)
         gt_es = stack_slices(case["es_gt"], size)
-        ef_g, _, _ = ejection_fraction(gt_ed, gt_es, spacing)
+        ef_g, _, _ = Measure.ejection_fraction(gt_ed, gt_es, spacing)
         z = Overlay._mid_slice(gt_ed)
         return dict(group=case.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
                     ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)

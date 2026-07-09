@@ -22,7 +22,7 @@ from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
 from core.inference import predict_volume_probs
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.model import resolve_device
 from core.obs import setup
 from core.postprocess import Postprocess
@@ -86,8 +86,8 @@ class Ensemble:
                 preds[tag], gts[tag] = pred, gt
                 Ensemble._dice_fold(pred, gt, inter, den)
             if "ed" in preds and "es" in preds:
-                efp = ejection_fraction(preds["ed"], preds["es"], sp)[0]
-                efg = ejection_fraction(gts["ed"], gts["es"], sp)[0]
+                efp = Measure.ejection_fraction(preds["ed"], preds["es"], sp)[0]
+                efg = Measure.ejection_fraction(gts["ed"], gts["es"], sp)[0]
                 if not (np.isnan(efp) or np.isnan(efg)):
                     diffs.append(efp - efg)
         return Ensemble._score_summary(inter, den, diffs)

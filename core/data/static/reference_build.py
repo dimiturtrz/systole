@@ -22,7 +22,7 @@ from core.data.dynamic.mri_physics import (
 from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference, reference_dir
 from core.data.static.store import build as store
-from core.measure import ejection_fraction
+from core.measure import Measure
 from core.obs import setup
 
 log = logging.getLogger("cardioseg.reference_build")
@@ -61,7 +61,7 @@ def build_from_store(sources=None, inplane: float | None = None, out_dir: str | 
         if "ed_gt" not in case or "es_gt" not in case:
             continue
         sp = tuple(float(s) for s in case["spacing"])
-        ef, edv, esv = ejection_fraction(case["ed_gt"], case["es_gt"], sp)
+        ef, edv, esv = Measure.ejection_fraction(case["ed_gt"], case["es_gt"], sp)
         path = (r.get("pathology") or "unknown")
         g = by_path.setdefault(path, {"ef": [], "edv": [], "esv": []})
         g["ef"].append(ef); g["edv"].append(edv); g["esv"].append(esv)

@@ -23,7 +23,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, data_root
-from core.data.static.mri.pathology import harmonize
+from core.data.static.mri.pathology import Pathology
 from core.data.static.mri.registry import get_adapter
 from core.data.static.reference import reference_dir
 from core.preprocessing.n4 import N4Cfg
@@ -186,7 +186,7 @@ class MetaBuilder:
         return {
             "subject_id": case.name, "dataset": self.name, "file": file, "raw_path": str(case),
             "vendor": _norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
-            "pathology": harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
+            "pathology": Pathology.harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
             "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
             # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
             # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.

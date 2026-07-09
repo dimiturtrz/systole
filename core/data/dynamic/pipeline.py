@@ -76,6 +76,10 @@ class Soften:
         return b
 
 
-def build_pipeline(cfg, n_classes: int) -> list[Transform]:
-    """The default recipe: synth-replace -> augment -> soften. cfg = GeneratorCfg (synth + aug)."""
-    return [SynthReplace(cfg.synth, n_classes), Augment(cfg.aug), Soften(cfg.aug.soft_label_sigma, n_classes)]
+class Pipeline:
+    """The ordered Transform recipe the Generator composes (the build lives here as a staticmethod)."""
+
+    @staticmethod
+    def build(cfg, n_classes: int) -> list[Transform]:
+        """The default recipe: synth-replace -> augment -> soften. cfg = GeneratorCfg (synth + aug)."""
+        return [SynthReplace(cfg.synth, n_classes), Augment(cfg.aug), Soften(cfg.aug.soft_label_sigma, n_classes)]
