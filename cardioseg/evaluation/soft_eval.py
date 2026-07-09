@@ -36,47 +36,52 @@ from core.run import load_run
 log = logging.getLogger("cardioseg.soft_eval")
 
 
-def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
-    d = from_json(run / "config.json").generator.data
-    meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
-    _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                  val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-    return val
+class SoftEval:
+    """Soft-label EF readout + calibration for a run: hard EF (argmax+CC voxel count) vs soft EF (expected
+    blood volume, collapse-never) plus the softmax ECE. Free helpers folded in as staticmethods."""
 
+    @staticmethod
+    def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
+        d = from_json(run / "config.json").generator.data
+        meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
+        _, val, _ = splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
+                                      val_datasets=d.val_datasets, val_vendors=d.val_vendors)
+        return val
 
-def _ef(edv: float, esv: float) -> float:
-    return (edv - esv) / edv * 100.0 if edv > 0 else float("nan")
+    @staticmethod
+    def _ef(edv: float, esv: float) -> float:
+        return (edv - esv) / edv * 100.0 if edv > 0 else float("nan")
 
-
-def evaluate(run: Path):  # pragma: no cover  (loads the model + runs GPU inference over real val cases)
-    dev = resolve_device()
-    model, _, _ = load_run(run, dev)
-    rows, conf_all, corr_all = [], [], []
-    for r in _val(run).iter_rows(named=True):
-        case = store.load_arrays(r["path"])
-        if "ed_img" not in case or "es_img" not in case:
-            continue
-        sp = tuple(float(s) for s in case["spacing"])
-        vols = {}
-        for tag in ("ed", "es"):
-            _, mean = predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
-            p = mean.float().cpu().numpy()
-            blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
-            hard = largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
-            gate = hard == LV_CAV
-            gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
-            vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),
-                         "soft": expected_volume_ml(blood * gate, sp),
-                         "gt": label_volume_ml(gt, LV_CAV, sp)}
-            # calibration over foreground voxels (pred or gt non-bg)
-            fg = (gt > 0) | (hard > 0)
-            conf_all.append(p.max(1)[fg]); corr_all.append((p.argmax(1)[fg] == gt[fg]).astype(float))
-        rows.append((_ef(vols["ed"]["gt"], vols["es"]["gt"]),
-                     _ef(vols["ed"]["hard"], vols["es"]["hard"]),
-                     _ef(vols["ed"]["soft"], vols["es"]["soft"])))
-    a = np.array(rows)                                  # [n, 3] = gt, hard, soft
-    conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
-    return a, ece(conf, corr)[0]
+    @staticmethod
+    def evaluate(run: Path):  # pragma: no cover  (loads the model + runs GPU inference over real val cases)
+        dev = resolve_device()
+        model, _, _ = load_run(run, dev)
+        rows, conf_all, corr_all = [], [], []
+        for r in SoftEval._val(run).iter_rows(named=True):
+            case = store.load_arrays(r["path"])
+            if "ed_img" not in case or "es_img" not in case:
+                continue
+            sp = tuple(float(s) for s in case["spacing"])
+            vols = {}
+            for tag in ("ed", "es"):
+                _, mean = predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
+                p = mean.float().cpu().numpy()
+                blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
+                hard = largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
+                gate = hard == LV_CAV
+                gt = stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
+                vols[tag] = {"hard": label_volume_ml(hard, LV_CAV, sp),
+                             "soft": expected_volume_ml(blood * gate, sp),
+                             "gt": label_volume_ml(gt, LV_CAV, sp)}
+                # calibration over foreground voxels (pred or gt non-bg)
+                fg = (gt > 0) | (hard > 0)
+                conf_all.append(p.max(1)[fg]); corr_all.append((p.argmax(1)[fg] == gt[fg]).astype(float))
+            rows.append((SoftEval._ef(vols["ed"]["gt"], vols["es"]["gt"]),
+                         SoftEval._ef(vols["ed"]["hard"], vols["es"]["hard"]),
+                         SoftEval._ef(vols["ed"]["soft"], vols["es"]["soft"])))
+        a = np.array(rows)                                  # [n, 3] = gt, hard, soft
+        conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
+        return a, ece(conf, corr)[0]
 
 
 def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
@@ -84,7 +89,7 @@ def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", required=True)
     args = ap.parse_args()
-    arr, e = evaluate(resolve(args.run))
+    arr, e = SoftEval.evaluate(resolve(args.run))
     gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
     log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
     log.info(f"ECE: {e:.4f}")

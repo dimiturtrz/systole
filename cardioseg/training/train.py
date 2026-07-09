@@ -34,7 +34,7 @@ from core.model import build_unet, resolve_device
 from core.obs import progress, setup, timed
 from core.registry import MODEL_NAME, save_model
 
-from ..evaluation.modelcard import generate
+from ..evaluation.modelcard import ModelCard
 from ..evaluation.validate import EvalCfg, Evaluator, summarize
 from ..tracking import Tracker
 from .ef_lane import build_aux
@@ -261,7 +261,7 @@ class SeedTrainer:
         Xva, Yva, val_df, device = self.sh["Xva"], self.sh["Yva"], self.sh["val_df"], self.device
         cfg, d, alias, seed = self.cfg, self.d, self.alias, self.seed
         with self._artifact_step("model card"):
-            generate(out)
+            ModelCard.generate(out)
             log.info("wrote %s/MODEL_CARD.md", out)
         with self._artifact_step("attribution"):               # attribution diagnostic (confusion + saliency)
             s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
