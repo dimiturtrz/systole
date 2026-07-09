@@ -5,19 +5,12 @@ import nibabel as nib
 import numpy as np
 
 from core.data.static.mri.base import MNM_LABEL_MAP, load_frames
-from core.data.static.mri.mnm2 import (
-    Mnm2Adapter,
-    _dataset_dir,
-    load_ed_es,
-    meta_from_info,
-    mnm2_cases,
-    mnm2_info,
-)
+from core.data.static.mri.mnm2 import Mnm2Adapter
 
 
 # --- meta_from_info: disease/vendor passthrough, FIELD float, fixed country, unfilled demographics ---
 def test_meta_from_info_fields():
-    m = meta_from_info({"DISEASE": "HCM", "VENDOR": "Philips", "SCANNER": "Achieva", "FIELD": "3.0"})
+    m = Mnm2Adapter._meta_from_info({"DISEASE": "HCM", "VENDOR": "Philips", "SCANNER": "Achieva", "FIELD": "3.0"})
     assert m["group"] == "HCM" and m["vendor"] == "Philips" and m["scanner"] == "Achieva"
     assert m["field_T"] == 3.0                                 # float-parsed
     assert m["country"] == "Spain" and m["centre"] is None     # fixed (paper), per-subject centre unknown
@@ -26,8 +19,8 @@ def test_meta_from_info_fields():
 
 def test_meta_from_info_bad_field_none():
     """Non-numeric FIELD -> None (to_float), never a crash; empty dict all-None but country fixed."""
-    assert meta_from_info({"FIELD": "n/a"})["field_T"] is None
-    m = meta_from_info({})
+    assert Mnm2Adapter._meta_from_info({"FIELD": "n/a"})["field_T"] is None
+    m = Mnm2Adapter._meta_from_info({})
     assert m["group"] is None and m["field_T"] is None and m["country"] == "Spain"
 
 
@@ -35,19 +28,19 @@ def test_meta_from_info_bad_field_none():
 def test_dataset_dir_direct_nnn(tmp_path, monkeypatch):
     (tmp_path / "001").mkdir()                                 # NNN dir directly in root
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path.parent))
-    assert _dataset_dir(tmp_path) == tmp_path                  # "." sub matches
+    assert Mnm2Adapter._dataset_dir(tmp_path) == tmp_path                  # "." sub matches
 
 
 def test_dataset_dir_nested(tmp_path, monkeypatch):
     nested = tmp_path / "MnM2" / "dataset"; (nested / "007").mkdir(parents=True)
     monkeypatch.setenv("CARDIAC_DATA", str(tmp_path.parent))
-    assert _dataset_dir(tmp_path) == nested                    # MnM2/dataset nesting resolved
+    assert Mnm2Adapter._dataset_dir(tmp_path) == nested                    # MnM2/dataset nesting resolved
 
 
 def test_dataset_dir_env_override(tmp_path, monkeypatch):
     (tmp_path / "123").mkdir()
     monkeypatch.setenv("CARDIAC_MNM2_ROOT", str(tmp_path))
-    assert _dataset_dir() == tmp_path                          # env root wins
+    assert Mnm2Adapter._dataset_dir() == tmp_path                          # env root wins
 
 
 # --- mnm2_cases: only 3-digit dirs, numerically sorted; non-NNN ignored ---
@@ -55,7 +48,7 @@ def test_mnm2_cases_filters_and_sorts(tmp_path, monkeypatch):
     for n in ("010", "002", "100", "abc"):
         (tmp_path / n).mkdir()
     monkeypatch.setenv("CARDIAC_MNM2_ROOT", str(tmp_path))
-    cases = mnm2_cases()
+    cases = Mnm2Adapter().cases()
     assert [c.name for c in cases] == ["002", "010", "100"]    # NNN only, sorted; 'abc' excluded
 
 
@@ -82,7 +75,7 @@ def test_mnm2_info_zero_pads_key(tmp_path, monkeypatch):
     ds = tmp_path / "dataset"; (ds / "007").mkdir(parents=True)
     (tmp_path / "dataset_information.csv").write_text("SUBJECT_CODE,DISEASE,VENDOR,FIELD\n7,HCM,GE,1.5\n")
     monkeypatch.setenv("CARDIAC_MNM2_ROOT", str(ds))
-    info = mnm2_info()
+    info = Mnm2Adapter._info()
     assert info["007"]["DISEASE"] == "HCM"                    # '7' -> '007' key transform
 
 
@@ -90,7 +83,7 @@ def test_mnm2_info_zero_pads_key(tmp_path, monkeypatch):
 def test_dataset_dir_fallback_to_raw(tmp_path, monkeypatch):
     empty = tmp_path / "empty"; empty.mkdir()
     monkeypatch.setenv("CARDIAC_DATA", str(empty))            # raw = empty/raw, no NNN dirs
-    assert _dataset_dir() == empty / "raw"                    # fallback = raw root
+    assert Mnm2Adapter._dataset_dir() == empty / "raw"                    # fallback = raw root
 
 
 # --- load_ed_es: end-to-end SA ED/ES via nifti + CSV disease, canonical remap ---
@@ -103,7 +96,7 @@ def test_load_ed_es_end_to_end(tmp_path, monkeypatch):
             im = nib.Nifti1Image(arr, np.eye(4)); im.header.set_zooms((1, 1, 1))
             nib.save(im, case / f"042_SA_{tag}{suf}.nii.gz")
     (tmp_path / "MnM2" / "dataset_information.csv").write_text("SUBJECT_CODE,DISEASE\n42,HCM\n")
-    out = load_ed_es(case)
+    out = Mnm2Adapter().load_ed_es(case)
     assert out["group"] == "HCM" and "ED" in out and "ES" in out
     assert 3 in np.unique(out["ED"]["gt"]) and 1 in np.unique(out["ED"]["gt"])   # raw 1->3, 3->1
 
