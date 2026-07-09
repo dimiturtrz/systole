@@ -5,7 +5,16 @@ import pytest
 
 nx = pytest.importorskip("networkx")
 
-from devtools.graph import _DEFAULTS, _STRUCTURAL, _undersized, assert_fitness, load_structure_cfg, report, _top
+from devtools.graph import (
+    _DEFAULTS,
+    _STRUCTURAL,
+    _top,
+    _undersized,
+    assert_fitness,
+    load_structure_cfg,
+    report,
+    unmirrored,
+)
 
 
 def test_top_ranks_descending_and_caps():
@@ -56,3 +65,16 @@ def test_undersized_exempts_structural_files():
 def test_load_structure_cfg_defaults_when_absent():
     cfg = load_structure_cfg("does_not_exist.toml")
     assert cfg == _DEFAULTS and cfg["file_max"] == 750
+
+
+def test_unmirrored_flags_module_without_test_and_exempts_plumbing(tmp_path, monkeypatch):
+    (tmp_path / "pkg").mkdir()
+    for n in ("logic.py", "covered.py", "__init__.py"):
+        (tmp_path / "pkg" / n).write_text("x = 1\n")
+    tdir = tmp_path / "tests" / "unit" / "pkg"; tdir.mkdir(parents=True)
+    (tdir / "test_covered.py").write_text("def test_x(): pass\n")
+    monkeypatch.chdir(tmp_path)
+    miss = unmirrored(["pkg"], test_root="tests/unit")
+    assert any("logic.py" in m for m in miss)          # no mirrored test -> flagged
+    assert not any("covered.py" in m for m in miss)    # has test_covered.py -> ok
+    assert not any("__init__" in m for m in miss)      # plumbing exempt

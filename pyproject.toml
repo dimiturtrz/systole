@@ -42,6 +42,10 @@ all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]          # repo root importable -> top-level devtools/ (dev tooling, not a shipped package)
+# tests/unit/ MIRRORS the source tree (bd cardiac-seg-h7vy.1) -> same-named test modules in different
+# dirs (two test_pipeline_chain.py). importlib import mode resolves those by path (the default 'prepend'
+# needs unique basenames + __init__ packages, which a mirror breaks).
+addopts = "--import-mode=importlib"
 
 # Architecture fitness thresholds (devtools/graph.py --assert, bd cardiac-seg-g0b2) — the METRIC arch
 # axis import-linter's categorical contracts can't express. BLOCKING rules start clean and ratchet:

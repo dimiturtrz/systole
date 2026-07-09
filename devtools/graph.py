@@ -88,6 +88,21 @@ def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
             for n, v in nx.betweenness_centrality(g).items() if v > mx]
 
 
+def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
+    """Source modules with no mirrored test at tests/unit/<same path>/test_<name>.py — the test tree is
+    meant to mirror the source tree method-wise (bd cardiac-seg-h7vy.1). __init__/__main__ are plumbing,
+    exempt. Advisory: a structural gap (untested module), distinct from line coverage."""
+    out = []
+    for pkg in packages:
+        for f in sorted(Path(pkg).rglob("*.py")):
+            if f.name in _STRUCTURAL:
+                continue
+            mirror = Path(test_root) / f.parent / f"test_{f.name}"
+            if not mirror.exists():
+                out.append(f"{f.as_posix()} — no mirrored {mirror.as_posix()}")
+    return out
+
+
 def assert_fitness(g: nx.DiGraph, files: list[tuple[str, int]], cfg: dict) -> tuple[list[str], list[str]]:
     """(blocking, advisory) fitness violations. BLOCKING = the rules clean today (god-module, cycle,
     god-file) so they ratchet; ADVISORY = the miscalibrated/noisy ones (line floor, chokepoint)."""
@@ -126,6 +141,7 @@ def _run_assert(packages: list[str]) -> int:
     cfg = load_structure_cfg()
     g, files = build_graph(packages), file_lines(packages)
     blocking, advisory = assert_fitness(g, files, cfg)
+    advisory += [f"test mirror: {m}" for m in unmirrored(packages)]
     if advisory:
         shown = advisory[:_ADVISORY_PREVIEW]
         extra = f"\n  … +{len(advisory) - _ADVISORY_PREVIEW} more" if len(advisory) > _ADVISORY_PREVIEW else ""
