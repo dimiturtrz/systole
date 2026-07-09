@@ -9,6 +9,7 @@ Run after regenerating RESULTS.json (cardioseg.evaluation.results):  python -m c
 Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep those few; the tables
 (where the drift happened) are now generated.
 """
+import argparse
 import json
 import logging
 import re
@@ -130,6 +131,7 @@ TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
 
 
 def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
+    argparse.ArgumentParser(description="sync cardioseg/RESULTS.json numbers into doc marker blocks").parse_args()
     Obs.setup()
     total = 0
     for f in TARGETS:

@@ -4,6 +4,7 @@ blobs, cartoon backgrounds, blood-too-bright). Saves a PNG grid. Companion to sy
 and sim2real (per-vendor fit)."""
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -61,6 +62,11 @@ class Render:
             log.info(f"  {_NAMES[c]:8} real {rm.mean():+.2f}±{rm.std():.2f}   synth {sm.mean():+.2f}±{sm.std():.2f}")
 
 
-if __name__ == "__main__":
+def main():
+    argparse.ArgumentParser(description="render synth-vs-real diagnostic panels").parse_args()
     Obs.setup()
     Render.render_synth_vs_real()
+
+
+if __name__ == "__main__":
+    main()
