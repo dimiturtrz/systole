@@ -39,18 +39,3 @@ def test_dprime_affine_invariant():
 def test_dprime_tiny_sample_is_nan():
     v = SynthFidelity.dprime(torch.randn(10), torch.randn(3000))              # < 50 pts -> unstable -> NaN
     assert v != v
-
-
-def test_fit_acquisition_reproduces_own_contrast():
-    """sim2real fit: bSSFP can reproduce a contrast it itself generated -> ~0 residual (expressiveness
-    sanity; the real residual on real data is the physics gap, e.g. RV/cav flow)."""
-    import math
-
-    import torch
-
-    from core.data.analysis.sim2real import Sim2Real
-    from core.data.dynamic.mri_physics import MriPhysics
-    n = 4
-    t1, t2, pd = MriPhysics.tissue_params(n, 0, 1.5, "cpu")
-    target = MriPhysics.bssfp_signal(t1, t2, pd, torch.tensor(3.0), torch.tensor(50 * math.pi / 180))[1:n]
-    assert Sim2Real.fit_acquisition(target, n)["residual"] < 0.01

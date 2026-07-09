@@ -91,9 +91,9 @@ def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
 
 
 def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
-    """Source modules with no mirrored test at tests/unit/<same path>/test_<name>.py — the test tree is
-    meant to mirror the source tree method-wise (bd cardiac-seg-h7vy.1). __init__/__main__ are plumbing,
-    exempt. Advisory: a structural gap (untested module), distinct from line coverage."""
+    """Source modules with no mirrored test at tests/unit/<same path>/test_<name>.py — the test tree
+    mirrors the source tree method-wise (bd h7vy.1). __init__/__main__ are plumbing, exempt. BLOCKING
+    (bd j4m2: backfilled to 0) — a new source module without its mirror test fails the fitness gate."""
     out = []
     for pkg in packages:
         for f in sorted(Path(pkg).rglob("*.py")):
@@ -143,7 +143,7 @@ def _run_assert(packages: list[str]) -> int:
     cfg = load_structure_cfg()
     g, files = build_graph(packages), file_lines(packages)
     blocking, advisory = assert_fitness(g, files, cfg)
-    advisory += [f"test mirror: {m}" for m in unmirrored(packages)]
+    blocking += [f"test mirror: {m}" for m in unmirrored(packages)]   # GRADUATED to blocking (bd j4m2: 0 gaps)
     if advisory:
         shown = advisory[:_ADVISORY_PREVIEW]
         extra = f"\n  … +{len(advisory) - _ADVISORY_PREVIEW} more" if len(advisory) > _ADVISORY_PREVIEW else ""
