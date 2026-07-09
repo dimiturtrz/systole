@@ -33,31 +33,36 @@ from .validate import EvalCfg, Evaluator
 log = logging.getLogger("cardioseg.calibrate")
 
 
-def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
-    """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
-    z = torch.tensor(logits, dtype=torch.float32, device=device)
-    y = torch.tensor(labels, dtype=torch.long, device=device)
-    logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
-    opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
-    nll = torch.nn.CrossEntropyLoss()
+class Calibrate:
+    """Temperature scaling (Guo 2017): fit one scalar T on val (LBFGS/NLL), report ECE before/after per
+    axis. The free helpers folded in as staticmethods — the fit and the ECE-at-T evaluation."""
 
-    def closure():
-        opt.zero_grad()
-        loss = nll(z / logT.exp(), y)
-        loss.backward()
-        return loss
+    @staticmethod
+    def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
+        """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
+        z = torch.tensor(logits, dtype=torch.float32, device=device)
+        y = torch.tensor(labels, dtype=torch.long, device=device)
+        logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
+        opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
+        nll = torch.nn.CrossEntropyLoss()
 
-    opt.step(closure)
-    return float(logT.exp().detach())
+        def closure():
+            opt.zero_grad()
+            loss = nll(z / logT.exp(), y)
+            loss.backward()
+            return loss
 
+        opt.step(closure)
+        return float(logT.exp().detach())
 
-def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
-    """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
-    z = logits / T
-    z = z - z.max(1, keepdims=True)
-    p = np.exp(z); p /= p.sum(1, keepdims=True)
-    conf, pred = p.max(1), p.argmax(1)
-    return ece(conf, (pred == labels).astype(float))[0]
+    @staticmethod
+    def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
+        """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
+        z = logits / T
+        z = z - z.max(1, keepdims=True)
+        p = np.exp(z); p /= p.sum(1, keepdims=True)
+        conf, pred = p.max(1), p.argmax(1)
+        return ece(conf, (pred == labels).astype(float))[0]
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
@@ -77,7 +82,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
     ev = Evaluator(model, device, EvalCfg(size=d.size))   # state (model/device/size) once; call many
     val_logits, val_labels = ev.gather(splits.paths(val))
-    T = fit_temperature(val_logits, val_labels, device)
+    T = Calibrate.fit_temperature(val_logits, val_labels, device)
 
     axes = {"val": val}
     for v in d.test_vendors:                         # report each test vendor separately
@@ -88,7 +93,7 @@ def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) 
         if not len(df):
             continue
         lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.paths(df))
-        e0, e1 = _ece_at(lg, lb, 1.0), _ece_at(lg, lb, T)
+        e0, e1 = Calibrate._ece_at(lg, lb, 1.0), Calibrate._ece_at(lg, lb, T)
         report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
         log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")
     (run / "plots").mkdir(parents=True, exist_ok=True)

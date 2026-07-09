@@ -2,8 +2,9 @@
 renderers (given the committed RESULTS.json, they must emit well-formed markdown). The per-file
 read/write loop in main() is the shell; inject_blocks + the block fns are pure and tested here.
 """
-from cardioseg.evaluation import sync_numbers as sn
-from cardioseg.evaluation.sync_numbers import BLOCKS, inject_blocks
+from cardioseg.evaluation.sync_numbers import BLOCKS, SyncNumbers
+
+inject_blocks = SyncNumbers.inject_blocks
 
 
 # --- inject_blocks: substitution equivalence classes ---
@@ -61,5 +62,5 @@ def test_table_blocks_have_header_and_separator():
 
 def test_headline_is_prose_with_numbers():
     """headline is prose (no table), naming the unseen vendors + a Dice value."""
-    h = sn.headline()
+    h = SyncNumbers.headline()
     assert "Dice" in h and "|" not in h

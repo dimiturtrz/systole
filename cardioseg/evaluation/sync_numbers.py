@@ -27,99 +27,106 @@ _NN = R["nnunet"]
 _E = R["efficiency"]
 
 
-def compare() -> str:   # ours vs SOTA on the UNSEEN vendors (Canon, GE) — same split + macro eval
-    o, n = _E["ours"], _E["nnunet"]
-    return "\n".join([
-        "| model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |",
-        "|---|---|---|---|---|---|---|",
-        f"| **ours** (ONNX-deployable) | **{o['params']}** | **{o['flops']}** | "
-        f"{_C['dice']['mean']:.2f} | {_C['ef_mae']}% | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
-        f"| nnU-Net (SOTA baseline) | {n['params']} | {n['flops']} | "
-        f"{_NN['canon']['dice']['mean']:.2f} | **{_NN['canon']['ef_mae']}%** | "
-        f"{_NN['ge']['dice']['mean']:.2f} | **{_NN['ge']['ef_mae']}%** |",
-    ])
+class SyncNumbers:
+    """Doc number-syncing: the table/prose renderers off the committed RESULTS.json + the pure
+    marker-block injection (the free helpers folded in as staticmethods). The per-file read/write loop
+    stays in module-level `main` (the shell); everything here is pure and testable."""
+
+    @staticmethod
+    def compare() -> str:   # ours vs SOTA on the UNSEEN vendors (Canon, GE) — same split + macro eval
+        o, n = _E["ours"], _E["nnunet"]
+        return "\n".join([
+            "| model | params | FLOPs | Canon Dice | Canon EF MAE | GE Dice | GE EF MAE |",
+            "|---|---|---|---|---|---|---|",
+            f"| **ours** (ONNX-deployable) | **{o['params']}** | **{o['flops']}** | "
+            f"{_C['dice']['mean']:.2f} | {_C['ef_mae']}% | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
+            f"| nnU-Net (SOTA baseline) | {n['params']} | {n['flops']} | "
+            f"{_NN['canon']['dice']['mean']:.2f} | **{_NN['canon']['ef_mae']}%** | "
+            f"{_NN['ge']['dice']['mean']:.2f} | **{_NN['ge']['ef_mae']}%** |",
+        ])
+
+    @staticmethod
+    def acdc() -> str:
+        d, h, s = _A["dice"], _A["hd95"], _A["assd"]
+        rows = ["| structure | Dice | HD95 (mm) | ASSD (mm) |", "|---|---|---|---|"]
+        for k, lab in [("LV-cav", "LV cavity"), ("LV-myo", "LV myocardium"), ("RV", "RV cavity")]:
+            rows.append(f"| {lab} | {d[k]:.2f} | {h[k]:.1f} | {s[k]:.2f} |")
+        rows.append(f"| **mean** | **{d['mean']:.2f}** | | |")
+        return "\n".join(rows)
+
+    @staticmethod
+    def strata() -> str:
+        st = _A.get("strata", {})
+        order = [("dilated", "dilated (DCM)"), ("ischemic", "ischemic (MINF)"), ("rv_congenital", "rv_congenital"),
+                 ("normal", "normal (NOR)"), ("hypertrophic", "**hypertrophic (HCM)**")]
+        rows = ["| pathology | gtEF | mean Dice | EF MAE | EF bias |", "|---|---|---|---|---|"]
+        for g, lab in order:
+            s = st.get(g)
+            if s:
+                rows.append(f"| {lab} | {s['gt_ef_mean']:.0f}% | {s['dice_mean']:.2f} | {s['ef_mae']:.1f}% | {s['ef_bias']:+.1f}% |")
+        return "\n".join(rows)
+
+    @staticmethod
+    def axis() -> str:
+        return "\n".join([
+            "| held-out axis | role | n | mean Dice | EF MAE |", "|---|---|---|---|---|",
+            f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
+            f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% |",
+            f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
+        ])
+
+    @staticmethod
+    def cardcompare() -> str:  # unseen-vendor comparison used in both model cards
+        return "\n".join([
+            "| unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
+            f"| Canon mean Dice | {_NN['canon']['dice']['mean']:.3f} | {_C['dice']['mean']:.3f} |",
+            f"| GE mean Dice | {_NN['ge']['dice']['mean']:.3f} | {_G['dice']['mean']:.3f} |",
+            f"| Canon / GE EF MAE | **{_NN['canon']['ef_mae']} / {_NN['ge']['ef_mae']}%** | {_C['ef_mae']} / {_G['ef_mae']}% |",
+        ])
+
+    @staticmethod
+    def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
+        a, n = _G["dice"], _NN["ge"]["dice"]
+        dd = lambda k: (n[k] - a[k]) * 100
+        return "\n".join([
+            "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
+            "|---|---|---|---|---|---|---|",
+            f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {a['mean']:.3f} | {a['LV-cav']:.3f} | "
+            f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
+            f"| **nnU-Net** (50 ep, 1 fold) | **{n['mean']:.3f}** | **{n['LV-cav']:.3f}** | **{n['LV-myo']:.3f}** | "
+            f"**{n['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
+            f"| Δ (nnU-Net − ours) | +{dd('mean'):.1f} | +{dd('LV-cav'):.1f} | +{dd('LV-myo'):.1f} | "
+            f"+{dd('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
+        ])
+
+    @staticmethod
+    def headline() -> str:
+        return (f"Unseen-vendor (held out: Canon n={_C['n']} + GE n={_G['n']}) mean Dice "
+                f"**{_C['dice']['mean']:.2f}** / **{_G['dice']['mean']:.2f}**, EF MAE {_C['ef_mae']} / {_G['ef_mae']}%; "
+                f"ACDC centre-shift (val, n={_A['n']}) Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
+                f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]).")
+
+    @staticmethod
+    def inject_blocks(txt: str, blocks: dict) -> tuple[str, int]:
+        """Replace each `<!-- results:KEY -->...<!-- /results:KEY -->` span with `\\n{fn()}\\n` between the
+        markers. Returns (new_text, n_blocks_substituted). Pure string transform (the file read/write is the
+        shell in `main`) — so the marker-matching + idempotent re-render is testable on an in-memory string.
+        A block present in the text but not in `blocks` is left untouched; a block in `blocks` not in the
+        text is skipped. `fn()` output that contains no marker keeps the operation idempotent."""
+        total = 0
+        for key, fn in blocks.items():
+            pat = re.compile(rf"(<!-- results:{key} -->).*?(<!-- /results:{key} -->)", re.DOTALL)
+            if pat.search(txt):
+                txt = pat.sub(lambda m, fn=fn: f"{m.group(1)}\n{fn()}\n{m.group(2)}", txt)
+                total += 1
+        return txt, total
 
 
-def acdc() -> str:
-    d, h, s = _A["dice"], _A["hd95"], _A["assd"]
-    rows = ["| structure | Dice | HD95 (mm) | ASSD (mm) |", "|---|---|---|---|"]
-    for k, lab in [("LV-cav", "LV cavity"), ("LV-myo", "LV myocardium"), ("RV", "RV cavity")]:
-        rows.append(f"| {lab} | {d[k]:.2f} | {h[k]:.1f} | {s[k]:.2f} |")
-    rows.append(f"| **mean** | **{d['mean']:.2f}** | | |")
-    return "\n".join(rows)
-
-
-def strata() -> str:
-    st = _A.get("strata", {})
-    order = [("dilated", "dilated (DCM)"), ("ischemic", "ischemic (MINF)"), ("rv_congenital", "rv_congenital"),
-             ("normal", "normal (NOR)"), ("hypertrophic", "**hypertrophic (HCM)**")]
-    rows = ["| pathology | gtEF | mean Dice | EF MAE | EF bias |", "|---|---|---|---|---|"]
-    for g, lab in order:
-        s = st.get(g)
-        if s:
-            rows.append(f"| {lab} | {s['gt_ef_mean']:.0f}% | {s['dice_mean']:.2f} | {s['ef_mae']:.1f}% | {s['ef_bias']:+.1f}% |")
-    return "\n".join(rows)
-
-
-def axis() -> str:
-    return "\n".join([
-        "| held-out axis | role | n | mean Dice | EF MAE |", "|---|---|---|---|---|",
-        f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
-        f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% |",
-        f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
-    ])
-
-
-def cardcompare() -> str:  # unseen-vendor comparison used in both model cards
-    return "\n".join([
-        "| unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
-        f"| Canon mean Dice | {_NN['canon']['dice']['mean']:.3f} | {_C['dice']['mean']:.3f} |",
-        f"| GE mean Dice | {_NN['ge']['dice']['mean']:.3f} | {_G['dice']['mean']:.3f} |",
-        f"| Canon / GE EF MAE | **{_NN['canon']['ef_mae']} / {_NN['ge']['ef_mae']}%** | {_C['ef_mae']} / {_G['ef_mae']}% |",
-    ])
-
-
-def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
-    a, n = _G["dice"], _NN["ge"]["dice"]
-    dd = lambda k: (n[k] - a[k]) * 100
-    return "\n".join([
-        "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
-        "|---|---|---|---|---|---|---|",
-        f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {a['mean']:.3f} | {a['LV-cav']:.3f} | "
-        f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
-        f"| **nnU-Net** (50 ep, 1 fold) | **{n['mean']:.3f}** | **{n['LV-cav']:.3f}** | **{n['LV-myo']:.3f}** | "
-        f"**{n['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
-        f"| Δ (nnU-Net − ours) | +{dd('mean'):.1f} | +{dd('LV-cav'):.1f} | +{dd('LV-myo'):.1f} | "
-        f"+{dd('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
-    ])
-
-
-def headline() -> str:
-    return (f"Unseen-vendor (held out: Canon n={_C['n']} + GE n={_G['n']}) mean Dice "
-            f"**{_C['dice']['mean']:.2f}** / **{_G['dice']['mean']:.2f}**, EF MAE {_C['ef_mae']} / {_G['ef_mae']}%; "
-            f"ACDC centre-shift (val, n={_A['n']}) Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
-            f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]).")
-
-
-BLOCKS = {"compare": compare, "acdc": acdc, "strata": strata, "headline": headline,
-          "axis": axis, "cardcompare": cardcompare, "nnucompare": nnucompare}
+BLOCKS = {"compare": SyncNumbers.compare, "acdc": SyncNumbers.acdc, "strata": SyncNumbers.strata,
+          "headline": SyncNumbers.headline, "axis": SyncNumbers.axis,
+          "cardcompare": SyncNumbers.cardcompare, "nnucompare": SyncNumbers.nnucompare}
 TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
            "baselines/nnunet/MODEL_CARD.md", "baselines/nnunet/README.md"]
-
-
-def inject_blocks(txt: str, blocks: dict) -> tuple[str, int]:
-    """Replace each `<!-- results:KEY -->...<!-- /results:KEY -->` span with `\\n{fn()}\\n` between the
-    markers. Returns (new_text, n_blocks_substituted). Pure string transform (the file read/write is the
-    shell in `main`) — so the marker-matching + idempotent re-render is testable on an in-memory string.
-    A block present in the text but not in `blocks` is left untouched; a block in `blocks` not in the
-    text is skipped. `fn()` output that contains no marker keeps the operation idempotent."""
-    total = 0
-    for key, fn in blocks.items():
-        pat = re.compile(rf"(<!-- results:{key} -->).*?(<!-- /results:{key} -->)", re.DOTALL)
-        if pat.search(txt):
-            txt = pat.sub(lambda m, fn=fn: f"{m.group(1)}\n{fn()}\n{m.group(2)}", txt)
-            total += 1
-    return txt, total
 
 
 def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
@@ -128,7 +135,7 @@ def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS;
     for f in TARGETS:
         p = ROOT / f
         txt = orig = p.read_text()
-        txt, n = inject_blocks(txt, BLOCKS)
+        txt, n = SyncNumbers.inject_blocks(txt, BLOCKS)
         total += n
         if txt != orig:
             p.write_text(txt)
