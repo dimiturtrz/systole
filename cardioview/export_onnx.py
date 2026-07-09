@@ -16,7 +16,7 @@ from pathlib import Path
 from common import DEFAULT_MODEL, MODELS, log_setup, model_dir
 
 from core.data.static import store
-from core.export_onnx import export as build_onnx
+from core.export_onnx import ExportOnnx
 
 log = logging.getLogger("cardioview.export_onnx")
 
@@ -35,7 +35,7 @@ def main() -> None:  # pragma: no cover  (core.export_onnx build + shutil.copy â
     # parity check needs a CONSOLIDATED-STORE npz (not a raw patient dir) â€” same source as
     # core.export_onnx's own default.
     verify = a.verify if a.verify else store.load(["acdc"]).get_column("path")[0]
-    onnx = build_onnx(run, verify, a.quantize)  # runs/<name>/model.onnx
+    onnx = ExportOnnx.export(run, verify, a.quantize)  # runs/<name>/model.onnx
 
     OUT.mkdir(parents=True, exist_ok=True)
     dst = OUT / f"{a.model}.onnx"

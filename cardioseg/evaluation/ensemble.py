@@ -21,7 +21,7 @@ import torch
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
-from core.inference import predict_volume_probs
+from core.inference import Inference
 from core.measure import Measure
 from core.model import resolve_device
 from core.obs import setup
@@ -45,7 +45,7 @@ class Ensemble:
     def decompose(models, vol_img, size, device):
         """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
         [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
-        mems = [predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
+        mems = [Inference.predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
         members = torch.stack(mems)                                                  # [K,D,C,H,W]
         mean = members.mean(0)
         logc = np.log(mean.shape[1])

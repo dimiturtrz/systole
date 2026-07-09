@@ -30,7 +30,7 @@ from core.data.static import splits
 from core.data.static.store import build as store
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import from_json
-from core.inference import predict_volume
+from core.inference import Inference
 from core.measure import LOA_Z, Measure
 from core.model import resolve_device
 from core.obs import setup
@@ -73,7 +73,7 @@ class Distribution:
                 k = tag.lower()
                 if f"{k}_img" not in case:
                     continue
-                pred = Postprocess.largest_cc_per_class(predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
+                pred = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
                 gt = stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it

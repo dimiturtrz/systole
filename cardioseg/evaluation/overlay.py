@@ -23,7 +23,7 @@ from core.data.static import splits
 from core.data.static.store import build as store
 from core.data.static.store import load_arrays
 from core.hparams import from_json
-from core.inference import predict_volume
+from core.inference import Inference
 from core.measure import Measure
 from core.model import build_unet
 from core.obs import setup
@@ -73,8 +73,8 @@ class Overlay:
     def _case(model, path, size, device):
         case = load_arrays(path)
         spacing = tuple(float(s) for s in case["spacing"])
-        pred_ed = Postprocess.largest_cc_per_class(predict_volume(model, case["ed_img"], size, device, tta=True))
-        pred_es = Postprocess.largest_cc_per_class(predict_volume(model, case["es_img"], size, device, tta=True))
+        pred_ed = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["ed_img"], size, device, tta=True))
+        pred_es = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["es_img"], size, device, tta=True))
         gt_ed = stack_slices(case["ed_gt"], size)
         img_ed = stack_slices(case["ed_img"], size, 0.0)
         ef_p, _, _ = Measure.ejection_fraction(pred_ed, pred_es, spacing)

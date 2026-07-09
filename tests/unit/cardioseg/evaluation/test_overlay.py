@@ -19,7 +19,7 @@ def test_case_assembles_row_with_matching_ef(monkeypatch):
     case = {"ed_img": ed.astype(np.float32), "es_img": es.astype(np.float32),
             "ed_gt": ed, "es_gt": es, "spacing": (10.0, 1.5, 1.5), "group": "NOR"}
     monkeypatch.setattr(ov, "load_arrays", lambda _p: case)
-    monkeypatch.setattr(ov, "predict_volume",
+    monkeypatch.setattr(ov.Inference, "predict_volume",
                         lambda _m, img, _size, _dev, tta=True: (img > 0).astype(np.uint8) * 3)
     out = ov.Overlay._case(None, "/p/pt001.npz", size=16, device="cpu")
     assert out["group"] == "NOR" and out["name"] == "pt001"

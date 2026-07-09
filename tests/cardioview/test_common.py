@@ -69,7 +69,7 @@ def _case(with_ed=True, with_es=True):
 def test_masks_gt_source_uses_ground_truth(monkeypatch):
     """GT-source class: source='gt' returns square-stacked GT (never calls the model) for ED and ES."""
     called = []
-    monkeypatch.setattr(C, "predict_volume", lambda *a, **k: called.append(1) or None)
+    monkeypatch.setattr(C.Inference, "predict_volume", lambda *a, **k: called.append(1) or None)
     out = masks(_case(), "gt")
     assert set(out) == {"ED", "ES"} and not called
     assert out["ED"].dtype == np.uint8 and out["ED"].max() == 3
@@ -81,7 +81,7 @@ def test_masks_pred_source_calls_model_then_largest_cc(monkeypatch):
     pred = np.zeros((2, 8, 8), np.uint8)
     pred[:, 1:4, 1:4] = 3     # big blob
     pred[0, 7, 7] = 3         # stray island (dropped by largest-CC)
-    monkeypatch.setattr(C, "predict_volume", lambda *a, **k: pred.copy())
+    monkeypatch.setattr(C.Inference, "predict_volume", lambda *a, **k: pred.copy())
     out = masks(_case(), "pred", model=object(), device="cpu")
     assert set(out) == {"ED", "ES"}
     assert out["ED"][0, 7, 7] == 0        # stray island removed
@@ -90,6 +90,6 @@ def test_masks_pred_source_calls_model_then_largest_cc(monkeypatch):
 
 def test_masks_skips_absent_phase(monkeypatch):
     """Missing-phase class: an ES-only case -> only 'ES' in the dict (the `continue` on absent img)."""
-    monkeypatch.setattr(C, "predict_volume", lambda *a, **k: np.zeros((2, 8, 8), np.uint8))
+    monkeypatch.setattr(C.Inference, "predict_volume", lambda *a, **k: np.zeros((2, 8, 8), np.uint8))
     out = masks(_case(with_ed=False), "pred", model=object(), device="cpu")
     assert set(out) == {"ES"}

@@ -27,7 +27,7 @@ from core.data.ingest.splits import list_splits, load_split, parse_ref, resolve_
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store import build as store
-from core.export_onnx import export
+from core.export_onnx import ExportOnnx
 from core.hparams import TrainCfg, apply_overrides, to_json
 from core.losses import PartialLabelDiceCE, SoftDiceCE, uncertainty_weighted
 from core.model import build_unet, resolve_device
@@ -267,7 +267,7 @@ class SeedTrainer:
             s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
             log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
         with self._artifact_step("ONNX export"):
-            export(out, splits.paths(val_df)[0])               # ONNX + INT8, parity-gated
+            ExportOnnx.export(out, splits.paths(val_df)[0])    # ONNX + INT8, parity-gated
         with self._artifact_step("registry save"):
             rid = mlflow.active_run().info.run_id if mlflow.active_run() else None
             split = "+".join(d.test_vendors) or "legacy"

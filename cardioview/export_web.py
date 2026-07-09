@@ -38,7 +38,7 @@ from core.data.static import splits, store
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
 from core.hparams import from_json
-from core.inference import predict_volume
+from core.inference import Inference
 from core.measure import Measure
 from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
 from core.postprocess import Postprocess
@@ -188,7 +188,7 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
         img = zscore(resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
-        masks[k] = Postprocess.largest_cc_per_class(predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
+        masks[k] = Postprocess.largest_cc_per_class(Inference.predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
 

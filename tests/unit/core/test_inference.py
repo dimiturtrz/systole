@@ -7,7 +7,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from core.inference import predict_volume, predict_volume_members, predict_volume_probs
+from core.inference import Inference
 from core.model import build_unet, resolve_device
 from core.run import load_run
 
@@ -28,7 +28,7 @@ def test_resolve_device_prefers_explicit():
 def test_predict_volume_probs_shapes_and_simplex(model):
     """pred is [D,size,size] uint8; mean_softmax is [D,C,size,size] and a proper simplex over C."""
     vol = np.random.RandomState(0).randn(3, 40, 28).astype(np.float32)  # [D,H,W], non-square
-    pred, mean = predict_volume_probs(model, vol, SIZE, "cpu")
+    pred, mean = Inference.predict_volume_probs(model, vol, SIZE, "cpu")
     assert pred.shape == (3, SIZE, SIZE) and pred.dtype == np.uint8
     assert tuple(mean.shape) == (3, 4, SIZE, SIZE)        # 4 classes
     assert torch.allclose(mean.sum(1), torch.ones(3, SIZE, SIZE), atol=1e-5)  # softmax simplex
@@ -37,22 +37,22 @@ def test_predict_volume_probs_shapes_and_simplex(model):
 def test_pred_equals_argmax_of_mean(model):
     """predict_volume(tta=True) must equal argmax of the probs primitive (same TTA path)."""
     vol = np.random.RandomState(1).randn(2, 32, 32).astype(np.float32)
-    pred_v = predict_volume(model, vol, SIZE, "cpu", tta=True)
-    pred_p, mean = predict_volume_probs(model, vol, SIZE, "cpu")
+    pred_v = Inference.predict_volume(model, vol, SIZE, "cpu", tta=True)
+    pred_p, mean = Inference.predict_volume_probs(model, vol, SIZE, "cpu")
     assert np.array_equal(pred_v, pred_p)
     assert np.array_equal(pred_p, mean.argmax(1).to(torch.uint8).cpu().numpy())
 
 
 def test_predict_volume_no_tta_shape(model):
     vol = np.random.RandomState(2).randn(2, 32, 32).astype(np.float32)
-    pred = predict_volume(model, vol, SIZE, "cpu", tta=False)
+    pred = Inference.predict_volume(model, vol, SIZE, "cpu", tta=False)
     assert pred.shape == (2, SIZE, SIZE) and pred.dtype == np.uint8
 
 
 def test_members_and_bald_decomposition(model):
     """4 flip-members -> mean; BALD decomposition: total = aleatoric + epistemic, epistemic >= 0."""
     vol = np.random.RandomState(4).randn(2, 32, 32).astype(np.float32)
-    pred, mean, members = predict_volume_members(model, vol, SIZE, "cpu")
+    pred, mean, members = Inference.predict_volume_members(model, vol, SIZE, "cpu")
     assert tuple(members.shape) == (4, 2, 4, SIZE, SIZE)        # K=4 flips
     assert torch.allclose(members.mean(0), mean, atol=1e-6)     # mean is the member average
     from cardioseg.evaluation.uncertainty import Uncertainty

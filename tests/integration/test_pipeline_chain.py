@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from core.evaluate import Evaluate
-from core.inference import predict_volume
+from core.inference import Inference
 from core.measure import Measure
 from core.preprocessing.preprocess import fit_square, resample_inplane, zscore
 
@@ -114,8 +114,8 @@ def test_predict_then_ejection_fraction():
     model = _ThreshModel()
     ed_vol = _cube(8, 64, 12, value=1.0)                  # large bright pool
     es_vol = _cube(8, 64, 7, value=1.0)                   # small bright pool
-    pred_ed = predict_volume(model, ed_vol, size=64, device="cpu")
-    pred_es = predict_volume(model, es_vol, size=64, device="cpu")
+    pred_ed = Inference.predict_volume(model, ed_vol, size=64, device="cpu")
+    pred_es = Inference.predict_volume(model, es_vol, size=64, device="cpu")
     assert pred_ed.shape == (8, 64, 64)
     assert set(np.unique(pred_ed).tolist()) == {0, 3}     # model emits bg + LV-cav only
     ef, edv, esv = Measure.ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
@@ -127,7 +127,7 @@ def test_predict_matches_groundtruth_threshold():
     pytest.importorskip("torch")
     model = _ThreshModel()
     vol = _cube(6, 64, 10, value=1.0)
-    pred = predict_volume(model, vol, size=64, device="cpu")
+    pred = Inference.predict_volume(model, vol, size=64, device="cpu")
     gt = np.where(vol > 0.5, 3, 0).astype(np.uint8)        # what the threshold model "should" give
     assert Evaluate.dice(pred, gt, 3) == 1.0
     assert Evaluate.hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance

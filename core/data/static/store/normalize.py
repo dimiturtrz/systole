@@ -15,7 +15,7 @@ from core.data.static.mri.registry import get_adapter
 from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS
 from core.preprocessing.n4 import N4Cfg
-from core.preprocessing.nyul import LANDMARKS, fit_standard, image_landmarks
+from core.preprocessing.nyul import LANDMARKS, Nyul
 from core.preprocessing.preprocess import preprocess_case, resample_inplane
 
 
@@ -62,8 +62,8 @@ class Normalizer:
                 if "ED" not in d:
                     continue
                 img, _ = resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
-                rows.append(image_landmarks(img))
-        std = fit_standard(np.stack(rows))
+                rows.append(Nyul.image_landmarks(img))
+        std = Nyul.fit_standard(np.stack(rows))
         p = Normalizer.ref_path(); p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Nyúl standard landmark scale (harmonization qfz) — fit by Normalizer.fit_standard\n"
                      + OmegaConf.to_yaml(OmegaConf.create({"nyul": {"standard": {

@@ -15,7 +15,7 @@ from scipy.ndimage import zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.preprocessing.n4 import N4Cfg
-from core.preprocessing.nyul import transform as nyul_transform
+from core.preprocessing.nyul import Nyul
 from core.types import Image, Slice2D, Spacing, Volume
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
@@ -112,7 +112,7 @@ def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
             p = n4_params or N4Cfg()
             img = N4Cfg.n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
         if nyul_standard is not None:
-            img = nyul_transform(img, np.asarray(nyul_standard))
+            img = Nyul.transform(img, np.asarray(nyul_standard))
         out[f"{tag.lower()}_img"] = blood_anchor(img, gt) if norm == "blood" else zscore(img)
         out[f"{tag.lower()}_gt"] = gt
         new_sp = isp

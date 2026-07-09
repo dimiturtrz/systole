@@ -19,7 +19,7 @@ from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
 # this module keeps the validation ORCHESTRATION (score a set of npz cases -> Dice/EF/boundary tables).
-from core.inference import predict_volume  # re-export
+from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, fit_square, stack_slices
@@ -122,7 +122,7 @@ class Evaluator:
             for tag in ("ED", "ES"):
                 if f"{tag.lower()}_img" not in case:
                     continue
-                pred = predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
+                pred = Inference.predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
                 if postproc:
                     pred = Postprocess.largest_cc_per_class(pred)
                 gt = stack_slices(case[f"{tag.lower()}_gt"], size)

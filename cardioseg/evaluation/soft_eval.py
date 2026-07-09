@@ -24,7 +24,7 @@ from core.data.static import splits
 from core.data.static.labels import LV_CAV
 from core.data.static.store import build as store
 from core.hparams import from_json
-from core.inference import predict_volume_probs
+from core.inference import Inference
 from core.measure import Measure
 from core.model import resolve_device
 from core.obs import setup
@@ -64,7 +64,7 @@ class SoftEval:
             sp = tuple(float(s) for s in case["spacing"])
             vols = {}
             for tag in ("ed", "es"):
-                _, mean = predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
+                _, mean = Inference.predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
                 p = mean.float().cpu().numpy()
                 blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
                 hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
