@@ -13,7 +13,7 @@ from typing import Protocol
 
 import torch
 
-from .augment import AugCfg, augment_batch, soften
+from .augment import AugCfg, Augmentor
 from .synth import SynthCfg, synthesize_from_labels
 
 
@@ -61,7 +61,7 @@ class Augment:
         self.cfg = cfg
 
     def __call__(self, b: Batch) -> Batch:
-        b.x, b.y = augment_batch(b.x, b.y, self.cfg)
+        b.x, b.y = Augmentor.augment_batch(b.x, b.y, self.cfg)
         return b
 
 
@@ -72,7 +72,7 @@ class Soften:
         self.sigma, self.n_classes = sigma, n_classes
 
     def __call__(self, b: Batch) -> Batch:
-        b.yt = soften(b.y, self.sigma, self.n_classes) if self.sigma > 0 else b.y[:, None]
+        b.yt = Augmentor.soften(b.y, self.sigma, self.n_classes) if self.sigma > 0 else b.y[:, None]
         return b
 
 

@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
 
-from .augment import _gaussian_kernel
+from .augment import Augmentor
 from .mri_physics import (
     TR_RANGE_MS,
     banding,
@@ -498,7 +498,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
     # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
     if cfg.pv_sigma > 0:
-        kpv = _gaussian_kernel(cfg.pv_sigma).to(dev)
+        kpv = Augmentor._gaussian_kernel(cfg.pv_sigma).to(dev)
         kpv = kpv.view(1, 1, *kpv.shape)
         mu_map = F.conv2d(mu_map, kpv, padding=kpv.shape[-1] // 2)
     img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
@@ -514,7 +514,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     bl_lo, bl_hi = cfg.blur
     sigma = float(torch.rand(1, device=dev) * (bl_hi - bl_lo) + bl_lo)
     if sigma > _MIN_BLUR_SIGMA:
-        k = _gaussian_kernel(sigma).to(dev)
+        k = Augmentor._gaussian_kernel(sigma).to(dev)
         k = k.view(1, 1, *k.shape)
         img = F.conv2d(img, k, padding=k.shape[-1] // 2)
 

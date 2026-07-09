@@ -21,7 +21,7 @@ def test_case_assembles_row_with_matching_ef(monkeypatch):
     monkeypatch.setattr(ov, "load_arrays", lambda _p: case)
     monkeypatch.setattr(ov, "predict_volume",
                         lambda _m, img, _size, _dev, tta=True: (img > 0).astype(np.uint8) * 3)
-    out = ov._case(None, "/p/pt001.npz", size=16, device="cpu")
+    out = ov.Overlay._case(None, "/p/pt001.npz", size=16, device="cpu")
     assert out["group"] == "NOR" and out["name"] == "pt001"
     assert abs(out["ef_pred"] - out["ef_gt"]) < 1e-6                 # pred==gt -> equal EF
     assert out["img"].shape == (16, 16) and out["pred"].shape == (16, 16)
@@ -33,6 +33,6 @@ def test_pick_hero_cases_clean_min_err_and_worst_hcm():
              {"group": "DCM", "ef_gt": 30.0, "ef_pred": 20.0},      # clean err 10
              {"group": "HCM", "ef_gt": 70.0, "ef_pred": 55.0},      # hcm err 15
              {"group": "HCM", "ef_gt": 65.0, "ef_pred": 62.0}]      # hcm err 3
-    clean, hcm = ov.pick_hero_cases(cases)
+    clean, hcm = ov.Overlay.pick_hero_cases(cases)
     assert clean["group"] == "NOR" and clean["ef_err"] == 2.0       # lowest clean error
     assert hcm["ef_err"] == 15.0                                    # worst HCM, not the best
