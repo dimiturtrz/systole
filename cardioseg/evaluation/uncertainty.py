@@ -11,7 +11,6 @@
 MC-dropout was tried (cardiac-seg-bp4) but dropout regressed EF ~2pp with no Dice gain, so the
 flagship has no dropout; TTA-variance is the no-cost uncertainty signal instead.
 """
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -29,7 +28,6 @@ from core.data.static import splits
 from core.data.static.labels import Labels
 from core.data.static.store.build import Build as store
 from core.inference import Inference
-from core.obs import Obs
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
@@ -154,61 +152,57 @@ class Uncertainty:
         fig.colorbar(im, ax=ax[2], fraction=.046)
         fig.tight_layout(); fig.savefig(path, dpi=120); plt.close(fig)
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", default=FLAGSHIP_REF)
+        ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
 
-def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_REF)
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
-    args = ap.parse_args()
-    run = Registry.resolve(args.run)
-    model, _, device = Run.load_run(run)
+    @staticmethod
+    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
+        run = Registry.resolve(args.run)
+        model, _, device = Run.load_run(run)
 
-    df = splits.Splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
+        df = splits.Splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
 
-    out = run / "plots"
-    out.mkdir(parents=True, exist_ok=True)
-    confs, corrects, ents, ales, epis, bnd_u, int_u, cases = Uncertainty._collect_uncertainty(model, df, device, out, args.eval)
+        out = run / "plots"
+        out.mkdir(parents=True, exist_ok=True)
+        confs, corrects, ents, ales, epis, bnd_u, int_u, cases = Uncertainty._collect_uncertainty(model, df, device, out, args.eval)
 
-    conf = np.concatenate(confs); correct = np.concatenate(corrects).astype(float)
-    e, bins = Uncertainty.ece(conf, correct)
-    cases.sort(key=lambda x: -x["uncertainty"])
-    bratio = float(np.mean(bnd_u) / max(np.mean(int_u), 1e-6))
+        conf = np.concatenate(confs); correct = np.concatenate(corrects).astype(float)
+        e, bins = Uncertainty.ece(conf, correct)
+        cases.sort(key=lambda x: -x["uncertainty"])
+        bratio = float(np.mean(bnd_u) / max(np.mean(int_u), 1e-6))
 
-    # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
-    # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
-    ent_all = np.concatenate(ents); wrong = 1.0 - correct
-    base = float(wrong.mean())
-    rocauc = float(roc_auc_score(wrong, ent_all))
-    auprc = float(average_precision_score(wrong, ent_all))
+        # does uncertainty predict error? wrong (pred!=gt) is the rare positive; entropy is the detector.
+        # AUPRC is the honest read under imbalance (compare to base rate); ROC-AUC for comparability.
+        ent_all = np.concatenate(ents); wrong = 1.0 - correct
+        base = float(wrong.mean())
+        rocauc = float(roc_auc_score(wrong, ent_all))
+        auprc = float(average_precision_score(wrong, ent_all))
 
-    # aleatoric/epistemic decomposition (BALD) over foreground — how much uncertainty is reducible
-    ale_m = float(np.concatenate(ales).mean()); epi_m = float(np.concatenate(epis).mean())
-    epi_frac = epi_m / max(ale_m + epi_m, 1e-9)
+        # aleatoric/epistemic decomposition (BALD) over foreground — how much uncertainty is reducible
+        ale_m = float(np.concatenate(ales).mean()); epi_m = float(np.concatenate(epis).mean())
+        epi_frac = epi_m / max(ale_m + epi_m, 1e-9)
 
-    (out / "uncertainty.json").write_text(json.dumps(
-        {"ece": round(e, 4), "boundary_vs_interior_ratio": round(bratio, 2),
-         "error_detection": {"auprc": round(auprc, 3), "base_rate": round(base, 3),
-                             "lift_over_base": round(auprc / max(base, 1e-6), 1), "rocauc": round(rocauc, 3)},
-         "decomposition": {"aleatoric": round(ale_m, 4), "epistemic": round(epi_m, 4),
-                           "epistemic_fraction": round(epi_frac, 3)},
-         "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
+        (out / "uncertainty.json").write_text(json.dumps(
+            {"ece": round(e, 4), "boundary_vs_interior_ratio": round(bratio, 2),
+             "error_detection": {"auprc": round(auprc, 3), "base_rate": round(base, 3),
+                                 "lift_over_base": round(auprc / max(base, 1e-6), 1), "rocauc": round(rocauc, 3)},
+             "decomposition": {"aleatoric": round(ale_m, 4), "epistemic": round(epi_m, 4),
+                               "epistemic_fraction": round(epi_frac, 3)},
+             "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
 
-    Uncertainty._reliability_plot(bins, e, out)
+        Uncertainty._reliability_plot(bins, e, out)
 
-    log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
-             f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
-             f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
-             f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
-    log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
+        log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
+                 f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
+                 f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
+                 f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
+        log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
-    trk = Tracker.track_run("cardioseg", run.name, run_dir=run)      # resume the train run
-    ev = args.eval
-    trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
-    trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)
-    trk.artifact(out / "uncertainty.json"); trk.artifact(out / "reliability.png")
-    trk.end()
-
-
-if __name__ == "__main__":
-    main()
+        trk = Tracker.track_run("cardioseg", run.name, run_dir=run)      # resume the train run
+        ev = args.eval
+        trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
+        trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)
+        trk.artifact(out / "uncertainty.json"); trk.artifact(out / "reliability.png")
+        trk.end()

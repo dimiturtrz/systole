@@ -6,7 +6,6 @@ ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact sh
 
     uv run python -m cardioseg.evaluation.overlay --run runs/gen
 """
-import argparse
 import logging
 from pathlib import Path
 
@@ -26,7 +25,6 @@ from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
-from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
@@ -86,43 +84,38 @@ class Overlay:
         return dict(group=case.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
                     ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", default=FLAGSHIP_REF)
+        ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
 
-def main():  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_REF)
-    ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
-    args = ap.parse_args()
+    @staticmethod
+    def run(args):  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
+        run = Registry.resolve(args.run)
+        cfg = Hparams.from_json(run / "config.json")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = Model.build_unet(cfg.model).to(device)
+        model.load_state_dict(torch.load(run / "model.pth", map_location=device))
+        d = cfg.generator.data
+        size = d.size
 
-    run = Registry.resolve(args.run)
-    cfg = Hparams.from_json(run / "config.json")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = Model.build_unet(cfg.model).to(device)
-    model.load_state_dict(torch.load(run / "model.pth", map_location=device))
-    d = cfg.generator.data
-    size = d.size
+        meta = store.load_cfg(d)                    # the run's own preprocessing params
+        val = splits.Splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
+        paths = splits.Splits.paths(val)
 
-    meta = store.load_cfg(d)                    # the run's own preprocessing params
-    val = splits.Splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
-    paths = splits.Splits.paths(val)
+        # score every case once: pick a clean low-error case + the worst-EF HCM case
+        cases = [Overlay._case(model, p, size, device) for p in paths]
+        clean, hcm = Overlay.pick_hero_cases(cases)
 
-    # score every case once: pick a clean low-error case + the worst-EF HCM case
-    cases = [Overlay._case(model, p, size, device) for p in paths]
-    clean, hcm = Overlay.pick_hero_cases(cases)
-
-    fig, axes = plt.subplots(2, 3, figsize=(9, 6.2))
-    for row, c in enumerate((clean, hcm)):
-        tag = f"{c['name']} ({c['group']})  EF gt {c['ef_gt']:.0f}% / pred {c['ef_pred']:.0f}%"
-        Overlay._panel(axes[row, 0], c["img"], np.zeros_like(c["gt"]), f"MRI — {tag}")
-        Overlay._panel(axes[row, 1], c["img"], c["gt"], "ground truth")
-        Overlay._panel(axes[row, 2], c["img"], c["pred"], "prediction")
-    fig.suptitle("Held-out ACDC — RV (blue) · LV-myo (green) · LV-cav (red)", fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.out, dpi=130)
-    log.info(f"wrote {args.out} | clean {clean['name']} {clean['group']} "
-             f"| hcm {hcm['name']} err {hcm['ef_err']:.1f}")
-
-
-if __name__ == "__main__":
-    main()
+        fig, axes = plt.subplots(2, 3, figsize=(9, 6.2))
+        for row, c in enumerate((clean, hcm)):
+            tag = f"{c['name']} ({c['group']})  EF gt {c['ef_gt']:.0f}% / pred {c['ef_pred']:.0f}%"
+            Overlay._panel(axes[row, 0], c["img"], np.zeros_like(c["gt"]), f"MRI — {tag}")
+            Overlay._panel(axes[row, 1], c["img"], c["gt"], "ground truth")
+            Overlay._panel(axes[row, 2], c["img"], c["pred"], "prediction")
+        fig.suptitle("Held-out ACDC — RV (blue) · LV-myo (green) · LV-cav (red)", fontsize=12)
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(args.out, dpi=130)
+        log.info(f"wrote {args.out} | clean {clean['name']} {clean['group']} "
+                 f"| hcm {hcm['name']} err {hcm['ef_err']:.1f}")

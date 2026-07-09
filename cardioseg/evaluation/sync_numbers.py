@@ -9,13 +9,10 @@ Run after regenerating RESULTS.json (cardioseg.evaluation.results):  python -m c
 Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep those few; the tables
 (where the drift happened) are now generated.
 """
-import argparse
 import json
 import logging
 import re
 from pathlib import Path
-
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.sync_numbers")
 
@@ -122,28 +119,26 @@ class SyncNumbers:
                 total += 1
         return txt, total
 
+    @staticmethod
+    def add_args(ap):
+        pass
+
+    @staticmethod
+    def run(args):  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
+        total = 0
+        for f in TARGETS:
+            p = ROOT / f
+            txt = orig = p.read_text()
+            txt, n = SyncNumbers.inject_blocks(txt, BLOCKS)
+            total += n
+            if txt != orig:
+                p.write_text(txt)
+                log.info(f"  updated {f}")
+        log.info(f"synced {total} blocks from cardioseg/RESULTS.json")
+
 
 BLOCKS = {"compare": SyncNumbers.compare, "acdc": SyncNumbers.acdc, "strata": SyncNumbers.strata,
           "headline": SyncNumbers.headline, "axis": SyncNumbers.axis,
           "cardcompare": SyncNumbers.cardcompare, "nnucompare": SyncNumbers.nnucompare}
 TARGETS = ["README.md", "cardioseg/README.md", "cardioseg/MODEL_CARD.md",
            "baselines/nnunet/MODEL_CARD.md", "baselines/nnunet/README.md"]
-
-
-def main():  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
-    argparse.ArgumentParser(description="sync cardioseg/RESULTS.json numbers into doc marker blocks").parse_args()
-    Obs.setup()
-    total = 0
-    for f in TARGETS:
-        p = ROOT / f
-        txt = orig = p.read_text()
-        txt, n = SyncNumbers.inject_blocks(txt, BLOCKS)
-        total += n
-        if txt != orig:
-            p.write_text(txt)
-            log.info(f"  updated {f}")
-    log.info(f"synced {total} blocks from cardioseg/RESULTS.json")
-
-
-if __name__ == "__main__":
-    main()

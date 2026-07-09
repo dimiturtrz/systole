@@ -12,7 +12,6 @@ clean number.
 """
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
 
@@ -27,7 +26,6 @@ from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
-from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
@@ -83,20 +81,16 @@ class SoftEval:
         conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
         return a, Uncertainty.ece(conf, corr)[0]
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", required=True)
 
-def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", required=True)
-    args = ap.parse_args()
-    arr, e = SoftEval.evaluate(Registry.resolve(args.run))
-    gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
-    log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
-    log.info(f"ECE: {e:.4f}")
-    for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
-        s = Measure.ef_statistics(gt, pred)
-        log.info(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
-
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
+        arr, e = SoftEval.evaluate(Registry.resolve(args.run))
+        gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
+        log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
+        log.info(f"ECE: {e:.4f}")
+        for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
+            s = Measure.ef_statistics(gt, pred)
+            log.info(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")

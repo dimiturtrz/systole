@@ -10,7 +10,6 @@ it — the gap is how much reducible headroom the weak estimate was hiding.
 
     python -m cardioseg.evaluation.ensemble --runs runs/gen runs/seed1 runs/seed2 runs/seed3 --eval canon
 """
-import argparse
 import logging
 from pathlib import Path
 
@@ -24,7 +23,6 @@ from core.data.static.store.build import Build as store
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
-from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
@@ -125,35 +123,31 @@ class Ensemble:
                 ta.append(sa[fg]); te.append(se_[fg])
         return Ensemble.reducible_frac(ea, ee), Ensemble.reducible_frac(ta, te)   # ensemble reducible-frac, single(TTA) reducible-frac
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
+        ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
 
-def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
-    ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
-    args = ap.parse_args()
-    device = Model.resolve_device()
-    loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
-    models = [m for m, _, _ in loaded]
-    cfg = loaded[0][1]
-    trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",
-                {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
-    for ax in args.eval:
-        df = Ensemble._eval_df(cfg, ax)
-        if not len(df):
-            continue
-        ens = Ensemble.score(models, df, SIZE, device)          # K models
-        sgl = Ensemble.score(models[:1], df, SIZE, device)      # single (gen)
-        ef_red, tf_red = Ensemble._headroom(models, df, SIZE, device)
-        dd = ens["dice_mean"] - sgl["dice_mean"]
-        log.info(f"axis {ax} (n={len(df)}, K={len(models)}): "
-              f"Dice ensemble {ens['dice_mean']} vs single {sgl['dice_mean']} ({dd:+.3f}) | "
-              f"EF MAE {ens['ef_mae']} vs {sgl['ef_mae']} | reducible {ef_red:.0%} (ensemble) / {tf_red:.0%} (TTA)")
-        trk.metric(f"{ax}_dice_ensemble", ens["dice_mean"]); trk.metric(f"{ax}_dice_single", sgl["dice_mean"])
-        trk.metric(f"{ax}_ef_ensemble", ens["ef_mae"]); trk.metric(f"{ax}_ef_single", sgl["ef_mae"])
-        trk.metric(f"{ax}_reducible_ensemble", round(ef_red, 3)); trk.metric(f"{ax}_reducible_tta", round(tf_red, 3))
-    trk.end()
-
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
+        device = Model.resolve_device()
+        loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
+        models = [m for m, _, _ in loaded]
+        cfg = loaded[0][1]
+        trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",
+                    {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+        for ax in args.eval:
+            df = Ensemble._eval_df(cfg, ax)
+            if not len(df):
+                continue
+            ens = Ensemble.score(models, df, SIZE, device)          # K models
+            sgl = Ensemble.score(models[:1], df, SIZE, device)      # single (gen)
+            ef_red, tf_red = Ensemble._headroom(models, df, SIZE, device)
+            dd = ens["dice_mean"] - sgl["dice_mean"]
+            log.info(f"axis {ax} (n={len(df)}, K={len(models)}): "
+                  f"Dice ensemble {ens['dice_mean']} vs single {sgl['dice_mean']} ({dd:+.3f}) | "
+                  f"EF MAE {ens['ef_mae']} vs {sgl['ef_mae']} | reducible {ef_red:.0%} (ensemble) / {tf_red:.0%} (TTA)")
+            trk.metric(f"{ax}_dice_ensemble", ens["dice_mean"]); trk.metric(f"{ax}_dice_single", sgl["dice_mean"])
+            trk.metric(f"{ax}_ef_ensemble", ens["ef_mae"]); trk.metric(f"{ax}_ef_single", sgl["ef_mae"])
+            trk.metric(f"{ax}_reducible_ensemble", round(ef_red, 3)); trk.metric(f"{ax}_reducible_tta", round(tf_red, 3))
+        trk.end()

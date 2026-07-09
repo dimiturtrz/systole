@@ -5,27 +5,17 @@ import + module-level class-dispatch + parser setup with no data/GPU. In-process
 spawn) so it stays fast.
 
 Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremental fill under bd j4m2 —
-plus a standing note that 28 entry points is probably too many (CLI consolidation, future).
+plus a standing note that 28 entry points is probably too many, consolidating (bd axri).
 """
 import runpy
 import sys
 
 import pytest
 
-# All 28 CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
+# All 18 CLI entry points -> `python -m <mod> --help` exits 0 (SystemExit) after building the parser.
 # `core.data.static.store` runs its package __main__.py.
 _ARGPARSE_ENTRYPOINTS = [
-    "cardioseg.evaluation.calibrate",
-    "cardioseg.evaluation.distribution",
-    "cardioseg.evaluation.ensemble",
-    "cardioseg.evaluation.matrix",
-    "cardioseg.evaluation.modelcard",
-    "cardioseg.evaluation.overlay",
-    "cardioseg.evaluation.results",
-    "cardioseg.evaluation.soft_eval",
-    "cardioseg.evaluation.sync_numbers",
-    "cardioseg.evaluation.uncertainty",
-    "cardioseg.preprocessing.normalization.persist",
+    "cardioseg.evaluation",
     "cardioseg.training.train",
     "core.data.analysis.attribution",
     "core.data.analysis.eda",

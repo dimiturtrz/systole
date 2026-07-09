@@ -12,14 +12,12 @@ always-in-sync per-run card.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from pathlib import Path
 
 from core.data.static.labels import CLASS_NAMES
 from core.data.static.reference import Reference
-from core.obs import Obs
 from core.registry import Registry
 
 log = logging.getLogger("cardioseg.modelcard")
@@ -140,14 +138,10 @@ class ModelCard:
         out.write_text(ModelCard.render_card(run.name, cfg, m, ModelCard._reference_section()))
         return out
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
 
-def main():  # pragma: no cover  (CLI: resolve registry ref + generate the card file)
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
-    args = ap.parse_args()
-    log.info(f"wrote {ModelCard.generate(Registry.resolve(args.run))}")
-
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def run(args):  # pragma: no cover  (CLI: resolve registry ref + generate the card file)
+        log.info(f"wrote {ModelCard.generate(Registry.resolve(args.run))}")

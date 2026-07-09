@@ -8,7 +8,6 @@ small paper-cited layer is hand-curated (and visibly flagged verified / unverifi
     python -m cardioseg.preprocessing.normalization.persist --dataset acdc
     python -m cardioseg.preprocessing.normalization.persist            # all
 """
-import argparse
 import logging
 from pathlib import Path
 
@@ -16,7 +15,6 @@ from omegaconf import OmegaConf
 
 from core.config import KNOWN_DATASETS, Config
 from core.data.static.mri.registry import AdapterRegistry
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.persist")
 
@@ -59,14 +57,10 @@ class Persist:
         return out
 
     @staticmethod
-    def main():
-        Obs.setup()
-        ap = argparse.ArgumentParser(description=__doc__)
+    def add_args(ap):
         ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
-        args = ap.parse_args()
+
+    @staticmethod
+    def run(args):
         for ds in (_DATASETS if args.dataset == "all" else [args.dataset]):
             Persist.persist_meta(ds)
-
-
-if __name__ == "__main__":
-    Persist.main()

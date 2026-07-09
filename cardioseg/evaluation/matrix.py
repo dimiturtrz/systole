@@ -15,7 +15,6 @@ Task per TestSet: seg4 -> all three classes; seg_lv (SCD, no RV in GT) -> myo+ca
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -28,7 +27,6 @@ from core import run as run_mod
 from core.data.ingest.testsets import EVAL_SOURCES, MATRIX_TESTSETS, TESTSETS
 from core.data.static import splits
 from core.data.static.store.build import Build as store
-from core.obs import Obs
 
 log = logging.getLogger("cardioseg.matrix")
 
@@ -76,18 +74,18 @@ class Matrix:
             log.info(f"  [{flag}] {r['model']:>12} x {r['testset']:<18} n={r['n']:>3} "
                   f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--models", nargs="+", required=True, help="registry refs (alias|version|run-id)")
+        ap.add_argument("--testsets", nargs="*", default=None,
+                        help=f"TestSet names (default: the granular battery). known: {sorted(TESTSETS)}")
+        ap.add_argument("--no-tta", action="store_true")
+        ap.add_argument("--out", default=None, help="write rows to this json")
 
-if __name__ == "__main__":
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="cross-domain generalization matrix over frozen TestSets")
-    ap.add_argument("--models", nargs="+", required=True, help="registry refs (alias|version|run-id)")
-    ap.add_argument("--testsets", nargs="*", default=None,
-                    help=f"TestSet names (default: the granular battery). known: {sorted(TESTSETS)}")
-    ap.add_argument("--no-tta", action="store_true")
-    ap.add_argument("--out", default=None, help="write rows to this json")
-    args = ap.parse_args()
-    rows = Matrix.score_matrix(args.models, args.testsets, tta=not args.no_tta)
-    Matrix._print(rows)
-    if args.out:
-        Path(args.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-        log.info(f"\nwrote {args.out}")
+    @staticmethod
+    def run(args):  # pragma: no cover
+        rows = Matrix.score_matrix(args.models, args.testsets, tta=not args.no_tta)
+        Matrix._print(rows)
+        if args.out:
+            Path(args.out).write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+            log.info(f"\nwrote {args.out}")
