@@ -31,7 +31,7 @@ from PIL import Image
 
 from core.obs import setup
 
-from .mri_physics import bssfp_signal, tissue_params
+from .mri_physics import MriPhysics
 
 log = logging.getLogger("cardioseg.inverse")
 
@@ -45,8 +45,8 @@ class Inverse:
         """Deterministic, differentiable bSSFP paint of the HEART classes (bg=0, excluded from any loss).
         seg [B,H,W] long; tr/flip_deg [B,1]; -> signal [B,1,H,W]. Tissue T1/T2/PD at literature values
         (tissue_params, no bg tiers). Differentiable wrt tr and flip_deg."""
-        t1, t2, pd = tissue_params(n_classes, 0, field, device)          # [n_classes]
-        mu = bssfp_signal(t1[None], t2[None], pd[None], tr, flip_deg * math.pi / 180.0)   # [B, n_classes]
+        t1, t2, pd = MriPhysics.tissue_params(n_classes, 0, field, device)          # [n_classes]
+        mu = MriPhysics.bssfp_signal(t1[None], t2[None], pd[None], tr, flip_deg * math.pi / 180.0)   # [B, n_classes]
         oh = F.one_hot(seg.clamp(min=0), n_classes).permute(0, 3, 1, 2).float()           # [B,n,H,W]
         return (oh * mu[:, :, None, None]).sum(1, keepdim=True)                           # [B,1,H,W]
 

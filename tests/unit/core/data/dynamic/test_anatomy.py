@@ -3,26 +3,28 @@ region-tag lookup, Rodrigues rotation, SAX alignment (both cohort paths), per-sl
 scale-to-real, and the label-space pathology deform + pool builders. Mesh-dependent functions run on
 tiny synthetic pyvista tet meshes; the real Rodero disk read / ProcessPool build are thin I/O shells."""
 import numpy as np
-import pyvista as pv
 import pytest
+import pyvista as pv
 
 from core.data.dynamic import anatomy as A
 from core.data.dynamic.anatomy import (
+    Anatomy,
     MeshError,
     PathologyPoolCfg,
     PoolBuildCfg,
-    _rot_to_z,
-    _scale_to_target,
-    _slice_labels,
-    _tag_name,
-    build_pathology_pool,
-    build_pool,
-    load,
-    load_pool,
-    pathology_deform,
-    voxelize,
 )
 from core.data.static.labels import LV_CAV, MYO, RV
+
+_rot_to_z = Anatomy._rot_to_z
+_scale_to_target = Anatomy._scale_to_target
+_slice_labels = Anatomy._slice_labels
+_tag_name = Anatomy._tag_name
+build_pathology_pool = Anatomy.build_pathology_pool
+build_pool = Anatomy.build_pool
+load = Anatomy.load
+load_pool = Anatomy.load_pool
+pathology_deform = Anatomy.pathology_deform
+voxelize = Anatomy.voxelize
 
 
 # ── fixtures: tiny synthetic Rodero-like tet meshes ──────────────────────────────────────────────
@@ -82,14 +84,14 @@ def test_rot_to_z_already_parallel_is_identity():
 # ── _sax_align: two cohort paths both put the long axis on +z ─────────────────────────────────────
 def test_sax_align_zdat_path():
     """Real cohort (has 'Z.dat'): apex->base axis from the universal coord; base ends up +z of apex."""
-    al = A._sax_align(_heart_mesh("ID", with_z=True))
+    al = A.Anatomy._sax_align(_heart_mesh("ID", with_z=True))
     pts = np.asarray(al.points)
     assert np.ptp(pts[:, 2]) > 0          # aligned volume has finite z-extent (didn't collapse)
 
 
 def test_sax_align_geometric_path():
     """SSM cohort (no 'Z.dat'): PCA long-axis oriented apex->base by the atria centroid."""
-    al = A._sax_align(_heart_mesh("elemTag", with_z=False))
+    al = A.Anatomy._sax_align(_heart_mesh("elemTag", with_z=False))
     assert np.ptp(np.asarray(al.points)[:, 2]) > 0
 
 
@@ -100,7 +102,7 @@ def test_sax_align_geometric_flips_axis_toward_base():
     rv = _tet_box((20, 34, 5, 15, 0, 60), 2, "elemTag")
     atria = _tet_box((0, 20, 0, 20, -20, -5), 5, "elemTag")   # atria/vessels BELOW the apex end
     m = lv.merge(rv).merge(atria); m.set_active_scalars("elemTag", preference="cell")
-    al = A._sax_align(m)
+    al = A.Anatomy._sax_align(m)
     assert np.ptp(np.asarray(al.points)[:, 2]) > 0            # aligned, not collapsed
 
 
@@ -163,8 +165,8 @@ def test_voxelize_degenerate_bounds_raises(monkeypatch):
         bounds = (0.0, 20.0, 0.0, 20.0, 0.0, 0.5)         # z-extent 0.5 mm -> nz = ceil(0.5/8) ... > 0
     # squash to truly degenerate: identical x bounds so nx = 0
     _Thin.bounds = (5.0, 5.0, 0.0, 20.0, 0.0, 60.0)
-    monkeypatch.setattr(A, "_sax_align", lambda _m: _Thin())
-    monkeypatch.setattr(A, "_tag_name", lambda _m: "elemTag")
+    monkeypatch.setattr(A.Anatomy, "_sax_align", lambda _m: _Thin())
+    monkeypatch.setattr(A.Anatomy, "_tag_name", lambda _m: "elemTag")
     with pytest.raises(MeshError):
         voxelize(m, inplane=2.0, slice_mm=8.0)
 
@@ -172,7 +174,7 @@ def test_voxelize_degenerate_bounds_raises(monkeypatch):
 def test_load_missing_file_raises_mesh_error(tmp_path):
     """load() wraps a pyvista read failure (missing/corrupt file) as our domain MeshError."""
     with pytest.raises(MeshError):
-        A.load(tmp_path / "does_not_exist.vtk")
+        A.Anatomy.load(tmp_path / "does_not_exist.vtk")
 
 
 # ── _scale_to_target: rescale, no-op, and empty-heart classes ────────────────────────────────────
@@ -285,7 +287,7 @@ def test_convert_binary_writes_vtu_beside_vtk(tmp_path):
     """convert_binary: a BINARY .vtu is written beside each ASCII .vtk (load() then prefers it). Returns
     the count converted; the .vtu is a readable pyvista mesh with the region tag intact."""
     _heart_mesh("elemTag").save(str(tmp_path / "h.vtk"))
-    n = A.convert_binary(tmp_path, workers=1)
+    n = A.Anatomy.convert_binary(tmp_path, workers=1)
     assert n == 1
     vtu = tmp_path / "h.vtu"
     assert vtu.exists()
@@ -295,9 +297,9 @@ def test_convert_binary_writes_vtu_beside_vtk(tmp_path):
 def test_convert_one_idempotent(tmp_path):
     """_convert_one skips a mesh whose .vtu already exists (idempotent re-run branch)."""
     p = tmp_path / "h.vtk"; _heart_mesh("elemTag").save(str(p))
-    first = A._convert_one(str(p))
+    first = A.Anatomy._convert_one(str(p))
     mtime = (tmp_path / "h.vtu").stat().st_mtime_ns
-    second = A._convert_one(str(p))                       # .vtu present -> no rewrite
+    second = A.Anatomy._convert_one(str(p))                       # .vtu present -> no rewrite
     assert first == second == str(tmp_path / "h.vtu")
     assert (tmp_path / "h.vtu").stat().st_mtime_ns == mtime
 
@@ -319,7 +321,7 @@ def test_pool_worker_bad_mesh_skipped(tmp_path):
     single bad mesh must not kill the build; lines 297-298 skip branch)."""
     bad = str(tmp_path / "missing.vtk")
     args = (bad, 2.0, 64, 5, 1, 0.01, 0)                  # mp, inplane, size, min_fg, reps, min_cav, seed
-    assert A._pool_worker(args) == []
+    assert A.Anatomy._pool_worker(args) == []
 
 
 def test_pool_worker_min_cav_frac_drops_myo_only(tmp_path):
@@ -327,7 +329,7 @@ def test_pool_worker_min_cav_frac_drops_myo_only(tmp_path):
     (pure-apical myo-only slices; line 311 cavity-composition guard) -> nothing emitted."""
     p = tmp_path / "m.vtk"; _heart_mesh("elemTag").save(str(p))
     args = (str(p), 2.0, 64, 5, 1, 0.99, 0)               # min_cav_frac 0.99 -> essentially every slice dropped
-    assert A._pool_worker(args) == []
+    assert A.Anatomy._pool_worker(args) == []
 
 
 def test_build_pool_parallel_branch_matches_serial(tmp_path):

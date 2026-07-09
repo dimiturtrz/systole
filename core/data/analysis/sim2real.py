@@ -20,7 +20,7 @@ import polars as pl
 import torch
 
 from core.data.dynamic.dataset import ACDCSliceDataset
-from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+from core.data.dynamic.mri_physics import MriPhysics
 from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store import build as store
@@ -50,10 +50,10 @@ class Sim2Real:
         fls = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
         best = {"residual": float("inf")}
         for field in fields:
-            t1, t2, pd = tissue_params(n_classes, 0, field, "cpu")
+            t1, t2, pd = MriPhysics.tissue_params(n_classes, 0, field, "cpu")
             for tr in trs:
                 for fl in fls:
-                    sig = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180)
+                    sig = MriPhysics.bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180)
                     syn_z = Sim2Real._standardize(sig[1:n_classes])
                     res = float(((syn_z - real_z) ** 2).mean())
                     if res < best["residual"]:

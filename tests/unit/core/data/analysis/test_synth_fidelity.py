@@ -49,8 +49,8 @@ def test_fit_acquisition_reproduces_own_contrast():
     import torch
 
     from core.data.analysis.sim2real import Sim2Real
-    from core.data.dynamic.mri_physics import bssfp_signal, tissue_params
+    from core.data.dynamic.mri_physics import MriPhysics
     n = 4
-    t1, t2, pd = tissue_params(n, 0, 1.5, "cpu")
-    target = bssfp_signal(t1, t2, pd, torch.tensor(3.0), torch.tensor(50 * math.pi / 180))[1:n]
+    t1, t2, pd = MriPhysics.tissue_params(n, 0, 1.5, "cpu")
+    target = MriPhysics.bssfp_signal(t1, t2, pd, torch.tensor(3.0), torch.tensor(50 * math.pi / 180))[1:n]
     assert Sim2Real.fit_acquisition(target, n)["residual"] < 0.01

@@ -19,7 +19,7 @@ import torch
 from mlflow.exceptions import MlflowException
 
 from core.data.analysis.attribution import Attribution
-from core.data.dynamic.anatomy import load_pool
+from core.data.dynamic.anatomy import Anatomy
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.generator import Generator
 from core.data.dynamic.synth import excise_heart
@@ -302,7 +302,7 @@ def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: 
     d = cfg.generator.data
     force_synth = None
     if d.anatomy_pool:
-        Ys = torch.as_tensor(load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
+        Ys = torch.as_tensor(Anatomy.load_pool(d.anatomy_pool), dtype=torch.long, device=data_device)  # [N,H,W]
         if d.anatomy_mode == "mix":
             Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.paths(train_df), d.size, data_device)
             Xsy = torch.zeros((Ys.shape[0], 1, d.size, d.size), device=data_device)

@@ -72,7 +72,7 @@ def test_dynamic_resident_zero_input_force_paints_all(monkeypatch):
     import torch
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((5, 8, 8), np.int64))
     X, Y, fs = DynamicSource(pool="p")._resident(8, "cpu")
     assert X.shape == (5, 1, 8, 8) and (X == 0).all()          # no real pixels
     assert fs.dtype == torch.bool and bool(fs.all())           # every row force-painted
@@ -83,7 +83,7 @@ def test_dynamic_resident_seeded_is_composite(monkeypatch):
     import torch
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
 
     class _Seed:                                               # 2 real rows, exposes resident() (no materialize)
         def resident(self, size, device):
@@ -124,7 +124,7 @@ def test_dynamic_source_cap_bounds_resident(monkeypatch):
     import numpy as np
 
     from core.data.dynamic.source import DynamicSource
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((100, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((100, 8, 8), np.int64))
     X, Y, fs = DynamicSource(pool="p", cap=30)._resident(8, "cpu")
     assert X.shape[0] == 30 and Y.shape[0] == 30 and fs.shape[0] == 30      # capped
     assert DynamicSource(pool="p")._resident(8, "cpu")[0].shape[0] == 100   # no cap = full
@@ -151,7 +151,7 @@ def test_composite_source_unions_children(monkeypatch):
     from core.data.dynamic.synth import FlatBgCfg, ProceduralBgCfg
     from core.hparams import TrainCfg
     sizes = {"a": 4, "b": 3}
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool",
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool",
                         lambda p: np.zeros((sizes[p], 8, 8), np.int64))
     src = CompositeSource([DynamicSource(pool="a", bg=ProceduralBgCfg()),
                            DynamicSource(pool="b", bg=FlatBgCfg())])   # different painters per source
@@ -170,7 +170,7 @@ def test_dynamic_train_gen_no_global_mutation(monkeypatch):
     from core.data.dynamic.generator import GeneratorCfg
     from core.data.dynamic.source import DynamicSource
     from core.data.dynamic.synth import ProceduralBgCfg
-    monkeypatch.setattr("core.data.dynamic.anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
+    monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((3, 8, 8), np.int64))
     cfg = GeneratorCfg()
     orig_bg = cfg.synth.bg.mode
     gen = DynamicSource(pool="p", bg=ProceduralBgCfg(), synth_p=1.0).train_gen(8, "cpu", cfg, 4)

@@ -36,7 +36,7 @@ from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.obs import setup
 from core.preprocessing.preprocess import fit_square
 
-from .anatomy import REAL_SIZE_PX, PoolBuildCfg, load_pool
+from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
 
 log = logging.getLogger("cardioseg.mrxcat")
 
@@ -223,7 +223,7 @@ class Mrxcat:
         """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
         into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.
         Paint with bg_mode='mrxcat'. Reuses `_fov_window` for the XCAT backgrounds and `place_heart_in_fov`."""
-        hearts = load_pool(rodero_pool)                                # [N,size,size] canonical (heart-centred)
+        hearts = Anatomy.load_pool(rodero_pool)                        # [N,size,size] canonical (heart-centred)
         bgs = []                                                       # XCAT whole-FOV chest windows (with heart)
         for vp in sorted(Path(vti_dir).rglob("*.vti")):
             fov = Mrxcat.to_tissue_map(Mrxcat.load_vti_labels(vp))

@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
-from core.data.dynamic.anatomy import load_pool
+from core.data.dynamic.anatomy import Anatomy
 from core.obs import setup
 
 from .shape_coverage import ShapeCoverage
@@ -84,7 +84,7 @@ def main():
     ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
     args = ap.parse_args()
     setup()
-    res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), load_pool(args.pool))
+    res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
     log.info(json.dumps(res, indent=2))
     worst = max(res, key=lambda k: res[k]["w1"])
     log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")

@@ -13,12 +13,7 @@ import polars as pl
 from omegaconf import OmegaConf
 
 from core.config import DEFAULT_INPLANE, KNOWN_VENDORS
-from core.data.dynamic.mri_physics import (
-    SAR_FLIP_CAP,
-    TR_RANGE_MS,
-    acquisition_for,
-    derive_acquisition,
-)
+from core.data.dynamic.mri_physics import SAR_FLIP_CAP, TR_RANGE_MS, MriPhysics
 from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference, reference_dir
 from core.data.static.store import build as store
@@ -168,8 +163,8 @@ def build_acquisition(out_dir: str | Path | None = None) -> Path:
     NORMALIZED: the machine reference table (attributes live once). Subjects hold the FK (vendor,
     field_T) in the store and JOIN here via `acquisition_for`; each vendor block is also the slot to
     drop a DICOM-mined per-vendor override later. (bd ex1 / 276.)"""
-    tr15, te15, f15 = derive_acquisition(1.5)
-    _, _, f30 = derive_acquisition(3.0)
+    tr15, te15, f15 = MriPhysics.derive_acquisition(1.5)
+    _, _, f30 = MriPhysics.derive_acquisition(3.0)
     src = ("DERIVED: flip = argmax|S_blood-S_myo| (bSSFP signal eq + literature T1/T2), capped by SAR "
            f"({SAR_FLIP_CAP[1.5]:.0f}@1.5T/{SAR_FLIP_CAP[3.0]:.0f}@3T, PubMed 26509846); "
            f"TR=mid{TR_RANGE_MS}ms, TE=TR/2")
@@ -204,8 +199,8 @@ def _mode_acquisition(args):
     log.info(f"wrote {p}")
     ref = Reference(root=p.parent)
     for v in _VENDORS:
-        tr15, te15, f15 = acquisition_for(v, 1.5, ref)
-        _, _, f30 = acquisition_for(v, 3.0, ref)
+        tr15, te15, f15 = MriPhysics.acquisition_for(v, 1.5, ref)
+        _, _, f30 = MriPhysics.acquisition_for(v, 3.0, ref)
         log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
 
 

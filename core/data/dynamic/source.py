@@ -40,7 +40,7 @@ class DynamicSource:
     def _resident(self, size: int, device: str):
         """(X, Y, force_synth) resident tensors for this source's Generator. Zero-input: N = pool size,
         X = zeros, all force. Seeded: seed's real ++ synth-anatomy rows, force only the synth ones."""
-        Ys = torch.as_tensor(_anatomy.load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
+        Ys = torch.as_tensor(_anatomy.Anatomy.load_pool(self.pool), dtype=torch.long, device=device)    # [M,H,W] labels
         if self.cap is not None and Ys.shape[0] > self.cap:                             # VRAM-bound the resident
             keep = torch.randperm(Ys.shape[0], generator=torch.Generator().manual_seed(0))[:self.cap]
             Ys = Ys[keep.to(Ys.device)]

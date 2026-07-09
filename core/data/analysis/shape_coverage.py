@@ -23,7 +23,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.data.dynamic.anatomy import load_pool
+from core.data.dynamic.anatomy import Anatomy
 from core.obs import setup
 
 log = logging.getLogger("cardioseg.shape_coverage")
@@ -105,7 +105,7 @@ def main():
     args = ap.parse_args()
     setup()
     real = ShapeCoverage._feats_from_masks(ShapeCoverage._real_masks(args.real))
-    synth = ShapeCoverage._feats_from_masks(load_pool(args.pool))
+    synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
     log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))
     # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
     mu, sd = real.mean(0), real.std(0) + 1e-9

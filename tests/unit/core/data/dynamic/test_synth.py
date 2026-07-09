@@ -7,7 +7,7 @@ import math
 import pytest
 import torch
 
-from core.data.dynamic.mri_physics import TISSUE, bssfp_signal, tissue_params
+from core.data.dynamic.mri_physics import TISSUE, MriPhysics
 from core.data.dynamic.synth import (
     FlatBgCfg,
     HybridBgCfg,
@@ -44,18 +44,18 @@ def test_bssfp_blood_brighter_than_myo():
     flip angles. Physics, not assumption."""
     t = torch.tensor
     flip, tr = t([45.0 * math.pi / 180]), t([3.0])
-    sig = lambda nm: bssfp_signal(t([TISSUE[nm][1.5][0]]), t([TISSUE[nm][1.5][1]]),
-                                  t([TISSUE[nm][1.5][2]]), tr, flip)
+    sig = lambda nm: MriPhysics.bssfp_signal(t([TISSUE[nm][1.5][0]]), t([TISSUE[nm][1.5][1]]),
+                                             t([TISSUE[nm][1.5][2]]), tr, flip)
     assert sig("blood") > sig("myocardium")
 
 
 def test_tissue_params_field_shifts_and_bg_distinct():
     """Field strength changes T1 (cross-vendor axis); bg tiers are all distinct (interpolated, no
     round() collisions — the fixed bug)."""
-    t1_15, _, _ = tissue_params(N, 0, 1.5, "cpu")
-    t1_30, _, _ = tissue_params(N, 0, 3.0, "cpu")
+    t1_15, _, _ = MriPhysics.tissue_params(N, 0, 1.5, "cpu")
+    t1_30, _, _ = MriPhysics.tissue_params(N, 0, 3.0, "cpu")
     assert not torch.allclose(t1_15, t1_30)                      # field shifts relaxation
-    _, t2_bg, _ = tissue_params(N, 6, 1.5, "cpu")
+    _, t2_bg, _ = MriPhysics.tissue_params(N, 6, 1.5, "cpu")
     bg = t2_bg[N:]                                               # the 6 background tiers
     assert bg.unique().numel() == 6                             # all distinct (collision fixed)
 
@@ -72,10 +72,10 @@ def test_tissue_points_inside_literature_ranges():
     """SSOT guard (bd 276/04bh): every TISSUE point sits INSIDE its TISSUE_RANGE band (so the per-sample
     sampler draws around a physically-consistent centre), except the documented known discrepancies.
     Catches point/range drift; a new out-of-band point fails until it's explained."""
-    from core.data.dynamic.mri_physics import TISSUE_RANGE, tissue_range
+    from core.data.dynamic.mri_physics import TISSUE_RANGE
     for name, fields in TISSUE.items():
         for field, (t1, t2, _pd) in fields.items():
-            (t1lo, t1hi), (t2lo, t2hi) = tissue_range(name, field)
+            (t1lo, t1hi), (t2lo, t2hi) = MriPhysics.tissue_range(name, field)
             if (name, field, "T1") not in _KNOWN_OUT_OF_BAND:
                 assert t1lo <= t1 <= t1hi, f"{name}@{field}T T1 {t1} outside [{t1lo},{t1hi}]"
             if (name, field, "T2") not in _KNOWN_OUT_OF_BAND:
@@ -86,32 +86,30 @@ def test_tissue_points_inside_literature_ranges():
 def test_sample_heart_tissue_spread_off_is_identity():
     """spread=0 -> point values unchanged (backward-compatible; registered models / the mdem baseline
     are unaffected until the knob is turned on)."""
-    from core.data.dynamic.mri_physics import sample_heart_tissue, tissue_params
-    t1p, t2p, _ = tissue_params(N, 0, 1.5, "cpu")
+    t1p, t2p, _ = MriPhysics.tissue_params(N, 0, 1.5, "cpu")
     t1 = t1p.expand(64, N).clone(); t2 = t2p.expand(64, N).clone()
     fi = torch.zeros(64, dtype=torch.long)
-    o1, o2 = sample_heart_tissue(t1, t2, fi, (1.5, 3.0), N, 0.0)
+    o1, o2 = MriPhysics.sample_heart_tissue(t1, t2, fi, (1.5, 3.0), N, 0.0)
     assert torch.equal(o1, t1) and torch.equal(o2, t2)
 
 
 def test_sample_heart_tissue_stays_in_band_and_splits_by_o2():
     """spread=1: heart T1/T2 land inside the literature band; blood cavities split by oxygenation
     (LV-cav long T2 upper half, RV-cav short T2 lower half); 3T blood T2 < 1.5T (field shift)."""
-    from core.data.dynamic.mri_physics import sample_heart_tissue, tissue_params, tissue_range
     torch.manual_seed(0)
     B = 4000
-    t1p, t2p, _ = tissue_params(N, 0, 1.5, "cpu")
+    t1p, t2p, _ = MriPhysics.tissue_params(N, 0, 1.5, "cpu")
     t1 = t1p.expand(B, N).clone(); t2 = t2p.expand(B, N).clone()
     fi15 = torch.zeros(B, dtype=torch.long)
-    o1, o2 = sample_heart_tissue(t1, t2, fi15, (1.5, 3.0), N, 1.0)
-    (mt1lo, mt1hi), _ = tissue_range("myocardium", 1.5)
+    o1, o2 = MriPhysics.sample_heart_tissue(t1, t2, fi15, (1.5, 3.0), N, 1.0)
+    (mt1lo, mt1hi), _ = MriPhysics.tissue_range("myocardium", 1.5)
     assert o1[:, 2].min() >= mt1lo - 1 and o1[:, 2].max() <= mt1hi + 1     # myo T1 within band
-    (_, _), (blo, bhi) = tissue_range("blood", 1.5)
+    (_, _), (blo, bhi) = MriPhysics.tissue_range("blood", 1.5)
     mid = 0.5 * (blo + bhi)
     assert o2[:, 3].min() >= mid - 1e-3                                    # LV cav (3) = high-O2 upper half
     assert o2[:, 1].max() <= mid + 1e-3                                    # RV cav (1) = low-O2 lower half
     t1b, t2b = t1p.expand(B, N).clone(), t2p.expand(B, N).clone()
-    o1b, o2b = sample_heart_tissue(t1b, t2b, torch.ones(B, dtype=torch.long), (1.5, 3.0), N, 1.0)
+    o1b, o2b = MriPhysics.sample_heart_tissue(t1b, t2b, torch.ones(B, dtype=torch.long), (1.5, 3.0), N, 1.0)
     assert o2b[:, 3].mean() < o2[:, 3].mean()                             # 3T blood T2 lower than 1.5T
 
 
@@ -186,32 +184,31 @@ def test_seed_deterministic():
 def test_banding_dips_at_pi_deeper_for_blood():
     """Banding factor: 1 at the passband (dphi=0), dips toward dphi=π, and the dip is DEEPER for
     long-T2 blood than short-T2 myocardium (the physical reason blood bands hardest)."""
-    from core.data.dynamic.mri_physics import banding
     t, tr = torch.tensor, torch.tensor([3.0])
     blood_t2 = t([TISSUE["blood"][1.5][1]]); myo_t2 = t([TISSUE["myocardium"][1.5][1]])
-    assert torch.allclose(banding(blood_t2, tr, t([0.0])), torch.ones(1), atol=1e-3)   # passband = 1
-    assert banding(blood_t2, tr, t([math.pi])) < 1.0                                    # band dip
-    assert banding(blood_t2, tr, t([math.pi])) < banding(myo_t2, tr, t([math.pi]))      # blood bands deeper
+    assert torch.allclose(MriPhysics.banding(blood_t2, tr, t([0.0])), torch.ones(1), atol=1e-3)   # passband = 1
+    assert MriPhysics.banding(blood_t2, tr, t([math.pi])) < 1.0                                    # band dip
+    assert MriPhysics.banding(blood_t2, tr, t([math.pi])) < MriPhysics.banding(myo_t2, tr, t([math.pi]))  # deeper
 
 
 def test_acquisition_derived_and_reference_override(tmp_path):
     """Acquisition is DERIVED from physics (contrast-optimal flip capped by SAR, TR floor, TE=TR/2), not
     tabulated: acquisition_for == derive_acquisition by field, flip within the SAR cap, 3T flip < 1.5T,
     field-invariant to vendor; a verified reference/ leaf overrides per (vendor, field)."""
-    from core.data.dynamic.mri_physics import _TR_MID, SAR_FLIP_CAP, acquisition_for, derive_acquisition
-    tr15, te15, f15 = derive_acquisition(1.5)
-    tr3, te3, f3 = derive_acquisition(3.0)
+    from core.data.dynamic.mri_physics import _TR_MID, SAR_FLIP_CAP
+    tr15, te15, f15 = MriPhysics.derive_acquisition(1.5)
+    tr3, te3, f3 = MriPhysics.derive_acquisition(3.0)
     assert (tr15, te15) == (_TR_MID, _TR_MID / 2.0)             # TR = cited-band mid, TE=TR/2 (derived)
     assert f15 <= SAR_FLIP_CAP[1.5] and f3 <= SAR_FLIP_CAP[3.0]  # SAR ceiling respected
     assert f3 < f15                                              # flip drops at 3T (shorter T1/T2 + cap)
-    assert acquisition_for("Siemens", 1.5) == (tr15, te15, f15)  # base = the derivation, vendor-invariant
-    assert acquisition_for("GE", 1.5) == acquisition_for("Philips", 1.5)
-    assert acquisition_for("X", 2.8)[2] == f3                    # field snaps to nearest tabulated (3T)
+    assert MriPhysics.acquisition_for("Siemens", 1.5) == (tr15, te15, f15)  # base = derivation, vendor-invariant
+    assert MriPhysics.acquisition_for("GE", 1.5) == MriPhysics.acquisition_for("Philips", 1.5)
+    assert MriPhysics.acquisition_for("X", 2.8)[2] == f3         # field snaps to nearest tabulated (3T)
     from core.data.static.reference import Reference
     (tmp_path / "acquisition.yaml").write_text(
         "acquisition:\n  Siemens:\n"
         "    flip_deg_1p5t: {value: 62, source: dicom-mined, based_on: x, extracted_by: computed, verified: true}\n")
-    tr, te, fl = acquisition_for("Siemens", 1.5, ref=Reference(root=tmp_path))
+    tr, te, fl = MriPhysics.acquisition_for("Siemens", 1.5, ref=Reference(root=tmp_path))
     assert fl == 62.0                                            # verified override wins
     assert (tr, te) == (tr15, te15)                             # unset leaves fall back to the derivation
 

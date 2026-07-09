@@ -31,16 +31,7 @@ from pydantic import BaseModel, Field, model_validator
 from core.config import _VALIDATE
 
 from .augment import Augmentor
-from .mri_physics import (
-    TR_RANGE_MS,
-    banding,
-    blood_classes,
-    bssfp_signal,
-    derive_flip_range,
-    named_tissue_params,
-    sample_heart_tissue,
-    tissue_params,
-)
+from .mri_physics import TR_RANGE_MS, MriPhysics
 from .mrxcat import FOV_TISSUE
 
 
@@ -284,7 +275,7 @@ class Background(ABC):
     def paint_params(self, n_classes: int, n_paint: int, field: float, dev):
         """(T1,T2,PD) [n_paint] for the extended classes at `field`. Default = heart classes + bg-ladder
         tiers (`tissue_params`). A strategy that assigns each class an EXPLICIT tissue (FovBg) overrides."""
-        return tissue_params(n_classes, n_paint - n_classes, field, dev)
+        return MriPhysics.tissue_params(n_classes, n_paint - n_classes, field, dev)
 
     def seg_target(self, mask: torch.Tensor) -> torch.Tensor:
         """The SEG label map from the (painted) label map. Default: the paint map IS the target. A
@@ -368,7 +359,7 @@ class FovBg(Background):
         return mask.long(), len(FOV_TISSUE)                  # mask is the FOV tissue map; paint all 8
 
     def paint_params(self, n_classes, n_paint, field, dev):
-        return named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
+        return MriPhysics.named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
 
     def seg_target(self, mask):
         return mask.where(mask <= 3, torch.zeros_like(mask))  # noqa: PLR2004  FOV 4..7 (organs)→bg; heart 1..3 kept
@@ -399,7 +390,7 @@ class RandomizedAcq(Acquisition):
     SAR-bounded FWHM contrast range (derive_flip_range). Breadth, not the single optimal point."""
     def sample(self, b, cfg, dev):
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
-        rng = torch.tensor([derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
+        rng = torch.tensor([MriPhysics.derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
         tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev)
         lo, hi = rng[fi, 0:1], rng[fi, 1:2]
         fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)
@@ -465,24 +456,24 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
     fi, tr, fl, vi = cfg.acq.build().sample(b, cfg, dev)
     t1, t2, pd = t1s[fi], t2s[fi], pds[fi]                                  # [B, n_paint]
     if cfg.tissue_spread > 0:                                               # physical per-sample T1/T2 sweep
-        t1, t2 = sample_heart_tissue(t1, t2, fi, cfg.fields, n_classes, cfg.tissue_spread)
+        t1, t2 = MriPhysics.sample_heart_tissue(t1, t2, fi, cfg.fields, n_classes, cfg.tissue_spread)
     meta = {"vendor": [cfg.vendors[i] for i in vi.tolist()],                 # provenance for each synth
             "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
-    mu = bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)                  # [B, n_paint] steady-state
+    mu = MriPhysics.bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)       # [B, n_paint] steady-state
     mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
     if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
         v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
         thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
         f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
         s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
-        for c in blood_classes(n_classes):
+        for c in MriPhysics.blood_classes(n_classes):
             mu[:, c] = (1 - f[:, 0]) * mu[:, c] + f[:, 0] * s_fresh[:, c]     # blend blood toward fresh
     if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
-        for c in blood_classes(n_classes):
+        for c in MriPhysics.blood_classes(n_classes):
             mu[:, c] = mu[:, c] * cfg.blood_scale
     sg = mu.abs() * cfg.texture                                              # within-class texture
     if cfg.flow > 0:                                                         # flow: blood pools spread
-        for c in blood_classes(n_classes):
+        for c in MriPhysics.blood_classes(n_classes):
             sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
     mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
     # off-resonance bSSFP banding: a smooth Δf (B0) field -> per-pixel signal drop near dphi=±π,
@@ -493,7 +484,7 @@ def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  #
         low = torch.rand(b, 1, 4, 4, device=dev) * 2 - 1
         df = cfg.b0_hz * F.interpolate(low, size=mask.shape[-2:], mode="bilinear", align_corners=False)
         phi = 2 * math.pi * df * (tr[:, :, None, None] / 1000.0)             # off-resonance per TR (rad)
-        mu_map = mu_map * banding(t2m, tr[:, :, None, None], phi)
+        mu_map = mu_map * MriPhysics.banding(t2m, tr[:, :, None, None], phi)
     sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
     # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
     # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
