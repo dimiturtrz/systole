@@ -8,7 +8,6 @@ All flagship numbers pool ED+ES (the honest read). nnU-Net numbers are read from
 baselines/nnunet/results.json (emitted by baselines/nnunet/score.py --out, ED+ES) — single source,
 no hand-copy; refresh by re-running that baseline's score.py.
 """
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -26,7 +25,6 @@ from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.measure import Measure
 from core.model import Model
-from core.obs import Obs
 from core.registry import _DB_URI, Registry
 
 log = logging.getLogger("cardioseg.results")
@@ -99,31 +97,27 @@ class Results:
             "efficiency": EFFICIENCY,
         }
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", default=FLAGSHIP_REF)
+        ap.add_argument("--out", default="cardioseg/RESULTS.json")
 
-def main():  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_REF)
-    ap.add_argument("--out", default="cardioseg/RESULTS.json")
-    args = ap.parse_args()
-    res = Results.build(Registry.resolve(args.run))
-    Path(args.out).write_text(json.dumps(res, indent=2))
-    f = res["flagship"]
-    log.info(f"wrote {args.out}: " + " · ".join(
-        f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
+    @staticmethod
+    def run(args):  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
+        res = Results.build(Registry.resolve(args.run))
+        Path(args.out).write_text(json.dumps(res, indent=2))
+        f = res["flagship"]
+        log.info(f"wrote {args.out}: " + " · ".join(
+            f"{k.upper()} mean {v['dice']['mean']}/EF {v['ef_mae']}%" for k, v in f.items()))
 
-    # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
-    try:
-        mlflow.set_tracking_uri(_DB_URI)
-        with mlflow.start_run(run_id=Registry._run_id_for(args.run)):
-            for ax, v in f.items():
-                mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
-                mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
-                mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
-            mlflow.log_artifact(args.out)
-    except MlflowException as e:
-        log.warning("mlflow metric logging skipped: %s", e)
-
-
-if __name__ == "__main__":
-    main()
+        # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
+        try:
+            mlflow.set_tracking_uri(_DB_URI)
+            with mlflow.start_run(run_id=Registry._run_id_for(args.run)):
+                for ax, v in f.items():
+                    mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
+                    mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])
+                    mlflow.log_metric(f"{ax}_ef_bias", v["ef_bias"])
+                mlflow.log_artifact(args.out)
+        except MlflowException as e:
+            log.warning("mlflow metric logging skipped: %s", e)

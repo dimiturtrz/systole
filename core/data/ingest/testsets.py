@@ -18,13 +18,14 @@ from pathlib import Path
 import polars as pl
 
 from core.data.ingest.source import StaticSource
+from core.data.static.store.build import Build as store
 
 log = logging.getLogger("cardioseg.testsets")
 
 V = pl.col
 
 # Locks live in a committed lockfile (DATA, derived) — not hand-pasted into the source (predicates are
-# CODE). `python -m core.data.ingest.testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
+# CODE). `python -m core.data lock-testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
 # -> empty locks -> no guard (bootstrap: run --freeze once).
 _LOCKFILE = Path(__file__).resolve().parent / "testsets.lock.json"
 _LOCKS: dict[str, str] = json.loads(_LOCKFILE.read_text()) if _LOCKFILE.exists() else {}
@@ -68,6 +69,25 @@ class TestSets:
         """Recompute every TestSet's lock (content hash) over `cloud`."""
         return {ts.name: StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash() for ts in _ALL}
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
+        ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
+
+    @staticmethod
+    def run(args):
+        fresh = TestSets.compute_locks(store.load(EVAL_SOURCES))
+        if args.freeze:
+            _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
+            log.info(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
+        else:                                                        # --check (default)
+            drift = {n: (h, _LOCKS.get(n, "")) for n, h in fresh.items() if h != _LOCKS.get(n, "")}
+            if drift:
+                for n, (now, was) in drift.items():
+                    log.warning(f"DRIFT {n}: lockfile {was[:19]}… != store {now[:19]}…")
+                raise SystemExit(1)
+            log.info(f"OK — {len(fresh)} TestSet locks match the store")
+
 
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
 CANON = TestSets._ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
@@ -93,26 +113,3 @@ TESTSETS: dict[str, TestSet] = {ts.name: ts for ts in _ALL}     # lookup by name
 
 # datasets any TestSet can reference (incl SCD, not in the default seg SOURCE_DATASETS) — the eval cloud
 EVAL_SOURCES = ["acdc", "mnm2", "mnms1", "cmrxmotion", "scd"]
-
-
-if __name__ == "__main__":
-    import argparse
-
-    from core.data.static.store.build import Build as store
-    from core.obs import Obs
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="TestSet locks: --freeze writes the lockfile, --check verifies")
-    ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
-    ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
-    args = ap.parse_args()
-    fresh = TestSets.compute_locks(store.load(EVAL_SOURCES))
-    if args.freeze:
-        _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")
-        log.info(f"froze {len(fresh)} locks -> {_LOCKFILE.name}")
-    else:                                                        # --check (default)
-        drift = {n: (h, _LOCKS.get(n, "")) for n, h in fresh.items() if h != _LOCKS.get(n, "")}
-        if drift:
-            for n, (now, was) in drift.items():
-                log.warning(f"DRIFT {n}: lockfile {was[:19]}… != store {now[:19]}…")
-            raise SystemExit(1)
-        log.info(f"OK — {len(fresh)} TestSet locks match the store")

@@ -24,6 +24,7 @@ from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import (  # noqa: F401  re-exported: `Build as store` keeps store.<light-symbol> working
     SOURCE_DATASETS,
+    AcqReference,
     DataCfg,
     MetaBuilder,
     Store,
@@ -82,12 +83,12 @@ class Build:
         """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
         (the data cloud, for these params). Adds an absolute `path` column to each npz. names=None -> all.
         nyul=True harmonizes to the cohort standard (reference/nyul.yaml; fit it first with
-        `python -m core.data.static.store --fit-nyul`)."""
+        `python -m core.data consolidate --fit-nyul`)."""
         names = SOURCE_DATASETS if names is None else ([names] if isinstance(names, str) else list(names))
         std = Normalizer.load_standard() if nyul else None
         if nyul and std is None:
             raise RuntimeError("nyul=True but no reference/nyul.yaml — fit it first: "
-                               "python -m core.data.static.store --fit-nyul")
+                               "python -m core.data consolidate --fit-nyul")
         frames = []
         for name in names:
             out = Store.dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
@@ -112,3 +113,40 @@ class Build:
         blood-norm model (a trap). `sources` overrides d.sources (e.g. the matrix's full eval cloud)."""
         return Build.load(list(sources if sources is not None else d.sources), inplane=d.inplane, n4=d.n4,
                           n4_params=d.n4_params, nyul=d.nyul, norm=d.norm, workers=workers)
+
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
+        ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
+        ap.add_argument("--n4", action="store_true")
+        ap.add_argument("--nyul", action="store_true", help="harmonize to the Nyúl standard (fit it first)")
+        ap.add_argument("--fit-nyul", action="store_true", dest="fit_nyul",
+                        help="fit the Nyúl standard from the cohort -> reference/nyul.yaml, then exit")
+        ap.add_argument("--migrate-meta", action="store_true", dest="migrate_meta",
+                        help="re-emit meta.csv for built stores with the current schema/adapter.meta() "
+                             "(no image reload) — run after adding metadata fields, then exit")
+        ap.add_argument("--fit-acquisition", action="store_true", dest="fit_acq",
+                        help="mine real per-(vendor,field) TR/TE/flip from built DICOM stores -> "
+                             "reference/acquisition.yaml (acquisition_for then overrides the derivation), then exit")
+
+    @staticmethod
+    def run(args):
+        if args.fit_nyul:
+            std = Normalizer.fit_standard(args.names, inplane=args.inplane)
+            log.info(f"fit Nyúl standard -> {Normalizer.ref_path()}\n  {[round(float(v), 3) for v in std]}")
+            raise SystemExit
+        if args.fit_acq:
+            acq = AcqReference.fit()
+            log.info(f"fit acquisition reference -> reference/acquisition.yaml\n  {list(acq)}")
+            raise SystemExit
+        if args.migrate_meta:
+            paths = MetaBuilder.migrate(args.names)
+            log.info(f"migrated meta.csv (current schema, no image reload) for {len(paths)} store(s):")
+            for p in paths:
+                log.info(f"  {p}")
+            raise SystemExit
+        df = Build.load(args.names, inplane=args.inplane, n4=args.n4, nyul=args.nyul)
+        log.info(f"\n=== data cloud: {len(df)} subjects ===")
+        log.info(df.group_by("dataset").agg(pl.len().alias("n"),
+              pl.col("labelled").sum().alias("labelled")).sort("dataset"))
+        log.info(df.group_by("vendor").agg(pl.len().alias("n")).sort("n", descending=True))

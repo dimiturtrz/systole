@@ -12,7 +12,6 @@ Also prints pooled HD95 / ASSD / Dice / EF-MAE. Writes PNGs to <run>/plots/.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from collections import defaultdict
@@ -33,7 +32,6 @@ from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import LOA_Z, Measure
 from core.model import Model
-from core.obs import Obs
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
@@ -242,54 +240,50 @@ class Distribution:
     def lo_hi(bias, sd):
         return f"{bias - LOA_Z * sd:+.1f}, {bias + LOA_Z * sd:+.1f}"
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
+        ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
+                        help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
+        ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
+        ap.add_argument("--seed", type=int, default=0)
 
-def main():  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
-    Obs.setup()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
-    ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
-                    help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
-    ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
-    ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
-    run = Registry.resolve(args.run)
-    device = Model.resolve_device()
+    @staticmethod
+    def run(args):  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
+        run = Registry.resolve(args.run)
+        device = Model.resolve_device()
 
-    df = splits.Splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
-    # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
-    d_model = Hparams.from_json(run / "config.json").generator.data
-    trained = splits.Splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
-    kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
-    n_excl = len(df) - len(kept)
-    if n_excl:
-        log.warning("excluded %d/%d '%s' subjects the model TRAINED on — leak-free distribution (bd h9bz)",
-                    n_excl, len(df), args.eval)
-    label = f" ({args.eval}{', held-out' if args.holdout else ''}, n={len(kept)})"
-    rows = Distribution.collect(run, device, kept)
-    dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+        df = splits.Splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
+        # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
+        d_model = Hparams.from_json(run / "config.json").generator.data
+        trained = splits.Splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
+        kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
+        n_excl = len(df) - len(kept)
+        if n_excl:
+            log.warning("excluded %d/%d '%s' subjects the model TRAINED on — leak-free distribution (bd h9bz)",
+                        n_excl, len(df), args.eval)
+        label = f" ({args.eval}{', held-out' if args.holdout else ''}, n={len(kept)})"
+        rows = Distribution.collect(run, device, kept)
+        dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
 
-    out = run / "plots"
-    out.mkdir(parents=True, exist_ok=True)
-    # --- total (pooled) ---
-    Distribution.plot_kde(dists, out / "boundary_kde.png", label)
-    bias, sd = Distribution.plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
+        out = run / "plots"
+        out.mkdir(parents=True, exist_ok=True)
+        # --- total (pooled) ---
+        Distribution.plot_kde(dists, out / "boundary_kde.png", label)
+        bias, sd = Distribution.plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
 
-    log.info(f"=== per-class surface metrics (pooled){label} ===")
-    for cl, (name, _) in CLASSES.items():
-        pooled = np.concatenate([d for d in dists[cl] if d.size])
-        m = Evaluate.surface_metrics(pooled)
-        log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-    log.info(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{Distribution.lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
+        log.info(f"=== per-class surface metrics (pooled){label} ===")
+        for cl, (name, _) in CLASSES.items():
+            pooled = np.concatenate([d for d in dists[cl] if d.size])
+            m = Evaluate.surface_metrics(pooled)
+            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
+        log.info(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{Distribution.lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
 
-    # --- stratified (only axes with >1 group present) ---
-    strata = {}
-    for key in ("vendor", "scanner", "pathology", "field", "country", "continent", "motion_grade"):
-        if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
-            strata[key] = Distribution.strata_table(rows, key)
-            Distribution.plot_strata(rows, key, out / f"strata_{key}.png", label)
-    (out / "stratified.json").write_text(json.dumps(strata, indent=2))
-    log.info(f"\nplots + stratified.json -> {out}")
-
-
-if __name__ == "__main__":
-    main()
+        # --- stratified (only axes with >1 group present) ---
+        strata = {}
+        for key in ("vendor", "scanner", "pathology", "field", "country", "continent", "motion_grade"):
+            if len({str(r.get(key)) for r in rows if r.get(key) is not None}) > 1:
+                strata[key] = Distribution.strata_table(rows, key)
+                Distribution.plot_strata(rows, key, out / f"strata_{key}.png", label)
+        (out / "stratified.json").write_text(json.dumps(strata, indent=2))
+        log.info(f"\nplots + stratified.json -> {out}")

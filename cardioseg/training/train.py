@@ -409,7 +409,7 @@ class SeedTrainer:
             ModelCard.generate(out)
             log.info("wrote %s/MODEL_CARD.md", out)
         with self._artifact_step("attribution"):               # attribution diagnostic (confusion + saliency)
-            s = Attribution(model, device, cfg.model.out_channels).run(Xva, Yva, out)
+            s = Attribution(model, device, cfg.model.out_channels).attribute(Xva, Yva, out)
             log.info("attribution: recall=%s saliency=%s -> %s/attribution.png", s["recall"], s["saliency"], out.name)
         with self._artifact_step("ONNX export"):
             ExportOnnx.export(out, splits.Splits.paths(val_df)[0])    # ONNX + INT8, parity-gated

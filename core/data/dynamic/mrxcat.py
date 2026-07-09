@@ -22,7 +22,6 @@ whole-FOV coverage, painted by the shared engine.
 """
 from __future__ import annotations
 
-import argparse
 import logging
 import subprocess
 from pathlib import Path
@@ -33,7 +32,6 @@ from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
-from core.obs import Obs
 from core.preprocessing.preprocess import Preprocess
 
 from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
@@ -276,6 +274,36 @@ class Mrxcat:
         out_path, shape = Mrxcat.build_ssm_fov_pool(args.rodero_pool, args.vti_dir, args.out, args.size, args.scale)
         log.info(f"wrote ssm-fov pool {out_path}  shape {shape}")
 
+    @staticmethod
+    def add_args(ap):
+        sub = ap.add_subparsers(dest="cmd", required=True)
+
+        pr = sub.add_parser("probe", help="raw + canonical label counts for one .vti")
+        pr.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
+
+        sub.add_parser("fetch", help="clone + pin external/mrxcat2 (idempotent)")
+
+        bp = sub.add_parser("build-pool", help="vti dir -> heart-only canonical pool npz")
+        bp.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+        bp.add_argument("--out", required=True, help="output pool npz")
+
+        bf = sub.add_parser("build-fov-pool", help="vti dir -> whole-FOV 8-class pool npz")
+        bf.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+        bf.add_argument("--out", required=True, help="output pool npz")
+        bf.add_argument("--size", type=int, default=DEFAULT_SIZE)
+        bf.add_argument("--min-fg", type=int, default=40)
+
+        bs = sub.add_parser("build-ssm-fov-pool", help="rodero pool + vti dir -> SSM×MRXCAT composite pool npz")
+        bs.add_argument("--rodero-pool", required=True, help="healthy Rodero pool npz (our hearts)")
+        bs.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
+        bs.add_argument("--out", required=True, help="output pool npz")
+        bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
+        bs.add_argument("--scale", type=float, default=3.0)
+
+    @staticmethod
+    def run(args):  # pragma: no cover
+        _CMDS[args.cmd](args)
+
 
 _CMDS = {
     "probe": Mrxcat._cmd_probe,
@@ -284,39 +312,3 @@ _CMDS = {
     "build-fov-pool": Mrxcat._cmd_build_fov_pool,
     "build-ssm-fov-pool": Mrxcat._cmd_build_ssm_fov_pool,
 }
-
-
-def _main():  # pragma: no cover
-    """MRXCAT2.0 CLI: fetch the external tool, probe a `.vti`, or build the (heart / FOV / SSM-FOV) pools."""
-    Obs.setup()
-    ap = argparse.ArgumentParser(description="MRXCAT2.0 phantom: fetch + probe + offline pool build (bd hpy/8pfl).")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-
-    pr = sub.add_parser("probe", help="raw + canonical label counts for one .vti")
-    pr.add_argument("--vti", required=True, help="path to an MRXCAT/XCAT phantom .vti")
-
-    sub.add_parser("fetch", help="clone + pin external/mrxcat2 (idempotent)")
-
-    bp = sub.add_parser("build-pool", help="vti dir -> heart-only canonical pool npz")
-    bp.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
-    bp.add_argument("--out", required=True, help="output pool npz")
-
-    bf = sub.add_parser("build-fov-pool", help="vti dir -> whole-FOV 8-class pool npz")
-    bf.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
-    bf.add_argument("--out", required=True, help="output pool npz")
-    bf.add_argument("--size", type=int, default=DEFAULT_SIZE)
-    bf.add_argument("--min-fg", type=int, default=40)
-
-    bs = sub.add_parser("build-ssm-fov-pool", help="rodero pool + vti dir -> SSM×MRXCAT composite pool npz")
-    bs.add_argument("--rodero-pool", required=True, help="healthy Rodero pool npz (our hearts)")
-    bs.add_argument("--vti-dir", required=True, help="dir of MRXCAT .vti phantoms")
-    bs.add_argument("--out", required=True, help="output pool npz")
-    bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
-    bs.add_argument("--scale", type=float, default=3.0)
-
-    args = ap.parse_args()
-    _CMDS[args.cmd](args)
-
-
-if __name__ == "__main__":
-    _main()

@@ -1,5 +1,6 @@
 """Dataset-metadata persistence (cardioseg.preprocessing.normalization.persist). The adapter +
 data_root are faked so the pure provenance/serialize logic runs without real data or sidecars."""
+import argparse
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -74,23 +75,19 @@ def test_overlay_absent_is_empty(monkeypatch, tmp_path):
     assert P.Persist._overlay() == {}
 
 
-def test_main_single_dataset(monkeypatch):
-    """main class: --dataset X -> persist_meta called for that one dataset."""
-    monkeypatch.setattr(P.Obs, "setup", staticmethod(lambda: None))
+def test_run_single_dataset(monkeypatch):
+    """run: --dataset X -> persist_meta called for that one dataset."""
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
     monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))
-    monkeypatch.setattr("sys.argv", ["persist", "--dataset", "acdc"])
-    P.Persist.main()
+    P.Persist.run(argparse.Namespace(dataset="acdc"))
     assert called == ["acdc"]
 
 
-def test_main_all_datasets(monkeypatch):
-    """main boundary: default 'all' -> persist_meta over every known dataset."""
-    monkeypatch.setattr(P.Obs, "setup", staticmethod(lambda: None))
+def test_run_all_datasets(monkeypatch):
+    """run: default 'all' -> persist_meta over every known dataset."""
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
     monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))
-    monkeypatch.setattr("sys.argv", ["persist"])
-    P.Persist.main()
+    P.Persist.run(argparse.Namespace(dataset="all"))
     assert called == ["acdc", "mnm2"]

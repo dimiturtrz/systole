@@ -13,7 +13,6 @@ so every run ships an attribution.png + confusion next to its card. captum is an
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -31,7 +30,6 @@ from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
-from core.obs import Obs
 from core.registry import Registry
 from core.run import Run
 
@@ -42,8 +40,8 @@ _NAMES = ["bg"] + [nm for nm, _ in CLASSES.values()]      # ["bg","RV","LV-myo",
 
 class Attribution:
     """Model-interpretability diagnostic (confusion recall + captum saliency) for a trained model.
-    Holds model + device + n_classes as STATE (bd 01fh: they were threaded as args); .run(X, Y, out_dir)
-    takes only the data + output location that vary. The model-free helpers (class_confusion, _predict)
+    Holds model + device + n_classes as STATE (bd 01fh: they were threaded as args); .attribute(X, Y,
+    out_dir) takes only the data + output location that vary. The model-free helpers (class_confusion, _predict)
     are folded in as staticmethods."""
 
     def __init__(self, model, device: str, n_classes: int):
@@ -71,7 +69,7 @@ class Attribution:
             return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
                               for i in range(0, X.shape[0], batch)])
 
-    def run(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
+    def attribute(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out = Path(out_dir)
@@ -114,22 +112,18 @@ class Attribution:
         fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
         return sal is not None
 
+    @staticmethod
+    def add_args(ap):
+        ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
+        ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
 
-def _main():
-    ap = argparse.ArgumentParser(description="Attribution diagnostic: confusion + saliency on a model.")
-    ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
-    ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
-    args = ap.parse_args()
-    Obs.setup()
-    run_dir = Registry.resolve(args.run)
-    model, cfg, device = Run.load_run(run_dir)
-    d = (cfg.generator.data if cfg else TrainCfg().generator.data)
-    meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-    va = splits.Splits.model_val(d, meta)                   # coded split's val if set, else criteria
-    X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, device)
-    s = Attribution(model, device, cfg.model.out_channels if cfg else 4).run(X, Y, args.out or run_dir)
-    log.info(json.dumps(s, indent=2))
-
-
-if __name__ == "__main__":
-    _main()
+    @staticmethod
+    def run(args):  # pragma: no cover
+        run_dir = Registry.resolve(args.run)
+        model, cfg, device = Run.load_run(run_dir)
+        d = (cfg.generator.data if cfg else TrainCfg().generator.data)
+        meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
+        va = splits.Splits.model_val(d, meta)                   # coded split's val if set, else criteria
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, device)
+        s = Attribution(model, device, cfg.model.out_channels if cfg else 4).attribute(X, Y, args.out or run_dir)
+        log.info(json.dumps(s, indent=2))
