@@ -23,7 +23,7 @@ from common import log_setup, patient_dir
 from geometry import bbox_slices
 from scipy.ndimage import zoom
 
-from core.data.static.mri.acdc import load_ed_es
+from core.data.static.mri.acdc import AcdcAdapter
 
 log = logging.getLogger("cardioview.render_volume")
 
@@ -71,7 +71,7 @@ class RenderCfg:
 
 def render(cfg: RenderCfg) -> None:  # pragma: no cover  (load_ed_es disk read + pyvista Plotter/screenshot — render shell)
     patient, phase = cfg.patient, cfg.phase
-    d = load_ed_es(patient_dir(patient))
+    d = AcdcAdapter().load_ed_es(patient_dir(patient))
     if phase not in d:
         raise SystemExit(f"phase {phase} not available for {patient} (have {list(d)})")
     vol = d[phase]["img"]

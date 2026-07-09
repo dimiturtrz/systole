@@ -40,8 +40,8 @@ def _fake_cases(names):
 def test_split_tag_held_out(monkeypatch, caplog):
     """Held-out class: the seed-0 0.2 val slice of a 5-case list holds 1 case -> that id -> 'held-out',
     no warning logged."""
-    monkeypatch.setattr(R, "acdc_cases",
-                        lambda: _fake_cases([f"p{i}" for i in range(5)]))
+    monkeypatch.setattr(R.AcdcAdapter, "cases",
+                        lambda self: _fake_cases([f"p{i}" for i in range(5)]))
     # find which one the deterministic split marks held-out, then assert its tag.
     tags = {p: _split_tag(p) for p in [f"p{i}" for i in range(5)]}
     held = [p for p, t in tags.items() if "held-out" in t]
@@ -51,8 +51,8 @@ def test_split_tag_held_out(monkeypatch, caplog):
 
 def test_split_tag_train_seen_warns(monkeypatch, caplog):
     """Train-seen class: an id NOT in the val slice -> '  TRAIN-seen' AND a warning (pred overstates)."""
-    monkeypatch.setattr(R, "acdc_cases",
-                        lambda: _fake_cases([f"p{i}" for i in range(5)]))
+    monkeypatch.setattr(R.AcdcAdapter, "cases",
+                        lambda self: _fake_cases([f"p{i}" for i in range(5)]))
     tags = {p: _split_tag(p) for p in [f"p{i}" for i in range(5)]}
     seen = [p for p, t in tags.items() if "TRAIN-seen" in t]
     assert len(seen) == 4

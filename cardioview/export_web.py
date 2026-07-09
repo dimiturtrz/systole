@@ -35,7 +35,7 @@ from PIL import Image
 
 from core.config import data_root
 from core.data.static import splits, store
-from core.data.static.mri.acdc import acdc_cases, load_ed_es, parse_info_cfg
+from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import split_patients
 from core.hparams import from_json
 from core.inference import predict_volume
@@ -84,7 +84,7 @@ def heldout_set(model_name: str) -> set[str]:
                                          val_datasets=dc.val_datasets, val_vendors=dc.val_vendors)
         # "held out" = anything the model did NOT train on (val OR test) — ACDC is now val, still unseen.
         return set(val.get_column("subject_id").to_list()) | set(test.get_column("subject_id").to_list())
-    _, val = split_patients(list(acdc_cases()), 0.2, 0)
+    _, val = split_patients(list(AcdcAdapter().cases()), 0.2, 0)
     return {c.name for c in val}
 
 
@@ -148,7 +148,7 @@ def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — 
 
 def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
     """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
-    cfg = parse_info_cfg(pdir)
+    cfg = AcdcAdapter._parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
@@ -157,7 +157,7 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
-        case = preprocess_case(pdir, loader=load_ed_es)
+        case = preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
         spacing = tuple(float(s) for s in case["spacing"])
         masks = build_masks(case, source, ctx.model, ctx.device)
         crop_masks, iso = shared_crop(masks, spacing)
@@ -226,7 +226,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     ed_k = nearest_index(frames_t, edi)
     es_k = nearest_index(frames_t, esi)
     ef, edv, esv = ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
-    case = preprocess_case(pdir, loader=load_ed_es)
+    case = preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
     entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                  pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
