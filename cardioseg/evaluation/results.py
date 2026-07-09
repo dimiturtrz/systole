@@ -18,7 +18,7 @@ import numpy as np
 import polars as pl
 from mlflow.exceptions import MlflowException
 
-from cardioseg.evaluation.distribution import _pooled, collect, strata_table
+from cardioseg.evaluation.distribution import Distribution
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store import build as store
@@ -70,11 +70,11 @@ class Results:
 
     @staticmethod
     def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
-        rows = collect(run, device, df.iter_rows(named=True))
-        dists, dice_acc, ef_gt, ef_pred = _pooled(rows)
+        rows = Distribution.collect(run, device, df.iter_rows(named=True))
+        dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
         out = Results.axis_dict(len(rows), dists, dice_acc, Measure.ef_statistics(ef_gt, ef_pred))
         if with_strata:
-            out["strata"] = strata_table(rows, "pathology")
+            out["strata"] = Distribution.strata_table(rows, "pathology")
         return out
 
     @staticmethod

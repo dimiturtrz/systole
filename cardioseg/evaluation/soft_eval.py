@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cardioseg.evaluation.uncertainty import ece
+from cardioseg.evaluation.uncertainty import Uncertainty
 from core.data.static import splits
 from core.data.static.labels import LV_CAV
 from core.data.static.store import build as store
@@ -81,7 +81,7 @@ class SoftEval:
                          SoftEval._ef(vols["ed"]["soft"], vols["es"]["soft"])))
         a = np.array(rows)                                  # [n, 3] = gt, hard, soft
         conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
-        return a, ece(conf, corr)[0]
+        return a, Uncertainty.ece(conf, corr)[0]
 
 
 def main():  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)

@@ -55,8 +55,8 @@ def test_members_and_bald_decomposition(model):
     pred, mean, members = predict_volume_members(model, vol, SIZE, "cpu")
     assert tuple(members.shape) == (4, 2, 4, SIZE, SIZE)        # K=4 flips
     assert torch.allclose(members.mean(0), mean, atol=1e-6)     # mean is the member average
-    from cardioseg.evaluation.uncertainty import tta_uncertainty
-    p, total, conf, ale, epi = tta_uncertainty(model, vol, SIZE, "cpu")
+    from cardioseg.evaluation.uncertainty import Uncertainty
+    p, total, conf, ale, epi = Uncertainty.tta_uncertainty(model, vol, SIZE, "cpu")
     assert np.array_equal(p, pred)
     assert (epi >= -1e-6).all()                                 # BALD >= 0 (Jensen)
     assert np.allclose(total, ale + epi, atol=1e-5)            # total = aleatoric + epistemic

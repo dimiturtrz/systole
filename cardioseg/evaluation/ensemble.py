@@ -31,7 +31,7 @@ from core.registry import resolve
 from core.run import load_run
 
 from ..tracking import Tracker
-from .uncertainty import tta_uncertainty
+from .uncertainty import Uncertainty
 
 log = logging.getLogger("cardioseg.ensemble")
 
@@ -121,7 +121,7 @@ class Ensemble:
                 gt = stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
                 fg = (pred > 0) | (gt > 0)
                 ea.append(ale[fg]); ee.append(epi[fg])
-                _, _, _, sa, se_ = tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
+                _, _, _, sa, se_ = Uncertainty.tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
                 ta.append(sa[fg]); te.append(se_[fg])
         return Ensemble.reducible_frac(ea, ee), Ensemble.reducible_frac(ta, te)   # ensemble reducible-frac, single(TTA) reducible-frac
 

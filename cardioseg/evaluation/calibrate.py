@@ -27,7 +27,7 @@ from core.registry import resolve
 from core.run import load_run
 
 from ..tracking import Tracker
-from .uncertainty import ece
+from .uncertainty import Uncertainty
 from .validate import EvalCfg, Evaluator
 
 log = logging.getLogger("cardioseg.calibrate")
@@ -62,7 +62,7 @@ class Calibrate:
         z = z - z.max(1, keepdims=True)
         p = np.exp(z); p /= p.sum(1, keepdims=True)
         conf, pred = p.max(1), p.argmax(1)
-        return ece(conf, (pred == labels).astype(float))[0]
+        return Uncertainty.ece(conf, (pred == labels).astype(float))[0]
 
 
 def main():  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
