@@ -135,6 +135,16 @@ type = "forbidden"
 source_modules = ["cardioview"]
 forbidden_modules = ["cardioseg"]
 
+# The store's read/query surface stays preprocessing-free: `query` (DataCfg, load_arrays, MetaBuilder…)
+# must not import the N4/Nyúl pipeline. Normalization is a DOWNSTREAM stage (`build`/`normalize` own it),
+# so read-only consumers never transitively drag it. The N4Cfg *config* is fine (co-located in n4.py);
+# this forbids the pipeline LOGIC modules only. bd cardiac-seg-4hdt.
+[[tool.importlinter.contracts]]
+name = "store read surface (query) is preprocessing-free (normalization is a downstream stage)"
+type = "forbidden"
+source_modules = ["core.data.static.store.query"]
+forbidden_modules = ["core.preprocessing.preprocess", "core.preprocessing.nyul"]
+
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only
 # packages pinned via [tool.uv.sources] draw from this index.

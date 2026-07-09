@@ -22,8 +22,9 @@ import torch
 
 from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.synth import MatchedAcqCfg, synthesize_from_labels
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import CLASSES
+from core.data.static.store import build as store
 from core.hparams import TrainCfg, apply_overrides
 from core.model import resolve_device
 from core.obs import setup

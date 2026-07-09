@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 
 from core.data.dynamic.dataset import load_to_gpu
 from core.data.dynamic.synth import FlatBgCfg, PartitionBgCfg, SynthCfg, synthesize_from_labels
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import CLASSES
+from core.data.static.store import build as store
 from core.hparams import TrainCfg
 from core.obs import setup
 

@@ -26,7 +26,8 @@ import numpy as np
 from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
-from core.data.static import splits, store
+from core.data.static import splits
+from core.data.static.store import build as store
 from core.evaluate import CLASSES, dice, surface_distances, surface_metrics
 from core.hparams import from_json
 from core.inference import predict_volume

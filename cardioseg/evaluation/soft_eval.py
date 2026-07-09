@@ -20,8 +20,9 @@ import numpy as np
 import polars as pl
 
 from cardioseg.evaluation.uncertainty import ece
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.labels import LV_CAV
+from core.data.static.store import build as store
 from core.hparams import from_json
 from core.inference import predict_volume_probs
 from core.measure import ef_statistics, expected_volume_ml, label_volume_ml
