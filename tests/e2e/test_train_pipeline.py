@@ -15,10 +15,10 @@ import pytest
 
 from cardioseg.training.train import train_seg
 from core.data.ingest.source import StaticSource
-from core.data.static.mri.acdc import acdc_cases
+from core.data.static.mri.acdc import AcdcAdapter
 from core.hparams import TrainCfg
 
-needs_data = pytest.mark.skipif(not acdc_cases(), reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
+needs_data = pytest.mark.skipif(not AcdcAdapter().cases(), reason="ACDC data not present (set CARDIAC_DATA_ROOT)")
 
 
 class _NoTrk:
