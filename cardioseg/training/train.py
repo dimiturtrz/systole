@@ -51,14 +51,6 @@ _CLI_FIELDS = [
 ]
 
 
-def _set_cfg_path(cfg, path: str, value) -> None:
-    """setattr along a dotted cfg path ('generator.data.n4' -> cfg.generator.data.n4 = value)."""
-    *parents, leaf = path.split(".")
-    for parent in parents:
-        cfg = getattr(cfg, parent)
-    setattr(cfg, leaf, value)
-
-
 class Train:
     """The train.py orchestration surface (the free funcs folded in as staticmethods): the CLI arg->cfg
     mapping, seed resolution + policy, output-dir/tag/count helpers, the early-stop val-Dice, the
@@ -111,8 +103,13 @@ class Train:
         for arg, path, is_flag in _CLI_FIELDS:
             value = a.get(arg)
             applies = bool(value) if is_flag else value is not None
-            if applies:
-                _set_cfg_path(cfg, path, True if is_flag else value)
+            if not applies:
+                continue
+            target = cfg                                   # walk the dotted cfg path, then set the leaf
+            *parents, leaf = path.split(".")
+            for parent in parents:
+                target = getattr(target, parent)
+            setattr(target, leaf, True if is_flag else value)
         Hparams.apply_overrides(cfg, a.get("overrides") or [])
         return cfg
 
