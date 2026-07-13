@@ -40,14 +40,6 @@ jobs:
       # ADVISORY: `ruff format` not applied yet (bd i851) — shows the pending reformat, does not block.
       - name: Format — advisory (non-blocking)
         run: uvx ruff@0.15.13 format --check . || true
-      # Type check — ty (astral, aligns with ruff+uv, auto-resolves the uv env). ADVISORY (bd
-      # cardiac-seg-pajt): surfaces the real Optional-narrowing bugs (e.g. `.head` on a None-union) that
-      # ruff's lint axis can't see. NOT hard-gated — ty is v0.0.x and its rules still churn; graduate to
-      # blocking once it reaches ~0.1+/stabilizes (mirrors the jscpd/coverage ratchet). Eval: bd rp8l,
-      # research/deep_dives/2026-07-13_type-checker-eval.md.
-      - name: Types — advisory (ty, non-blocking)
-        continue-on-error: true
-        run: uvx ty@0.0.59 check core cardioseg || true
       # Vulture — dead code, the axis ruff can't see (bd cardiac-seg-5ogp). Two tiers (paths/ignores in
       # [tool.vulture]). BLOCKS at conf>=80 (near-certain: redundant conditions, unreachable, unused
       # locals — precision high enough to fail the merge).
