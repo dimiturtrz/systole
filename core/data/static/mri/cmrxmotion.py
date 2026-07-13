@@ -37,6 +37,9 @@ class CmrxMotionAdapter(DatasetAdapter):
     name = "cmrxmotion"
     label_map = LABEL_MAP
 
+    def __init__(self, root: str | Path | None = None):
+        self.root = root                                     # acquisition-dir override (default env/config search)
+
     @staticmethod
     def _root(root: str | Path | None = None) -> Path:
         """Resolve the dir holding the P###-n/ folders. Override with CARDIAC_CMRX_ROOT."""
@@ -69,7 +72,7 @@ class CmrxMotionAdapter(DatasetAdapter):
 
     def cases(self) -> list[Path]:
         """List acquisition dirs (P###-n: volunteer × breathing condition)."""
-        d = self._root()
+        d = self._root(self.root)
         return sorted((p for p in d.glob("P[0-9][0-9][0-9]-[0-9]") if p.is_dir()), key=lambda p: p.name)
 
     def load_ed_es(self, case: Path) -> PatientData:

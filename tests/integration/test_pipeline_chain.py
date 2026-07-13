@@ -114,8 +114,9 @@ def test_predict_then_ejection_fraction():
     model = _ThreshModel()
     ed_vol = _cube(8, 64, 12, value=1.0)                  # large bright pool
     es_vol = _cube(8, 64, 7, value=1.0)                   # small bright pool
-    pred_ed = Inference.predict_volume(model, ed_vol, size=64, device="cpu")
-    pred_es = Inference.predict_volume(model, es_vol, size=64, device="cpu")
+    inf = Inference(model, 64, "cpu")
+    pred_ed = inf.predict_volume(ed_vol)
+    pred_es = inf.predict_volume(es_vol)
     assert pred_ed.shape == (8, 64, 64)
     assert set(np.unique(pred_ed).tolist()) == {0, 3}     # model emits bg + LV-cav only
     ef, edv, esv = Measure.ejection_fraction(pred_ed, pred_es, (10.0, 1.5, 1.5))
@@ -127,7 +128,7 @@ def test_predict_matches_groundtruth_threshold():
     pytest.importorskip("torch")
     model = _ThreshModel()
     vol = _cube(6, 64, 10, value=1.0)
-    pred = Inference.predict_volume(model, vol, size=64, device="cpu")
+    pred = Inference(model, 64, "cpu").predict_volume(vol)
     gt = np.where(vol > 0.5, 3, 0).astype(np.uint8)        # what the threshold model "should" give
     assert Evaluate.dice(pred, gt, 3) == 1.0
     assert Evaluate.hd95(pred, gt, 3) == 0.0                        # identical surfaces -> zero distance

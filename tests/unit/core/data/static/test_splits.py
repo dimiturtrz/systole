@@ -4,7 +4,7 @@ import types
 
 import polars as pl
 
-from core.data.static.splits import Splits
+from core.data.static.splits import ModelSplit, Splits
 
 
 def _meta():
@@ -17,9 +17,10 @@ def _meta():
 
 
 def _cfg(**kw):
-    """A DataCfg-like stub carrying only the fields split_from_cfg reads."""
+    """A DataCfg-like stub carrying only the fields ModelSplit / make_split read."""
     base = dict(test_datasets=(), test_vendors=(), val_frac=0.25,
-                val_datasets=(), val_vendors=(), train_vendors=())
+                val_datasets=(), val_vendors=(), train_vendors=(),
+                split=None, sources=("mnm2", "mnms1", "acdc"))
     return types.SimpleNamespace(**{**base, **kw})
 
 
@@ -50,9 +51,25 @@ def test_train_vendors_restricts_train_only():
     assert scarce[1].equals(full[1]) and scarce[2].equals(full[2])   # val/test unchanged
 
 
-def test_split_from_cfg_criteria(monkeypatch):
-    """Legacy path: DataCfg criteria -> (train, val, test) by vendor/dataset holdout."""
-    tr, val, test = Splits.split_from_cfg(_cfg(test_vendors=("Canon",), val_datasets=("acdc",)), _meta())
+def test_modelsplit_split_criteria():
+    """ModelSplit.split(): legacy criteria path -> (train, val, test) by vendor/dataset holdout."""
+    tr, val, test = ModelSplit(_cfg(test_vendors=("Canon",), val_datasets=("acdc",)), _meta()).split()
     assert set(test["vendor"].unique()) == {"Canon"}            # test = Canon
     assert set(val["dataset"].unique()) == {"acdc"}            # val = acdc
     assert "Canon" not in set(tr["vendor"].unique()) and "acdc" not in set(tr["dataset"].unique())
+
+
+def test_modelsplit_val_and_test_properties():
+    """The .val / .test properties expose the criteria val/test frames a model held out."""
+    ms = ModelSplit(_cfg(test_vendors=("Canon",), val_datasets=("acdc",)), _meta())
+    assert set(ms.test["vendor"].unique()) == {"Canon"}
+    assert set(ms.val["dataset"].unique()) == {"acdc"}
+
+
+def test_modelsplit_seen_excludes_test_train_excludes_val():
+    """seen_keys = train∪val (labelled, in-sources, minus test); train_keys drops val too."""
+    ms = ModelSplit(_cfg(test_vendors=("Canon",), val_datasets=("acdc",)), _meta())
+    seen, trained = ms.seen_keys(), ms.train_keys()
+    assert trained <= seen                                      # train is a subset of seen (val carved off)
+    assert not any(k.startswith("mnms1\tCanon") for k in seen)  # test subjects never seen
+    assert not any(k.startswith("acdc\t") for k in trained)     # val (acdc) not in train

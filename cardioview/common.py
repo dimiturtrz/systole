@@ -90,6 +90,6 @@ def masks(case: dict, source: str, model=None, device=None) -> dict:
         out[tag] = (
             square_stack(case[f"{k}_gt"], np.uint8)
             if source == "gt"
-            else Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device))
+            else Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"]))
         )
     return out

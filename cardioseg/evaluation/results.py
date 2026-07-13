@@ -21,6 +21,7 @@ from cardioseg.evaluation.distribution import Distribution
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.measure import Measure
@@ -82,7 +83,7 @@ class Results:
         the run actually held out."""
         device = Model.resolve_device()
         d = Hparams.from_json(run / "config.json").generator.data
-        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
+        meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
         _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
         flagship = {"acdc": Results._axis(run, device, val, with_strata=True)}   # val = ACDC, with strata

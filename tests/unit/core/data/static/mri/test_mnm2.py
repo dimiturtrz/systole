@@ -43,6 +43,14 @@ def test_dataset_dir_env_override(tmp_path, monkeypatch):
     assert Mnm2Adapter._dataset_dir() == tmp_path                          # env root wins
 
 
+# --- stateful: a ctor root override is honoured by cases() (mirrors AcdcAdapter(root)) ---
+def test_ctor_root_drives_cases(tmp_path):
+    for n in ("010", "002"):
+        (tmp_path / n).mkdir()
+    cases = Mnm2Adapter(root=tmp_path).cases()                             # self.root -> _dataset_dir
+    assert [c.name for c in cases] == ["002", "010"]
+
+
 # --- mnm2_cases: only 3-digit dirs, numerically sorted; non-NNN ignored ---
 def test_mnm2_cases_filters_and_sorts(tmp_path, monkeypatch):
     for n in ("010", "002", "100", "abc"):

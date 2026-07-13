@@ -260,7 +260,7 @@ class SynthFidelity:
         # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
         # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
         if args.val_only:
-            real_df = splits.Splits.model_val(d, meta)          # coded split's val if set, else criteria
+            real_df = splits.ModelSplit(d, meta).val          # coded split's val if set, else criteria
         else:
             real_df = meta.filter(pl.col("labelled"))
         X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(real_df), d.size, "cpu")

@@ -58,10 +58,10 @@ class Augment:
     """GPU-batched real-pixel augmentation (geometry + intensity), on the hard mask (nearest interp)."""
 
     def __init__(self, cfg: AugCfg):
-        self.cfg = cfg
+        self.aug = Augmentor(cfg)
 
     def __call__(self, b: Batch) -> Batch:
-        b.x, b.y = Augmentor.augment_batch(b.x, b.y, self.cfg)
+        b.x, b.y = self.aug.augment_batch(b.x, b.y)
         return b
 
 

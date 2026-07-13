@@ -20,6 +20,7 @@ import torch
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
@@ -43,7 +44,7 @@ class Ensemble:
     def decompose(models, vol_img, size, device):
         """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
         [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
-        mems = [Inference.predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
+        mems = [Inference(m, size, device).predict_volume_probs(vol_img)[1] for m in models]   # each [D,C,H,W]
         members = torch.stack(mems)                                                  # [K,D,C,H,W]
         mean = members.mean(0)
         logc = np.log(mean.shape[1])
@@ -93,10 +94,11 @@ class Ensemble:
     @staticmethod
     def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
         d = cfg.generator.data
-        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
+        meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
+        ms = splits.ModelSplit(d, meta)
         if which.lower() == "val":                          # the held-out val split (split-derived, not a literal)
-            return splits.Splits.model_val(d, meta)
-        test = splits.Splits.model_test(d, meta)                   # a vendor axis carves the frozen test by vendor
+            return ms.val
+        test = ms.test                                             # a vendor axis carves the frozen test by vendor
         return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
     @staticmethod
@@ -134,8 +136,9 @@ class Ensemble:
         loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
         models = [m for m, _, _ in loaded]
         cfg = loaded[0][1]
-        trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",
+        tracker = Tracker("cardioseg", f"ensemble-{len(models)}seed",
                     {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+        trk = tracker.start()
         for ax in args.eval:
             df = Ensemble._eval_df(cfg, ax)
             if not len(df):

@@ -42,6 +42,15 @@ def test_cases_listed_sorted(root):
     assert [c.name for c in cases] == ["P001-1", "P001-2"]
 
 
+# --- stateful: a ctor root override is honoured by cases() (mirrors AcdcAdapter(root)) ---
+def test_ctor_root_drives_cases(tmp_path):
+    data = tmp_path / "data"
+    for case in ("P002-1", "P001-3"):
+        (data / case).mkdir(parents=True)
+    cases = CmrxMotionAdapter(root=tmp_path).cases()                      # self.root -> _root
+    assert [c.name for c in cases] == ["P001-3", "P002-1"]
+
+
 def test_load_ed_es_squeeze_and_label_flip(root):
     a = CmrxMotionAdapter()
     pd = a.load_ed_es(a.cases()[0])                     # P001-1: both frames labelled

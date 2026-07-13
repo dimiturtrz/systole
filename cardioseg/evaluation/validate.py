@@ -124,7 +124,7 @@ class Evaluator:
             for tag in ("ED", "ES"):
                 if f"{tag.lower()}_img" not in case:
                     continue
-                pred = Inference.predict_volume(model, case[f"{tag.lower()}_img"], size, device, tta=tta)
+                pred = Inference(model, size, device).predict_volume(case[f"{tag.lower()}_img"], tta=tta)
                 if postproc:
                     pred = Postprocess.largest_cc_per_class(pred)
                 gt = Preprocess.stack_slices(case[f"{tag.lower()}_gt"], size)

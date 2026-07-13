@@ -29,6 +29,20 @@ from core.data.static.reference import Reference
 from core.preprocessing.n4 import N4Cfg
 
 
+class Recipe(BaseModel):
+    """The preprocessing recipe that addresses a processed-cache dir (the paramkey): inplane resample, N4
+    bias field, Nyúl harmonization, intensity norm. One value object threaded through Store/Build/
+    Normalizer instead of five loose params travelling together (Fowler Introduce Parameter Object, bd
+    cardiac-seg-h7vy.4.1). The fitted Nyúl STANDARD is a separate artifact (data, not a knob) — it stays
+    out of the recipe and rides alongside as `nyul_standard`."""
+
+    inplane: float = Field(DEFAULT_INPLANE, gt=0)
+    n4: bool = False
+    n4_params: N4Cfg = Field(default_factory=N4Cfg)
+    nyul: bool = False
+    norm: str = "zscore"
+
+
 class DataCfg(BaseModel):
     """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
     Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
@@ -73,6 +87,13 @@ class DataCfg(BaseModel):
     val_frac: float = Field(0.2, gt=0, lt=1)
     size: int = Field(DEFAULT_SIZE, ge=32)
 
+    @property
+    def recipe(self) -> Recipe:
+        """The preprocessing recipe this cfg selects — the bridge from the flat serialized fields (kept
+        for config.json back-compat) to the Recipe value object Store/Build/Normalizer consume."""
+        return Recipe(inplane=self.inplane, n4=self.n4, n4_params=self.n4_params,
+                      nyul=self.nyul, norm=self.norm)
+
 
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
 # adapter registry: "canon" is a registered adapter but it's a vendor SLICE of mnms1 (a split query,
@@ -105,30 +126,32 @@ _FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T fli
 
 
 class Store:
-    """The store's cache-addressing + npz read primitives (the free store helpers folded in as
-    staticmethods): `param_key` encodes the preprocessing recipe into a cache dir name, `dataset_dir`
-    composes the processed/<dataset>/<paramkey>/ path, `load_arrays` reads one consolidated npz."""
+    """The store's cache-addressing read surface, bound to ONE preprocessing recipe (inplane resample,
+    N4, Nyúl, norm): construct once with the recipe, then `param_key()` / `dataset_dir(dataset)` address
+    the cache for any dataset under it. The recipe is the fixed session — it's exactly what a paramkey
+    encodes — while the dataset name is the per-call data. `load_arrays` is recipe-free (a pure npz read),
+    so it stays a staticmethod."""
 
-    @staticmethod
-    def param_key(inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
-                  nyul: bool = False, norm: str = "zscore") -> str:
-        """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
-        too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
-        cache is separate). norm='blood' -> '_blood' suffix (blood-anchored normalization, bd h8k)."""
-        key = f"inplane{str(inplane).replace('.', 'p')}"
-        if n4:
-            p = n4_params or N4Cfg()
+    def __init__(self, recipe: Recipe | None = None):
+        self.recipe = recipe or Recipe()
+
+    def param_key(self) -> str:
+        """Processed-cache key for this recipe. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes
+        the N4 params too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix
+        (harmonized cache is separate). norm='blood' -> '_blood' suffix (blood-anchored norm, bd h8k)."""
+        r = self.recipe
+        key = f"inplane{str(r.inplane).replace('.', 'p')}"
+        if r.n4:
+            p = r.n4_params or N4Cfg()
             key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
-        if nyul:
+        if r.nyul:
             key += "_nyul"
-        if norm != "zscore":
-            key += f"_{norm}"
+        if r.norm != "zscore":
+            key += f"_{r.norm}"
         return key
 
-    @staticmethod
-    def dataset_dir(dataset: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
-                    n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
-        return Path(Config.data_root("processed")) / dataset / Store.param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
+    def dataset_dir(self, dataset: str) -> Path:
+        return Path(Config.data_root("processed")) / dataset / self.param_key()
 
     @staticmethod
     def load_arrays(path: str | Path) -> dict:

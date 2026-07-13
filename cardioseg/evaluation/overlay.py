@@ -73,8 +73,9 @@ class Overlay:
     def _case(model, path, size, device):
         case = load_arrays(path)
         spacing = tuple(float(s) for s in case["spacing"])
-        pred_ed = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["ed_img"], size, device, tta=True))
-        pred_es = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["es_img"], size, device, tta=True))
+        inf = Inference(model, size, device)
+        pred_ed = Postprocess.largest_cc_per_class(inf.predict_volume(case["ed_img"], tta=True))
+        pred_es = Postprocess.largest_cc_per_class(inf.predict_volume(case["es_img"], tta=True))
         gt_ed = Preprocess.stack_slices(case["ed_gt"], size)
         img_ed = Preprocess.stack_slices(case["ed_img"], size, 0.0)
         ef_p, _, _ = Measure.ejection_fraction(pred_ed, pred_es, spacing)
@@ -100,7 +101,7 @@ class Overlay:
         size = d.size
 
         meta = store.load_cfg(d)                    # the run's own preprocessing params
-        val = splits.Splits.model_val(d, meta)             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
+        val = splits.ModelSplit(d, meta).val             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
         paths = splits.Splits.paths(val)
 
         # score every case once: pick a clean low-error case + the worst-EF HCM case

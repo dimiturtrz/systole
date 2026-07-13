@@ -51,7 +51,7 @@ class Ctx:
     def val_sample(self) -> str:  # pragma: no cover  (store.load + split resolution over the real data tree)
         """One held-out val npz path — the ONNX exporter's parity sample."""
         d = self.cfg.generator.data
-        return splits.Splits.paths(splits.Splits.model_val(d, store.load_cfg(d)))[0]
+        return splits.Splits.paths(splits.ModelSplit(d, store.load_cfg(d)).val)[0]
 
 
 class Stage:

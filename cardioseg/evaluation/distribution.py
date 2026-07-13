@@ -27,6 +27,7 @@ from scipy.stats import gaussian_kde
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.inference import Inference
@@ -71,7 +72,7 @@ class Distribution:
                 k = tag.lower()
                 if f"{k}_img" not in case:
                     continue
-                pred = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
+                pred = Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=True))
                 gt = Preprocess.stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
@@ -125,10 +126,14 @@ class Distribution:
     def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover  (matplotlib scatter + marginal-KDE render + savefig)
         """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
         upright on top; bias + 95% LoA as vertical lines (and in the title)."""
-        mean = (ef_gt + ef_pred) / 2
-        diff = ef_pred - ef_gt
-        s = Measure.ef_statistics(ef_gt, ef_pred)
-        bias, sd, (lo, hi) = s["bias"], s["sd"], s["loa"]
+        gt = np.asarray(ef_gt, dtype=float)
+        pred = np.asarray(ef_pred, dtype=float)
+        stats = Measure.ef_statistics(gt, pred)
+        bias, (lo, hi) = stats["bias"], stats["loa"]
+        raw_diff = pred - gt
+        ok = ~np.isnan(raw_diff)
+        n_collapsed = int((~ok).sum())
+        diff, mean = raw_diff[ok], ((gt + pred) / 2)[ok]
 
         fig = plt.figure(figsize=(7, 5))
         gs = fig.add_gridspec(2, 1, height_ratios=(1, 3), hspace=0.05)
@@ -136,8 +141,8 @@ class Distribution:
         ax = fig.add_subplot(gs[1], sharex=axk)      # scatter vs mean EF
 
         # focus on the bulk so the distribution shape reads; mark hard failures off-scale
-        x_lo = min(lo, float(np.percentile(diff, 2))) - 6
-        x_hi = max(hi, float(np.percentile(diff, 98))) + 6
+        x_lo = min(lo, float(np.percentile(diff, 2)) if diff.size else lo) - 6
+        x_hi = max(hi, float(np.percentile(diff, 98)) if diff.size else hi) + 6
         ax.set_xlim(x_lo, x_hi)
         lines = [(bias, "-"), (hi, "--"), (lo, "--")]
 
@@ -149,9 +154,10 @@ class Distribution:
         ax.set_xlabel("pred − GT  (EF %)")
         ax.set_ylabel("mean EF  %")
         n_off = int((diff < x_lo).sum() + (diff > x_hi).sum())
-        if n_off:
-            ax.text(0.02, 0.04, f"{n_off} off-scale (EF prediction collapsed)",
-                    transform=ax.transAxes, fontsize=8, color="#a33")
+        flags = [(n_off, "off-scale"), (n_collapsed, "EF collapsed (EDV≤0)")]
+        msg = "  ·  ".join(f"{n} {lbl}" for n, lbl in flags if n)
+        if msg:
+            ax.text(0.02, 0.04, msg, transform=ax.transAxes, fontsize=8, color="#a33")
 
         # upright distribution outline on top
         xs = np.linspace(x_lo, x_hi, 200)
@@ -169,7 +175,7 @@ class Distribution:
         fig.subplots_adjust(left=0.1, right=0.97, top=0.86, bottom=0.11)  # tight_layout breaks shared marginal
         fig.savefig(out, dpi=110)
         plt.close(fig)
-        return bias, sd
+        return stats
 
     @staticmethod
     def _groups(rows, key):
@@ -214,7 +220,8 @@ class Distribution:
             return
         groups = list(g)
         mean_dice = [np.mean([r["dice"][c] for r in g[gr] for c in CLASSES if "dice" in r]) for gr in groups]
-        ef_mae = [float(np.mean([abs(r["ef_pred"] - r["ef_gt"]) for r in g[gr]])) for gr in groups]
+        ef_mae = [Measure.ef_statistics([r["ef_gt"] for r in g[gr]], [r["ef_pred"] for r in g[gr]])["mae"]
+                  for gr in groups]
         ns = [len(g[gr]) for gr in groups]
         small = [n < SMALL_N for n in ns]
 
@@ -256,7 +263,7 @@ class Distribution:
         df = splits.Splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
         # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
         d_model = Hparams.from_json(run / "config.json").generator.data
-        trained = splits.Splits.train_keys(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4))
+        trained = splits.ModelSplit(d_model, store.load(list(d_model.sources), Recipe(inplane=d_model.inplane, n4=d_model.n4))).train_keys()
         kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
         n_excl = len(df) - len(kept)
         if n_excl:
@@ -270,14 +277,14 @@ class Distribution:
         out.mkdir(parents=True, exist_ok=True)
         # --- total (pooled) ---
         Distribution.plot_kde(dists, out / "boundary_kde.png", label)
-        bias, sd = Distribution.plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
+        s = Distribution.plot_bland_altman(ef_gt, ef_pred, out / "ef_bland_altman.png", label)
 
         log.info(f"=== per-class surface metrics (pooled){label} ===")
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size])
             m = Evaluate.surface_metrics(pooled)
             log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-        log.info(f"=== EF Bland-Altman: bias {bias:+.1f}% · 95% LoA [{Distribution.lo_hi(bias, sd)}] · MAE {np.mean(np.abs(ef_pred - ef_gt)):.1f}%")
+        log.info(f"=== EF Bland-Altman: bias {s['bias']:+.1f}% · 95% LoA [{Distribution.lo_hi(s['bias'], s['sd'])}] · MAE {s['mae']:.1f}%")
 
         # --- stratified (only axes with >1 group present) ---
         strata = {}

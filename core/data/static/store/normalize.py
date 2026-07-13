@@ -13,8 +13,7 @@ from omegaconf import OmegaConf
 from core.config import DEFAULT_INPLANE
 from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.reference import Reference
-from core.data.static.store.query import SOURCE_DATASETS
-from core.preprocessing.n4 import N4Cfg
+from core.data.static.store.query import SOURCE_DATASETS, Recipe
 from core.preprocessing.nyul import LANDMARKS, Nyul
 from core.preprocessing.preprocess import Preprocess
 
@@ -25,17 +24,16 @@ class Normalizer:
     store never imports `preprocess_case` directly. The Nyúl STANDARD (a normalization axis fit to
     reference data) is fit/loaded via the staticmethods `fit_standard`/`load_standard`."""
 
-    def __init__(self, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913
-                 n4_params: N4Cfg | None = None, nyul: bool = False, nyul_standard=None,
-                 norm: str = "zscore"):
-        self.inplane, self.n4, self.n4_params = inplane, n4, n4_params
-        self.nyul, self.nyul_standard, self.norm = nyul, nyul_standard, norm
+    def __init__(self, recipe: Recipe | None = None, nyul_standard=None):
+        self.recipe = recipe or Recipe()
+        self.nyul_standard = nyul_standard
 
     def apply_case(self, case: Path, loader) -> dict:
         """Consolidate ONE raw case to the recipe's processed arrays (resample [+N4] [+Nyúl] + norm)."""
-        return Preprocess.preprocess_case(case, target_inplane=self.inplane, loader=loader,
-                               n4=self.n4, n4_params=self.n4_params,
-                               nyul_standard=self.nyul_standard if self.nyul else None, norm=self.norm)
+        r = self.recipe
+        return Preprocess.preprocess_case(case, target_inplane=r.inplane, loader=loader,
+                               n4=r.n4, n4_params=r.n4_params,
+                               nyul_standard=self.nyul_standard if r.nyul else None, norm=r.norm)
 
     @staticmethod
     def ref_path() -> Path:
