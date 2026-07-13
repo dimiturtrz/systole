@@ -43,20 +43,20 @@ class Sim2Real:
         """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
         real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
         Standardized so it fits the CONTRAST SHAPE (bSSFP scale is arbitrary)."""
-        real_z = Sim2Real._standardize(real_means)
-        trs = torch.linspace(*tr_grid[:2], int(tr_grid[2]))
-        fls = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
+        real_standardized = Sim2Real._standardize(real_means)
+        tr_values = torch.linspace(*tr_grid[:2], int(tr_grid[2]))
+        flip_values = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
         best = {"residual": float("inf")}
         for field in fields:
             t1, t2, pd = MriPhysics.tissue_params(n_classes, 0, field, "cpu")
-            for tr in trs:
-                for fl in fls:
-                    sig = MriPhysics.bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180)
-                    syn_z = Sim2Real._standardize(sig[1:n_classes])
-                    res = float(((syn_z - real_z) ** 2).mean())
-                    if res < best["residual"]:
-                        best = {"field": field, "tr": float(tr), "flip": float(fl),
-                                "residual": round(res, 4), "synth_z": [round(v, 3) for v in syn_z.tolist()]}
+            for tr in tr_values:
+                for flip in flip_values:
+                    signal = MriPhysics.bssfp_signal(t1, t2, pd, tr, flip * math.pi / 180)
+                    synth_standardized = Sim2Real._standardize(signal[1:n_classes])
+                    residual = float(((synth_standardized - real_standardized) ** 2).mean())
+                    if residual < best["residual"]:
+                        best = {"field": field, "tr": float(tr), "flip": float(flip),
+                                "residual": round(residual, 4), "synth_z": [round(value, 3) for value in synth_standardized.tolist()]}
         return best
 
 
@@ -66,17 +66,17 @@ class Sim2Real:
 
     @staticmethod
     def run(args):  # pragma: no cover
-        d = TrainCfg().generator.data
+        data_cfg = TrainCfg().generator.data
         n_classes = len(CLASSES) + 1
-        meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
+        meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)
         log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
         for vendor in ("Siemens", "Philips", "GE", "Canon"):
             df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
             if df.height == 0:
                 continue
-            X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), d.size, "cpu")
+            X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), data_cfg.size, "cpu")
             real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
-            b = Sim2Real.fit_acquisition(real, n_classes)
-            real_z = [round(v, 2) for v in Sim2Real._standardize(real).tolist()]
-            log.info(f"{vendor:10} {X.shape[0]:>4}  {b['field']}  {b['tr']:.1f}  {b['flip']:.0f}  | "
-                  f"{b['residual']:.4f} | real {real_z} synth {b['synth_z']}")
+            best_fit = Sim2Real.fit_acquisition(real, n_classes)
+            real_z = [round(value, 2) for value in Sim2Real._standardize(real).tolist()]
+            log.info(f"{vendor:10} {X.shape[0]:>4}  {best_fit['field']}  {best_fit['tr']:.1f}  {best_fit['flip']:.0f}  | "
+                  f"{best_fit['residual']:.4f} | real {real_z} synth {best_fit['synth_z']}")

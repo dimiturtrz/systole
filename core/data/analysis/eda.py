@@ -35,33 +35,33 @@ class Eda:
 
     @staticmethod
     def summarize_patient(patient_dir):
-        d = AcdcAdapter().load_ed_es(patient_dir)
-        sp = d["spacing"]
-        log.info(f"\n=== {patient_dir.name} | group={d.get('group','?')} ===")
+        case_data = AcdcAdapter().load_ed_es(patient_dir)
+        spacing = case_data["spacing"]
+        log.info(f"\n=== {patient_dir.name} | group={case_data.get('group','?')} ===")
         for tag in ("ED", "ES"):
-            if tag not in d:
+            if tag not in case_data:
                 continue
-            img, gt = d[tag]["img"], d[tag]["gt"]
-            anis = max(sp) / min(sp)
+            img, gt = case_data[tag]["img"], case_data[tag]["gt"]
+            anisotropy = max(spacing) / min(spacing)
             lv, scores = Base.identify_lv_cavity(gt)
             log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
-                  f"{tuple(round(float(s),2) for s in sp)} mm  anisotropy={anis:.1f}x")
+                  f"{tuple(round(float(spacing_value),2) for spacing_value in spacing)} mm  anisotropy={anisotropy:.1f}x")
             log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
-            log.info(f"      myo-enclosure score={ {k: round(v,2) for k,v in scores.items()} }"
+            log.info(f"      myo-enclosure score={ {label: round(score,2) for label,score in scores.items()} }"
                   f"  -> LV cavity = label {lv}")
-        return d
+        return case_data
 
     @staticmethod
     def save_viz(patient_dir, d, out_png):
-        rows = [t for t in ("ED", "ES") if t in d]
+        rows = [tag for tag in ("ED", "ES") if tag in d]
         if not rows:
             return
         fig, axes = plt.subplots(len(rows), 3, figsize=(9, 3 * len(rows)), squeeze=False)
         for ri, tag in enumerate(rows):
             img, gt = d[tag]["img"], d[tag]["gt"]
-            D = img.shape[0]
+            depth = img.shape[0]
             for ci, (name, z) in enumerate(
-                (("base", int(D * 0.25)), ("mid", D // 2), ("apex", int(D * 0.75)))
+                (("base", int(depth * 0.25)), ("mid", depth // 2), ("apex", int(depth * 0.75)))
             ):
                 ax = axes[ri][ci]
                 ax.imshow(img[z], cmap="gray")
@@ -88,9 +88,9 @@ class Eda:
             log.warning("NO patient*/ dirs found — check the layout / CARDIAC_DATA_ROOT.")
             return
         if args.patient:
-            cases = [c for c in cases if c.name == args.patient] or cases[:1]
+            cases = [case for case in cases if case.name == args.patient] or cases[:1]
 
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        for pd in cases[: args.n]:
-            d = Eda.summarize_patient(pd)
-            Eda.save_viz(pd, d, OUT_DIR / f"{pd.name}_overlay.png")
+        for patient_dir in cases[: args.n]:
+            case_data = Eda.summarize_patient(patient_dir)
+            Eda.save_viz(patient_dir, case_data, OUT_DIR / f"{patient_dir.name}_overlay.png")

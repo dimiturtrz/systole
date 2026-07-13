@@ -38,29 +38,29 @@ class Calibrate:
     @staticmethod
     def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
         """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
-        z = torch.tensor(logits, dtype=torch.float32, device=device)
-        y = torch.tensor(labels, dtype=torch.long, device=device)
-        logT = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
-        opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
-        nll = torch.nn.CrossEntropyLoss()
+        logits_tensor = torch.tensor(logits, dtype=torch.float32, device=device)
+        labels_tensor = torch.tensor(labels, dtype=torch.long, device=device)
+        log_temperature = torch.zeros(1, requires_grad=True, device=device)   # optimize log T -> T>0
+        optimizer = torch.optim.LBFGS([log_temperature], lr=0.05, max_iter=80)
+        cross_entropy = torch.nn.CrossEntropyLoss()
 
         def closure():
-            opt.zero_grad()
-            loss = nll(z / logT.exp(), y)
+            optimizer.zero_grad()
+            loss = cross_entropy(logits_tensor / log_temperature.exp(), labels_tensor)
             loss.backward()
             return loss
 
-        opt.step(closure)
-        return float(logT.exp().detach())
+        optimizer.step(closure)
+        return float(log_temperature.exp().detach())
 
     @staticmethod
-    def _ece_at(logits: np.ndarray, labels: np.ndarray, T: float) -> float:
+    def _ece_at(logits: np.ndarray, labels: np.ndarray, temperature: float) -> float:
         """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
-        z = logits / T
-        z = z - z.max(1, keepdims=True)
-        p = np.exp(z); p /= p.sum(1, keepdims=True)
-        conf, pred = p.max(1), p.argmax(1)
-        return Uncertainty.ece(conf, (pred == labels).astype(float))[0]
+        scaled_logits = logits / temperature
+        scaled_logits = scaled_logits - scaled_logits.max(1, keepdims=True)
+        probs = np.exp(scaled_logits); probs /= probs.sum(1, keepdims=True)
+        confidence, pred = probs.max(1), probs.argmax(1)
+        return Uncertainty.ece(confidence, (pred == labels).astype(float))[0]
 
     @staticmethod
     def add_args(ap):
@@ -70,38 +70,38 @@ class Calibrate:
     def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
         run = Registry.resolve(args.run)
         model, cfg, device = Run.load_run(run)
-        d = cfg.generator.data
-        meta = store.load_cfg(d).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
-        if d.split:                                           # coded split -> its resolved val/test
-            r = Splits.resolve_cfg(d, meta)
-            val, test = r.val.frame, r.test.frame
+        data_cfg = cfg.generator.data
+        meta = store.load_cfg(data_cfg).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
+        if data_cfg.split:                                    # coded split -> its resolved val/test
+            resolved = Splits.resolve_cfg(data_cfg, meta)
+            val, test = resolved.val.frame, resolved.test.frame
         else:
-            _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                             val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-        ev = Evaluator(model, device, EvalCfg(size=d.size))   # state (model/device/size) once; call many
-        val_logits, val_labels = ev.gather(splits.Splits.paths(val))
-        T = Calibrate.fit_temperature(val_logits, val_labels, device)
+            _, val, test = splits.Splits.make_split(meta, data_cfg.test_datasets, data_cfg.test_vendors, data_cfg.val_frac, 0,
+                                             val_datasets=data_cfg.val_datasets, val_vendors=data_cfg.val_vendors)
+        evaluator = Evaluator(model, device, EvalCfg(size=data_cfg.size))   # state (model/device/size) once; call many
+        val_logits, val_labels = evaluator.gather(splits.Splits.paths(val))
+        temperature = Calibrate.fit_temperature(val_logits, val_labels, device)
 
         axes = {"val": val}
-        for v in d.test_vendors:                         # report each test vendor separately
-            axes[v] = test.filter(pl.col("vendor") == v)
-        report = {"T": round(T, 3), "axes": {}}
-        log.info(f"fitted T = {T:.3f} on val (n={len(val)})")
+        for vendor in data_cfg.test_vendors:             # report each test vendor separately
+            axes[vendor] = test.filter(pl.col("vendor") == vendor)
+        report = {"T": round(temperature, 3), "axes": {}}
+        log.info(f"fitted T = {temperature:.3f} on val (n={len(val)})")
         for name, df in axes.items():
             if not len(df):
                 continue
-            lg, lb = (val_logits, val_labels) if name == "val" else ev.gather(splits.Splits.paths(df))
-            e0, e1 = Calibrate._ece_at(lg, lb, 1.0), Calibrate._ece_at(lg, lb, T)
-            report["axes"][name] = {"n": len(df), "ece_uncal": round(e0, 4), "ece_temp": round(e1, 4)}
-            log.info(f"  {name:8} (n={len(df):3}) ECE {e0:.3f} -> {e1:.3f}  ({e1-e0:+.3f})")
+            logits, labels = (val_logits, val_labels) if name == "val" else evaluator.gather(splits.Splits.paths(df))
+            ece_uncal, ece_temp = Calibrate._ece_at(logits, labels, 1.0), Calibrate._ece_at(logits, labels, temperature)
+            report["axes"][name] = {"n": len(df), "ece_uncal": round(ece_uncal, 4), "ece_temp": round(ece_temp, 4)}
+            log.info(f"  {name:8} (n={len(df):3}) ECE {ece_uncal:.3f} -> {ece_temp:.3f}  ({ece_temp-ece_uncal:+.3f})")
         (run / "plots").mkdir(parents=True, exist_ok=True)
         (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
         log.info(f"-> {run}/plots/calibration.json")
 
         tracker = Tracker("cardioseg", run.name)
-        trk = tracker.track_run(run_dir=run)      # resume the train run
-        trk.metric("temp_T", T)
-        for name, ax in report["axes"].items():
-            trk.metric(f"{name}_ece_uncal", ax["ece_uncal"]); trk.metric(f"{name}_ece_temp", ax["ece_temp"])
-        trk.artifact(run / "plots" / "calibration.json")
-        trk.end()
+        tracked_run = tracker.track_run(run_dir=run)      # resume the train run
+        tracked_run.metric("temp_T", temperature)
+        for name, axis_report in report["axes"].items():
+            tracked_run.metric(f"{name}_ece_uncal", axis_report["ece_uncal"]); tracked_run.metric(f"{name}_ece_temp", axis_report["ece_temp"])
+        tracked_run.artifact(run / "plots" / "calibration.json")
+        tracked_run.end()

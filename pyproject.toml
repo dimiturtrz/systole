@@ -99,16 +99,16 @@ select = [
 # Generator changes the RNG stream, breaking seed-comparability with existing runs).
 
 [tool.ruff.lint.pep8-naming]
-# Deliberate idioms that violate pep8 CASE but are the field convention (not rename-debt). Glob patterns
-# apply across all N rules. X*/Y* = ML design matrices + image/mask tensor pairs (Ximg, Xtr, Yva…);
-# single-caps = tensor dims / math maps (B batch, C channels, D/H/W/Z spatial, G/L/M/P/R/S/U pred/gt/
-# label/map/set); T/T1/T2/TR/PD + logT = MRI-physics + calibration temperature; F = torch.nn.functional;
-# sitk = SimpleITK canonical alias; store = Build imported as the store facade; timed = lowercase
-# decorator-class (reads as a function decorator at the call site).
+# The ONLY allowlisted idioms are ones with no honest descriptive form — every name that carries a
+# meaning is renamed, not dodged (a dodge makes the gate useless). What stays: X*/Y* = ML design
+# matrices + image/mask tensor pairs (Ximg, Xtr, Yva…); B/C/H/W = tensor-shape unpacking dims
+# (`B, C, H, W = x.shape`); T1/T2/TR/PD = MRI-physics literature symbols (relaxation / repetition /
+# proton-density); F = torch.nn.functional; sitk = SimpleITK canonical alias; store = Build imported as
+# the store facade; timed = lowercase decorator-class (reads as a function decorator at the call site).
 ignore-names = [
     "X*", "Y*",
-    "B", "C", "D", "G", "H", "L", "M", "P", "R", "S", "Sf", "Sp", "U", "W", "Z",
-    "T", "T1", "T2", "TR", "PD", "logT",
+    "B", "C", "H", "W",
+    "T1", "T2", "TR", "PD",
     "F", "sitk", "store", "timed",
 ]
 

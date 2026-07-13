@@ -38,42 +38,42 @@ class StaticCompare:
     @staticmethod
     def geom_metrics(mask: np.ndarray) -> dict | None:
         """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
-        fg = mask > 0
-        if int(fg.sum()) < _MIN_FG_PX:
+        foreground = mask > 0
+        if int(foreground.sum()) < _MIN_FG_PX:
             return None
         rv, myo, lvc = mask == _RV, mask == _MYO, mask == _LVC
-        a_rv, a_myo, a_lvc = int(rv.sum()), int(myo.sum()), int(lvc.sum())
-        m = {"rv_area": a_rv, "myo_area": a_myo, "lvc_area": a_lvc, "fg_area": int(fg.sum())}
+        rv_area, myo_area, lvc_area = int(rv.sum()), int(myo.sum()), int(lvc.sum())
+        metrics = {"rv_area": rv_area, "myo_area": myo_area, "lvc_area": lvc_area, "fg_area": int(foreground.sum())}
         # myo WALL THICKNESS: mean over the myo of the distance-to-non-myo (×2 ≈ local thickness)
-        dt = distance_transform_edt(myo)
-        m["myo_thickness"] = float(dt[myo].mean() * 2.0) if a_myo else 0.0   # over myo pixels only (px)
+        distance_transform = distance_transform_edt(myo)
+        metrics["myo_thickness"] = float(distance_transform[myo].mean() * 2.0) if myo_area else 0.0   # over myo pixels only (px)
         # LV-cavity SPHERICITY (2D roundness): 4πA / P²  (1 = perfect circle). P ≈ boundary-pixel count.
-        if a_lvc >= _MIN_LVC_PX:
-            per = int((lvc & ~binary_erosion(lvc)).sum())
-            m["lvc_sphericity"] = float(4 * np.pi * a_lvc / (per * per)) if per else 0.0
+        if lvc_area >= _MIN_LVC_PX:
+            perimeter = int((lvc & ~binary_erosion(lvc)).sum())
+            metrics["lvc_sphericity"] = float(4 * np.pi * lvc_area / (perimeter * perimeter)) if perimeter else 0.0
         else:
-            m["lvc_sphericity"] = 0.0
-        m["rv_lv_ratio"] = a_rv / (a_lvc + 1.0)                 # RV vs LV cavity balance
-        m["myo_lv_ratio"] = a_myo / (a_lvc + 1.0)              # myo mass per cavity (hypertrophy proxy)
-        return m
+            metrics["lvc_sphericity"] = 0.0
+        metrics["rv_lv_ratio"] = rv_area / (lvc_area + 1.0)                 # RV vs LV cavity balance
+        metrics["myo_lv_ratio"] = myo_area / (lvc_area + 1.0)              # myo mass per cavity (hypertrophy proxy)
+        return metrics
 
     @staticmethod
     def _dist(masks) -> dict:
-        rows = [g for g in (StaticCompare.geom_metrics(m) for m in masks) if g is not None]
+        rows = [metrics for metrics in (StaticCompare.geom_metrics(mask) for mask in masks) if metrics is not None]
         keys = rows[0].keys()
-        return {k: np.array([r[k] for r in rows], dtype=np.float64) for k in keys}
+        return {metric: np.array([row[metric] for row in rows], dtype=np.float64) for metric in keys}
 
     @staticmethod
     def compare(real_masks, synth_masks) -> dict:
         """Per-metric W1(real, synth) + real/synth medians — the geometry/biomarker panel."""
-        R, S = StaticCompare._dist(real_masks), StaticCompare._dist(synth_masks)
-        out = {}
-        for k in R:
-            r, s = torch.tensor(R[k]), torch.tensor(S[k])
-            out[k] = {"w1": round(SynthFidelity.wasserstein1d(r, s), 3),
-                      "real_median": round(float(np.median(R[k])), 2),
-                      "synth_median": round(float(np.median(S[k])), 2)}
-        return out
+        real_distributions, synth_distributions = StaticCompare._dist(real_masks), StaticCompare._dist(synth_masks)
+        comparison = {}
+        for metric in real_distributions:
+            real_values, synth_values = torch.tensor(real_distributions[metric]), torch.tensor(synth_distributions[metric])
+            comparison[metric] = {"w1": round(SynthFidelity.wasserstein1d(real_values, synth_values), 3),
+                      "real_median": round(float(np.median(real_distributions[metric])), 2),
+                      "synth_median": round(float(np.median(synth_distributions[metric])), 2)}
+        return comparison
 
 
     @staticmethod
@@ -83,7 +83,7 @@ class StaticCompare:
 
     @staticmethod
     def run(args):  # pragma: no cover
-        res = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
-        log.info(json.dumps(res, indent=2))
-        worst = max(res, key=lambda k: res[k]["w1"])
-        log.info(f"# worst-matched geometry metric: {worst} (W1={res[worst]['w1']})")
+        results = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
+        log.info(json.dumps(results, indent=2))
+        worst = max(results, key=lambda metric: results[metric]["w1"])
+        log.info(f"# worst-matched geometry metric: {worst} (W1={results[worst]['w1']})")

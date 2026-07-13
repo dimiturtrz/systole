@@ -346,7 +346,7 @@ class SeedTrainer:
                 # EF/volume-consistency NUDGE: fold the aux lanes INTO one seg gradient step (not a separate
                 # vote) — seg's dense signal keeps the direction, the lanes only bend the cavity volume.
                 # Fixed λ nudge (seg dominant) or learned Kendall balance (log_sig); seg stays dominant.
-                auxs = [al for al in (lane.loss(model, amp=pin) for lane in aux) if al is not None]
+                auxs = [aux_loss for aux_loss in (lane.loss(model, amp=pin) for lane in aux) if aux_loss is not None]
                 if auxs:
                     opt.zero_grad(set_to_none=True)
                     with torch.autocast("cuda", enabled=pin):

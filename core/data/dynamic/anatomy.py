@@ -94,21 +94,21 @@ class Anatomy:
         """The per-cell region-tag array. Two Rodero packagings: real-patient cohort (4590294) tags it
         'ID' + ships 'Z.dat' universal coords; the 1000 SSM-sampled cohort (4506930) tags it 'elemTag'
         with NO point data. Same 1..24 scheme (1=LV, 2=RV myo)."""
-        for k in ("ID", "elemTag"):
-            if k in mesh.cell_data:
-                return k
+        for key in ("ID", "elemTag"):
+            if key in mesh.cell_data:
+                return key
         raise KeyError(f"no region-tag cell array (looked for ID/elemTag); have {list(mesh.cell_data)}")
 
     @staticmethod
     def _rot_to_z(axis: np.ndarray) -> np.ndarray:
         """Rodrigues rotation matrix taking unit `axis` -> +z."""
         axis = axis / (np.linalg.norm(axis) + 1e-9)
-        z = np.array([0.0, 0.0, 1.0])
-        v = np.cross(axis, z); s = np.linalg.norm(v); c = float(np.dot(axis, z))
-        if s < _PARALLEL_EPS:
+        z_axis = np.array([0.0, 0.0, 1.0])
+        cross = np.cross(axis, z_axis); sine = np.linalg.norm(cross); cosine = float(np.dot(axis, z_axis))
+        if sine < _PARALLEL_EPS:
             return np.eye(3)
-        vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-        return np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))
+        skew_matrix = np.array([[0, -cross[2], cross[1]], [cross[2], 0, -cross[0]], [-cross[1], cross[0], 0]])
+        return np.eye(3) + skew_matrix + skew_matrix @ skew_matrix * ((1 - cosine) / (sine * sine))
 
     @staticmethod
     def _sax_align(mesh):
@@ -116,43 +116,43 @@ class Anatomy:
         voxelized volume are short-axis. Uses the 'Z.dat' apico-basal coord when present (real cohort);
         else derives the axis geometrically (PCA long-axis of the LV myocardium, oriented apex->base by
         the atria/vessel centroid) — the 1000 SSM cohort ships no universal coords."""
-        pts = np.asarray(mesh.points)
-        tn = Anatomy._tag_name(mesh)
+        points = np.asarray(mesh.points)
+        tag_name = Anatomy._tag_name(mesh)
         if "Z.dat" in mesh.point_data:
-            Z = np.asarray(mesh.point_data["Z.dat"])
-            valid = (Z >= 0.0) & (Z <= 1.0)                   # ventricular points only (atria = -10 sentinel)
-            apex = pts[valid & (Z < _APEX_Z_FRAC)].mean(0)
-            base = pts[valid & (Z > _BASE_Z_FRAC)].mean(0)
+            long_axis_position = np.asarray(mesh.point_data["Z.dat"])   # 0=apex .. 1=base, atria = -10 sentinel
+            ventricular = (long_axis_position >= 0.0) & (long_axis_position <= 1.0)
+            apex = points[ventricular & (long_axis_position < _APEX_Z_FRAC)].mean(0)
+            base = points[ventricular & (long_axis_position > _BASE_Z_FRAC)].mean(0)
             axis = base - apex
-            R = Anatomy._rot_to_z(axis)
+            rotation_matrix = Anatomy._rot_to_z(axis)
             origin = apex
         else:
-            tags = np.asarray(mesh.cell_data[tn])
-            lvpts = np.asarray(mesh.threshold([LV_ID, LV_ID], scalars=tn).points)
-            c = lvpts.mean(0)
-            _, _, vt = np.linalg.svd(lvpts - c, full_matrices=False)
-            axis = vt[0]                                       # LV long axis = 1st principal component
-            hi = int(tags.max())
-            if hi > RV_ID:                                     # orient toward base (atria/vessels = tag>2)
-                basec = np.asarray(mesh.threshold([RV_ID + 1, hi], scalars=tn).points).mean(0)
-                if np.dot(basec - c, axis) < 0:
+            cell_tags = np.asarray(mesh.cell_data[tag_name])
+            lv_points = np.asarray(mesh.threshold([LV_ID, LV_ID], scalars=tag_name).points)
+            lv_centroid = lv_points.mean(0)
+            _, _, principal_axes = np.linalg.svd(lv_points - lv_centroid, full_matrices=False)
+            axis = principal_axes[0]                           # LV long axis = 1st principal component
+            max_tag = int(cell_tags.max())
+            if max_tag > RV_ID:                                # orient toward base (atria/vessels = tag>2)
+                base_centroid = np.asarray(mesh.threshold([RV_ID + 1, max_tag], scalars=tag_name).points).mean(0)
+                if np.dot(base_centroid - lv_centroid, axis) < 0:
                     axis = -axis
-            proj = (lvpts - c) @ axis
-            apex = c + axis * proj.min()                       # apex = far LV tip opposite the base
-            R = Anatomy._rot_to_z(axis)
+            long_axis_projection = (lv_points - lv_centroid) @ axis
+            apex = lv_centroid + axis * long_axis_projection.min()   # apex = far LV tip opposite the base
+            rotation_matrix = Anatomy._rot_to_z(axis)
             origin = apex
         out = mesh.copy()
-        out.points = (pts - origin) @ R.T
+        out.points = (points - origin) @ rotation_matrix.T
         return out
 
     @staticmethod
     def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
         """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
         grid points that lie in the myocardium)."""
-        sub = mesh.threshold([region_id, region_id], scalars=tag)
-        surf = sub.extract_surface().triangulate()
-        sel = grid.select_enclosed_points(surf, tolerance=0.0, check_surface=False)
-        return np.asarray(sel["SelectedPoints"]).astype(bool)
+        region_mesh = mesh.threshold([region_id, region_id], scalars=tag)
+        surface = region_mesh.extract_surface().triangulate()
+        selection = grid.select_enclosed_points(surface, tolerance=0.0, check_surface=False)
+        return np.asarray(selection["SelectedPoints"]).astype(bool)
 
     @staticmethod
     def _slice_labels(lw: np.ndarray, rw: np.ndarray, rv_close: int = 3) -> np.ndarray:
@@ -168,13 +168,13 @@ class Anatomy:
         # bridge the small gaps, fill, subtract walls+LV-cav, then keep only components touching the RV
         # wall (drops any fill that leaked into background). This is what lifted RV-cav off ~0.21.
         walls = binary_closing(lw | rw, iterations=rv_close) if rv_close > 0 else (lw | rw)
-        both = binary_fill_holes(walls) & ~(lw | rw)
-        rv_cav = both & ~lv_cav
+        wall_enclosed = binary_fill_holes(walls) & ~(lw | rw)
+        rv_cav = wall_enclosed & ~lv_cav
         if rw.any() and rv_cav.any():
-            lbl, _ = cc_label(rv_cav)
-            near = binary_dilation(rw, iterations=2)
-            keep = {int(v) for v in np.unique(lbl[near & rv_cav]) if v}
-            rv_cav = np.isin(lbl, list(keep)) if keep else np.zeros_like(rv_cav)
+            components, _ = cc_label(rv_cav)
+            near_rv_wall = binary_dilation(rw, iterations=2)
+            kept_labels = {int(label_value) for label_value in np.unique(components[near_rv_wall & rv_cav]) if label_value}
+            rv_cav = np.isin(components, list(kept_labels)) if kept_labels else np.zeros_like(rv_cav)
         out[rv_cav] = RV                                              # RV cavity
         out[lw] = MYO                                                 # LV myocardium (RV wall -> bg)
         out[lv_cav] = LV_CAV                                          # LV cavity (3)
@@ -186,17 +186,17 @@ class Anatomy:
         """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
         Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
         LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
-        m = Anatomy._sax_align(mesh)
-        tn = Anatomy._tag_name(m)
-        x0, x1, y0, y1, z0, z1 = m.bounds
+        aligned_mesh = Anatomy._sax_align(mesh)
+        tag_name = Anatomy._tag_name(aligned_mesh)
+        x0, x1, y0, y1, z0, z1 = aligned_mesh.bounds
         nx = int(np.ceil((x1 - x0) / inplane)); ny = int(np.ceil((y1 - y0) / inplane))
         nz = int(np.ceil((z1 - z0) / slice_mm))
         if min(nx, ny, nz) < 1:                              # degenerate/empty mesh -> no grid to rasterize
-            raise MeshError(f"degenerate mesh bounds {m.bounds} -> grid {(nx, ny, nz)}")
+            raise MeshError(f"degenerate mesh bounds {aligned_mesh.bounds} -> grid {(nx, ny, nz)}")
         grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=(inplane, inplane, slice_mm),
                             origin=(x0, y0, z0))
-        lv = Anatomy._wall_mask(m, LV_ID, grid, tn).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
-        rv = Anatomy._wall_mask(m, RV_ID, grid, tn).reshape(nz, ny, nx)
+        lv = Anatomy._wall_mask(aligned_mesh, LV_ID, grid, tag_name).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
+        rv = Anatomy._wall_mask(aligned_mesh, RV_ID, grid, tag_name).reshape(nz, ny, nx)
         out = np.zeros((nz, ny, nx), dtype=np.uint8)
         for k in range(nz):
             out[k] = Anatomy._slice_labels(lv[k], rv[k], rv_close=rv_close)
@@ -209,12 +209,12 @@ class Anatomy:
         fg = vol > 0
         if not fg.any():
             return vol
-        _, ys, xs = np.where(fg)                    # z discarded — bbox is in-plane (ys, xs) only
-        cur = max(ys.max() - ys.min(), xs.max() - xs.min()) + 1
-        f = target_px / max(cur, 1)
-        if abs(f - 1.0) < _ZOOM_NOOP_EPS:
+        _, row_indices, col_indices = np.where(fg)   # z discarded — bbox is in-plane (rows, cols) only
+        current_side = max(row_indices.max() - row_indices.min(), col_indices.max() - col_indices.min()) + 1
+        scale_factor = target_px / max(current_side, 1)
+        if abs(scale_factor - 1.0) < _ZOOM_NOOP_EPS:
             return vol
-        return _zoom(vol, (1.0, f, f), order=0)           # in-plane only; slices (z) untouched
+        return _zoom(vol, (1.0, scale_factor, scale_factor), order=0)   # in-plane only; slices (z) untouched
 
     @staticmethod
     def load(path: str | Path):
@@ -232,21 +232,21 @@ class Anatomy:
         return m
 
     @staticmethod
-    def _convert_one(mp: str) -> str:
-        out = Path(mp).with_suffix(".vtu")
+    def _convert_one(mesh_path: str) -> str:
+        out = Path(mesh_path).with_suffix(".vtu")
         if not out.exists():
-            pv.read(mp).save(str(out), binary=True)
+            pv.read(mesh_path).save(str(out), binary=True)
         return str(out)
 
     @staticmethod
     def convert_binary(mesh_dir: str | Path, workers: int = 0) -> int:
         """One-time: write a BINARY .vtu beside every ASCII .vtk (parallel). load() then uses it (4.5x
         faster). Returns count converted. ASCII parse is ~half the per-mesh voxelize cost."""
-        vtks = [str(p) for p in sorted(Path(mesh_dir).rglob("*.vtk"))]
-        nw = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
-        with ProcessPoolExecutor(max_workers=nw) as ex:
-            list(ex.map(Anatomy._convert_one, vtks, chunksize=1))
-        return len(vtks)
+        vtk_paths = [str(p) for p in sorted(Path(mesh_dir).rglob("*.vtk"))]
+        n_workers = workers if workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+        with ProcessPoolExecutor(max_workers=n_workers) as ex:
+            list(ex.map(Anatomy._convert_one, vtk_paths, chunksize=1))
+        return len(vtk_paths)
 
     @staticmethod
     def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
@@ -255,15 +255,15 @@ class Anatomy:
         deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
         (-> HCM). rv_k>0 = grow the RV cavity into background (-> abnormal/dilated RV; real RV-group RV/LV
         ~2.2 vs synth ~1.3). Returns a new label map (uint8)."""
-        lvc, myo = mask == LV_CAV, mask == MYO
-        wall = lvc | myo                                          # LV cavity + myocardium (outer size fixed)
+        lv_cavity, myo = mask == LV_CAV, mask == MYO
+        wall = lv_cavity | myo                                    # LV cavity + myocardium (outer size fixed)
         out = mask.copy()
-        if lvc.any() and myo.any() and k != 0:
-            new_lvc = binary_dilation(lvc, iterations=k) & wall if k > 0 else binary_erosion(lvc, iterations=-k)
-            new_myo = wall & ~new_lvc
+        if lv_cavity.any() and myo.any() and k != 0:
+            new_lv_cavity = binary_dilation(lv_cavity, iterations=k) & wall if k > 0 else binary_erosion(lv_cavity, iterations=-k)
+            new_myo = wall & ~new_lv_cavity
             if new_myo.sum() >= 0.10 * wall.sum():               # guard: don't dissolve the myo ring
                 out[wall] = 2
-                out[new_lvc] = LV_CAV
+                out[new_lv_cavity] = LV_CAV
         if rv_k > 0 and (mask == 1).any():                       # abnormal RV: grow RV cavity into bg only
             grown = binary_dilation(mask == RV, iterations=rv_k) & ~(out == MYO) & ~(out == LV_CAV)
             out[grown] = 1
@@ -278,40 +278,40 @@ class Anatomy:
         cfg = cfg or PathologyPoolCfg()
         rng = np.random.default_rng(cfg.seed)
         out = []
-        for m in pool:
-            out.append(Anatomy.pathology_deform(m, k=int(rng.integers(cfg.k_dcm[0], cfg.k_dcm[1] + 1))))
-            out.append(Anatomy.pathology_deform(m, k=-int(rng.integers(cfg.k_hcm[0], cfg.k_hcm[1] + 1))))
-            out.append(Anatomy.pathology_deform(m, rv_k=int(rng.integers(cfg.rv[0], cfg.rv[1] + 1))))
-        arr = np.stack(out).astype(np.uint8)
+        for mask in pool:
+            out.append(Anatomy.pathology_deform(mask, k=int(rng.integers(cfg.k_dcm[0], cfg.k_dcm[1] + 1))))
+            out.append(Anatomy.pathology_deform(mask, k=-int(rng.integers(cfg.k_hcm[0], cfg.k_hcm[1] + 1))))
+            out.append(Anatomy.pathology_deform(mask, rv_k=int(rng.integers(cfg.rv[0], cfg.rv[1] + 1))))
+        pool_array = np.stack(out).astype(np.uint8)
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(out_path, slices=arr)
-        return out_path, arr.shape
+        np.savez_compressed(out_path, slices=pool_array)
+        return out_path, pool_array.shape
 
     @staticmethod
     def _pool_worker(args) -> list[np.ndarray]:
         """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
         process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
-        mp, inplane, size, min_fg, scale_reps, min_cav_frac, mseed = args
-        rng = np.random.default_rng(mseed)
+        mesh_path, inplane, size, min_fg, scale_reps, min_cav_frac, mesh_seed = args
+        rng = np.random.default_rng(mesh_seed)
         out = []
         try:
-            vol = Anatomy.voxelize(Anatomy.load(mp), inplane=inplane)
+            vol = Anatomy.voxelize(Anatomy.load(mesh_path), inplane=inplane)
         except MeshError:                                   # bad file / degenerate geometry -> skip this mesh
             return out
         for _ in range(max(1, scale_reps)):
-            tgt = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
-            sv = Anatomy._scale_to_target(vol, tgt)
-            for k in range(sv.shape[0]):
-                s = sv[k]
-                fg = int((s > 0).sum())
+            target_px = int(rng.integers(REAL_SIZE_PX[0], REAL_SIZE_PX[1] + 1))
+            scaled_volume = Anatomy._scale_to_target(vol, target_px)
+            for k in range(scaled_volume.shape[0]):
+                slice_labels = scaled_volume[k]
+                fg = int((slice_labels > 0).sum())
                 if fg < min_fg:
                     continue
                 # drop pure-apical myo-only slices (no cavity): the mesh contributes its whole apico-basal
                 # stack, so apex slices (~all myo, no cavity) over-represent 11x vs real (19% vs 1.8%). Require
                 # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
-                if min_cav_frac > 0 and int(((s == RV) | (s == LV_CAV)).sum()) < min_cav_frac * fg:
+                if min_cav_frac > 0 and int(((slice_labels == RV) | (slice_labels == LV_CAV)).sum()) < min_cav_frac * fg:
                     continue
-                out.append(Preprocess.fit_square(s, size, 0).astype(np.uint8))
+                out.append(Preprocess.fit_square(slice_labels, size, 0).astype(np.uint8))
         return out
 
     @staticmethod
@@ -331,21 +331,21 @@ class Anatomy:
         stems |= {p.with_suffix("") for p in Path(mesh_dir).rglob("*.vtk")}
         meshes = sorted((s.with_suffix(".vtu") if s.with_suffix(".vtu").exists() else s.with_suffix(".vtk"))
                         for s in stems)
-        nw = cfg.workers if cfg.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
-        jobs = [(str(mp), cfg.inplane, cfg.size, cfg.min_fg, cfg.scale_reps, cfg.min_cav_frac, cfg.seed + i)
-                for i, mp in enumerate(meshes)]
+        n_workers = cfg.workers if cfg.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
+        jobs = [(str(mesh_path), cfg.inplane, cfg.size, cfg.min_fg, cfg.scale_reps, cfg.min_cav_frac, cfg.seed + i)
+                for i, mesh_path in enumerate(meshes)]
         slices: list[np.ndarray] = []
-        if nw == 1 or len(jobs) <= 1:
-            for j in jobs:
-                slices.extend(Anatomy._pool_worker(j))
+        if n_workers == 1 or len(jobs) <= 1:
+            for job in jobs:
+                slices.extend(Anatomy._pool_worker(job))
         else:
-            with ProcessPoolExecutor(max_workers=nw) as ex:
+            with ProcessPoolExecutor(max_workers=n_workers) as ex:
                 for part in ex.map(Anatomy._pool_worker, jobs, chunksize=1):
                     slices.extend(part)
-        arr = np.stack(slices) if slices else np.zeros((0, cfg.size, cfg.size), np.uint8)
+        pool_array = np.stack(slices) if slices else np.zeros((0, cfg.size, cfg.size), np.uint8)
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(out_path, slices=arr)
-        return out_path, arr.shape
+        np.savez_compressed(out_path, slices=pool_array)
+        return out_path, pool_array.shape
 
     @staticmethod
     def load_pool(path: str | Path) -> np.ndarray:
@@ -356,16 +356,16 @@ class Anatomy:
     def _cmd_view(args) -> None:  # pragma: no cover
         """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
         vol = Anatomy.voxelize(Anatomy.load(args.mesh), inplane=args.inplane)
-        counts = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
+        counts = {int(label): int((vol == label).sum()) for label in np.unique(vol)}
         log.info(f"volume {vol.shape}  label counts {counts}  (1=RVcav 2=LVmyo 3=LVcav)")
-        D = vol.shape[0]
-        ks = [int(D * f) for f in (0.3, 0.45, 0.6, 0.75)]            # mid-ventricular slices
+        depth = vol.shape[0]
+        slice_indices = [int(depth * f) for f in (0.3, 0.45, 0.6, 0.75)]   # mid-ventricular slices
         cmap = np.array([[0, 0, 0], [91, 141, 239], [255, 202, 91], [239, 83, 80]], np.uint8)
-        tiles = [cmap[vol[k]] for k in ks]
-        montage = np.concatenate(tiles, axis=1)
+        slice_images = [cmap[vol[k]] for k in slice_indices]
+        montage = np.concatenate(slice_images, axis=1)
         out = args.out or (str(Path(args.mesh).with_suffix("")) + "_sax.png")
         Image.fromarray(montage).save(out)
-        log.info(f"wrote {out}  (slices {ks})")
+        log.info(f"wrote {out}  (slices {slice_indices})")
 
     @staticmethod
     def _cmd_build_pool(args) -> None:  # pragma: no cover
