@@ -7,6 +7,8 @@ anchored by checksum not by name.
 """
 from __future__ import annotations
 
+from typing import ClassVar
+
 import polars as pl
 
 from core.data.ingest.source import StaticSource
@@ -19,9 +21,10 @@ V = pl.col
 class StaticMain:
     name = "static_main"
     sources = ()                        # default seg cloud (= DataCfg.sources); no extra
-    versions = {
+    versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
-            test=lambda c: STATIC_MAIN_TEST.source(c),           # unseen vendors + motion cohort (147, locked)
+            # unseen vendors + motion cohort (147, locked); lambda defers the global lookup (testset swap)
+            test=lambda c: STATIC_MAIN_TEST.source(c),  # noqa: PLW0108
             val=lambda c: StaticSource(
                 c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),
             # train = labelled complement (Siemens + Philips)

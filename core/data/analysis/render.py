@@ -7,11 +7,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 import numpy as np
 import torch
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.dynamic.dataset import ACDCSliceDataset
@@ -56,7 +56,7 @@ class Render:
         fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
         log.info(f"wrote {out_png}\nPER-CLASS mean±std (z), real vs synth-partition:")
         for class_index in range(n):
-            real_intensities, synth_intensities = X[:, 0][Y == class_index], synth_partition[:, 0][Y == class_index]
+            real_intensities, synth_intensities = X[:, 0][class_index == Y], synth_partition[:, 0][class_index == Y]
             log.info(f"  {_NAMES[class_index]:8} real {real_intensities.mean():+.2f}±{real_intensities.std():.2f}   synth {synth_intensities.mean():+.2f}±{synth_intensities.std():.2f}")
 
 

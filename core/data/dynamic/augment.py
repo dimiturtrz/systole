@@ -36,6 +36,8 @@ from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
 
+_GAUSSIAN_RADIUS_SIGMAS = 3.0    # Gaussian kernel half-width in units of σ (covers ~99.7% of the mass)
+
 
 class AugCfg(BaseModel):
     """GPU-batched augmentation. Geometric widths conservative; intensity widths broad to span the
@@ -82,7 +84,7 @@ class Augmentor:
     @staticmethod
     def _gaussian_kernel(sigma: float) -> torch.Tensor:
         """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
-        r = max(1, int(math.ceil(3.0 * sigma)))
+        r = max(1, math.ceil(_GAUSSIAN_RADIUS_SIGMAS * sigma))
         xs = torch.arange(-r, r + 1, dtype=torch.float32)
         g = torch.exp(-(xs ** 2) / (2.0 * sigma * sigma))
         g = g / g.sum()

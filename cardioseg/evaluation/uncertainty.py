@@ -11,13 +11,14 @@
 MC-dropout was tried (cardiac-seg-bp4) but dropout regressed EF ~2pp with no Dice gain, so the
 flagship has no dropout; TTA-variance is the no-cost uncertainty signal instead.
 """
+import itertools
 import json
 import logging
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import binary_erosion
@@ -71,7 +72,7 @@ class Uncertainty:
         """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram."""
         edges = np.linspace(0, 1, n_bins + 1)
         e, bins = 0.0, []
-        for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        for lo, hi in itertools.pairwise(edges):
             m = (conf > lo) & (conf <= hi)
             if m.sum() == 0:
                 continue

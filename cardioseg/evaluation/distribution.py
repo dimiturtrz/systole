@@ -17,9 +17,9 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import gaussian_kde

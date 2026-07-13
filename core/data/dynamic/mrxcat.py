@@ -115,7 +115,7 @@ class Mrxcat:
         if ys.size == 0:
             return None
         crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-        f = target_px / max(max(crop.shape), 1)
+        f = target_px / max(*crop.shape, 1)
         if abs(f - 1.0) > _ZOOM_NOOP_EPS:
             crop = _zoom(crop, f, order=0)
         return Preprocess.fit_square(crop, size, 0).astype(np.uint8)
@@ -252,8 +252,9 @@ class Mrxcat:
         if (_MRXCAT_DIR / ".git").exists():
             log.info(f"mrxcat2 already present at {_MRXCAT_DIR}; skipping clone")
             return
-        subprocess.run(["git", "clone", _MRXCAT_REPO, str(_MRXCAT_DIR)], check=True)
-        subprocess.run(["git", "-C", str(_MRXCAT_DIR), "checkout", _MRXCAT_PIN], check=True)
+        # trusted dev-tooling: fixed argv (no shell, no user input) cloning the pinned MRXCAT2 tool
+        subprocess.run(["git", "clone", _MRXCAT_REPO, str(_MRXCAT_DIR)], check=True)  # noqa: S603, S607
+        subprocess.run(["git", "-C", str(_MRXCAT_DIR), "checkout", _MRXCAT_PIN], check=True)  # noqa: S603, S607
         log.info(f"cloned mrxcat2 @ {_MRXCAT_PIN} into {_MRXCAT_DIR}")
 
     @staticmethod

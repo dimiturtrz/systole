@@ -35,7 +35,7 @@ class Splits:
     @staticmethod
     def parse_ref(ref: str) -> tuple[str, str | None]:
         """'name@version' -> (name, version); 'name' -> (name, None)."""
-        name, ver = (ref.split("@", 1) + [None])[:2]
+        name, ver = [*ref.split("@", 1), None][:2]
         return name, ver
 
     @staticmethod

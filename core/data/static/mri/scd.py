@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 from skimage.draw import polygon
@@ -34,7 +35,7 @@ class ScdAdapter(DatasetAdapter):
     """SCD adapter — owns its DICOM+contour parsing (the free helpers folded in as staticmethods): patient
     dir discovery, contour-dir renaming, polygon rasterization to canonical {0,2,3}, and ED/ES-by-endo-area."""
     name = "scd"
-    label_map: dict[int, int] = {}                            # masks built canonical from contours; no remap
+    label_map: ClassVar[dict[int, int]] = {}                 # masks built canonical from contours; no remap
 
     def __init__(self, root: str | Path | None = None):
         self.root = root                                     # data root override (tests point at a fake tree)

@@ -69,7 +69,9 @@ class SynthFidelity:
         if a.numel() == 0 or b.numel() == 0:
             return float("nan")
         cap = 100_000                                       # torch.quantile caps input size; subsample above
-        subsample = lambda v: v[torch.randperm(v.numel(), device=v.device)[:cap]] if v.numel() > cap else v
+
+        def subsample(v):
+            return v[torch.randperm(v.numel(), device=v.device)[:cap]] if v.numel() > cap else v
         quantiles = torch.linspace(0, 1, q, device=a.device)
         return float((torch.quantile(subsample(a).float(), quantiles) - torch.quantile(subsample(b).float(), quantiles)).abs().mean())
 
@@ -174,8 +176,8 @@ class SynthFidelity:
                 shape[_NAMES[c]] = round(self.wasserstein1d(real_class - real_class.mean(), synth_class - synth_class.mean(), q), 3)
             else:
                 loc[_NAMES[c]] = shape[_NAMES[c]] = float("nan")
-        values = [value for value in distances.values() if value == value]                  # drop NaN (absent classes)
-        worst = max(distances, key=lambda name: (distances[name] if distances[name] == distances[name] else -1))
+        values = [value for value in distances.values() if not np.isnan(value)]              # drop NaN (absent classes)
+        worst = max(distances, key=lambda name: (distances[name] if not np.isnan(distances[name]) else -1))
         return {"per_class_w1": distances, "location": loc, "shape": shape,
                 "mean_w1": round(sum(values) / len(values), 3) if values else float("nan"),
                 "worst_class": worst}
@@ -259,10 +261,8 @@ class SynthFidelity:
             return
         # real target: ALL labelled real (all vendors) by default — the multi-vendor manifold synth should
         # cover — vs a single cohort (--val-only). Compare-to-all-data is DIAGNOSTIC coverage, not tuning.
-        if args.val_only:
-            real_df = splits.ModelSplit(data_cfg, meta).val          # coded split's val if set, else criteria
-        else:
-            real_df = meta.filter(pl.col("labelled"))
+        # --val-only -> the coded split's val (else criteria); default -> ALL labelled real (every vendor)
+        real_df = splits.ModelSplit(data_cfg, meta).val if args.val_only else meta.filter(pl.col("labelled"))
         X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(real_df), data_cfg.size, "cpu")
         n = int(X.shape[0])
         if n > args.max_slices:

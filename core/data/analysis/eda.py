@@ -14,10 +14,10 @@ Usage:
 import logging
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 import numpy as np
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter

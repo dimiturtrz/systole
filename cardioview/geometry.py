@@ -17,6 +17,6 @@ def bbox_slices(mask_bool: np.ndarray, spacing, margin_mm: float = 12.0) -> tupl
         if len(idx) == 0:
             sl.append(slice(0, n))
             continue
-        pad = int(round(margin_mm / spacing[ax]))
+        pad = round(margin_mm / spacing[ax])
         sl.append(slice(max(0, idx[0] - pad), min(n, idx[-1] + 1 + pad)))
     return tuple(sl)

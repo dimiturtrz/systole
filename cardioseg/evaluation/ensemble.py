@@ -72,7 +72,7 @@ class Ensemble:
     def score(models, df, size, device):
         """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
         like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
-        inter = {c: 0.0 for c in FOREGROUND}; den = {c: 0.0 for c in FOREGROUND}
+        inter = dict.fromkeys(FOREGROUND, 0.0); den = dict.fromkeys(FOREGROUND, 0.0)
         diffs = []
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"]); sp = tuple(float(s) for s in case["spacing"])

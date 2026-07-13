@@ -116,6 +116,34 @@ def volumes(masks: dict, spacing) -> dict:
     return {}
 
 
+@dataclass(kw_only=True)
+class ManifestEntry:
+    """One patient row in the web manifest — the single schema both exports build, so the on-disk
+    shape can't drift between the static and beating paths. `to_dict` IS the JSON form; the
+    animation-only fields are dropped when unset, so a static entry serializes to exactly the keys
+    the viewer expects (no null frames/slices)."""
+    patient: str
+    group: str | None
+    held_out: bool
+    source: str
+    pred: dict
+    gt: dict
+    glb: dict
+    frames: list[str] | None = None      # beating-cycle only (None on a static entry)
+    ed_idx: int | None = None
+    es_idx: int | None = None
+    slices: list[str] | None = None
+    slice_d: int | None = None           # serialized as the viewer's `sliceD` key
+
+    def to_dict(self) -> dict:
+        entry = {"patient": self.patient, "group": self.group, "held_out": self.held_out,
+                 "source": self.source, "pred": self.pred, "gt": self.gt, "glb": self.glb}
+        if self.frames is not None:      # a beating entry carries the cine strips + phase indices
+            entry.update(frames=self.frames, ed_idx=self.ed_idx, es_idx=self.es_idx,
+                         slices=self.slices, sliceD=self.slice_d)
+        return entry
+
+
 def manifest_with(data, entry: dict, model_name: str) -> dict:
     """Pure insert/replace of one patient into a manifest dict -> the new {model, hearts} dict.
     `data` is the prior manifest (dict, the old bare-array form, or None); the entry replaces any
@@ -129,13 +157,13 @@ def manifest_with(data, entry: dict, model_name: str) -> dict:
     return {"model": model_name, "hearts": hearts}
 
 
-def upsert_manifest(entry: dict, model_name: str) -> None:  # pragma: no cover  (manifest.json read/write — file-IO shell around manifest_with)
+def upsert_manifest(entry: ManifestEntry, model_name: str) -> None:  # pragma: no cover  (manifest.json read/write — file-IO shell around manifest_with)
     """Insert/replace one patient in manifest.json. Manifest = {model, hearts}; the web
     reads `model` to know which bundled .onnx to load (so it follows what was exported)."""
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / "manifest.json"
     data = json.loads(path.read_text()) if path.exists() else {}
-    path.write_text(json.dumps(manifest_with(data, entry, model_name), indent=2))
+    path.write_text(json.dumps(manifest_with(data, entry.to_dict(), model_name), indent=2))
 
 
 def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — IO shell)
@@ -166,11 +194,11 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
             fn = f"{name}_{tag}_{source}.gltf"
             Mesh.export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
-        entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source=source,
-                     pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
+        entry = ManifestEntry(patient=name, group=case.get("group"), held_out=(name in held), source=source,
+                              pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
         upsert_manifest(entry, ctx.model_name)
         log.info("  %-11s %-5s static  EF %s%% (GT %s%%)", name, str(case.get("group")),
-                 entry["pred"].get("ef"), entry["gt"].get("ef"))
+                 entry.pred.get("ef"), entry.gt.get("ef"))
 
 
 def run_animate(patients, ctx: ExportCtx, stride=1):  # pragma: no cover  (per-patient cine segmentation + glb write — export orchestration shell)
@@ -228,14 +256,14 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
     case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
-    entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
-                 pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
-                 frames=files, ed_idx=ed_k, es_idx=es_k,
-                 glb={"ED": files[ed_k], "ES": files[es_k]},
-                 slices=slice_files, sliceD=int(masks[0].shape[0]))
+    entry = ManifestEntry(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
+                          pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
+                          glb={"ED": files[ed_k], "ES": files[es_k]},
+                          frames=files, ed_idx=ed_k, es_idx=es_k,
+                          slices=slice_files, slice_d=int(masks[0].shape[0]))
     upsert_manifest(entry, ctx.model_name)
     log.info("  %-11s %-5s BEATING %d frames  EF %s%% (GT %s%%)", name, str(case.get("group")),
-             len(files), entry["pred"]["ef"], gt.get("ef"))
+             len(files), entry.pred["ef"], gt.get("ef"))
 
 
 

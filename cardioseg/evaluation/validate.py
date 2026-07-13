@@ -15,8 +15,6 @@ from pydantic import BaseModel
 
 from core.config import _VALIDATE
 from core.data.static.store import Store
-
-load_arrays = Store.load_arrays
 from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
@@ -25,6 +23,8 @@ from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
+
+load_arrays = Store.load_arrays
 
 log = logging.getLogger("cardioseg.validate")
 
@@ -53,8 +53,8 @@ class _ClassScores:
 
     def __init__(self, *, boundary: bool = True):
         self.boundary = boundary
-        self.inter = {c: 0.0 for c in CLASS_NAMES}
-        self.denom = {c: 0.0 for c in CLASS_NAMES}
+        self.inter = dict.fromkeys(CLASS_NAMES, 0.0)
+        self.denom = dict.fromkeys(CLASS_NAMES, 0.0)
         self.surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
 
     def add(self, pred, gt, spacing):
@@ -133,8 +133,8 @@ class Evaluator:
             if "ED" in vols and "ES" in vols:
                 ef_pred, edv_pred, _ = Measure.ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
                 ef_gt, edv_gt, _ = Measure.ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
-                ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
-                                    ef_gt=ef_gt, ef_pred=ef_pred, edv_gt=edv_gt, edv_pred=edv_pred))
+                ef_rows.append({"patient": Path(npz_path).stem, "group": case.get("group"),
+                                "ef_gt": ef_gt, "ef_pred": ef_pred, "edv_gt": edv_gt, "edv_pred": edv_pred})
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
 
     def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
@@ -180,7 +180,7 @@ class Evaluator:
         for row in ef_rows:
             abs_error = abs(row["ef_gt"] - row["ef_pred"])
             errors.append(abs_error)
-            log.info(f"  {row['patient']:11} {str(row['group']):5}  GT {row['ef_gt']:5.1f}%  "
+            log.info(f"  {row['patient']:11} {row['group']!s:5}  GT {row['ef_gt']:5.1f}%  "
                      f"pred {row['ef_pred']:5.1f}%  |d| {abs_error:4.1f}")
         ef_mae = float(np.mean(errors)) if errors else float("nan")
         if errors:
