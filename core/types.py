@@ -18,7 +18,9 @@ shape as its image. An Image is float intensities of the same shape.
 import numpy as np
 
 # Geometry / units
-Spacing = tuple[float, float, float]      # (z, y, x) mm, matches [D, H, W]
+# float | np.floating: spacing reaches the measure/inference boundary as np.float32 straight from the
+# store's header, so the runtime-checked (jaxtyping/beartype, bd zwno) form must admit numpy scalars.
+Spacing = tuple[float | np.floating, float | np.floating, float | np.floating]  # (z, y, x) mm, matches [D, H, W]
 
 # Arrays (shape documented in the alias name; not runtime-enforced)
 Volume = np.ndarray                       # [D, H, W]   image or mask, 3D

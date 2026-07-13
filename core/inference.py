@@ -7,8 +7,10 @@ K-member ensemble for the aleatoric/epistemic (BALD) split.
 """
 import numpy as np
 import torch
+from jaxtyping import Float, UInt8
 
 from core.preprocessing.preprocess import Preprocess
+from core.shapecheck import shapecheck
 from core.types import Volume
 
 _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
@@ -53,7 +55,8 @@ class Inference:
         pred, mean, _ = self.predict_volume_members(vol_img)
         return pred, mean
 
-    def predict_volume(self, vol_img: Volume, *, tta: bool = False) -> Volume:
+    @shapecheck
+    def predict_volume(self, vol_img: Float[np.ndarray, "d h w"], *, tta: bool = False) -> UInt8[np.ndarray, "d s s"]:
         """Predict a label map [D, size, size] for one z-scored [D, H, W] volume.
 
         `tta=True` averages over the 4 in-plane flips (delegates to predict_volume_probs); `tta=False`

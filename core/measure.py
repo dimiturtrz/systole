@@ -8,9 +8,11 @@ Shapes: masks are [D, H, W] integer label maps; spacing is (z, y, x) mm. See
 cardioseg/types.py for the convention.
 """
 import numpy as np
+from jaxtyping import Float, Integer
 
 from core.data.static.labels import LV_CAV
-from core.types import Mask, Spacing
+from core.shapecheck import shapecheck
+from core.types import Spacing
 
 LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)
 
@@ -24,12 +26,14 @@ class Measure:
         return float(np.prod(spacing)) / 1000.0
 
     @staticmethod
-    def label_volume_ml(mask: Mask, label: int, spacing: Spacing) -> float:
+    @shapecheck
+    def label_volume_ml(mask: Integer[np.ndarray, "d h w"], label: int, spacing: Spacing) -> float:
         """Volume (mL) of one label = voxel count x voxel volume (the Riemann sum)."""
         return int(np.sum(mask == label)) * Measure.voxel_volume_ml(spacing)
 
     @staticmethod
-    def expected_volume_ml(prob: np.ndarray, spacing: Spacing) -> float:
+    @shapecheck
+    def expected_volume_ml(prob: Float[np.ndarray, "d h w"], spacing: Spacing) -> float:
         """EXPECTED volume (mL) from a per-voxel probability map [D,H,W] of one class = Σ prob × voxel
         volume — the 'collapse-never' soft readout. A boundary voxel at p=0.6 contributes 0.6 of a voxel
         instead of 0 or 1, so sub-voxel boundary mass survives into the volume (only meaningful for a
@@ -57,8 +61,10 @@ class Measure:
                 "loa": [bias - LOA_Z * sd, bias + LOA_Z * sd], "mean_gt": float(g.mean())}
 
     @staticmethod
+    @shapecheck
     def ejection_fraction(
-        ed_mask: Mask, es_mask: Mask, spacing: Spacing, lv_label: int = LV_CAV
+        ed_mask: Integer[np.ndarray, "d h w"], es_mask: Integer[np.ndarray, "d h w"],
+        spacing: Spacing, lv_label: int = LV_CAV,
     ) -> tuple[float, float, float]:
         """EF = (EDV - ESV) / EDV in percent, from LV blood-pool volumes (mL).
 

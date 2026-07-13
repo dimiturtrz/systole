@@ -18,5 +18,7 @@ def test_array_aliases_are_ndarray():
 
 
 def test_spacing_is_float_triple():
-    """Spacing = (z, y, x) mm -> a 3-tuple of float."""
-    assert types.Spacing == tuple[float, float, float]
+    """Spacing = (z, y, x) mm -> a 3-tuple of float | np.floating (store headers hand back np.float32,
+    which the runtime-checked measure/inference boundary must admit — bd zwno)."""
+    real = float | np.floating
+    assert types.Spacing == tuple[real, real, real]
