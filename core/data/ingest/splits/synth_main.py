@@ -38,14 +38,14 @@ class SynthMain:
     sources = ()                        # synth train adds no real store sources
 
     @staticmethod
-    def _pool(name: str) -> str:
+    def pool(name: str) -> str:
         """Resolve a built anatomy pool by name under the meshes root (paths.yaml `meshes:` key; the
         Rodero SSM anatomy lives beside the MRI root, not under it). No machine path in code."""
         return str(Path(Config.data_root("meshes")) / "processed" / "rodero_anatomy" / f"{name}.npz")
 
     versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
-            train=lambda c: DynamicSource(pool=SynthMain._pool(POOL), bg=ProceduralBgCfg(),
+            train=lambda c: DynamicSource(pool=SynthMain.pool(POOL), bg=ProceduralBgCfg(),
                                           note=f"Rodero {POOL}, zero-real procedural bg"),
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
                                        "ACDC real val (held from test; synth val = 6rd7)"),

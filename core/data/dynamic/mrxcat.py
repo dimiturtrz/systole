@@ -301,15 +301,8 @@ class Mrxcat:
         bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
         bs.add_argument("--scale", type=float, default=3.0)
 
-    @staticmethod
-    def run(args):  # pragma: no cover
-        _CMDS[args.cmd](args)
-
-
-_CMDS = {
-    "probe": Mrxcat._cmd_probe,
-    "fetch": Mrxcat._cmd_fetch,
-    "build-pool": Mrxcat._cmd_build_pool,
-    "build-fov-pool": Mrxcat._cmd_build_fov_pool,
-    "build-ssm-fov-pool": Mrxcat._cmd_build_ssm_fov_pool,
-}
+    @classmethod
+    def run(cls, args):  # pragma: no cover
+        {"probe": cls._cmd_probe, "fetch": cls._cmd_fetch, "build-pool": cls._cmd_build_pool,
+         "build-fov-pool": cls._cmd_build_fov_pool,
+         "build-ssm-fov-pool": cls._cmd_build_ssm_fov_pool}[args.cmd](args)

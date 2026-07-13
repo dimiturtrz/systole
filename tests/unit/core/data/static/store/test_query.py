@@ -20,10 +20,10 @@ from core.data.static.store.query import (
 )
 from core.preprocessing.n4 import N4Cfg
 
-_region_of = MetaBuilder._region_of
+_region_of = MetaBuilder.region_of
 _bsa = MetaBuilder._bsa
 _age_band = MetaBuilder._age_band
-_norm_vendor = MetaBuilder._norm_vendor
+_norm_vendor = MetaBuilder.norm_vendor
 _is_labelled = MetaBuilder._is_labelled
 load_arrays = Store.load_arrays
 

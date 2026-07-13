@@ -170,7 +170,7 @@ class MetaBuilder:
         self.name, self.adapter = name, adapter
 
     @staticmethod
-    def _region_of(country):
+    def region_of(country):
         return _REGION.get(country) if country else None
 
     @staticmethod
@@ -192,7 +192,7 @@ class MetaBuilder:
                 else "60-75" if a < _AGE_75 else "75+")
 
     @staticmethod
-    def _norm_vendor(v):
+    def norm_vendor(v):
         if not v:
             return None
         s = str(v).upper()
@@ -214,14 +214,14 @@ class MetaBuilder:
         f = meta.get("field_T")
         return {
             "subject_id": case.name, "dataset": self.name, "file": file, "raw_path": str(case),
-            "vendor": self._norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
+            "vendor": self.norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
             "pathology": Pathology.harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
             "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
             # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
             # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
             "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
             "centre": meta.get("centre"), "country": meta.get("country"),
-            "region": self._region_of(meta.get("country")), "institution": meta.get("institution"),
+            "region": self.region_of(meta.get("country")), "institution": meta.get("institution"),
             "age": meta.get("age"), "age_band": self._age_band(meta.get("age")),
             "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
             "bsa": self._bsa(meta.get("height"), meta.get("weight")),

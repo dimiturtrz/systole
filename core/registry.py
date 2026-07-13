@@ -41,7 +41,7 @@ class Registry:
         return Registry._mlflow().tracking.MlflowClient()
 
     @staticmethod
-    def _run_id_for(ref: str) -> str:
+    def run_id_for(ref: str) -> str:
         """Resolve a ref (alias | version number | run-id) to an mlflow run-id."""
         c = Registry._client()
         # alias (e.g. 'production')
@@ -64,7 +64,7 @@ class Registry:
         if (p / "model.pth").exists():                     # already a dir (back-compat / explicit path)
             return p
         Registry._mlflow()
-        rid = Registry._run_id_for(ref)
+        rid = Registry.run_id_for(ref)
         dst = _CACHE / rid
         if not (dst / "model.pth").exists():               # cache: download once per run-id
             dst.mkdir(parents=True, exist_ok=True)

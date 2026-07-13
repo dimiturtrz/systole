@@ -41,7 +41,7 @@ class SynthComposite:
 
     @staticmethod
     def _synth_source(pool: str, note: str) -> DynamicSource:
-        return DynamicSource(pool=SynthMain._pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
+        return DynamicSource(pool=SynthMain.pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
 
     versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(

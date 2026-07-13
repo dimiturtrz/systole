@@ -104,7 +104,7 @@ class Train:
         return cfg
 
     @staticmethod
-    def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
+    def val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
         """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
         Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
         inter = dict.fromkeys(FOREGROUND, 0.0)
@@ -356,7 +356,7 @@ class SeedTrainer:
                     scaler.scale(loss_j).backward()
                     scaler.step(opt)
                     scaler.update()
-            vd = Train._val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
+            vd = Train.val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
             improved = vd > best_dice + 1e-4
             if improved:
                 best_dice, bad = vd, 0

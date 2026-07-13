@@ -11,7 +11,7 @@ import torch
 from cardioseg.training.train import Train
 from core.hparams import TrainCfg
 
-_val_dice = Train._val_dice
+_val_dice = Train.val_dice
 apply_cli_args = Train.apply_cli_args
 check_multiseed_split = Train.check_multiseed_split
 n_train_of = Train.n_train_of

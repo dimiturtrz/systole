@@ -57,10 +57,10 @@ class TestSet:
 
 class TestSets:
     """Factory + drift-computation helpers for the module's frozen TestSet constants (siblings
-    `TestSets._ts(...)`). Holds no state — the TestSet instances live at module level."""
+    `TestSets.ts(...)`). Holds no state — the TestSet instances live at module level."""
 
     @staticmethod
-    def _ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
+    def ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
         """A TestSet with its lock pulled from the committed lockfile (empty until --freeze)."""
         return TestSet(name, task, predicate, _LOCKS.get(name, ""))
 
@@ -90,20 +90,20 @@ class TestSets:
 
 
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
-CANON = TestSets._ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
-GE = TestSets._ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
-CMRXMOTION = TestSets._ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
-ACDC = TestSets._ts("acdc", "seg4", V("dataset") == "acdc")
-MNM2 = TestSets._ts("mnm2", "seg4", V("dataset") == "mnm2")
-MNMS1 = TestSets._ts("mnms1", "seg4", V("dataset") == "mnms1")
-SCD_LV = TestSets._ts("scd_lv", "seg_lv", V("dataset") == "scd")
+CANON = TestSets.ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
+GE = TestSets.ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
+CMRXMOTION = TestSets.ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
+ACDC = TestSets.ts("acdc", "seg4", V("dataset") == "acdc")
+MNM2 = TestSets.ts("mnm2", "seg4", V("dataset") == "mnm2")
+MNMS1 = TestSets.ts("mnms1", "seg4", V("dataset") == "mnms1")
+SCD_LV = TestSets.ts("scd_lv", "seg_lv", V("dataset") == "scd")
 
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
-STATIC_MAIN_TEST = TestSets._ts("static_main_test", "seg4",
+STATIC_MAIN_TEST = TestSets.ts("static_main_test", "seg4",
                                 _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
-SYNTH_MAIN_TEST = TestSets._ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
+SYNTH_MAIN_TEST = TestSets.ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
 
 # the matrix's default granular battery (over-held models score OOD on the ones they didn't train)
 MATRIX_TESTSETS: list[TestSet] = [CANON, GE, CMRXMOTION, ACDC, MNM2, MNMS1, SCD_LV]
