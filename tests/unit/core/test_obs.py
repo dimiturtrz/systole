@@ -6,7 +6,7 @@ timed logs START/DONE around its block. tqdm/logging internals are not re-tested
 """
 import logging
 
-from core.obs import Obs, timed
+from core.obs import Obs, _AppendHandler, timed
 
 
 def test_setup_configures_named_logger():
@@ -35,6 +35,16 @@ def test_progress_wraps_iterable_losslessly():
     """progress yields exactly the underlying items (degrades to a plain pass-through in non-tty)."""
     items = [1, 2, 3]
     assert list(Obs.progress(items, "desc", total=len(items))) == items
+
+
+def test_append_handler_emit_swallows_io_error(tmp_path):
+    """The file-log handler's emit routes an OSError (here: the path is a directory, so open('a')
+    raises) through handleError instead of propagating — logging must never crash the caller."""
+    handler = _AppendHandler(tmp_path)                   # a directory -> open('a') raises IsADirectoryError
+    errors = []
+    handler.handleError = errors.append
+    handler.emit(logging.LogRecord("n", logging.INFO, __file__, 1, "msg", None, None))
+    assert errors                                        # emit caught the OSError and called handleError
 
 
 def test_timed_logs_start_and_done(caplog):

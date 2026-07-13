@@ -100,3 +100,13 @@ def test_flat_config_backcompat():
 def test_n4cfg_reject_bad_shrink():
     with pytest.raises(ValidationError):
         N4Cfg(shrink=0)                                  # shrink >= 1
+
+
+# --- _coerce: parse an override string to the current field's type (one rep per type class) ---
+def test_coerce_parses_by_current_field_type():
+    assert Hparams._coerce("yes", True) is True and Hparams._coerce("off", True) is False   # bool words
+    assert Hparams._coerce("5", 0) == 5                                                       # int
+    assert Hparams._coerce("1.5", 0.0) == 1.5                                                 # float
+    assert Hparams._coerce("(1, 2)", ()) == (1, 2)                                            # tuple via literal_eval
+    assert Hparams._coerce("none", None) is None and Hparams._coerce("cuda", None) == "cuda"  # Optional[str]
+    assert Hparams._coerce("hi", "s") == "hi"                                                 # str fallthrough

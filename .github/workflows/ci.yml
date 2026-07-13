@@ -97,12 +97,14 @@ jobs:
       # shells are pragma'd, so the % reflects the pure plottable-data logic. bd cardiac-seg-3vbc.
       - name: cardioview tests + coverage (logic, advisory)
         run: PYTHONPATH=. COVERAGE_FILE=.coverage.cardioview uv run pytest tests/cardioview --cov=cardioview --cov-report=term-missing -q
-      # Coverage RED tier (mirrors vulture conf80): below 80% fails the merge. Reads the .coverage from
-      # the run above. bd cardiac-seg-emko — reaching 80 honestly is tracked in 7bbq.
-      - name: Coverage floor — enforced (>=80, blocks)
-        run: uv run coverage report --fail-under=80
-      # Coverage YELLOW tier (mirrors vulture conf60): 80–95 warns, never blocks. `always()` so the
-      # target signal shows even when the floor failed; `continue-on-error` keeps it non-blocking.
+      # Coverage RED tier: below the floor fails the merge. Reads the .coverage from the run above.
+      # RATCHETED 80 -> 90 (bd cardiac-seg-xf8r): the repo now sits at ~95%, so the floor moves up to
+      # lock the gain with a ~5pt margin. bd cardiac-seg-emko.
+      - name: Coverage floor — enforced (>=90, blocks)
+        run: uv run coverage report --fail-under=90
+      # Coverage YELLOW tier: the 95% target. Now MET (~95.2%) but kept advisory — at <1pt margin a hard
+      # 95 gate would be brittle on an actively-developed repo; the enforced floor (90) protects the gain.
+      # `always()` so the target signal shows even when the floor failed; `continue-on-error` non-blocking.
       - name: Coverage target — advisory (>=95, warns)
         if: always()
         continue-on-error: true
