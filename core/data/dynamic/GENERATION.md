@@ -1,11 +1,9 @@
 # Generation architecture — one process, many operations
 
-> Status: **living** (updated 2026-07-13). The point is to give the tangle of synth pipelines a shared
-> skeleton so we can fix it piece by piece. Since the first cut the skeleton grew real bones: the forward
-> path is a composable **Transform pipeline** (`pipeline.py`), generation is a **Source** behind the same
-> seam as real data (`source.py` + the `ingest/` layer), the **FIT** operator exists (`inverse.py`), and
-> the **shape-coverage** metric is built (`analysis/shape_coverage.py`). Entry points are mapped at the
-> bottom. Expect this to keep evolving — emergent architecture.
+> The synth pipelines share one skeleton. The forward path is a composable **Transform pipeline**
+> (`pipeline.py`); generation is a **Source** behind the same seam as real data (`source.py` + the
+> `ingest/` layer); the **FIT** operator lives in `inverse.py`; the **shape-coverage** metric in
+> `analysis/shape_coverage.py`. Entry points are mapped at the bottom.
 
 ## The one idea
 
@@ -131,7 +129,7 @@ sliced by the frame edge is a genuinely different, harder input).
 - **support / manifold** — the region of possible inputs the generator can produce; "how much space we
   model". Coverage = does that region contain the real data's region.
 
-## Generation SOURCES — a composite all-synthetic dataset (2026-07-02)
+## Generation SOURCES — a composite all-synthetic dataset
 
 The goal is **all-synthetic training data**, and no single generator reaches the whole real manifold.
 So think of it as a **portfolio of sources**, each ENTERING the DAG at a different point with a different
@@ -168,14 +166,14 @@ VALUE is *diverse sources*, not one bigger source. Coverage is measured per sour
 (NOR 0.49), the DCM/RV tail needs the pathology pool / label-space / learned / MRXCAT. Control degree is a
 *feature*: high-control sources (parametric) for targeted gaps, whole-thing sources (MRXCAT) for breadth.
 
-**Result — coverage ≠ Dice (2026-07-09, `uch6`/`bs71`):** the SSM ∪ pathology composite pushed shape
-coverage 0.78 → 0.94 (the pathology pool fills the DCM/HCM tail SSM misses) but zero-real TEST Dice did
-**not** move (0.541 vs 0.554 synth-main, within 2-seed noise). Closing coverage did not close Dice, so the
-remaining ceiling is shape/color **fidelity** (boundary/texture detail), not coverage. Next fidelity lever
-= within-slice texture or a learned shape prior (`vpn5`), **not** more coverage sources. Also: unioning the
-full ~42k-row pool thrashes VRAM (`DynamicSource` caps per-source residency; `residency=cpu` still open).
+**Result — coverage ≠ Dice:** the SSM ∪ pathology composite pushes shape coverage ~0.78 → ~0.94 (the
+pathology pool fills the DCM/HCM tail SSM misses) but zero-real TEST Dice does **not** move (within 2-seed
+noise). Closing coverage does not close Dice, so the remaining ceiling is shape/color **fidelity**
+(boundary/texture detail), not coverage — the next fidelity lever is within-slice texture or a learned
+shape prior (`vpn5`), not more coverage sources. Unioning the full pool thrashes VRAM, so `DynamicSource`
+caps per-source residency.
 
-## Current implementation map (what's built, where) — 2026-07-02
+## Implementation map (what's built, where)
 
 **Factors / mechanisms (the forward process):**
 
