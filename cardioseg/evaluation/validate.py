@@ -62,20 +62,20 @@ class _ClassScores:
         # Dice numerator/denominator for ALL classes in one shot: one-hot pred/gt to [...,C] and reduce
         # over the spatial axes (no python class loop). 2*|P∩G| and |P|+|G| per class.
         axes = tuple(range(pred.ndim))
-        P = pred[..., None] == self._CLS                                 # [...,C] bool one-hot
-        G = gt[..., None] == self._CLS
-        inter_c = 2.0 * np.logical_and(P, G).sum(axis=axes)              # [C]
-        denom_c = P.sum(axis=axes) + G.sum(axis=axes)                    # [C]
+        pred_onehot = pred[..., None] == self._CLS                       # [...,C] bool one-hot
+        gt_onehot = gt[..., None] == self._CLS
+        inter_c = 2.0 * np.logical_and(pred_onehot, gt_onehot).sum(axis=axes)   # [C]
+        denom_c = pred_onehot.sum(axis=axes) + gt_onehot.sum(axis=axes)         # [C]
         for i, cl in enumerate(CLASS_NAMES):
             self.inter[cl] += float(inter_c[i])
             self.denom[cl] += float(denom_c[i])
         if not self.boundary:                                           # Dice/EF-only sweep — skip the EDT cost
             return
         for cl in CLASS_NAMES:
-            sd = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
-            if sd.size:
-                m = Evaluate.surface_metrics(sd)
-                self.surf[cl]["hd95"].append(m["hd95"]); self.surf[cl]["assd"].append(m["assd"])
+            surface_dist = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
+            if surface_dist.size:
+                metrics = Evaluate.surface_metrics(surface_dist)
+                self.surf[cl]["hd95"].append(metrics["hd95"]); self.surf[cl]["assd"].append(metrics["assd"])
 
     def dice(self) -> dict[int, float]:
         return {cl: (self.inter[cl] / self.denom[cl] if self.denom[cl] else float("nan"))
@@ -103,10 +103,10 @@ class Evaluator:
         """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
         (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
         pred = logits.argmax(1)
-        idx = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
-        if idx.size > per_vol:
-            idx = rng.choice(idx, per_vol, replace=False)
-        return logits[idx], y[idx]
+        foreground_indices = np.where((y > 0) | (pred > 0))[0]                # foreground voxels
+        if foreground_indices.size > per_vol:
+            foreground_indices = rng.choice(foreground_indices, per_vol, replace=False)
+        return logits[foreground_indices], y[foreground_indices]
 
     def validate(self, npz_paths) -> tuple[dict[int, float], list[dict], dict]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
@@ -131,10 +131,10 @@ class Evaluator:
                 vols[tag] = (pred, gt)
                 scores.add(pred, gt, spacing)
             if "ED" in vols and "ES" in vols:
-                ef_p, edv_p, _ = Measure.ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
-                ef_g, edv_g, _ = Measure.ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
+                ef_pred, edv_pred, _ = Measure.ejection_fraction(vols["ED"][0], vols["ES"][0], spacing)
+                ef_gt, edv_gt, _ = Measure.ejection_fraction(vols["ED"][1], vols["ES"][1], spacing)
                 ef_rows.append(dict(patient=Path(npz_path).stem, group=case.get("group"),
-                                    ef_gt=ef_g, ef_pred=ef_p, edv_gt=edv_g, edv_pred=edv_p))
+                                    ef_gt=ef_gt, ef_pred=ef_pred, edv_gt=edv_gt, edv_pred=edv_pred))
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
 
     def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
@@ -144,21 +144,21 @@ class Evaluator:
         are now state.)"""
         size = self.cfg.size
         rng = np.random.RandomState(seed)
-        L, Y = [], []
+        logit_rows, label_rows = [], []
         self.model.eval()
         for p in npz_paths:
             case = load_arrays(p)
             for tag in ("ed", "es"):
                 if f"{tag}_img" not in case:
                     continue
-                xs = np.stack([Preprocess.fit_square(s.astype(np.float32), size, 0.0) for s in case[f"{tag}_img"]])
+                squared_slices = np.stack([Preprocess.fit_square(slice_img.astype(np.float32), size, 0.0) for slice_img in case[f"{tag}_img"]])
                 gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
-                    logits = self.model(torch.from_numpy(xs)[:, None].to(self.device))   # [D,C,H,W]
+                    logits = self.model(torch.from_numpy(squared_slices)[:, None].to(self.device))   # [D,C,H,W]
                 logits = logits.permute(0, 2, 3, 1).reshape(-1, logits.shape[1]).cpu().numpy()  # [Npix,C]
-                lg, y = self._foreground_samples(logits, gt.reshape(-1), per_vol, rng)
-                L.append(lg); Y.append(y)
-        return np.concatenate(L), np.concatenate(Y)
+                logits_kept, labels_kept = self._foreground_samples(logits, gt.reshape(-1), per_vol, rng)
+                logit_rows.append(logits_kept); label_rows.append(labels_kept)
+        return np.concatenate(logit_rows), np.concatenate(label_rows)
 
 
     @staticmethod
@@ -176,15 +176,15 @@ class Evaluator:
                 log.info(f"  {name:7} HD95 {surf_per_class[cl]['hd95']:5.2f}  ASSD {surf_per_class[cl]['assd']:5.2f}")
 
         log.info("\n=== VAL EF: GT vs predicted ===")
-        errs = []
-        for r in ef_rows:
-            d = abs(r["ef_gt"] - r["ef_pred"])
-            errs.append(d)
-            log.info(f"  {r['patient']:11} {str(r['group']):5}  GT {r['ef_gt']:5.1f}%  "
-                     f"pred {r['ef_pred']:5.1f}%  |d| {d:4.1f}")
-        ef_mae = float(np.mean(errs)) if errs else float("nan")
-        if errs:
-            log.info(f"  EF MAE = {ef_mae:.1f}%  (n={len(errs)})")
+        errors = []
+        for row in ef_rows:
+            abs_error = abs(row["ef_gt"] - row["ef_pred"])
+            errors.append(abs_error)
+            log.info(f"  {row['patient']:11} {str(row['group']):5}  GT {row['ef_gt']:5.1f}%  "
+                     f"pred {row['ef_pred']:5.1f}%  |d| {abs_error:4.1f}")
+        ef_mae = float(np.mean(errors)) if errors else float("nan")
+        if errors:
+            log.info(f"  EF MAE = {ef_mae:.1f}%  (n={len(errors)})")
 
         return {
             "dice": {CLASS_NAMES[c]: dice_per_class[c] for c in CLASS_NAMES},

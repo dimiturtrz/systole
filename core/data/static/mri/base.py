@@ -118,7 +118,7 @@ class Base:
         """Geometrically identify the LV-cavity label: the non-myo foreground label most enclosed
         by the myocardium ring. Trusts geometry, not a remembered int. mask [D,H,W] or [H,W].
         Returns (lv_label, scores) where score = fraction of a label's shell touching myocardium."""
-        labels = [int(l) for l in np.unique(mask) if l != 0 and l != myo_label]
+        labels = [int(label) for label in np.unique(mask) if label != 0 and label != myo_label]
         myo = mask == myo_label
         scores: dict[int, float] = {}
         for lab in labels:

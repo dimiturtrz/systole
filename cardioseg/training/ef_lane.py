@@ -59,8 +59,8 @@ class EfLane:
         invariant — the KaggleEF objective. `targets` in percent; a [K] tensor/list. Pulled out of .loss so
         the weak-supervision math is testable with synthetic cavity totals (no cine, no GPU forward)."""
         ef_pred = EfLane.ef_ratio(ed, es)
-        tgt = ed.new_tensor([float(t) for t in targets]) if not isinstance(targets, torch.Tensor) else targets
-        return F.huber_loss(ef_pred / 100, tgt.to(ef_pred) / 100, delta=delta)
+        target_tensor = ed.new_tensor([float(t) for t in targets]) if not isinstance(targets, torch.Tensor) else targets
+        return F.huber_loss(ef_pred / 100, target_tensor.to(ef_pred) / 100, delta=delta)
 
     @staticmethod
     def _cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
@@ -68,8 +68,8 @@ class EfLane:
         by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
         owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)
         with torch.autocast("cuda", enabled=amp):
-            pix = model(stacks).softmax(1)[:, lv].float().sum((1, 2))       # [ΣDi]
-        return torch.zeros(len(sizes), device=pix.device, dtype=pix.dtype).index_add_(0, owner, pix)
+            cavity_pixels = model(stacks).softmax(1)[:, lv].float().sum((1, 2))       # [ΣDi]
+        return torch.zeros(len(sizes), device=cavity_pixels.device, dtype=cavity_pixels.dtype).index_add_(0, owner, cavity_pixels)
 
     @staticmethod
     def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
@@ -96,9 +96,9 @@ class VolConsistency:
     def __init__(self, npz_paths, size: int, device: str, k: int, lv_label: int = LV_CAV):
         self.device, self.lv, self.k = device, lv_label, k
         self.ed, self.es = [], []                       # per-subject [Di,1,H,W] GPU stacks (aligned)
-        edv_gt, esv_gt, vox = [], [], []
-        for p in npz_paths:
-            case = load_arrays(p)
+        edv_gt, esv_gt, voxel_volumes = [], [], []
+        for path in npz_paths:
+            case = load_arrays(path)
             if "ed_img" not in case or "es_img" not in case:
                 continue
             spacing = tuple(float(s) for s in case["spacing"])
@@ -108,23 +108,23 @@ class VolConsistency:
                 continue
             self.ed.append(EfLane._stack(case["ed_img"], size, device))
             self.es.append(EfLane._stack(case["es_img"], size, device))
-            edv_gt.append(edv); esv_gt.append(esv); vox.append(Measure.voxel_volume_ml(spacing))
+            edv_gt.append(edv); esv_gt.append(esv); voxel_volumes.append(Measure.voxel_volume_ml(spacing))
         self.n = len(self.ed)
         self.counts = torch.tensor([t.shape[0] for t in self.ed], device=device)
-        self.vox = torch.tensor(vox, device=device)
+        self.vox = torch.tensor(voxel_volumes, device=device)
         self.edv_gt = torch.tensor(edv_gt, device=device)
         self.esv_gt = torch.tensor(esv_gt, device=device)
 
     def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
-        idx = torch.randperm(self.n, device=self.device)[:self.k]
-        sizes, vox = self.counts[idx], self.vox[idx]
-        ed = torch.cat([self.ed[int(i)] for i in idx])                  # [ΣDi,1,H,W]
-        es = torch.cat([self.es[int(i)] for i in idx])
-        edv = EfLane._cav_volume(model, ed, sizes, self.lv, amp=amp) * vox     # [K] soft EDV (mL)
-        esv = EfLane._cav_volume(model, es, sizes, self.lv, amp=amp) * vox
-        return VolLoss.vol_loss(edv, esv, self.edv_gt[idx], self.esv_gt[idx], delta)
+        subject_indices = torch.randperm(self.n, device=self.device)[:self.k]
+        slice_counts, voxel_volumes = self.counts[subject_indices], self.vox[subject_indices]
+        ed = torch.cat([self.ed[int(i)] for i in subject_indices])                  # [ΣDi,1,H,W]
+        es = torch.cat([self.es[int(i)] for i in subject_indices])
+        edv = EfLane._cav_volume(model, ed, slice_counts, self.lv, amp=amp) * voxel_volumes     # [K] soft EDV (mL)
+        esv = EfLane._cav_volume(model, es, slice_counts, self.lv, amp=amp) * voxel_volumes
+        return VolLoss.vol_loss(edv, esv, self.edv_gt[subject_indices], self.esv_gt[subject_indices], delta)
 
 
 class KaggleEF:
@@ -139,45 +139,45 @@ class KaggleEF:
                  lv_label: int = LV_CAV, seed: int = 0):
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
         self.X, self.LP, self.ef = [], [], []          # [L*P,1,H,W] GPU / (L,P) / EF%
-        for j in np.random.RandomState(seed).permutation(len(cases)):
+        for case_index in np.random.RandomState(seed).permutation(len(cases)):
             if len(self.X) >= pool:
                 break
-            c = cases[j]
-            t = ef_targets.get(c.name)
-            if not t or not t.get("ef"):
+            case = cases[case_index]
+            target = ef_targets.get(case.name)
+            if not target or not target.get("ef"):
                 continue
-            sax = KaggleDsbAdapter.load_sax(c)
+            sax = KaggleDsbAdapter.load_sax(case)
             if not sax:
                 continue
-            P, L = min(v.shape[0] for v, _, _ in sax), len(sax)
-            arr = np.array([[Preprocess.fit_square(EfLane._zscore(vol[p]), size, 0.0) for p in range(P)]
-                            for vol, _, _ in sax])                      # [L,P,H,W]
+            n_phases, n_slices = min(v.shape[0] for v, _, _ in sax), len(sax)
+            case_slices = np.array([[Preprocess.fit_square(EfLane._zscore(vol[p]), size, 0.0) for p in range(n_phases)]
+                            for vol, _, _ in sax])                      # [n_slices,n_phases,H,W]
             # Kept on CPU (host RAM): the pool is large and each cine is touched rarely (k sampled/
             # epoch). Residing it in VRAM hoards ~tens of GB and thrashes the card — the big rarely-hit
             # pool belongs in RAM, sampled cines ship to the GPU per epoch (mirrors residency='cpu').
-            self.X.append(torch.from_numpy(arr).reshape(L * P, 1, size, size))   # CPU tensor
-            self.LP.append((L, P))
-            self.ef.append(float(t["ef"]))
+            self.X.append(torch.from_numpy(case_slices).reshape(n_slices * n_phases, 1, size, size))   # CPU tensor
+            self.LP.append((n_slices, n_phases))
+            self.ef.append(float(target["ef"]))
         self.n = len(self.X)
 
     def loss(self, model, delta: float = 0.1, *, amp: bool = True):
         if self.n == 0:
             return None
-        idx = [int(i) for i in torch.randperm(self.n)[:self.k]]
-        xs = [self.X[i].to(self.device, non_blocking=True) for i in idx]   # ship sampled cines to GPU
-        sizes = [x.shape[0] for x in xs]
+        case_indices = [int(i) for i in torch.randperm(self.n)[:self.k]]
+        sampled_cines = [self.X[i].to(self.device, non_blocking=True) for i in case_indices]   # ship sampled cines to GPU
+        stack_sizes = [x.shape[0] for x in sampled_cines]
         with torch.no_grad(), torch.autocast("cuda", enabled=amp):      # phase-find, batched
-            pix = model(torch.cat(xs)).softmax(1)[:, self.lv].float().sum((1, 2))
-        ed_stacks, es_stacks, ls, tgt = [], [], [], []
-        off = 0
-        for gx, i, sz in zip(xs, idx, sizes, strict=True):                            # gx = the GPU-resident cine
-            L, P = self.LP[i]
-            pv = pix[off:off + sz].view(L, P).sum(0); off += sz          # [P] cavity vol / phase
-            X = gx.view(L, P, 1, self.size, self.size)
-            ed_stacks.append(X[:, int(pv.argmax())])
-            es_stacks.append(X[:, int(pv.argmin())])
-            ls.append(L); tgt.append(self.ef[i])
-        ls = torch.tensor(ls, device=self.device)
-        ed = EfLane._cav_volume(model, torch.cat(ed_stacks), ls, self.lv, amp=amp)  # [K] ED cavity vol (px)
-        es = EfLane._cav_volume(model, torch.cat(es_stacks), ls, self.lv, amp=amp)
-        return EfLane.ef_ratio_loss(ed, es, tgt, delta)                  # spacing-cancelling EF Huber
+            cavity_pixels = model(torch.cat(sampled_cines)).softmax(1)[:, self.lv].float().sum((1, 2))
+        ed_stacks, es_stacks, slice_counts, target_efs = [], [], [], []
+        offset = 0
+        for cine_on_gpu, i, stack_size in zip(sampled_cines, case_indices, stack_sizes, strict=True):
+            n_slices, n_phases = self.LP[i]
+            phase_volumes = cavity_pixels[offset:offset + stack_size].view(n_slices, n_phases).sum(0); offset += stack_size    # [n_phases] cavity vol / phase
+            cine = cine_on_gpu.view(n_slices, n_phases, 1, self.size, self.size)
+            ed_stacks.append(cine[:, int(phase_volumes.argmax())])
+            es_stacks.append(cine[:, int(phase_volumes.argmin())])
+            slice_counts.append(n_slices); target_efs.append(self.ef[i])
+        slice_counts = torch.tensor(slice_counts, device=self.device)
+        ed = EfLane._cav_volume(model, torch.cat(ed_stacks), slice_counts, self.lv, amp=amp)  # [K] ED cavity vol (px)
+        es = EfLane._cav_volume(model, torch.cat(es_stacks), slice_counts, self.lv, amp=amp)
+        return EfLane.ef_ratio_loss(ed, es, target_efs, delta)                  # spacing-cancelling EF Huber

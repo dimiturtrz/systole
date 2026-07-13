@@ -51,16 +51,16 @@ class Attribution:
     def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
         """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
         absent GT classes are left zero. Pure (no model) -> unit-testable."""
-        M = torch.zeros(n_classes, n_classes)
-        for g in range(n_classes):
-            gm = gt == g
-            tot = int(gm.sum())
-            if tot == 0:
+        confusion = torch.zeros(n_classes, n_classes)
+        for gt_class in range(n_classes):
+            gt_mask = gt == gt_class
+            total = int(gt_mask.sum())
+            if total == 0:
                 continue
-            pg = pred[gm]
-            for p in range(n_classes):
-                M[g, p] = (pg == p).float().mean()
-        return M
+            pred_at_gt = pred[gt_mask]
+            for pred_class in range(n_classes):
+                confusion[gt_class, pred_class] = (pred_at_gt == pred_class).float().mean()
+        return confusion
 
     @staticmethod
     def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
@@ -72,45 +72,45 @@ class Attribution:
     def attribute(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
-        out = Path(out_dir)
+        out_dir_path = Path(out_dir)
         pred = self._predict(self.model, X, self.device)          # on cpu
-        conf = self.class_confusion(pred, Y.cpu(), self.n_classes)
+        confusion = self.class_confusion(pred, Y.cpu(), self.n_classes)
         # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
         summary = {
             "names": _NAMES[:self.n_classes],
-            "confusion": [[round(float(conf[g, p]), 3) for p in range(self.n_classes)] for g in range(self.n_classes)],
-            "recall": {_NAMES[g]: round(float(conf[g, g]), 3) for g in range(self.n_classes)},
+            "confusion": [[round(float(confusion[gt_class, pred_class]), 3) for pred_class in range(self.n_classes)] for gt_class in range(self.n_classes)],
+            "recall": {_NAMES[gt_class]: round(float(confusion[gt_class, gt_class]), 3) for gt_class in range(self.n_classes)},
         }
-        has_sal = self._render(X, Y, pred, out / "attribution.png")
-        summary["saliency"] = has_sal
-        (out / "attribution.json").write_text(json.dumps(summary, indent=2))
+        has_saliency = self._render(X, Y, pred, out_dir_path / "attribution.png")
+        summary["saliency"] = has_saliency
+        (out_dir_path / "attribution.json").write_text(json.dumps(summary, indent=2))
         return summary
 
     def _render(self, X, Y, pred, out_png: Path, k: int = 4) -> bool:
         """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
         it was drawn. Always writes the real/GT/pred panel."""
-        good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
-        if not good:
-            good = list(range(min(k, Y.shape[0])))
+        all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
+        if not all_class_slices:
+            all_class_slices = list(range(min(k, Y.shape[0])))
         def _fwd(x):
             return self.model(x).sum(dim=(2, 3))             # spatial-sum logits -> [B,C] for attribution
-        sal = Saliency(_fwd)
+        saliency = Saliency(_fwd)
 
-        rows = 4 if sal is not None else 3
+        rows = 4 if saliency is not None else 3
         vmax = self.n_classes - 1
-        fig, ax = plt.subplots(rows, len(good), figsize=(3 * len(good), 3 * rows), squeeze=False)
+        fig, ax = plt.subplots(rows, len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * rows), squeeze=False)
         def _panel(row, c, img, title, **kw):
             ax[row, c].imshow(img, **kw); ax[row, c].set_title(title); ax[row, c].axis("off")
-        for c, i in enumerate(good):
-            xi = X[i:i + 1].to(self.device)
+        for c, i in enumerate(all_class_slices):
+            slice_input = X[i:i + 1].to(self.device)
             _panel(0, c, X[i, 0].cpu(), "real", cmap="gray")
             _panel(1, c, Y[i].cpu(), "GT", cmap="viridis", vmin=0, vmax=vmax)
             _panel(2, c, pred[i], "pred", cmap="viridis", vmin=0, vmax=vmax)
-            if sal is not None:
-                a = sal.attribute(xi, target=self.n_classes - 1).abs()[0, 0].detach().cpu().numpy()
-                _panel(3, c, a, f"saliency({_NAMES[-1]})", cmap="hot")
+            if saliency is not None:
+                saliency_map = saliency.attribute(slice_input, target=self.n_classes - 1).abs()[0, 0].detach().cpu().numpy()
+                _panel(3, c, saliency_map, f"saliency({_NAMES[-1]})", cmap="hot")
         fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
-        return sal is not None
+        return saliency is not None
 
     @staticmethod
     def add_args(ap):
@@ -121,9 +121,9 @@ class Attribution:
     def run(args):  # pragma: no cover
         run_dir = Registry.resolve(args.run)
         model, cfg, device = Run.load_run(run_dir)
-        d = (cfg.generator.data if cfg else TrainCfg().generator.data)
-        meta = store.load_cfg(d)                          # ALL preprocessing params (nyul/norm too)
-        va = splits.ModelSplit(d, meta).val                   # coded split's val if set, else criteria
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, device)
-        s = Attribution(model, device, cfg.model.out_channels if cfg else 4).attribute(X, Y, args.out or run_dir)
-        log.info(json.dumps(s, indent=2))
+        data_cfg = (cfg.generator.data if cfg else TrainCfg().generator.data)
+        meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)
+        val_split = splits.ModelSplit(data_cfg, meta).val                   # coded split's val if set, else criteria
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, device)
+        summary = Attribution(model, device, cfg.model.out_channels if cfg else 4).attribute(X, Y, args.out or run_dir)
+        log.info(json.dumps(summary, indent=2))

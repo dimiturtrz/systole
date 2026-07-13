@@ -34,20 +34,20 @@ class Render:
         """Load k real val slices (all heart classes present), generate synth from their masks, save a grid
         (real | mask | synth-flat | synth-partition) + print per-class real-vs-synth intensity stats."""
         torch.manual_seed(seed); np.random.seed(seed)
-        d = TrainCfg().generator.data
+        data_cfg = TrainCfg().generator.data
         n = len(CLASSES) + 1
-        meta = store.load_cfg(d, workers=4)              # ALL preprocessing params (nyul/norm too)
-        va = splits.ModelSplit(d, meta).val                   # held-out real slices (coded split's val if set)
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, "cpu")
-        good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
-        X, Y = X[good], Y[good]
-        torch.manual_seed(1); Sf, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)
-        torch.manual_seed(2); Sp, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=PartitionBgCfg()), n, real_img=X)
+        meta = store.load_cfg(data_cfg, workers=4)              # ALL preprocessing params (nyul/norm too)
+        val_split = splits.ModelSplit(data_cfg, meta).val                   # held-out real slices (coded split's val if set)
+        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, "cpu")
+        all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
+        X, Y = X[all_class_slices], Y[all_class_slices]
+        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)
+        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=PartitionBgCfg()), n, real_img=X)
 
-        rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", Sf[:, 0]), ("synth partition", Sp[:, 0])]
-        fig, ax = plt.subplots(len(rows), len(good), figsize=(3 * len(good), 3 * len(rows)), squeeze=False)
+        rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", synth_flat[:, 0]), ("synth partition", synth_partition[:, 0])]
+        fig, ax = plt.subplots(len(rows), len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * len(rows)), squeeze=False)
         for r, (name, vol) in enumerate(rows):
-            for c in range(len(good)):
+            for c in range(len(all_class_slices)):
                 ax[r, c].imshow(vol[c].cpu().numpy(), cmap="viridis" if "mask" in name else "gray")
                 ax[r, c].axis("off")
                 if c == 0:
@@ -55,9 +55,9 @@ class Render:
         out_png = Path(out_png); out_png.parent.mkdir(parents=True, exist_ok=True)
         fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
         log.info(f"wrote {out_png}\nPER-CLASS mean±std (z), real vs synth-partition:")
-        for c in range(n):
-            rm, sm = X[:, 0][Y == c], Sp[:, 0][Y == c]
-            log.info(f"  {_NAMES[c]:8} real {rm.mean():+.2f}±{rm.std():.2f}   synth {sm.mean():+.2f}±{sm.std():.2f}")
+        for class_index in range(n):
+            real_intensities, synth_intensities = X[:, 0][Y == class_index], synth_partition[:, 0][Y == class_index]
+            log.info(f"  {_NAMES[class_index]:8} real {real_intensities.mean():+.2f}±{real_intensities.std():.2f}   synth {synth_intensities.mean():+.2f}±{synth_intensities.std():.2f}")
 
 
     @staticmethod

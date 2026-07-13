@@ -41,14 +41,14 @@ class ShapeCoverage:
     def shape_features(mask: np.ndarray) -> np.ndarray | None:
         """Interpretable SHAPE-only descriptors for one 2D label map, or None if ~empty. Scale/position-
         invariant where sensible so it compares generated vs real anatomy, not framing artifacts."""
-        fg = mask > 0
-        n = int(fg.sum())
+        foreground = mask > 0
+        n = int(foreground.sum())
         if n < _MIN_FG_PX:
             return None
         rv, myo, lvc = (mask == _RV).sum(), (mask == _MYO).sum(), (mask == _LVC).sum()
-        ys, xs = np.where(fg)
-        h = ys.max() - ys.min() + 1
-        w = xs.max() - xs.min() + 1
+        row_indices, col_indices = np.where(foreground)
+        h = row_indices.max() - row_indices.min() + 1
+        w = col_indices.max() - col_indices.min() + 1
         eps = 1.0
         return np.array([
             rv / n, myo / n, lvc / n,                       # class area fractions (composition)
@@ -60,15 +60,15 @@ class ShapeCoverage:
 
     @staticmethod
     def _feats_from_masks(masks) -> np.ndarray:
-        rows = [f for f in (ShapeCoverage.shape_features(m) for m in masks) if f is not None]
+        rows = [features for features in (ShapeCoverage.shape_features(mask) for mask in masks) if features is not None]
         return np.stack(rows) if rows else np.zeros((0, 7))
 
     @staticmethod
     def _real_masks(acdc_dir: str) -> list[np.ndarray]:
         out = []
-        for f in sorted(Path(acdc_dir).glob("*.npz")):
-            d = np.load(f)
-            for gt in (d["ed_gt"], d["es_gt"]):
+        for npz_path in sorted(Path(acdc_dir).glob("*.npz")):
+            data = np.load(npz_path)
+            for gt in (data["ed_gt"], data["es_gt"]):
                 out.extend(gt[k] for k in range(gt.shape[0]))
         return out
 
@@ -76,22 +76,22 @@ class ShapeCoverage:
     def coverage(real: np.ndarray, synth: np.ndarray) -> dict:
         """Standardize by REAL stats; for each real point the nearest synth point (does synth cover real),
         and the reverse (does synth extrapolate beyond real). Distances in std-units of the real cloud."""
-        mu, sd = real.mean(0), real.std(0) + 1e-9
-        r, s = (real - mu) / sd, (synth - mu) / sd
+        real_mean, real_std = real.mean(0), real.std(0) + 1e-9
+        real_standardized, synth_standardized = (real - real_mean) / real_std, (synth - real_mean) / real_std
         def nn(a, b):                                        # nearest-neighbour distance a->b, per row of a
-            d = np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
-            return d.min(1)
-        r2s = nn(r, s)                                       # real -> nearest synth (coverage)
-        s2r = nn(s, r)                                       # synth -> nearest real (extrapolation if large)
-        s_self = nn(s, s) if len(s) > 1 else np.array([1.0]) # synth internal scale (for a radius)
-        rad = float(np.median(s_self[s_self > 0])) if (s_self > 0).any() else 1.0
+            distances = np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
+            return distances.min(1)
+        real_to_synth = nn(real_standardized, synth_standardized)   # real -> nearest synth (coverage)
+        synth_to_real = nn(synth_standardized, real_standardized)   # synth -> nearest real (extrapolation if large)
+        synth_to_synth = nn(synth_standardized, synth_standardized) if len(synth_standardized) > 1 else np.array([1.0]) # synth internal scale (for a radius)
+        radius = float(np.median(synth_to_synth[synth_to_synth > 0])) if (synth_to_synth > 0).any() else 1.0
         return {
             "n_real": int(len(real)), "n_synth": int(len(synth)),
-            "real_to_synth_nn_median": round(float(np.median(r2s)), 3),
-            "real_to_synth_nn_p95": round(float(np.percentile(r2s, 95)), 3),
-            "coverage_at_synth_radius": round(float((r2s <= rad).mean()), 3),   # frac real with a synth neighbour
-            "synth_to_real_nn_median": round(float(np.median(s2r)), 3),         # >real-internal => extrapolates
-            "synth_beyond_real_frac": round(float((s2r > np.percentile(r2s, 95)).mean()), 3),
+            "real_to_synth_nn_median": round(float(np.median(real_to_synth)), 3),
+            "real_to_synth_nn_p95": round(float(np.percentile(real_to_synth, 95)), 3),
+            "coverage_at_synth_radius": round(float((real_to_synth <= radius).mean()), 3),   # frac real with a synth neighbour
+            "synth_to_real_nn_median": round(float(np.median(synth_to_real)), 3),         # >real-internal => extrapolates
+            "synth_beyond_real_frac": round(float((synth_to_real > np.percentile(real_to_synth, 95)).mean()), 3),
         }
 
 
@@ -107,15 +107,16 @@ class ShapeCoverage:
         synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
         log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))
         # 2D PCA (SVD) fit on the union, standardized by real, for the scatter
-        mu, sd = real.mean(0), real.std(0) + 1e-9
-        R, S = (real - mu) / sd, (synth - mu) / sd
-        U = np.concatenate([R, S])
-        _, _, vt = np.linalg.svd(U - U.mean(0), full_matrices=False)
-        pr, ps = (R - U.mean(0)) @ vt[:2].T, (S - U.mean(0)) @ vt[:2].T
+        real_mean, real_std = real.mean(0), real.std(0) + 1e-9
+        real_standardized, synth_standardized = (real - real_mean) / real_std, (synth - real_mean) / real_std
+        union = np.concatenate([real_standardized, synth_standardized])
+        _, _, right_singular_vectors = np.linalg.svd(union - union.mean(0), full_matrices=False)
+        projected_real = (real_standardized - union.mean(0)) @ right_singular_vectors[:2].T
+        projected_synth = (synth_standardized - union.mean(0)) @ right_singular_vectors[:2].T
         plt.figure(figsize=(6, 6))
-        plt.scatter(ps[:, 0], ps[:, 1], s=6, alpha=0.3, label=f"synth (n={len(ps)})", color="#e35")
-        plt.scatter(pr[:, 0], pr[:, 1], s=6, alpha=0.3, label=f"real (n={len(pr)})", color="#38e")
+        plt.scatter(projected_synth[:, 0], projected_synth[:, 1], s=6, alpha=0.3, label=f"synth (n={len(projected_synth)})", color="#e35")
+        plt.scatter(projected_real[:, 0], projected_real[:, 1], s=6, alpha=0.3, label=f"real (n={len(projected_real)})", color="#38e")
         plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
-        out = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
-        plt.savefig(out, dpi=110, bbox_inches="tight")
-        log.info(f"wrote {out}")
+        output_path = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
+        plt.savefig(output_path, dpi=110, bbox_inches="tight")
+        log.info(f"wrote {output_path}")
