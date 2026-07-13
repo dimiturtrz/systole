@@ -8,6 +8,7 @@ import export_web as E
 import numpy as np
 from export_web import (
     SIZE,
+    ManifestEntry,
     _heart_bbox,
     heldout_set,
     manifest_with,
@@ -82,6 +83,29 @@ def test_manifest_with_upgrades_legacy_array():
     """Back-compat class: the old bare-array manifest form is lifted into {hearts:[...]}."""
     out = manifest_with([{"patient": "p1"}], {"patient": "p2"}, "gen")
     assert [h["patient"] for h in out["hearts"]] == ["p1", "p2"]
+
+
+# --- ManifestEntry.to_dict (the single manifest schema for both export paths) ----
+
+def test_manifest_entry_static_omits_animation_keys():
+    """Static class: a static entry carries no cine fields -> to_dict emits exactly the 7 static keys
+    (no null frames/slices/sliceD leaking into the JSON the viewer reads)."""
+    entry = ManifestEntry(patient="p1", group="DCM", held_out=True, source="pred",
+                          pred={"ef": 42.0}, gt={"ef": 40.0}, glb={"ED": "p1_ED_pred.gltf"})
+    assert entry.to_dict() == {"patient": "p1", "group": "DCM", "held_out": True, "source": "pred",
+                               "pred": {"ef": 42.0}, "gt": {"ef": 40.0}, "glb": {"ED": "p1_ED_pred.gltf"}}
+
+
+def test_manifest_entry_beating_includes_cine_fields_and_sliced_key():
+    """Beating class: an animation entry adds the cine strips + phase indices, and the snake `slice_d`
+    field serializes to the viewer's `sliceD` JSON key."""
+    entry = ManifestEntry(patient="p2", group="NOR", held_out=False, source="pred",
+                          pred={"ef": 55.0}, gt={"ef": 54.0}, glb={"ED": "a.gltf", "ES": "b.gltf"},
+                          frames=["f0.gltf", "f1.gltf"], ed_idx=0, es_idx=1,
+                          slices=["s0.png"], slice_d=9)
+    d = entry.to_dict()
+    assert d["frames"] == ["f0.gltf", "f1.gltf"] and d["ed_idx"] == 0 and d["es_idx"] == 1
+    assert d["slices"] == ["s0.png"] and d["sliceD"] == 9 and "slice_d" not in d
 
 
 # --- heldout_set (fallback branch: no config.json -> split_patients) -------
