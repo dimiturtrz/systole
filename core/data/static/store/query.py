@@ -44,10 +44,14 @@ class Recipe(BaseModel):
 
 
 class DataCfg(BaseModel):
-    """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
-    Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
-    the labelled rest. Serialized to config.json (the run self-documents its split). Prefer a coded
-    split family (`split` field, core.data.ingest.splits); these criteria defaults = the generalization
+    """The data + the CRITERIA split (the ad-hoc, parametric partition). Two split modes coexist by
+    design (bd cardiac-seg-z1uj): a coded split family (`split`, core.data.ingest.splits) is the FROZEN,
+    lock-hashed, reproducible partition — prefer it for headline runs; the criteria path here is the
+    FLEXIBLE one — TEST = live criteria (`test_datasets`/`test_vendors`), train/val = the labelled rest,
+    with `train_vendors`/`val_*` knobs for ad-hoc holdouts (e.g. the single-vendor-train regime, bd 5r7n,
+    or `--set test_vendors=('GE',)`) that no frozen coded split expresses. It is NOT deprecated — retiring
+    it would need those parametric knobs ported into a coded split family first (bd cardiac-seg follow-up).
+    Serialized to config.json (the run self-documents its split); the criteria defaults = the generalization
     split (ACDC centre-shift VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
