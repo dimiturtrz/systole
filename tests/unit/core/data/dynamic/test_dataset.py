@@ -2,6 +2,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from core.data.static.splits import Splits
 from core.preprocessing.preprocess import Preprocess
@@ -51,7 +52,6 @@ def test_split_is_deterministic():
 
 # --- load_to_gpu: VRAM-resident loader (GPU-resident training) ---
 def _fake_npz(tmp_path):
-    import numpy as np
     p = tmp_path / "subj.npz"
     D, H, W = 3, 40, 50
     img = np.random.rand(D, H, W).astype(np.float32)
@@ -62,9 +62,8 @@ def _fake_npz(tmp_path):
 
 
 def test_load_to_gpu_shapes_dtype_device(tmp_path):
-    import pytest
     torch = pytest.importorskip("torch")
-    from core.data.dynamic.dataset import ACDCSliceDataset
+    from core.data.dynamic.dataset import ACDCSliceDataset  # noqa: PLC0415
     imgs, msks = ACDCSliceDataset.load_to_gpu([_fake_npz(tmp_path)], size=64, device="cpu")
     assert imgs.shape[1:] == (1, 64, 64) and imgs.dtype == torch.float32   # [N,1,size,size] f32
     assert msks.shape[1:] == (64, 64) and msks.dtype == torch.uint8        # [N,size,size] u8 (VRAM-lean)
@@ -73,8 +72,7 @@ def test_load_to_gpu_shapes_dtype_device(tmp_path):
 
 
 def test_load_to_gpu_empty_paths():
-    import pytest
     pytest.importorskip("torch")
-    from core.data.dynamic.dataset import ACDCSliceDataset
+    from core.data.dynamic.dataset import ACDCSliceDataset  # noqa: PLC0415
     imgs, msks = ACDCSliceDataset.load_to_gpu([], size=64, device="cpu")
     assert imgs.shape == (0, 1, 64, 64) and msks.shape == (0, 64, 64)

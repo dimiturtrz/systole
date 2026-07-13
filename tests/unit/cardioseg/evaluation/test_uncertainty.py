@@ -10,10 +10,10 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-import cardioseg.evaluation.uncertainty as U
-from cardioseg.evaluation.uncertainty import Uncertainty
-from core.model import Model
-from core.preprocessing.preprocess import SIZE as PSIZE
+import cardioseg.evaluation.uncertainty as U  # noqa: E402
+from cardioseg.evaluation.uncertainty import Uncertainty  # noqa: E402
+from core.model import Model  # noqa: E402
+from core.preprocessing.preprocess import SIZE as PSIZE  # noqa: E402
 
 SIZE = 32
 

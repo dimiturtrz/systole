@@ -7,6 +7,7 @@ import numpy as np
 
 from cardioseg.evaluation.distribution import Distribution
 from core.data.static.labels import CLASSES
+from core.measure import LOA_Z
 
 RV, MYO, CAV = tuple(CLASSES)   # 1, 2, 3
 
@@ -14,7 +15,7 @@ RV, MYO, CAV = tuple(CLASSES)   # 1, 2, 3
 def _row(dice=0.9, ef=(50.0, 48.0), vendor="A", **extra):
     """A minimal per-case row like collect() emits: sd + dice per class, ef gt/pred, stratify keys."""
     r = {"sd": {c: np.array([1.0, 2.0]) for c in CLASSES},
-         "dice": {c: dice for c in CLASSES},
+         "dice": dict.fromkeys(CLASSES, dice),
          "ef_gt": ef[0], "ef_pred": ef[1], "vendor": vendor}
     r.update(extra)
     return r
@@ -24,7 +25,7 @@ def _row(dice=0.9, ef=(50.0, 48.0), vendor="A", **extra):
 def test_pooled_concatenates_and_splits_ef():
     """Normal class: dists/dice collected per class, ef unzipped into aligned gt/pred arrays."""
     rows = [_row(dice=0.8, ef=(50.0, 45.0)), _row(dice=0.6, ef=(60.0, 66.0))]
-    dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+    dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
     assert dice_acc[RV] == [0.8, 0.6]
     assert list(ef_gt) == [50.0, 60.0] and list(ef_pred) == [45.0, 66.0]
     assert len(dists[CAV]) == 2
@@ -33,13 +34,13 @@ def test_pooled_concatenates_and_splits_ef():
 def test_pooled_skips_rows_missing_keys():
     """Missing class: a row without 'sd'/'dice'/'ef_gt' is dropped from that pool (no KeyError)."""
     rows = [_row(), {"vendor": "B"}]          # 2nd row has no sd/dice/ef
-    dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+    dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
     assert len(dice_acc[RV]) == 1 and len(ef_gt) == 1
 
 
 def test_pooled_empty_is_empty_arrays():
     """Boundary: no rows -> empty ef arrays, empty per-class lists (never a crash)."""
-    dists, dice_acc, ef_gt, ef_pred = Distribution._pooled([])
+    dists, dice_acc, ef_gt, ef_pred = Distribution.pooled([])
     assert ef_gt.size == 0 and ef_pred.size == 0 and dice_acc[RV] == []
 
 
@@ -80,6 +81,5 @@ def test_strata_table_shape_and_values():
 # --- lo_hi: the LoA-band string ---
 def test_lo_hi_formats_signed_band():
     """LoA string = bias ± LOA_Z·sd, each signed to 1 dp; sd=0 collapses the band to the bias."""
-    from core.measure import LOA_Z
     assert Distribution.lo_hi(0.0, 0.0) == "+0.0, +0.0"
     assert Distribution.lo_hi(2.0, 1.0) == f"{2.0 - LOA_Z:+.1f}, {2.0 + LOA_Z:+.1f}"

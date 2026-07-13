@@ -8,6 +8,16 @@ name; a param carried by >=half the methods (and >=2) is latent state. Score = s
 counts, so a class where many methods thread many common params ranks highest. Dispatcher command classes
 (`add_args`+`run`) and already-stateful classes (have `__init__`) are skipped.
 
+The discriminator the human applies to a surfaced candidate is SESSION-vs-DATA: promote a shared param to
+`__init__` ONLY if it's a configured-once SESSION held across calls; it STAYS static if it's per-call DATA
+(the array being transformed) or a swept axis. Two sub-rules encoded here to cut false positives:
+  - **constant-default = knob, not session** (bd cardiac-seg-w9p0): a param defaulted to a module constant
+    or literal (`labels=FOREGROUND`, `size=256`) is an optional knob with a sensible default — a real
+    session is required/computed, not defaulted-to-a-constant — so it's excluded from the shared count.
+  - **per-call DATA still surfaces** (the input `mask`/`vol` shared by the transform methods): the detector
+    can't tell it from session state by AST, so it's surfaced and the human keeps it static. That's why
+    e.g. `Postprocess` (mask is the per-call array; labels is a constant-default) correctly STAYS static.
+
     python -m devtools.state_candidates core cardioseg
 """
 from __future__ import annotations
@@ -33,11 +43,33 @@ def _staticmethods(cls: ast.ClassDef) -> list[ast.FunctionDef]:
             and any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in n.decorator_list)]
 
 
+def _is_constant_default(node: ast.expr) -> bool:
+    """A default that marks its param as a KNOB, not session state: a literal (`256`, `"zscore"`) or a
+    module constant (an UPPER_CASE Name like `FOREGROUND`). A configured session is required or computed,
+    not defaulted to a constant."""
+    return isinstance(node, ast.Constant) or (isinstance(node, ast.Name) and node.id.isupper())
+
+
+def _constant_defaulted(fn: ast.FunctionDef) -> set[str]:
+    """Param names whose default is a constant/literal (bd cardiac-seg-w9p0) — excluded from the
+    session-candidate set. Positional defaults align to the TAIL of posonly+args; kwonly pair with
+    kw_defaults (None = no default)."""
+    args = fn.args
+    positional = [*args.posonlyargs, *args.args]
+    out = {p.arg for p, d in zip(positional[len(positional) - len(args.defaults):], args.defaults, strict=True)
+           if _is_constant_default(d)}
+    out |= {p.arg for p, d in zip(args.kwonlyargs, args.kw_defaults, strict=True)
+            if d is not None and _is_constant_default(d)}
+    return out
+
+
 def _params(fn: ast.FunctionDef) -> set[str]:
-    """Positional + keyword-only param names, minus self/cls."""
+    """Session-candidate param names: positional + keyword-only, minus self/cls and minus the
+    constant-defaulted knobs (those are optional knobs, not configured session state)."""
     args = fn.args
     names = [a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
-    return {n for n in names if n not in _SELF}
+    constant_defaulted = _constant_defaulted(fn)
+    return {n for n in names if n not in _SELF and n not in constant_defaulted}
 
 
 def _is_command(names: set[str]) -> bool:

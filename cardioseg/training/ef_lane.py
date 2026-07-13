@@ -36,13 +36,13 @@ class EfLane:
     soft-cavity segment-sum, and `build_aux` — the single home for the aux-objective contract."""
 
     @staticmethod
-    def _stack(vol, size: int, device: str) -> torch.Tensor:
+    def stack(vol, size: int, device: str) -> torch.Tensor:
         """[D,H,W] numpy -> [D,1,size,size] float32 on device (grid-fit, no augmentation)."""
         slices = [torch.from_numpy(Preprocess.fit_square(vol[z], size, 0.0)) for z in range(vol.shape[0])]
         return torch.stack(slices)[:, None].to(device)
 
     @staticmethod
-    def _zscore(s):
+    def zscore(s):
         s = s.astype(np.float32)
         return (s - s.mean()) / (s.std() + 1e-6)
 
@@ -63,7 +63,7 @@ class EfLane:
         return F.huber_loss(ef_pred / 100, target_tensor.to(ef_pred) / 100, delta=delta)
 
     @staticmethod
-    def _cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
+    def cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
         """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
         by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
         owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)
@@ -106,8 +106,8 @@ class VolConsistency:
             esv = Measure.label_volume_ml(case["es_gt"], lv_label, spacing)
             if edv <= 0:
                 continue
-            self.ed.append(EfLane._stack(case["ed_img"], size, device))
-            self.es.append(EfLane._stack(case["es_img"], size, device))
+            self.ed.append(EfLane.stack(case["ed_img"], size, device))
+            self.es.append(EfLane.stack(case["es_img"], size, device))
             edv_gt.append(edv); esv_gt.append(esv); voxel_volumes.append(Measure.voxel_volume_ml(spacing))
         self.n = len(self.ed)
         self.counts = torch.tensor([t.shape[0] for t in self.ed], device=device)
@@ -122,8 +122,8 @@ class VolConsistency:
         slice_counts, voxel_volumes = self.counts[subject_indices], self.vox[subject_indices]
         ed = torch.cat([self.ed[int(i)] for i in subject_indices])                  # [ΣDi,1,H,W]
         es = torch.cat([self.es[int(i)] for i in subject_indices])
-        edv = EfLane._cav_volume(model, ed, slice_counts, self.lv, amp=amp) * voxel_volumes     # [K] soft EDV (mL)
-        esv = EfLane._cav_volume(model, es, slice_counts, self.lv, amp=amp) * voxel_volumes
+        edv = EfLane.cav_volume(model, ed, slice_counts, self.lv, amp=amp) * voxel_volumes     # [K] soft EDV (mL)
+        esv = EfLane.cav_volume(model, es, slice_counts, self.lv, amp=amp) * voxel_volumes
         return VolLoss.vol_loss(edv, esv, self.edv_gt[subject_indices], self.esv_gt[subject_indices], delta)
 
 
@@ -150,7 +150,7 @@ class KaggleEF:
             if not sax:
                 continue
             n_phases, n_slices = min(v.shape[0] for v, _, _ in sax), len(sax)
-            case_slices = np.array([[Preprocess.fit_square(EfLane._zscore(vol[p]), size, 0.0) for p in range(n_phases)]
+            case_slices = np.array([[Preprocess.fit_square(EfLane.zscore(vol[p]), size, 0.0) for p in range(n_phases)]
                             for vol, _, _ in sax])                      # [n_slices,n_phases,H,W]
             # Kept on CPU (host RAM): the pool is large and each cine is touched rarely (k sampled/
             # epoch). Residing it in VRAM hoards ~tens of GB and thrashes the card — the big rarely-hit
@@ -178,6 +178,6 @@ class KaggleEF:
             es_stacks.append(cine[:, int(phase_volumes.argmin())])
             slice_counts.append(n_slices); target_efs.append(self.ef[i])
         slice_counts = torch.tensor(slice_counts, device=self.device)
-        ed = EfLane._cav_volume(model, torch.cat(ed_stacks), slice_counts, self.lv, amp=amp)  # [K] ED cavity vol (px)
-        es = EfLane._cav_volume(model, torch.cat(es_stacks), slice_counts, self.lv, amp=amp)
+        ed = EfLane.cav_volume(model, torch.cat(ed_stacks), slice_counts, self.lv, amp=amp)  # [K] ED cavity vol (px)
+        es = EfLane.cav_volume(model, torch.cat(es_stacks), slice_counts, self.lv, amp=amp)
         return EfLane.ef_ratio_loss(ed, es, target_efs, delta)                  # spacing-cancelling EF Huber

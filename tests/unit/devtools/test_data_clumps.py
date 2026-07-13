@@ -1,6 +1,5 @@
 """Unit tests for the data-clump detector (bd cardiac-seg-o07n): a param SET carried whole by enough
 functions surfaces as a clump; subsets are suppressed by the maximal filter; thin support is ignored."""
-import ast
 import textwrap
 
 from devtools.data_clumps import _candidates, _functions, clumps

@@ -1,4 +1,6 @@
 """Tracking is optional + guarded — disabled -> no-op handle that never raises; config flattens."""
+from typing import ClassVar
+
 import cardioseg.tracking as trk
 from cardioseg.tracking import Tracker, _Live, _Noop
 
@@ -116,7 +118,7 @@ def test_live_methods_swallow_backend_errors(tmp_path):
 class _LogModelMlflow:
     """Fake with the log_model surface: mlflow.pytorch.log_model + a client returning versions."""
     class pytorch:
-        logged = []
+        logged: ClassVar[list] = []
         @classmethod
         def log_model(cls, model, name=None, registered_model_name=None):
             cls.logged.append((model, registered_model_name))

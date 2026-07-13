@@ -44,10 +44,14 @@ class Recipe(BaseModel):
 
 
 class DataCfg(BaseModel):
-    """The data + the LEGACY criteria split. Prefer a coded split family (`split`, core.data.ingest.splits).
-    Legacy path: load `sources`; TEST = live criteria (`test_datasets`/`test_vendors`); train/val =
-    the labelled rest. Serialized to config.json (the run self-documents its split). Prefer a coded
-    split family (`split` field, core.data.ingest.splits); these criteria defaults = the generalization
+    """The data + the CRITERIA split (the ad-hoc, parametric partition). Two split modes coexist by
+    design (bd cardiac-seg-z1uj): a coded split family (`split`, core.data.ingest.splits) is the FROZEN,
+    lock-hashed, reproducible partition — prefer it for headline runs; the criteria path here is the
+    FLEXIBLE one — TEST = live criteria (`test_datasets`/`test_vendors`), train/val = the labelled rest,
+    with `train_vendors`/`val_*` knobs for ad-hoc holdouts (e.g. the single-vendor-train regime, bd 5r7n,
+    or `--set test_vendors=('GE',)`) that no frozen coded split expresses. It is NOT deprecated — retiring
+    it would need those parametric knobs ported into a coded split family first (bd cardiac-seg follow-up).
+    Serialized to config.json (the run self-documents its split); the criteria defaults = the generalization
     split (ACDC centre-shift VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE
     sources: tuple[str, ...] = KNOWN_DATASETS
@@ -170,7 +174,7 @@ class MetaBuilder:
         self.name, self.adapter = name, adapter
 
     @staticmethod
-    def _region_of(country):
+    def region_of(country):
         return _REGION.get(country) if country else None
 
     @staticmethod
@@ -192,7 +196,7 @@ class MetaBuilder:
                 else "60-75" if a < _AGE_75 else "75+")
 
     @staticmethod
-    def _norm_vendor(v):
+    def norm_vendor(v):
         if not v:
             return None
         s = str(v).upper()
@@ -214,14 +218,14 @@ class MetaBuilder:
         f = meta.get("field_T")
         return {
             "subject_id": case.name, "dataset": self.name, "file": file, "raw_path": str(case),
-            "vendor": self._norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
+            "vendor": self.norm_vendor(meta.get("vendor")), "scanner": meta.get("scanner"),
             "pathology": Pathology.harmonize(meta.get("group")), "pathology_raw": meta.get("group"),
             "field_T": "/".join(map(str, f)) if isinstance(f, list) else f,
             # real per-image ACQUISITION — only DICOM carries these (TR/TE/flip); NIfTI datasets stripped the
             # headers so they stay null. The ground truth our synth/normalization thread otherwise *derives*.
             "tr_ms": meta.get("tr_ms"), "te_ms": meta.get("te_ms"), "flip_deg": meta.get("flip_deg"),
             "centre": meta.get("centre"), "country": meta.get("country"),
-            "region": self._region_of(meta.get("country")), "institution": meta.get("institution"),
+            "region": self.region_of(meta.get("country")), "institution": meta.get("institution"),
             "age": meta.get("age"), "age_band": self._age_band(meta.get("age")),
             "sex": meta.get("sex"), "height": meta.get("height"), "weight": meta.get("weight"),
             "bsa": self._bsa(meta.get("height"), meta.get("weight")),

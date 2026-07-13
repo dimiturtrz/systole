@@ -410,14 +410,8 @@ class Anatomy:
         cb.add_argument("--mesh-dir", required=True, help="dir of Rodero .vtk meshes")
         cb.add_argument("--workers", type=int, default=0)
 
-    @staticmethod
-    def run(args):  # pragma: no cover
-        _CMDS[args.cmd](args)
-
-
-_CMDS = {
-    "view": Anatomy._cmd_view,
-    "build-pool": Anatomy._cmd_build_pool,
-    "build-pathology-pool": Anatomy._cmd_build_pathology_pool,
-    "convert-binary": Anatomy._cmd_convert_binary,
-}
+    @classmethod
+    def run(cls, args):  # pragma: no cover
+        {"view": cls._cmd_view, "build-pool": cls._cmd_build_pool,
+         "build-pathology-pool": cls._cmd_build_pathology_pool,
+         "convert-binary": cls._cmd_convert_binary}[args.cmd](args)

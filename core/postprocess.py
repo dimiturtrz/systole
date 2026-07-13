@@ -29,7 +29,7 @@ class Postprocess:
         return lab == int(sizes.argmax())
 
     @staticmethod
-    def _gpu_cc():
+    def gpu_cc():
         """cucim GPU connected-components (the linux GPU lane) if importable, else None -> scipy CPU.
         Detected once at import — a single capability gate, no per-call branching beyond the dispatch."""
         try:
@@ -73,4 +73,4 @@ class Postprocess:
         return out
 
 
-_CUCIM_LABEL = Postprocess._gpu_cc()
+_CUCIM_LABEL = Postprocess.gpu_cc()

@@ -1,5 +1,7 @@
 """Synth fidelity eval (core.data.analysis.synth_fidelity). The testable cores are wasserstein1d —
 the per-class synth-vs-real distance metric — and dprime, the separability (distinguishability) metric."""
+import math
+
 import torch
 
 from core.data.analysis.synth_fidelity import SynthFidelity
@@ -18,7 +20,7 @@ def test_w1_recovers_shift():
 
 def test_w1_empty_is_nan():
     v = SynthFidelity.wasserstein1d(torch.tensor([]), torch.randn(10))
-    assert v != v                                       # NaN (absent class)
+    assert math.isnan(v)                                # NaN (absent class)
 
 
 def test_dprime_separated_vs_overlapping():
@@ -38,4 +40,4 @@ def test_dprime_affine_invariant():
 
 def test_dprime_tiny_sample_is_nan():
     v = SynthFidelity.dprime(torch.randn(10), torch.randn(3000))              # < 50 pts -> unstable -> NaN
-    assert v != v
+    assert math.isnan(v)

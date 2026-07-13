@@ -98,6 +98,7 @@ select = [
     "PERF401", "PLW0108", "E731",  # list.extend / no-wrapper-lambda / def-not-lambda-assignment
     "E402", "ICN001",  # imports at top (module-level alias assignments relocated below) / matplotlib-as-mpl
     "S603", "S607", "PTH123",  # subprocess review (trusted internal calls carry a bare noqa) / Path.open
+    "SLF001",   # private-member-access — cross-class `_x` reach; promote to the owner's public API (or cls)
 ]
 # N* REVERSED ON (was OFF): pep8-naming gates CASE only, not length — so the ML idioms (design matrices
 # X/Y, tensor dims, MRI-physics relaxation names) are preserved via [tool.ruff.lint.pep8-naming]
@@ -129,7 +130,11 @@ ignore-names = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
-"**/tests/**" = ["PLR2004", "FBT"]    # literal fixtures + bool test flags are fine in tests
+# tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); privates-under-test are
+# the point of a unit test (SLF001); mock classes mirror external PascalCase APIs — SimpleITK, mlflow.
+# pytorch (N801/N802); test-local math scratch + module aliases (N806/N803/N812); fixtures take many
+# params (PLR0913). The SUBSTANTIVE gates (imports-at-top, real bugs, dead code) still apply to tests.
+"**/tests/**" = ["PLR2004", "FBT", "SLF001", "N801", "N802", "N806", "N803", "N812", "PLR0913"]
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
 
 # Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg ONLY

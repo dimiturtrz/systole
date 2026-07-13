@@ -86,6 +86,22 @@ def test_single_method_class_has_no_shared_state():
     """)) == {}
 
 
+def test_constant_defaulted_param_excluded(tmp_path):
+    """A param defaulted to a module constant/literal is a KNOB, not session state (bd w9p0) — excluded
+    from the shared count, so only the genuinely-threaded param (mask) survives (mirrors Postprocess:
+    labels=FOREGROUND drops out, mask stays)."""
+    shared = shared_state(_cls("""
+        class Postprocess:
+            @staticmethod
+            def a(mask, labels=FOREGROUND): ...
+            @staticmethod
+            def b(mask, labels=FOREGROUND): ...
+            @staticmethod
+            def c(size=256): ...
+    """))
+    assert shared == {"mask": 2}                          # labels (const default) + size (literal) excluded
+
+
 def test_analyze_scores_and_names_the_class(tmp_path):
     """analyze returns (score, class, n_methods, shared) for a candidate in a real file."""
     f = tmp_path / "m.py"

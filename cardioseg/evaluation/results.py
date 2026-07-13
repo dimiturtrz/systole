@@ -70,7 +70,7 @@ class Results:
     @staticmethod
     def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
         rows = Distribution.collect(run, device, df.iter_rows(named=True))
-        dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+        dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
         out = Results.axis_dict(len(rows), dists, dice_acc, Measure.ef_statistics(ef_gt, ef_pred))
         if with_strata:
             out["strata"] = Distribution.strata_table(rows, "pathology")
@@ -114,7 +114,7 @@ class Results:
         # log the CANONICAL per-axis numbers into the model's registry run (resolve ref -> run-id)
         try:
             mlflow.set_tracking_uri(_DB_URI)
-            with mlflow.start_run(run_id=Registry._run_id_for(args.run)):
+            with mlflow.start_run(run_id=Registry.run_id_for(args.run)):
                 for ax, v in f.items():
                     mlflow.log_metric(f"{ax}_dice_mean", v["dice"]["mean"])
                     mlflow.log_metric(f"{ax}_ef_mae", v["ef_mae"])

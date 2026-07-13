@@ -5,12 +5,11 @@ import numpy as np
 import pytest
 
 sitk = pytest.importorskip("SimpleITK")
-from core.data.static.mri.dicom import Dicom
+from core.data.static.mri.dicom import Dicom  # noqa: E402
 
 
 def _write_series(dirpath, vol, spacing_xyz, vendor="Siemens"):
     """Write a [D,H,W] int16 volume as a DICOM series with z-spacing carried by slice positions."""
-    import SimpleITK as sitk
     d, sx, sy, sz = vol.shape[0], *spacing_xyz
     series_uid = "1.2.826.0.1.3680043.2.1125.1.111111111111"
     w = sitk.ImageFileWriter(); w.KeepOriginalImageUIDOn()

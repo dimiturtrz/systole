@@ -4,7 +4,8 @@ targets accepted.
 """
 import torch
 
-from core.losses import PartialLabelDiceCE
+from core.data.static.labels import Labels
+from core.losses import Losses, PartialLabelDiceCE
 
 FULL = torch.tensor([[True, True, True, True]])       # all classes valid
 SCD = torch.tensor([[False, False, True, True]])      # LV-only: bg + RV untrustworthy
@@ -41,7 +42,6 @@ def test_soft_target_accepted():
 
 
 def test_valid_row_registry():
-    from core.data.static.labels import Labels
     assert Labels.valid_row("scd") == [False, False, True, True]      # LV-only: bg + RV untrusted
     assert Labels.valid_row("acdc") == [True, True, True, True]       # full-label
 
@@ -56,7 +56,6 @@ def test_per_sample_mask_mixes_full_and_partial():
 
 
 def test_uncertainty_weighted_matches_kendall_formula():
-    from core.losses import Losses
     L1, L2 = torch.tensor(2.0), torch.tensor(4.0)
     s1, s2 = torch.tensor(0.5), torch.tensor(-0.3)
     got = Losses.uncertainty_weighted([L1, L2], [s1, s2])

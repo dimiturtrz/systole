@@ -64,7 +64,7 @@ class ShapeCoverage:
         return np.stack(rows) if rows else np.zeros((0, 7))
 
     @staticmethod
-    def _real_masks(acdc_dir: str) -> list[np.ndarray]:
+    def real_masks(acdc_dir: str) -> list[np.ndarray]:
         out = []
         for npz_path in sorted(Path(acdc_dir).glob("*.npz")):
             data = np.load(npz_path)
@@ -103,7 +103,7 @@ class ShapeCoverage:
 
     @staticmethod
     def run(args):  # pragma: no cover
-        real = ShapeCoverage._feats_from_masks(ShapeCoverage._real_masks(args.real))
+        real = ShapeCoverage._feats_from_masks(ShapeCoverage.real_masks(args.real))
         synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
         log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))
         # 2D PCA (SVD) fit on the union, standardized by real, for the scatter

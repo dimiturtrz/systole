@@ -1,8 +1,12 @@
 """TestSet — coded frozen eval targets. Locks the source resolution + the content-hash drift guard."""
+import argparse
+import logging
+
 import polars as pl
 import pytest
 
-from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, TestSet
+from core.data.ingest import testsets as T
+from core.data.ingest.testsets import MATRIX_TESTSETS, TESTSETS, TestSet, TestSets
 
 V = pl.col
 
@@ -36,3 +40,28 @@ def test_lock_guard_passes_when_hash_matches():
 def test_registry_and_battery_populated():
     assert {"canon", "ge", "scd_lv", "static_main_test", "synth_main_test"} <= set(TESTSETS)
     assert all(ts.lock.startswith("sha256:") for ts in MATRIX_TESTSETS)   # all frozen
+
+
+# --- TestSets.run: --freeze writes the lockfile; --check passes on match, exits 1 on drift ---
+
+def test_run_freeze_writes_lockfile(tmp_path, monkeypatch):
+    monkeypatch.setattr(T.store, "load", lambda sources: _cloud())
+    lockfile = tmp_path / "locks.json"
+    monkeypatch.setattr(T, "_LOCKFILE", lockfile)
+    TestSets.run(argparse.Namespace(freeze=True))
+    assert lockfile.exists() and "canon" in lockfile.read_text()
+
+
+def test_run_check_ok_when_locks_match(monkeypatch, caplog):
+    monkeypatch.setattr(T.store, "load", lambda sources: _cloud())
+    monkeypatch.setattr(T, "_LOCKS", TestSets.compute_locks(_cloud()))   # lockfile == store
+    with caplog.at_level(logging.INFO):
+        TestSets.run(argparse.Namespace(freeze=False))
+    assert any("locks match" in r.getMessage() for r in caplog.records)
+
+
+def test_run_check_raises_on_drift(monkeypatch):
+    monkeypatch.setattr(T.store, "load", lambda sources: _cloud())
+    monkeypatch.setattr(T, "_LOCKS", {})                                 # empty lockfile -> everything drifts
+    with pytest.raises(SystemExit):
+        TestSets.run(argparse.Namespace(freeze=False))

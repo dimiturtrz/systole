@@ -99,7 +99,7 @@ class _ThreshModel:
         return self
 
     def __call__(self, x):
-        import torch
+        import torch  # noqa: PLC0415
         b, _, h, w = x.shape
         logits = torch.zeros(b, 4, h, w)
         bright = (x[:, 0] > 0.5).float()

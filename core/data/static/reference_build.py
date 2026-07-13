@@ -234,15 +234,13 @@ class ReferenceBuild:
                         help="emit <data>/reference/acquisition.yaml (machine dimension from committed paper priors)")
         ap.add_argument("--sources", nargs="*", default=None)
 
-    @staticmethod
-    def run(args):
-        handler = next((h for flag, h in _MODES.items() if getattr(args, flag)), None)
+    @classmethod
+    def run(cls, args):
+        # flag -> handler; add a mode by adding a row, not an elif
+        modes = {"acquisition": cls._mode_acquisition, "build": cls._mode_build,
+                 "real_levels": cls._mode_real_levels}
+        handler = next((h for flag, h in modes.items() if getattr(args, flag)), None)
         if handler is None:
             log.info("no mode selected — pass --build / --real-levels / --acquisition")
         else:
             handler(args)
-
-
-# flag -> handler; add a mode by adding a row, not an elif
-_MODES = {"acquisition": ReferenceBuild._mode_acquisition, "build": ReferenceBuild._mode_build,
-          "real_levels": ReferenceBuild._mode_real_levels}

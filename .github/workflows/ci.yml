@@ -29,7 +29,7 @@ jobs:
       # Ratchet: add each in-progress family's code to --select as it reaches zero.
       # Remaining advisory (not yet 0 on the enforced path): E501 (bd cardiac-seg-i851). bd cardiac-seg-l79o.
       - name: Lint — enforced (shipped code, clean rules)
-        run: uvx ruff@0.15.13 check core cardioseg cardioview --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415,FBT,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM105,SIM108,SIM300,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123
+        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,I,B,S110,BLE001,C901,PLR0912,PLR0913,PLR0915,T201,PLR2004,PLC0415,FBT,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM105,SIM108,SIM300,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,SLF001
       # ADVISORY (never blocks): full curated config over the whole tree — surfaces the families still
       # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
       - name: Lint — advisory full (non-blocking)
@@ -61,13 +61,13 @@ jobs:
       - name: "Module shape — enforced (ast-grep: in-a-class + no import-time side effects)"
         run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core cardioseg
       # Duplication — the DRY axis (bd cardiac-seg-tte0), which the coupling tools (import-linter/graph)
-      # can't see. jscpd over python + TS; threshold in .jscpd.json (repo is ~0.23%/0% today, so this is a
-      # REGRESSION GUARD). ADVISORY while the Node step proves stable; graduate to blocking after.
+      # can't see. jscpd over python + TS; threshold in .jscpd.json (repo ~0.5% today vs the 1% ceiling —
+      # a REGRESSION GUARD). ENFORCED (bd cardiac-seg-krmz): graduated from advisory once the Node step
+      # proved stable; jscpd exits non-zero past threshold, so it now blocks the merge.
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Duplication — advisory (jscpd, DRY axis)
-        continue-on-error: true
+      - name: Duplication — enforced (jscpd, DRY axis)
         run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
 
   tests:
@@ -97,12 +97,14 @@ jobs:
       # shells are pragma'd, so the % reflects the pure plottable-data logic. bd cardiac-seg-3vbc.
       - name: cardioview tests + coverage (logic, advisory)
         run: PYTHONPATH=. COVERAGE_FILE=.coverage.cardioview uv run pytest tests/cardioview --cov=cardioview --cov-report=term-missing -q
-      # Coverage RED tier (mirrors vulture conf80): below 80% fails the merge. Reads the .coverage from
-      # the run above. bd cardiac-seg-emko — reaching 80 honestly is tracked in 7bbq.
-      - name: Coverage floor — enforced (>=80, blocks)
-        run: uv run coverage report --fail-under=80
-      # Coverage YELLOW tier (mirrors vulture conf60): 80–95 warns, never blocks. `always()` so the
-      # target signal shows even when the floor failed; `continue-on-error` keeps it non-blocking.
+      # Coverage RED tier: below the floor fails the merge. Reads the .coverage from the run above.
+      # RATCHETED 80 -> 90 (bd cardiac-seg-xf8r): the repo now sits at ~95%, so the floor moves up to
+      # lock the gain with a ~5pt margin. bd cardiac-seg-emko.
+      - name: Coverage floor — enforced (>=90, blocks)
+        run: uv run coverage report --fail-under=90
+      # Coverage YELLOW tier: the 95% target. Now MET (~95.2%) but kept advisory — at <1pt margin a hard
+      # 95 gate would be brittle on an actively-developed repo; the enforced floor (90) protects the gain.
+      # `always()` so the target signal shows even when the floor failed; `continue-on-error` non-blocking.
       - name: Coverage target — advisory (>=95, warns)
         if: always()
         continue-on-error: true

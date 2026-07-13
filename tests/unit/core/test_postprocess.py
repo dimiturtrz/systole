@@ -1,7 +1,9 @@
 """Unit tests for largest-CC post-processing — equivalence classes of the input mask."""
 import numpy as np
 import pytest
+from scipy.ndimage import label as cpu_label
 
+from core.data.static.labels import FOREGROUND
 from core.postprocess import _CUCIM_LABEL, Postprocess
 
 
@@ -49,9 +51,6 @@ def test_empty_mask_returns_empty():
 def test_gpu_cucim_matches_cpu_parity():
     """Linux GPU lane: the cucim largest-CC must give bit-identical output to the scipy CPU path.
     Skipped where cucim is absent (Windows); the scipy path is covered by the tests above."""
-    from scipy.ndimage import label as cpu_label
-
-    from core.data.static.labels import FOREGROUND
     rng = np.random.default_rng(0)
     m = np.zeros((6, 64, 64), np.uint8)
     m[:, 16:48, 16:48] = 1; m[:, 24:40, 24:40] = 2; m[:, 28:36, 28:36] = 3

@@ -30,7 +30,7 @@ class AcdcAdapter(DatasetAdapter):
         self.root = root                                     # data root override (default DATA_ROOT)
 
     @staticmethod
-    def _parse_info_cfg(patient_dir: str | Path) -> dict[str, str]:
+    def parse_info_cfg(patient_dir: str | Path) -> dict[str, str]:
         """ACDC Info.cfg -> dict (ED, ES frame numbers; Group = pathology; Height; Weight; etc.)."""
         cfg: dict[str, str] = {}
         p = Path(patient_dir) / "Info.cfg"
@@ -66,7 +66,7 @@ class AcdcAdapter(DatasetAdapter):
         """Load ED + ES frames + masks for one patient (labels already canonical). img/gt [D,H,W],
         spacing (z,y,x) mm. Frame indices come from Info.cfg."""
         patient_dir = Path(case)
-        cfg = self._parse_info_cfg(patient_dir)
+        cfg = self.parse_info_cfg(patient_dir)
 
         def resolve(tag):
             fno = cfg.get(tag)
@@ -76,7 +76,7 @@ class AcdcAdapter(DatasetAdapter):
 
     def meta(self, case: Path) -> dict:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
-        cfg = self._parse_info_cfg(case)
+        cfg = self.parse_info_cfg(case)
         return {
             "group": cfg.get("Group"),
             "height": Base.to_float(cfg.get("Height")), "weight": Base.to_float(cfg.get("Weight")),

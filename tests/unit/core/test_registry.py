@@ -25,7 +25,7 @@ def test_client_builds_from_mlflow(monkeypatch):
     """_client class: constructs an MlflowClient off the (URI-set) mlflow module."""
     sentinel = object()
     fake_tracking = type("T", (), {"MlflowClient": staticmethod(lambda: sentinel)})()
-    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: type("M", (), {"tracking": fake_tracking})())
+    monkeypatch.setattr(reg.Registry, "_mlflow", type("M", (), {"tracking": fake_tracking}))
     assert Registry._client() is sentinel
 
 
@@ -57,19 +57,19 @@ class _FakeClient:
 def test_run_id_for_alias(monkeypatch):
     """_run_id_for class: a known alias resolves via get_model_version_by_alias."""
     monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
-    assert Registry._run_id_for("production") == "RID_PROD"
+    assert Registry.run_id_for("production") == "RID_PROD"
 
 
 def test_run_id_for_version_number(monkeypatch):
     """_run_id_for class: alias miss + digit ref -> get_model_version."""
     monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
-    assert Registry._run_id_for("7") == "RID_V7"
+    assert Registry.run_id_for("7") == "RID_V7"
 
 
 def test_run_id_for_raw_run_id(monkeypatch):
     """_run_id_for boundary: alias miss + non-digit -> assumed to already be a run-id."""
     monkeypatch.setattr(reg.Registry, "_client", _FakeClient)
-    assert Registry._run_id_for("abc123def") == "abc123def"
+    assert Registry.run_id_for("abc123def") == "abc123def"
 
 
 def test_resolve_downloads_and_flattens(monkeypatch, tmp_path):

@@ -82,7 +82,7 @@ class Augmentor:
         self.cfg = cfg or AugCfg()                               # session hyperparams (geometric + intensity)
 
     @staticmethod
-    def _gaussian_kernel(sigma: float) -> torch.Tensor:
+    def gaussian_kernel(sigma: float) -> torch.Tensor:
         """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
         r = max(1, math.ceil(_GAUSSIAN_RADIUS_SIGMAS * sigma))
         xs = torch.arange(-r, r + 1, dtype=torch.float32)
@@ -102,7 +102,7 @@ class Augmentor:
         oh = F.one_hot(mask.long(), n_classes).permute(0, 3, 1, 2).float()   # [B, C, H, W]
         if not sigma or sigma <= 0:
             return oh
-        k = Augmentor._gaussian_kernel(sigma).to(oh.device, oh.dtype)
+        k = Augmentor.gaussian_kernel(sigma).to(oh.device, oh.dtype)
         pad = k.shape[-1] // 2
         kk = k.view(1, 1, *k.shape).expand(n_classes, 1, *k.shape)
         oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)

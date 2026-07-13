@@ -90,7 +90,7 @@ class Distribution:
         return rows
 
     @staticmethod
-    def _pooled(rows):
+    def pooled(rows):
         """Pooled dists/dice/ef arrays from per-case rows (for the total plots)."""
         dists = {c: [r["sd"][c] for r in rows if "sd" in r] for c in CLASSES}
         dice_acc = {c: [r["dice"][c] for r in rows if "dice" in r] for c in CLASSES}
@@ -271,7 +271,7 @@ class Distribution:
                         n_excl, len(df), args.eval)
         label = f" ({args.eval}{', held-out' if args.holdout else ''}, n={len(kept)})"
         rows = Distribution.collect(run, device, kept)
-        dists, dice_acc, ef_gt, ef_pred = Distribution._pooled(rows)
+        dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
 
         out = run / "plots"
         out.mkdir(parents=True, exist_ok=True)

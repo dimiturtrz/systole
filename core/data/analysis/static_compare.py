@@ -83,7 +83,7 @@ class StaticCompare:
 
     @staticmethod
     def run(args):  # pragma: no cover
-        results = StaticCompare.compare(ShapeCoverage._real_masks(args.real), Anatomy.load_pool(args.pool))
+        results = StaticCompare.compare(ShapeCoverage.real_masks(args.real), Anatomy.load_pool(args.pool))
         log.info(json.dumps(results, indent=2))
         worst = max(results, key=lambda metric: results[metric]["w1"])
         log.info(f"# worst-matched geometry metric: {worst} (W1={results[worst]['w1']})")
