@@ -281,9 +281,10 @@ class SeedTrainer:
         self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
         split_tag = Train.split_tag_of(self.d)
-        self.trk = Tracker("cardioseg", self.out.name,
-                           params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
-                           tags={"split": split_tag, "seed": seed}).track_run(run_dir=self.out)
+        tracker = Tracker("cardioseg", self.out.name,
+                          params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
+                          tags={"split": split_tag, "seed": seed})
+        self.trk = tracker.track_run(run_dir=self.out)
         self.log_sig = None
         if cfg.ef_learn and self.aux:
             self.log_sig = torch.zeros(1 + len(self.aux), device=self.device, requires_grad=True)

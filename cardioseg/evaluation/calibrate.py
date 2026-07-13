@@ -98,7 +98,8 @@ class Calibrate:
         (run / "plots" / "calibration.json").write_text(json.dumps(report, indent=2))
         log.info(f"-> {run}/plots/calibration.json")
 
-        trk = Tracker("cardioseg", run.name).track_run(run_dir=run)      # resume the train run
+        tracker = Tracker("cardioseg", run.name)
+        trk = tracker.track_run(run_dir=run)      # resume the train run
         trk.metric("temp_T", T)
         for name, ax in report["axes"].items():
             trk.metric(f"{name}_ece_uncal", ax["ece_uncal"]); trk.metric(f"{name}_ece_temp", ax["ece_temp"])

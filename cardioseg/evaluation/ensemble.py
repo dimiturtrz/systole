@@ -136,8 +136,9 @@ class Ensemble:
         loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
         models = [m for m, _, _ in loaded]
         cfg = loaded[0][1]
-        trk = Tracker("cardioseg", f"ensemble-{len(models)}seed",
-                    {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)}).start()
+        tracker = Tracker("cardioseg", f"ensemble-{len(models)}seed",
+                    {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+        trk = tracker.start()
         for ax in args.eval:
             df = Ensemble._eval_df(cfg, ax)
             if not len(df):

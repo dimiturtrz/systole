@@ -200,7 +200,8 @@ class Uncertainty:
                  f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
         log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
-        trk = Tracker("cardioseg", run.name).track_run(run_dir=run)      # resume the train run
+        tracker = Tracker("cardioseg", run.name)
+        trk = tracker.track_run(run_dir=run)      # resume the train run
         ev = args.eval
         trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
         trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)

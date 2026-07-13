@@ -126,14 +126,14 @@ class Distribution:
     def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover  (matplotlib scatter + marginal-KDE render + savefig)
         """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
         upright on top; bias + 95% LoA as vertical lines (and in the title)."""
-        g = np.asarray(ef_gt, dtype=float)
-        p = np.asarray(ef_pred, dtype=float)
-        s = Measure.ef_statistics(g, p)
-        bias, (lo, hi) = s["bias"], s["loa"]
-        raw_diff = p - g
+        gt = np.asarray(ef_gt, dtype=float)
+        pred = np.asarray(ef_pred, dtype=float)
+        stats = Measure.ef_statistics(gt, pred)
+        bias, (lo, hi) = stats["bias"], stats["loa"]
+        raw_diff = pred - gt
         ok = ~np.isnan(raw_diff)
         n_collapsed = int((~ok).sum())
-        diff, mean = raw_diff[ok], ((g + p) / 2)[ok]
+        diff, mean = raw_diff[ok], ((gt + pred) / 2)[ok]
 
         fig = plt.figure(figsize=(7, 5))
         gs = fig.add_gridspec(2, 1, height_ratios=(1, 3), hspace=0.05)
@@ -175,7 +175,7 @@ class Distribution:
         fig.subplots_adjust(left=0.1, right=0.97, top=0.86, bottom=0.11)  # tight_layout breaks shared marginal
         fig.savefig(out, dpi=110)
         plt.close(fig)
-        return s
+        return stats
 
     @staticmethod
     def _groups(rows, key):
