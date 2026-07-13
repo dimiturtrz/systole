@@ -8,6 +8,8 @@ synth_main (ACDC val held out; SYNTH_MAIN_TEST locked). (bd cumw/uch6)
 """
 from __future__ import annotations
 
+from typing import ClassVar
+
 import polars as pl
 
 from core.data.dynamic.source import CompositeSource, DynamicSource
@@ -41,7 +43,7 @@ class SynthComposite:
     def _synth_source(pool: str, note: str) -> DynamicSource:
         return DynamicSource(pool=SynthMain._pool(pool), bg=ProceduralBgCfg(), note=note, cap=_CAP)
 
-    versions = {
+    versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
             train=lambda c: CompositeSource(
                 [SynthComposite._synth_source(_SSM, "Rodero SSM (healthy manifold)"),

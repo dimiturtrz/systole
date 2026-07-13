@@ -8,6 +8,8 @@ in training lifts held-vendor generalization without hurting RV.
 """
 from __future__ import annotations
 
+from typing import ClassVar
+
 import polars as pl
 
 from core.data.ingest.source import StaticSource
@@ -20,7 +22,7 @@ V = pl.col
 class StaticAll:
     name = "static_all"
     sources = ("acdc", "mnm2", "mnms1", "cmrxmotion", "scd")     # load SCD too (not in the default seg cloud)
-    versions = {
+    versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
             test=lambda c: STATIC_MAIN_TEST.source(c),           # == static_main's frozen test (147)
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),

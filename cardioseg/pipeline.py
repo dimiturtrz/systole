@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 from cardioseg.evaluation.results import Results
 from cardioseg.training.train import Train
@@ -138,8 +139,8 @@ class Pipeline:
     """The DAG runner: resolve a target to its transitive-dependency plan, then run each stage whose
     artifact is missing. Command-agnostic — no per-stage branching, the stages ARE the strategy."""
 
-    _STAGES: dict[str, Stage] = {s.name: s for s in
-                                 (DataStage(), AnalysisStage(), TrainStage(), EvaluateStage(), ExportStage())}
+    _STAGES: ClassVar[dict[str, Stage]] = {s.name: s for s in
+                                           (DataStage(), AnalysisStage(), TrainStage(), EvaluateStage(), ExportStage())}
 
     @staticmethod
     def plan(targets: list[str]) -> list[str]:

@@ -115,7 +115,7 @@ class Mrxcat:
         if ys.size == 0:
             return None
         crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-        f = target_px / max(max(crop.shape), 1)
+        f = target_px / max(*crop.shape, 1)
         if abs(f - 1.0) > _ZOOM_NOOP_EPS:
             crop = _zoom(crop, f, order=0)
         return Preprocess.fit_square(crop, size, 0).astype(np.uint8)

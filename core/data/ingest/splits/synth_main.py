@@ -10,6 +10,7 @@ test_lock pins the real test set by content hash (labelled real minus the ACDC v
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import polars as pl
 
@@ -42,7 +43,7 @@ class SynthMain:
         Rodero SSM anatomy lives beside the MRI root, not under it). No machine path in code."""
         return str(Path(Config.data_root("meshes")) / "processed" / "rodero_anatomy" / f"{name}.npz")
 
-    versions = {
+    versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
             train=lambda c: DynamicSource(pool=SynthMain._pool(POOL), bg=ProceduralBgCfg(),
                                           note=f"Rodero {POOL}, zero-real procedural bg"),
