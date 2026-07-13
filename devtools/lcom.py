@@ -28,7 +28,7 @@ from pathlib import Path
 
 from core.obs import Obs
 
-log = logging.getLogger("devtools.lcom")
+log = logging.getLogger("cardioseg.devtools.lcom")
 
 _SKIP = {"__init__", "__new__", "__post_init__"}
 _MIN_METHODS = 2          # LCOM is undefined for < 2 methods

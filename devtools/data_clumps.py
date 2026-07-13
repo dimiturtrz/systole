@@ -21,7 +21,7 @@ from pathlib import Path
 
 from core.obs import Obs
 
-log = logging.getLogger("devtools.data_clumps")
+log = logging.getLogger("cardioseg.devtools.data_clumps")
 
 _SELF = {"self", "cls"}
 _MIN_SUPPORT = 4          # a param SET must be carried whole by >= this many functions to count

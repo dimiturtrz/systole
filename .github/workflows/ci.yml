@@ -115,3 +115,16 @@ jobs:
       # env (grimp/networkx). bd cardiac-seg-g0b2.
       - name: Architecture fitness — enforced (devtools/graph.py --assert)
         run: uv run python -m devtools.graph --assert
+      # Class-shape smells — advisory (devtools AST detectors, bd cardiac-seg-h7vy.4 / xj5d). The three
+      # smells the promotions targeted: state_candidates (namespace-class with latent shared state ->
+      # __init__), data_clumps (params travelling together -> Introduce Parameter Object), lcom (LCOM4
+      # disjoint-state class -> split). ADVISORY, never blocking — each has a legitimately non-zero floor:
+      # state_candidates/data_clumps top out on the pure functional core (Evaluate/Measure) + swept-gen
+      # data, and lcom's interface/ABC/stub exclusions are heuristic on a strategy-pattern codebase. So
+      # they're a regression radar (a NEW smell shows in the log), not a gate.
+      - name: Class-shape smells — advisory (namespace / data-clump / LCOM)
+        continue-on-error: true
+        run: |
+          uv run python -m devtools.state_candidates
+          uv run python -m devtools.data_clumps
+          uv run python -m devtools.lcom

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from core.obs import Obs
 
-log = logging.getLogger("devtools.state_candidates")
+log = logging.getLogger("cardioseg.devtools.state_candidates")
 
 _SELF = {"self", "cls"}
 _MIN_METHODS = 2
