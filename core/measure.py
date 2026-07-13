@@ -27,13 +27,14 @@ class Measure:
 
     @staticmethod
     @shapecheck
-    def label_volume_ml(mask: Integer[np.ndarray, "d h w"], label: int, spacing: Spacing) -> float:
-        """Volume (mL) of one label = voxel count x voxel volume (the Riemann sum)."""
+    def label_volume_ml(mask: Integer[np.ndarray, "..."], label: int, spacing: Spacing) -> float:
+        """Volume (mL) of one label = voxel count x voxel volume (the Riemann sum). Shape-agnostic (a
+        count works on 2D/3D/batched alike); only the dtype (integer label map) is the contract."""
         return int(np.sum(mask == label)) * Measure.voxel_volume_ml(spacing)
 
     @staticmethod
     @shapecheck
-    def expected_volume_ml(prob: Float[np.ndarray, "d h w"], spacing: Spacing) -> float:
+    def expected_volume_ml(prob: Float[np.ndarray, "..."], spacing: Spacing) -> float:
         """EXPECTED volume (mL) from a per-voxel probability map [D,H,W] of one class = Σ prob × voxel
         volume — the 'collapse-never' soft readout. A boundary voxel at p=0.6 contributes 0.6 of a voxel
         instead of 0 or 1, so sub-voxel boundary mass survives into the volume (only meaningful for a
@@ -63,7 +64,7 @@ class Measure:
     @staticmethod
     @shapecheck
     def ejection_fraction(
-        ed_mask: Integer[np.ndarray, "d h w"], es_mask: Integer[np.ndarray, "d h w"],
+        ed_mask: Integer[np.ndarray, "*grid"], es_mask: Integer[np.ndarray, "*grid"],
         spacing: Spacing, lv_label: int = LV_CAV,
     ) -> tuple[float, float, float]:
         """EF = (EDV - ESV) / EDV in percent, from LV blood-pool volumes (mL).
