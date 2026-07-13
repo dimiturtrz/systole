@@ -87,65 +87,75 @@ class Splits:
         """The npz paths for a split (what the torch dataset consumes)."""
         return df.get_column("path").to_list()
 
-    @staticmethod
-    def model_val(d, meta: pl.DataFrame) -> pl.DataFrame:
-        """The val subject frame a model (DataCfg `d`) held out — a coded split's resolved val when
-        `d.split` is set, else the DataCfg-criteria val. Analysis tools that want 'the model's held-out
-        real slices' MUST use this, not raw make_split: make_split reads only the criteria and silently
-        ignores a coded split (today it gives the right val only by the criteria defaults coinciding with
-        the coded splits' val — a trap this removes)."""
-        if d.split:
-            return SplitRegistry.resolve_cfg(d, meta).val.frame
-        return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                 d.val_datasets, d.val_vendors, d.train_vendors)[1]
 
-    @staticmethod
-    def model_test(d, meta: pl.DataFrame) -> pl.DataFrame:
-        """The test subject frame a model (DataCfg `d`) held out — a coded split's frozen test when
-        `d.split` is set, else the DataCfg-criteria test. The test-side counterpart to `model_val`;
-        per-axis (e.g. per-vendor) eval filters this rather than re-deriving the split from a literal."""
-        if d.split:
-            return SplitRegistry.resolve_cfg(d, meta).test.frame
-        return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
-                                 d.val_datasets, d.val_vendors, d.train_vendors)[2]
+class ModelSplit:
+    """The split a trained model's DataCfg induces over a meta frame: construct with `(d, meta)`, then
+    query `.val` / `.test` / `.seen_keys()` / `.train_keys()` / `.split()`. `d` (the run's DataCfg =
+    criteria or a coded split) and `meta` (the store frame this query runs over) are the fixed session;
+    each query derives one partition off them. Analysis/eval tools that want 'the model's held-out real
+    slices' MUST go through this, not raw `Splits.make_split`: make_split reads only the criteria and
+    silently ignores a coded split (a trap this removes)."""
 
-    @staticmethod
-    def seen_keys(d, meta: pl.DataFrame) -> set[str]:
-        """The real subjects a model (DataCfg `d`) actually SAW = train ∪ val, restricted to its own
-        `sources` — the honest basis for an OOD/leak check (a val subject IS seen; early-stopping touched
-        it). Coded split (`d.split`): resolved val ∪ (static) train — a DYNAMIC/synth train contributes no
-        real subjects. Old criteria: labelled ∩ sources − test. ANY tool that scores a model on a set it
-        chose by name (not via the model's split) must exclude these to stay leak-free (bd cardiac-seg-h9bz).
-        The `dataset\\tsubject` key format matches `subject_keys`, so callers can set-difference directly."""
-        in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
-        if d.split:
-            r = SplitRegistry.resolve_cfg(d, in_sources)
+    def __init__(self, d, meta: pl.DataFrame):
+        self.d, self.meta = d, meta
+
+    def _criteria_split(self, meta: pl.DataFrame, seed: int = 0
+                        ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+        """(train, val, test) from the DataCfg's CRITERIA over an arbitrary meta frame (train_keys runs it
+        on a sources-filtered frame, so meta stays a param, not self.meta)."""
+        d = self.d
+        return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
+                                 d.val_datasets, d.val_vendors, d.train_vendors)
+
+    @property
+    def val(self) -> pl.DataFrame:
+        """The held-out val subject frame — the coded split's resolved val when `d.split` is set, else the
+        DataCfg-criteria val."""
+        if self.d.split:
+            return SplitRegistry.resolve_cfg(self.d, self.meta).val.frame
+        return self._criteria_split(self.meta)[1]
+
+    @property
+    def test(self) -> pl.DataFrame:
+        """The frozen test subject frame — the coded split's test when `d.split` is set, else the criteria
+        test. Per-axis (e.g. per-vendor) eval filters this rather than re-deriving from a literal."""
+        if self.d.split:
+            return SplitRegistry.resolve_cfg(self.d, self.meta).test.frame
+        return self._criteria_split(self.meta)[2]
+
+    def split(self, seed: int = 0) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+        """(train, val, test) from the DataCfg's CRITERIA over this model's meta. The LEGACY path — kept so
+        a run without a coded split, and the matrix reconstructing an OLD model's train set from its saved
+        DataCfg, still work. New splits are coded families (core.data.ingest.splits)."""
+        return self._criteria_split(self.meta, seed)
+
+    def seen_keys(self) -> set[str]:
+        """The real subjects the model actually SAW = train ∪ val, restricted to its own `sources` — the
+        honest basis for an OOD/leak check (a val subject IS seen; early-stopping touched it). Coded split:
+        resolved val ∪ (static) train — a DYNAMIC/synth train contributes no real subjects. Old criteria:
+        labelled ∩ sources − test. ANY tool that scores a model on a set it chose by name (not via the
+        model's split) must exclude these to stay leak-free (bd cardiac-seg-h9bz). The `dataset\\tsubject`
+        key format matches `subject_keys`, so callers can set-difference directly."""
+        in_sources = self.meta.filter(pl.col("dataset").is_in(list(self.d.sources)))
+        if self.d.split:
+            r = SplitRegistry.resolve_cfg(self.d, in_sources)
             seen = set(r.val.subjects())                            # val is always a real StaticSource
             if r.train.kind == "static":
                 seen |= set(r.train.subjects())                     # dynamic/synth train = no real subjects
             return {f"{a}\t{b}" for a, b in seen}
-        test = pl.col("dataset").is_in(list(d.test_datasets)) | pl.col("vendor").is_in(list(d.test_vendors))
+        test = (pl.col("dataset").is_in(list(self.d.test_datasets))
+                | pl.col("vendor").is_in(list(self.d.test_vendors)))
         return SubjectIds.subject_keys(in_sources.filter(pl.col("labelled") & ~test))
 
-    @staticmethod
-    def train_keys(d, meta: pl.DataFrame) -> set[str]:
-        """The real subjects a model (DataCfg `d`) actually TRAINED on (gradient) — like `seen_keys` but
-        EXCLUDING val. For tools that may legitimately show the held-out VAL (qualitative overlays, a val-
-        centre distribution) yet must never score on TRAIN: exclude these, keep val. Coded split: the static
-        train subjects (a dynamic/synth train = none). Old criteria: the train partition of split_from_cfg."""
-        in_sources = meta.filter(pl.col("dataset").is_in(list(d.sources)))
-        if d.split:
-            r = SplitRegistry.resolve_cfg(d, in_sources)
+    def train_keys(self) -> set[str]:
+        """The real subjects the model actually TRAINED on (gradient) — like `seen_keys` but EXCLUDING val.
+        For tools that may legitimately show the held-out VAL (qualitative overlays, a val-centre
+        distribution) yet must never score on TRAIN: exclude these, keep val. Coded split: the static train
+        subjects (a dynamic/synth train = none). Old criteria: the train partition of `split`."""
+        in_sources = self.meta.filter(pl.col("dataset").is_in(list(self.d.sources)))
+        if self.d.split:
+            r = SplitRegistry.resolve_cfg(self.d, in_sources)
             if r.train.kind != "static":
                 return set()                                        # dynamic/synth train touches no real subject
             return {f"{a}\t{b}" for a, b in r.train.subjects()}
-        return SubjectIds.subject_keys(Splits.split_from_cfg(d, in_sources)[0])   # [0] = train partition (val carved off)
-
-    @staticmethod
-    def split_from_cfg(d, meta: pl.DataFrame, seed: int = 0
-                       ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-        """(train, val, test) from a DataCfg's CRITERIA (test_datasets/test_vendors, val criteria). The
-        LEGACY path — kept so a run without a coded split, and the matrix reconstructing an OLD model's
-        train set from its saved DataCfg, still work. New splits are coded families (core.data.ingest.splits)."""
-        return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
-                                 d.val_datasets, d.val_vendors, d.train_vendors)
+        return SubjectIds.subject_keys(self._criteria_split(in_sources)[0])   # [0] = train (val carved off)

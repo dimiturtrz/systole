@@ -67,13 +67,17 @@ class AugCfg(BaseModel):
     soft_label_sigma: float = Field(1.0, ge=0)
 
 class Augmentor:
-    """GPU-batched augmentation engine (the free helpers folded in as staticmethods): the separable
-    Gaussian kernel, one-hot->soft target `soften`, and the per-sample geometric+intensity
-    `augment_batch`. Hyperparams from the injected AugCfg. Uses torch's global RNG — seed it
-    (torch.manual_seed) for reproducibility."""
+    """GPU-batched augmentation engine bound to its AugCfg: construct once with the session config, then
+    `augment_batch` many batches. The per-batch img/mask stay method args; only the (configured-once)
+    hyperparams are held on the instance. The pure helpers — the separable Gaussian kernel and the
+    one-hot->soft target `soften` (its sigma/n_classes threaded per call) — stay static. Uses torch's
+    global RNG — seed it (torch.manual_seed) for reproducibility."""
 
     _GAUSS3 = torch.tensor([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0], [1.0, 2.0, 1.0]]) / 16.0  # 3x3 blur kernel
     _FLIP_PROB = 0.5   # per-sample probability of a horizontal / vertical flip
+
+    def __init__(self, cfg: AugCfg | None = None):
+        self.cfg = cfg or AugCfg()                               # session hyperparams (geometric + intensity)
 
     @staticmethod
     def _gaussian_kernel(sigma: float) -> torch.Tensor:
@@ -102,20 +106,19 @@ class Augmentor:
         oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)
         return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
 
-    @staticmethod
     def augment_batch(
+        self,
         img: torch.Tensor,
         mask: torch.Tensor,
-        cfg: AugCfg | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
 
         Per-sample flip * rotate * scale via a single affine grid_sample (bilinear image, nearest
         mask so labels stay integer; out-of-frame -> 0/background). Per-sample gamma, contrast,
-        gaussian noise, and an occasional 3x3 blur on the image only. Hyperparams from the injected
+        gaussian noise, and an occasional 3x3 blur on the image only. Hyperparams from this instance's
         AugCfg. Uses torch's global RNG — seed it (torch.manual_seed) for reproducibility.
         """
-        cfg = cfg or AugCfg()
+        cfg = self.cfg
         rot_deg, scale = cfg.rot_deg, cfg.scale
         b, _, _, _ = img.shape
         dev, dt = img.device, img.dtype

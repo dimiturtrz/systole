@@ -1,7 +1,7 @@
 """Hyperparameters as injectable, *validated* configs (pydantic v2) — one typed source of truth.
 
 Each component takes its config as an argument (dependency injection): `build_unet(ModelCfg)`,
-`augment_batch(x, m, AugCfg)`, `train_seg(TrainCfg)`. Defaults live here; a run is fully described by
+`Augmentor(AugCfg).augment_batch(x, m)`, `train_seg(TrainCfg)`. Defaults live here; a run is fully described by
 one `TrainCfg`, serialized to `runs/<run>/config.json` (provenance + reproducibility).
 
 Why pydantic (not plain dataclasses): the fields cross a trust boundary — `--set` overrides and

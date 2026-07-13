@@ -38,10 +38,8 @@ log = logging.getLogger("cardioseg.store")
 class Build:
     """The store's BUILD + cloud-load engine as staticmethods (the free build funcs folded in). Consumers
     alias `from core.data.static.store.build import Build as store` -> `store.load`/`store.load_cfg` (and
-    the re-exported light surface `store.load_arrays`/`store.param_key`/`store.dataset_dir`) keep working."""
+    the re-exported light surface `store.load_arrays`) keep working."""
     load_arrays = staticmethod(Store.load_arrays)
-    param_key = staticmethod(Store.param_key)
-    dataset_dir = staticmethod(Store.dataset_dir)
 
     @staticmethod
     def build(name: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)  # pragma: no cover  npz writes over real adapter volumes (preprocess_case reads NIfTI/DICOM); meta core = MetaBuilder, tested
@@ -53,7 +51,7 @@ class Build:
         (ThreadPool — resample/N4 release the GIL). `nyul`+`nyul_standard` apply Nyúl harmonization
         (qfz) to a separate _nyul cache. Returns the processed dir.
         """
-        out = Store.dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
+        out = Store(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm).dataset_dir(name)
         data_dir = out / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         adapter = AdapterRegistry.get_adapter(name)
@@ -90,8 +88,9 @@ class Build:
             raise RuntimeError("nyul=True but no reference/nyul.yaml — fit it first: "
                                "python -m core.data consolidate --fit-nyul")
         frames = []
+        store = Store(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
         for name in names:
-            out = Store.dataset_dir(name, inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
+            out = store.dataset_dir(name)
             if not (out / "meta.csv").exists():
                 Build.build(name, inplane, n4=n4, n4_params=n4_params, workers=workers, nyul=nyul,  # pragma: no cover  triggers a real consolidation build (reads adapter data from disk)
                             nyul_standard=std, norm=norm)

@@ -15,7 +15,10 @@ from core.data.static.store.build import Build
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import DataCfg, Store
 
-param_key = Store.param_key
+def param_key(inplane, **recipe):
+    return Store(inplane, **recipe).param_key()
+
+
 load = Build.load
 
 

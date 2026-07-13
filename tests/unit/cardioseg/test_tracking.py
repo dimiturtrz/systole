@@ -2,7 +2,17 @@
 import cardioseg.tracking as trk
 from cardioseg.tracking import Tracker, _Live, _Noop
 
-_flat, start, track_run = Tracker._flat, Tracker.start, Tracker.track_run
+_flat = Tracker._flat
+
+
+def start(experiment, run_name, params=None, tags=None):
+    """Open a fresh run via the session ctor + instance start() (was the Tracker.start factory)."""
+    return Tracker(experiment, run_name, params, tags).start()
+
+
+def track_run(experiment, run_name, run_dir=None, params=None, tags=None):
+    """Resume-or-create via the session ctor + instance track_run() (was the factory)."""
+    return Tracker(experiment, run_name, params, tags).track_run(run_dir=run_dir)
 
 
 def test_flat_nested():

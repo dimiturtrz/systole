@@ -209,7 +209,7 @@ class Train:
                          d.split.split("@")[0], r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
             else:
                 train_src = val_src = None               # legacy: DataCfg criteria + inline anatomy block
-                train_df, val_df, test_df = splits.Splits.split_from_cfg(d, meta, seeds[0])   # single-seed only
+                train_df, val_df, test_df = splits.ModelSplit(d, meta).split(seeds[0])   # single-seed only
         if cfg.n_patients:                          # debug cap — bound test + val (+ legacy train frame)
             n = cfg.n_patients
             test_df = test_df.head(n)
@@ -282,9 +282,9 @@ class SeedTrainer:
         self.opt = torch.optim.Adam(self.model.parameters(), cfg.lr)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.pin)
         split_tag = Train.split_tag_of(self.d)
-        self.trk = Tracker.track_run("cardioseg", self.out.name, run_dir=self.out,
-                             params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
-                             tags={"split": split_tag, "seed": seed})
+        self.trk = Tracker("cardioseg", self.out.name,
+                           params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
+                           tags={"split": split_tag, "seed": seed}).track_run(run_dir=self.out)
         self.log_sig = None
         if cfg.ef_learn and self.aux:
             self.log_sig = torch.zeros(1 + len(self.aux), device=self.device, requires_grad=True)

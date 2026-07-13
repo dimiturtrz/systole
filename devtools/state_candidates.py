@@ -45,9 +45,18 @@ def _is_command(names: set[str]) -> bool:
     return {"add_args", "run"} <= names
 
 
+def _is_pydantic_config(cls: ast.ClassDef) -> bool:
+    """A pydantic config class (base `BaseModel`) — its shared params are declared FIELDS, so its
+    staticmethods are apply/build over an ALREADY-stateful config, not latent instance state. Skip."""
+    return any(isinstance(b, ast.Name) and b.id == "BaseModel" for b in cls.bases)
+
+
 def shared_state(cls: ast.ClassDef) -> dict[str, int]:
     """Param names carried by >=2 and >=half of a class's staticmethods = its latent instance state.
-    Empty if the class has an __init__ (already stateful), is a CLI command, or has too few methods."""
+    Empty if the class has an __init__ (already stateful), is a pydantic config, is a CLI command, or
+    has too few methods."""
+    if _is_pydantic_config(cls):
+        return {}
     if any(isinstance(n, ast.FunctionDef) and n.name == "__init__" for n in cls.body):
         return {}
     methods = _staticmethods(cls)

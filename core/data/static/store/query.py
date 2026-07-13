@@ -105,30 +105,32 @@ _FIELD_1P5T_TOL = 0.6       # |field - 1.5T| below this -> treat as the 1.5T fli
 
 
 class Store:
-    """The store's cache-addressing + npz read primitives (the free store helpers folded in as
-    staticmethods): `param_key` encodes the preprocessing recipe into a cache dir name, `dataset_dir`
-    composes the processed/<dataset>/<paramkey>/ path, `load_arrays` reads one consolidated npz."""
+    """The store's cache-addressing read surface, bound to ONE preprocessing recipe (inplane resample,
+    N4, Nyúl, norm): construct once with the recipe, then `param_key()` / `dataset_dir(dataset)` address
+    the cache for any dataset under it. The recipe is the fixed session — it's exactly what a paramkey
+    encodes — while the dataset name is the per-call data. `load_arrays` is recipe-free (a pure npz read),
+    so it stays a staticmethod."""
 
-    @staticmethod
-    def param_key(inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
-                  nyul: bool = False, norm: str = "zscore") -> str:
-        """Processed-cache key. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes the N4 params
-        too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix (harmonized
-        cache is separate). norm='blood' -> '_blood' suffix (blood-anchored normalization, bd h8k)."""
-        key = f"inplane{str(inplane).replace('.', 'p')}"
-        if n4:
-            p = n4_params or N4Cfg()
+    def __init__(self, inplane: float = DEFAULT_INPLANE, *, n4: bool = False, n4_params: N4Cfg | None = None,
+                 nyul: bool = False, norm: str = "zscore"):
+        self.inplane, self.n4, self.n4_params, self.nyul, self.norm = inplane, n4, n4_params, nyul, norm
+
+    def param_key(self) -> str:
+        """Processed-cache key for this recipe. n4=False -> 'inplaneXpY' (unchanged). n4=True -> encodes
+        the N4 params too, so different N4 settings never collide on one cache dir. nyul -> '_nyul' suffix
+        (harmonized cache is separate). norm='blood' -> '_blood' suffix (blood-anchored norm, bd h8k)."""
+        key = f"inplane{str(self.inplane).replace('.', 'p')}"
+        if self.n4:
+            p = self.n4_params or N4Cfg()
             key += f"_n4-s{p.shrink}-i{'x'.join(map(str, p.iters))}-f{str(p.fwhm).replace('.', 'p')}"
-        if nyul:
+        if self.nyul:
             key += "_nyul"
-        if norm != "zscore":
-            key += f"_{norm}"
+        if self.norm != "zscore":
+            key += f"_{self.norm}"
         return key
 
-    @staticmethod
-    def dataset_dir(dataset: str, inplane: float = DEFAULT_INPLANE, *, n4: bool = False,  # noqa: PLR0913  low-level store primitive; config-object path is load_cfg(DataCfg)
-                    n4_params: N4Cfg | None = None, nyul: bool = False, norm: str = "zscore") -> Path:
-        return Path(Config.data_root("processed")) / dataset / Store.param_key(inplane, n4=n4, n4_params=n4_params, nyul=nyul, norm=norm)
+    def dataset_dir(self, dataset: str) -> Path:
+        return Path(Config.data_root("processed")) / dataset / self.param_key()
 
     @staticmethod
     def load_arrays(path: str | Path) -> dict:

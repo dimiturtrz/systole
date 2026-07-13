@@ -21,8 +21,13 @@ LANDMARKS: tuple[int, ...] = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99)
 
 
 class Nyul:
-    """Nyúl histogram standardization (harmonization): landmark extraction, standard-scale fit, and the
-    per-image piecewise-linear transform onto that standard — the free helpers folded in as staticmethods."""
+    """Nyúl histogram standardization (harmonization) bound to a fitted STANDARD landmark scale: construct
+    once with the learned standard (the fit-side session), then `transform` many images onto it. The fit
+    helpers (`image_landmarks`, `fit_standard`) stay static — they run BEFORE an instance exists, to derive
+    the standard a `Nyul(standard)` is then constructed with."""
+
+    def __init__(self, standard: np.ndarray):
+        self.standard = np.asarray(standard, dtype=np.float64)   # fitted standard landmark scale (session)
 
     @staticmethod
     def image_landmarks(img: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
@@ -40,14 +45,14 @@ class Nyul:
         scaled = (rows - lo) / np.clip(hi - lo, 1e-6, None)
         return scaled.mean(axis=0)
 
-    @staticmethod
-    def transform(img: np.ndarray, standard: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
-        """Map `img` onto the standard scale: piecewise-linear interp from the image's own landmarks to the
-        standard landmarks. Values outside the landmark range extrapolate linearly at the end segments (np
-        clamps to the standard endpoints — acceptable, tails are p1/p99). Returns a float array."""
+    def transform(self, img: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+        """Map `img` onto this instance's standard scale: piecewise-linear interp from the image's own
+        landmarks to the standard landmarks. Values outside the landmark range extrapolate linearly at the
+        end segments (np clamps to the standard endpoints — acceptable, tails are p1/p99). Returns a float
+        array."""
         lm = Nyul.image_landmarks(img, mask)
         lm = Nyul._dedup_monotone(lm)                              # np.interp needs strictly-increasing xp
-        return np.interp(img.astype(np.float64), lm, standard)
+        return np.interp(img.astype(np.float64), lm, self.standard)
 
     @staticmethod
     def _dedup_monotone(lm: np.ndarray, eps: float = 1e-6) -> np.ndarray:

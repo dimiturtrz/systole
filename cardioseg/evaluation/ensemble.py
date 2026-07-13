@@ -94,9 +94,10 @@ class Ensemble:
     def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
         d = cfg.generator.data
         meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
+        ms = splits.ModelSplit(d, meta)
         if which.lower() == "val":                          # the held-out val split (split-derived, not a literal)
-            return splits.Splits.model_val(d, meta)
-        test = splits.Splits.model_test(d, meta)                   # a vendor axis carves the frozen test by vendor
+            return ms.val
+        test = ms.test                                             # a vendor axis carves the frozen test by vendor
         return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
     @staticmethod
@@ -134,8 +135,8 @@ class Ensemble:
         loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
         models = [m for m, _, _ in loaded]
         cfg = loaded[0][1]
-        trk = Tracker.start("cardioseg", f"ensemble-{len(models)}seed",
-                    {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)})
+        trk = Tracker("cardioseg", f"ensemble-{len(models)}seed",
+                    {"members": len(models), "runs": ",".join(Path(r).name for r in args.runs)}).start()
         for ax in args.eval:
             df = Ensemble._eval_df(cfg, ax)
             if not len(df):

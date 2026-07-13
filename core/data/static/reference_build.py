@@ -16,6 +16,7 @@ from core.data.dynamic.mri_physics import SAR_FLIP_CAP, TR_RANGE_MS, MriPhysics
 from core.data.static.labels import CLASSES
 from core.data.static.reference import Reference
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Store
 from core.measure import Measure
 
 log = logging.getLogger("cardioseg.reference_build")
@@ -52,7 +53,7 @@ class ReferenceBuild:
         Healthy cohort (pathology contains 'normal') is also surfaced as normal_ranges.* for consumers."""
         inplane = DEFAULT_INPLANE if inplane is None else inplane
         df = store.load(sources, inplane=inplane).filter(pl.col("labelled"))
-        paramkey = store.param_key(inplane)
+        paramkey = Store(inplane).param_key()
         # per-case EF/EDV/ESV from GT, grouped by pathology
         by_path: dict[str, dict[str, list]] = {}
         datasets: dict[str, set] = {}
@@ -117,7 +118,7 @@ class ReferenceBuild:
         cohort. Blood classes (RV=1, LV-cav=3) are the ones that carry the vendor-dependent gap."""
         inplane = DEFAULT_INPLANE if inplane is None else inplane
         df = store.load(sources, inplane=inplane).filter(pl.col("labelled"))
-        paramkey = store.param_key(inplane)
+        paramkey = Store(inplane).param_key()
         names = {0: "bg", **{lbl: nm for lbl, (nm, _) in CLASSES.items()}}
         rng = np.random.RandomState(0)
         # vendor -> class label -> list of sampled pixel z-values

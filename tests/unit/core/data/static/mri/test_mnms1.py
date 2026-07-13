@@ -196,3 +196,12 @@ def test_mnms1_adapter_delegates(tmp_path, monkeypatch):
     assert a.meta(case)["country"] == "Germany"               # delegates to meta_from_row (centre 3 -> Germany)
     led = a.load_ed_es(case)                                   # delegates; SA files are stubs (no ED/ES idx) -> empty
     assert "ED" not in led and "ES" not in led
+
+
+def test_root_ctor_threads_through_cases(tmp_path):
+    """The constructed root (session state) is threaded into cases() — an explicit root overrides the
+    env/config search, mirroring AcdcAdapter/Mnm2Adapter."""
+    root = _fake_mnm(tmp_path)
+    case = root / "Testing" / "z1"; case.mkdir(parents=True)
+    (case / "z1_sa.nii.gz").write_text("x"); (case / "z1_sa_gt.nii.gz").write_text("x")
+    assert [c.name for c in Mnms1Adapter(root).cases()] == ["z1"]   # no env set -> resolved via ctor root

@@ -37,7 +37,7 @@ class Render:
         d = TrainCfg().generator.data
         n = len(CLASSES) + 1
         meta = store.load_cfg(d, workers=4)              # ALL preprocessing params (nyul/norm too)
-        va = splits.Splits.model_val(d, meta)                   # held-out real slices (coded split's val if set)
+        va = splits.ModelSplit(d, meta).val                   # held-out real slices (coded split's val if set)
         X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(va), d.size, "cpu")
         good = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[good], Y[good]

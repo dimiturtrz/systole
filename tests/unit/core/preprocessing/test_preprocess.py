@@ -136,9 +136,9 @@ def test_preprocess_case_with_nyul(monkeypatch):
     import core.preprocessing.preprocess as pp
     seen = {}
 
-    def _fake_nyul(img, standard, mask=None):
+    def _fake_nyul(self, img, mask=None):
         seen["called"] = True
         return img
-    monkeypatch.setattr(pp.Nyul, "transform", staticmethod(_fake_nyul))
+    monkeypatch.setattr(pp.Nyul, "transform", _fake_nyul)
     out = pp.Preprocess.preprocess_case("/tmp/pNy", _fake_loader, nyul_standard=[0.0, 0.5, 1.0])
     assert seen.get("called") and "ed_img" in out

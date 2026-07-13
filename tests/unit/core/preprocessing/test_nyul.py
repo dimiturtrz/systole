@@ -23,7 +23,8 @@ def test_nyul_harmonizes_two_scanners():
     a = rng.normal(100, 15, 8000)                        # scanner A
     b = rng.normal(500, 90, 8000)                        # scanner B (different offset + scale)
     std = Nyul.fit_standard(np.stack([Nyul.image_landmarks(a), Nyul.image_landmarks(b)]))
-    ta, tb = Nyul.transform(a, std), Nyul.transform(b, std)
+    nyul = Nyul(std)                                     # bind the fitted standard once, transform many
+    ta, tb = nyul.transform(a), nyul.transform(b)
     pa, pb = np.percentile(ta, [10, 50, 90]), np.percentile(tb, [10, 50, 90])
     assert np.allclose(pa, pb, atol=0.03)               # distributions aligned
 
@@ -32,6 +33,6 @@ def test_transform_preserves_order():
     rng = np.random.default_rng(2)
     img = rng.normal(300, 50, 5000)
     std = Nyul.fit_standard(np.stack([Nyul.image_landmarks(img)]))
-    t = Nyul.transform(img, std)
+    t = Nyul(std).transform(img)
     order = np.argsort(img)
     assert np.all(np.diff(t[order]) >= -1e-9)           # monotone map -> tissue ordering kept

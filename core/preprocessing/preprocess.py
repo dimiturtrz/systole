@@ -117,7 +117,7 @@ class Preprocess:
                 p = n4_params or N4Cfg()
                 img = N4Cfg.n4_bias(img, isp, shrink=p.shrink, iters=tuple(p.iters), fwhm=p.fwhm)
             if nyul_standard is not None:
-                img = Nyul.transform(img, np.asarray(nyul_standard))
+                img = Nyul(np.asarray(nyul_standard)).transform(img)
             out[f"{tag.lower()}_img"] = Preprocess.blood_anchor(img, gt) if norm == "blood" else Preprocess.zscore(img)
             out[f"{tag.lower()}_gt"] = gt
             new_sp = isp

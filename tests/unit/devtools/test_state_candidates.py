@@ -63,6 +63,20 @@ def test_cli_command_class_is_skipped():
     """)) == {}
 
 
+def test_pydantic_config_class_is_skipped():
+    """A pydantic config (base BaseModel) whose staticmethods thread declared FIELDS is not latent
+    state — the params live in __init__ via the fields already. False positive (N4Cfg), skipped."""
+    assert shared_state(_cls("""
+        class Foo(BaseModel):
+            shrink: int = 4
+            fwhm: float = 0.15
+            @staticmethod
+            def a(vol, shrink, fwhm): ...
+            @staticmethod
+            def b(vol, shrink, fwhm): ...
+    """)) == {}
+
+
 def test_single_method_class_has_no_shared_state():
     """One method can't share anything across the class."""
     assert shared_state(_cls("""

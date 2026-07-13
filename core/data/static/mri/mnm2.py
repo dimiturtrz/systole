@@ -28,6 +28,9 @@ class Mnm2Adapter(DatasetAdapter):
     name = "mnm2"
     label_map = LABEL_MAP
 
+    def __init__(self, root: str | Path | None = None):
+        self.root = root                                     # dataset-dir override (default env/config search)
+
     @staticmethod
     def _dataset_dir(root: str | Path | None = None) -> Path:
         """Resolve the dir holding the NNN/ subject folders, tolerating nesting.
@@ -70,7 +73,7 @@ class Mnm2Adapter(DatasetAdapter):
 
     def cases(self) -> list[Path]:
         """List subject dirs (M&M-2: NNN/)."""
-        d = self._dataset_dir()
+        d = self._dataset_dir(self.root)
         return sorted((p for p in d.glob("[0-9][0-9][0-9]") if p.is_dir()), key=lambda p: p.name)
 
     def load_ed_es(self, case: Path, view: str = "SA") -> PatientData:

@@ -41,6 +41,9 @@ class Mnms1Adapter(DatasetAdapter):
     name = "mnms1"
     label_map = LABEL_MAP
 
+    def __init__(self, root: str | Path | None = None):
+        self.root = root                                     # MnM-root override (default env/config search)
+
     @staticmethod
     def _is_mnms1(base: Path) -> bool:
         """M&Ms-1 marker: a nested Training/Labeled (ACDC has only lowercase training/, no Labeled),
@@ -127,7 +130,7 @@ class Mnms1Adapter(DatasetAdapter):
         }
 
     def cases(self) -> list[Path]:
-        return Mnms1Adapter.mnms1_cases()
+        return Mnms1Adapter.mnms1_cases(self.root)
 
     def load_ed_es(self, case: str | Path) -> PatientData:
         """Load ED + ES frames (from the 4D cine at CSV indices) + canonical-remapped masks."""
