@@ -38,7 +38,7 @@ def test_train_seg_e2e_smoke(split, tmp_path, monkeypatch):
     _orig_paths = StaticSource.paths
     monkeypatch.setattr(StaticSource, "paths", lambda self, _o=_orig_paths: _o(self)[:4])
     monkeypatch.setattr("core.data.dynamic.anatomy.Anatomy.load_pool", lambda p: np.zeros((20, 32, 32), np.int64))
-    monkeypatch.setattr("cardioseg.training.train.track_run", lambda *a, **k: _NoTrk())
+    monkeypatch.setattr("cardioseg.tracking.Tracker.track_run", lambda *a, **k: _NoTrk())
 
     cfg = TrainCfg()
     cfg.device = "cpu"
