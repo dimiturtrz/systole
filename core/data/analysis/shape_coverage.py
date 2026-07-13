@@ -86,7 +86,7 @@ class ShapeCoverage:
         synth_to_synth = nn(synth_standardized, synth_standardized) if len(synth_standardized) > 1 else np.array([1.0]) # synth internal scale (for a radius)
         radius = float(np.median(synth_to_synth[synth_to_synth > 0])) if (synth_to_synth > 0).any() else 1.0
         return {
-            "n_real": int(len(real)), "n_synth": int(len(synth)),
+            "n_real": len(real), "n_synth": len(synth),
             "real_to_synth_nn_median": round(float(np.median(real_to_synth)), 3),
             "real_to_synth_nn_p95": round(float(np.percentile(real_to_synth, 95)), 3),
             "coverage_at_synth_radius": round(float((real_to_synth <= radius).mean()), 3),   # frac real with a synth neighbour

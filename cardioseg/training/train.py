@@ -107,8 +107,8 @@ class Train:
     def _val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
         """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
         Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
-        inter = {c: 0.0 for c in FOREGROUND}
-        denom = {c: 0.0 for c in FOREGROUND}
+        inter = dict.fromkeys(FOREGROUND, 0.0)
+        denom = dict.fromkeys(FOREGROUND, 0.0)
         model.eval()
         with torch.no_grad():
             for i in range(0, Ximg.shape[0], batch):

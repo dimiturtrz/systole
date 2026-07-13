@@ -58,7 +58,7 @@ class Persist:
 
     @staticmethod
     def add_args(ap):
-        ap.add_argument("--dataset", default="all", choices=("all",) + _DATASETS)
+        ap.add_argument("--dataset", default="all", choices=("all", *_DATASETS))
 
     @staticmethod
     def run(args):

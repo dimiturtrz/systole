@@ -66,6 +66,5 @@ class Labels:
         """Matplotlib ListedColormap for a label overlay: background transparent, each
         foreground class its CLASSES color at `alpha`. Index i == label i (vmin=0, vmax=3)."""
         colors = [(0.0, 0.0, 0.0, 0.0)]  # label 0 = background, fully transparent
-        for lab in FOREGROUND:
-            colors.append((*to_rgb(CLASSES[lab][1]), alpha))
+        colors.extend((*to_rgb(CLASSES[lab][1]), alpha) for lab in FOREGROUND)
         return ListedColormap(colors)

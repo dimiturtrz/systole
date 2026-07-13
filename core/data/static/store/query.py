@@ -241,8 +241,10 @@ class MetaBuilder:
                 meta = {}
             arrays = dict(np.load(data_dir / f, allow_pickle=True))
             rows.append(self._row(case, arrays, meta, f))
-        _dt = lambda k: pl.Float64 if k in ("age", "height", "weight", "bsa") else (
-            pl.Boolean if k == "labelled" else pl.Utf8)
+        def _dt(k):
+            if k in ("age", "height", "weight", "bsa"):
+                return pl.Float64
+            return pl.Boolean if k == "labelled" else pl.Utf8
         pl.DataFrame(rows, schema={k: _dt(k) for k in META_FIELDS}, strict=False).write_csv(out / "meta.csv")
         return out / "meta.csv"
 
@@ -287,10 +289,13 @@ class AcqReference:
         real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
         acq: dict[str, dict] = {}
         for (vendor, field), g in real.group_by(["vendor", "_field"]):
-            med = lambda c, g=g: round(float(g[c].cast(pl.Float64).median()), 3)
+            def med(col, frame=g):
+                return round(float(frame[col].cast(pl.Float64).median()), 3)
             based = f"{g.height} DICOM subjects @{field}T"
-            leaf = lambda v, based=based: {"value": v, "source": "DICOM-measured", "based_on": based,
-                              "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
+
+            def leaf(value, provenance=based):
+                return {"value": value, "source": "DICOM-measured", "based_on": provenance,
+                        "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
             e = acq.setdefault(str(vendor), {})
             e["tr_ms"], e["te_ms"] = leaf(med("tr_ms")), leaf(med("te_ms"))
             near15 = abs(float(field) - _FIELD_1P5T) < _FIELD_1P5T_TOL if field else True

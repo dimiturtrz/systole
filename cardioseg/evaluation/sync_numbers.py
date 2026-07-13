@@ -85,7 +85,9 @@ class SyncNumbers:
     @staticmethod
     def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
         a, n = _G["dice"], _NN["ge"]["dice"]
-        dd = lambda k: (n[k] - a[k]) * 100
+
+        def dd(k):
+            return (n[k] - a[k]) * 100
         return "\n".join([
             "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
             "|---|---|---|---|---|---|---|",

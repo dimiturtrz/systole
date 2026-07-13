@@ -10,6 +10,7 @@ truth — runs/<name>/{config,metrics}.json + RESULTS.json remain authoritative.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -35,8 +36,8 @@ class _Live:
         self._m = mlflow
 
     def metric(self, key: str, value, step: int | None = None):
-        try: self._m.log_metric(key, float(value), step=step)
-        except Exception: pass
+        with contextlib.suppress(Exception):
+            self._m.log_metric(key, float(value), step=step)
 
     def summary(self, results: dict):
         """Log the TRAIN-TIME per-axis scalars as fit_<axis>_<k> (e.g. fit_val_dice_mean). The 'fit_'
@@ -55,8 +56,8 @@ class _Live:
         except Exception: pass
 
     def tag(self, key, value):
-        try: self._m.set_tag(key, str(value))
-        except Exception: pass
+        with contextlib.suppress(Exception):
+            self._m.set_tag(key, str(value))
 
     def log_model(self, model, registered_name, alias=None, description=None, version_tags=None):
         """Log the torch model + register a version (catalog). `alias` (e.g. 'production') points at it;
@@ -74,8 +75,8 @@ class _Live:
         except Exception: pass
 
     def end(self):
-        try: self._m.end_run()
-        except Exception: pass
+        with contextlib.suppress(Exception):
+            self._m.end_run()
 
 
 class Tracker:
@@ -116,8 +117,8 @@ class Tracker:
         _MLRUNS.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(_DB_URI)
         mlflow.set_experiment(self.experiment)
-        try: mlflow.enable_system_metrics_logging()          # GPU/CPU/mem if psutil+pynvml present
-        except Exception: pass
+        with contextlib.suppress(Exception):
+            mlflow.enable_system_metrics_logging()           # GPU/CPU/mem if psutil+pynvml present
 
     def _apply_tags(self, mlflow):
         for k, v in (self.tags or {}).items():

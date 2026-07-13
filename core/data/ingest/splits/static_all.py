@@ -24,7 +24,8 @@ class StaticAll:
     sources = ("acdc", "mnm2", "mnms1", "cmrxmotion", "scd")     # load SCD too (not in the default seg cloud)
     versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
-            test=lambda c: STATIC_MAIN_TEST.source(c),           # == static_main's frozen test (147)
+            # == static_main's frozen test (147); lambda defers the global lookup (testset swap)
+            test=lambda c: STATIC_MAIN_TEST.source(c),  # noqa: PLW0108
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),
             # train = labelled complement: Siemens+Philips seg + ALL SCD (RV masked via partial-label)
         ),

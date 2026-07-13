@@ -82,8 +82,8 @@ class Overlay:
         gt_es = Preprocess.stack_slices(case["es_gt"], size)
         ef_g, _, _ = Measure.ejection_fraction(gt_ed, gt_es, spacing)
         z = Overlay._mid_slice(gt_ed)
-        return dict(group=case.get("group"), img=img_ed[z], gt=gt_ed[z], pred=pred_ed[z],
-                    ef_gt=ef_g, ef_pred=ef_p, name=Path(path).stem)
+        return {"group": case.get("group"), "img": img_ed[z], "gt": gt_ed[z], "pred": pred_ed[z],
+                "ef_gt": ef_g, "ef_pred": ef_p, "name": Path(path).stem}
 
     @staticmethod
     def add_args(ap):

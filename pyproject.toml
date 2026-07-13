@@ -92,6 +92,10 @@ select = [
     "PLR1714",  # repeated-equality — `a != x and a != y` -> `a not in (x, y)`
     "PLW3301",  # nested-min-max — flatten `max(max(...), ...)`
     "RUF012",   # mutable-class-default — a shared mutable class attr is an aliasing bug (annotate ClassVar)
+    "RUF005", "RUF007", "RUF010", "RUF022", "RUF046",  # collection/pairwise/conversion/sort/cast cleanups
+    "C408", "C420",  # unnecessary dict() call / dict-comprehension (use a literal / dict.fromkeys)
+    "SIM105", "SIM108", "SIM300",  # contextlib.suppress / ternary / no-yoda
+    "PERF401", "PLW0108", "E731",  # list.extend / no-wrapper-lambda / def-not-lambda-assignment
 ]
 # N* REVERSED ON (was OFF): pep8-naming gates CASE only, not length — so the ML idioms (design matrices
 # X/Y, tensor dims, MRI-physics relaxation names) are preserved via [tool.ruff.lint.pep8-naming]

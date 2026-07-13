@@ -82,7 +82,7 @@ class Augmentor:
     @staticmethod
     def _gaussian_kernel(sigma: float) -> torch.Tensor:
         """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
-        r = max(1, int(math.ceil(3.0 * sigma)))
+        r = max(1, math.ceil(3.0 * sigma))
         xs = torch.arange(-r, r + 1, dtype=torch.float32)
         g = torch.exp(-(xs ** 2) / (2.0 * sigma * sigma))
         g = g / g.sum()

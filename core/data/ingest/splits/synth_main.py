@@ -49,6 +49,7 @@ class SynthMain:
                                           note=f"Rodero {POOL}, zero-real procedural bg"),
             val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
                                        "ACDC real val (held from test; synth val = 6rd7)"),
-            test=lambda c: SYNTH_MAIN_TEST.source(c),            # all seg real minus ACDC val (642, locked)
+            # all seg real minus ACDC val (642, locked); lambda defers the global lookup (testset swap)
+            test=lambda c: SYNTH_MAIN_TEST.source(c),  # noqa: PLW0108
         ),
     }

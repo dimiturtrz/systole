@@ -75,7 +75,7 @@ class Sim2Real:
             if df.height == 0:
                 continue
             X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), data_cfg.size, "cpu")
-            real = torch.tensor([X[:, 0][Y == c].mean() for c in range(1, n_classes)])
+            real = torch.tensor([X[:, 0][c == Y].mean() for c in range(1, n_classes)])
             best_fit = Sim2Real.fit_acquisition(real, n_classes)
             real_z = [round(value, 2) for value in Sim2Real._standardize(real).tolist()]
             log.info(f"{vendor:10} {X.shape[0]:>4}  {best_fit['field']}  {best_fit['tr']:.1f}  {best_fit['flip']:.0f}  | "

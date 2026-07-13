@@ -41,9 +41,23 @@ from core.preprocessing.n4 import N4Cfg
 # SynthCfg→synth, DataCfg→store, N4Cfg→preprocessing.n4, GeneratorCfg→generator, LossCfg+variants→
 # core.losses so each cfg builds its own loss). Re-exported here so `from core.hparams import X` still
 # resolves. TrainCfg (whole-run composition root) stays here.
-__all__ = ["ModelCfg", "AugCfg", "SynthCfg", "N4Cfg", "DataCfg", "GeneratorCfg", "LossCfg",
-           "AnyLossCfg", "DiceCECfg", "DiceCETverskyCfg", "DiceCEHERCfg", "DiceCEHDCfg", "LOSS_VARIANTS",
-           "TrainCfg", "Hparams"]
+__all__ = [
+    "LOSS_VARIANTS",
+    "AnyLossCfg",
+    "AugCfg",
+    "DataCfg",
+    "DiceCECfg",
+    "DiceCEHDCfg",
+    "DiceCEHERCfg",
+    "DiceCETverskyCfg",
+    "GeneratorCfg",
+    "Hparams",
+    "LossCfg",
+    "ModelCfg",
+    "N4Cfg",
+    "SynthCfg",
+    "TrainCfg",
+]
 
 
 # LossCfg (discriminated union) + variants live in core.losses, co-located with the loss classes so

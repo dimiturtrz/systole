@@ -108,7 +108,7 @@ SYNTH_MAIN_TEST = TestSets._ts("synth_main_test", "seg4", _IN_SEG & (V("dataset"
 # the matrix's default granular battery (over-held models score OOD on the ones they didn't train)
 MATRIX_TESTSETS: list[TestSet] = [CANON, GE, CMRXMOTION, ACDC, MNM2, MNMS1, SCD_LV]
 
-_ALL: list[TestSet] = MATRIX_TESTSETS + [STATIC_MAIN_TEST, SYNTH_MAIN_TEST]
+_ALL: list[TestSet] = [*MATRIX_TESTSETS, STATIC_MAIN_TEST, SYNTH_MAIN_TEST]
 TESTSETS: dict[str, TestSet] = {ts.name: ts for ts in _ALL}     # lookup by name (CLI / reporting)
 
 # datasets any TestSet can reference (incl SCD, not in the default seg SOURCE_DATASETS) — the eval cloud

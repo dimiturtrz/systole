@@ -45,7 +45,7 @@ class Splits:
         case directories rather than the consolidated store (e.g. the viewer's held-out check)."""
         cases = list(cases)
         idx = np.random.default_rng(seed).permutation(len(cases))
-        n_val = max(1, int(round(len(cases) * val_frac)))
+        n_val = max(1, round(len(cases) * val_frac))
         val_names = {cases[i].name for i in idx[:n_val]}
         train = [c for c in cases if c.name not in val_names]
         val = [c for c in cases if c.name in val_names]
