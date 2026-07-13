@@ -7,9 +7,11 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from core.inference import Inference
-from core.model import Model
-from core.run import Run
+from cardioseg.evaluation.uncertainty import Uncertainty  # noqa: E402
+from core.hparams import Hparams, TrainCfg  # noqa: E402
+from core.inference import Inference  # noqa: E402
+from core.model import Model  # noqa: E402
+from core.run import Run  # noqa: E402
 
 SIZE = 32  # small grid; divisible by the 4 strides (2^4=16)
 
@@ -56,7 +58,6 @@ def test_members_and_bald_decomposition(model):
     pred, mean, members = Inference(model, SIZE, "cpu").predict_volume_members(vol)
     assert tuple(members.shape) == (4, 2, 4, SIZE, SIZE)        # K=4 flips
     assert torch.allclose(members.mean(0), mean, atol=1e-6)     # mean is the member average
-    from cardioseg.evaluation.uncertainty import Uncertainty
     p, total, conf, ale, epi = Uncertainty.tta_uncertainty(model, vol, SIZE, "cpu")
     assert np.array_equal(p, pred)
     assert (epi >= -1e-6).all()                                 # BALD >= 0 (Jensen)
@@ -66,7 +67,6 @@ def test_members_and_bald_decomposition(model):
 
 # --- load_run: rebuilds arch from config.json; falls back when absent ---
 def _make_run(tmp_path, with_config):
-    from core.hparams import Hparams, TrainCfg
     run = tmp_path / "run"; run.mkdir()
     torch.save(Model.build_unet().state_dict(), run / "model.pth")
     if with_config:

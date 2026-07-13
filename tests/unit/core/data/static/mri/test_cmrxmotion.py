@@ -6,7 +6,8 @@ import pytest
 
 nib = pytest.importorskip("nibabel")
 
-from core.data.static.mri.cmrxmotion import CmrxMotionAdapter
+from core.data.static.mri.base import MNM_LABEL_MAP  # noqa: E402
+from core.data.static.mri.cmrxmotion import CmrxMotionAdapter  # noqa: E402
 
 
 def _nii(path, arr):
@@ -82,5 +83,4 @@ def test_meta_fixed_scanner_fields(root):
 
 
 def test_label_map_is_the_shared_mnm_flip():
-    from core.data.static.mri.base import MNM_LABEL_MAP
     assert CmrxMotionAdapter().label_map == MNM_LABEL_MAP == {0: 0, 1: 3, 2: 2, 3: 1}

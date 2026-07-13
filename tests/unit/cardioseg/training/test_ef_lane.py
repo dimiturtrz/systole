@@ -14,6 +14,8 @@ from cardioseg.training.ef_lane import (
     KaggleEF,
     VolConsistency,
 )
+from core.data.static.labels import LV_CAV
+from core.model import Model
 
 _cav_volume = EfLane.cav_volume
 _stack = EfLane.stack
@@ -21,8 +23,6 @@ _zscore = EfLane.zscore
 build_aux = EfLane.build_aux
 ef_ratio = EfLane.ef_ratio
 ef_ratio_loss = EfLane.ef_ratio_loss
-from core.data.static.labels import LV_CAV
-from core.model import Model
 
 
 def test_ef_ratio_matches_hand_formula():

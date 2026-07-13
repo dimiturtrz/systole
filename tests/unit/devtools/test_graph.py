@@ -5,7 +5,7 @@ import pytest
 
 nx = pytest.importorskip("networkx")
 
-from devtools.graph import (
+from devtools.graph import (  # noqa: E402
     _DEFAULTS,
     _STRUCTURAL,
     _top,

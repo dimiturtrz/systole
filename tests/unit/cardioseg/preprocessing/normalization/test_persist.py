@@ -79,7 +79,7 @@ def test_run_single_dataset(monkeypatch):
     """run: --dataset X -> persist_meta called for that one dataset."""
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
-    monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))
+    monkeypatch.setattr(P.Persist, "persist_meta", called.append)
     P.Persist.run(argparse.Namespace(dataset="acdc"))
     assert called == ["acdc"]
 
@@ -88,6 +88,6 @@ def test_run_all_datasets(monkeypatch):
     """run: default 'all' -> persist_meta over every known dataset."""
     monkeypatch.setattr(P, "_DATASETS", ("acdc", "mnm2"))
     called = []
-    monkeypatch.setattr(P.Persist, "persist_meta", lambda ds: called.append(ds))
+    monkeypatch.setattr(P.Persist, "persist_meta", called.append)
     P.Persist.run(argparse.Namespace(dataset="all"))
     assert called == ["acdc", "mnm2"]

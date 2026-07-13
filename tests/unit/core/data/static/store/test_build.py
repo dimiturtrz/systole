@@ -15,6 +15,7 @@ from core.data.static.store.build import Build
 from core.data.static.store.normalize import Normalizer
 from core.data.static.store.query import DataCfg, Recipe, Store
 
+
 def param_key(inplane, **recipe):
     return Store(Recipe(inplane=inplane, **recipe)).param_key()
 

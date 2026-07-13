@@ -113,8 +113,9 @@ def test_n_train_legacy_none_source_uses_frame():
 
 # --- apply_cli_args: set scalars win, unset skipped, --set applied last ---
 def _args(**kw):
-    base = dict(epochs=None, batch=None, patience=None, workers=None, seed=None, n_patients=None,
-                ef_lambda=None, n4=False, ef_learn=False, ef_kaggle=False, out=None, overrides=[])
+    base = {"epochs": None, "batch": None, "patience": None, "workers": None, "seed": None,
+            "n_patients": None, "ef_lambda": None, "n4": False, "ef_learn": False, "ef_kaggle": False,
+            "out": None, "overrides": []}
     base.update(kw)
     return SimpleNamespace(**base)
 

@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+import core.preprocessing.preprocess as pp
 from core.preprocessing.preprocess import Preprocess
 
 
@@ -133,7 +134,6 @@ def test_preprocess_case_with_n4():
 
 def test_preprocess_case_with_nyul(monkeypatch):
     """Class: nyul_standard given -> nyul_transform applied before z-score (injected, no fit needed)."""
-    import core.preprocessing.preprocess as pp
     seen = {}
 
     def _fake_nyul(self, img, mask=None):

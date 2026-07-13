@@ -6,8 +6,8 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("monai")
 
-from core.data.dynamic.augment import Augmentor
-from core.losses import DiceCECfg, SoftDiceCE
+from core.data.dynamic.augment import Augmentor  # noqa: E402
+from core.losses import DiceCECfg, SoftDiceCE  # noqa: E402
 
 
 # --- soften: shape, channels sum to 1, σ=0 crisp, σ>0 soft at boundary / hard interior ---

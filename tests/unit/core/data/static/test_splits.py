@@ -18,9 +18,9 @@ def _meta():
 
 def _cfg(**kw):
     """A DataCfg-like stub carrying only the fields ModelSplit / make_split read."""
-    base = dict(test_datasets=(), test_vendors=(), val_frac=0.25,
-                val_datasets=(), val_vendors=(), train_vendors=(),
-                split=None, sources=("mnm2", "mnms1", "acdc"))
+    base = {"test_datasets": (), "test_vendors": (), "val_frac": 0.25,
+            "val_datasets": (), "val_vendors": (), "train_vendors": (),
+            "split": None, "sources": ("mnm2", "mnms1", "acdc")}
     return types.SimpleNamespace(**{**base, **kw})
 
 

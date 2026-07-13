@@ -25,7 +25,7 @@ def test_client_builds_from_mlflow(monkeypatch):
     """_client class: constructs an MlflowClient off the (URI-set) mlflow module."""
     sentinel = object()
     fake_tracking = type("T", (), {"MlflowClient": staticmethod(lambda: sentinel)})()
-    monkeypatch.setattr(reg.Registry, "_mlflow", lambda: type("M", (), {"tracking": fake_tracking})())
+    monkeypatch.setattr(reg.Registry, "_mlflow", type("M", (), {"tracking": fake_tracking}))
     assert Registry._client() is sentinel
 
 

@@ -5,7 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from core.data.dynamic.augment import AugCfg
-from core.hparams import Hparams, TrainCfg
+from core.data.static.store import DataCfg
+from core.hparams import DiceCEHDCfg, Hparams, TrainCfg
+from core.model import ModelCfg
+from core.preprocessing.n4 import N4Cfg
 
 
 # --- accept: valid defaults + roundtrip ---
@@ -33,13 +36,11 @@ def test_reject_out_of_range_prob():
 
 
 def test_reject_val_frac_ge_1():
-    from core.data.static.store import DataCfg
     with pytest.raises(ValidationError):
         DataCfg(val_frac=1.0)                # val_frac in (0,1)
 
 
 def test_reject_bad_loss_kind():
-    from core.hparams import TrainCfg
     with pytest.raises(ValidationError):
         TrainCfg.model_validate({"loss": {"kind": "dice_ce_bogus"}})   # no such union variant
 
@@ -47,7 +48,6 @@ def test_reject_bad_loss_kind():
 def test_loss_union_picks_variant_and_ignores_old_flat_fields():
     # OLD flat config (kind + every loss's params) must still load: discriminator picks the variant,
     # extra fields are dropped. Guards config.json backward-compat for registered models.
-    from core.hparams import DiceCEHDCfg, TrainCfg
     flat = {"kind": "dice_ce_hd", "hd_weight": 0.02, "tversky_alpha": 0.3, "her_weight": 0.5}
     t = TrainCfg.model_validate({"loss": flat})
     assert isinstance(t.loss, DiceCEHDCfg)
@@ -56,7 +56,6 @@ def test_loss_union_picks_variant_and_ignores_old_flat_fields():
 
 
 def test_reject_bad_spatial_dims():
-    from core.model import ModelCfg
     with pytest.raises(ValidationError):
         ModelCfg(spatial_dims=5)             # Literal[2,3]
 
@@ -99,6 +98,5 @@ def test_flat_config_backcompat():
 
 
 def test_n4cfg_reject_bad_shrink():
-    from core.preprocessing.n4 import N4Cfg
     with pytest.raises(ValidationError):
         N4Cfg(shrink=0)                                  # shrink >= 1

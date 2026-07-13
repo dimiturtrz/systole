@@ -6,16 +6,28 @@ import math
 
 import pytest
 import torch
+from pydantic import ValidationError
 
-from core.data.dynamic.mri_physics import TISSUE, MriPhysics
+from core.data.dynamic.mri_physics import _TR_MID, SAR_FLIP_CAP, TISSUE, TISSUE_RANGE, MriPhysics
 from core.data.dynamic.synth import (
+    FlatBg,
     FlatBgCfg,
+    HybridBg,
     HybridBgCfg,
+    LegacyAcq,
+    LegacyAcqCfg,
+    MatchedAcq,
+    MatchedAcqCfg,
+    PartitionBg,
     PartitionBgCfg,
+    ProceduralBg,
     ProceduralBgCfg,
+    RandomizedAcq,
+    RandomizedAcqCfg,
     SynthCfg,
     SynthPainter,
 )
+from core.data.static.reference import Reference
 
 synthesize_from_labels = SynthPainter.synthesize_from_labels
 
@@ -33,9 +45,9 @@ def _mask(b=2, h=8, w=8):
 def _fixed(**kw):
     """A deterministic-contrast SynthCfg: single field, fixed TR/flip, no jitter/texture/corruption —
     so the paint is purely the bSSFP signal (for ordering assertions)."""
-    base = dict(synth_p=1.0, deform=0.0, bg=FlatBgCfg(), fields=(1.5,), tr_ms=(3.0, 3.0),
-                flip_deg=(45.0, 45.0), jitter=0.0, texture=0.0, bias_strength=0.0, blur=(0.0, 0.0),
-                noise=0.0, kspace=0.0)
+    base = {"synth_p": 1.0, "deform": 0.0, "bg": FlatBgCfg(), "fields": (1.5,), "tr_ms": (3.0, 3.0),
+            "flip_deg": (45.0, 45.0), "jitter": 0.0, "texture": 0.0, "bias_strength": 0.0,
+            "blur": (0.0, 0.0), "noise": 0.0, "kspace": 0.0}
     base.update(kw)
     return SynthCfg(**base)
 
@@ -46,8 +58,9 @@ def test_bssfp_blood_brighter_than_myo():
     flip angles. Physics, not assumption."""
     t = torch.tensor
     flip, tr = t([45.0 * math.pi / 180]), t([3.0])
-    sig = lambda nm: MriPhysics.bssfp_signal(t([TISSUE[nm][1.5][0]]), t([TISSUE[nm][1.5][1]]),
-                                             t([TISSUE[nm][1.5][2]]), tr, flip)
+    def sig(nm):
+        return MriPhysics.bssfp_signal(t([TISSUE[nm][1.5][0]]), t([TISSUE[nm][1.5][1]]),
+                                       t([TISSUE[nm][1.5][2]]), tr, flip)
     assert sig("blood") > sig("myocardium")
 
 
@@ -74,7 +87,6 @@ def test_tissue_points_inside_literature_ranges():
     """SSOT guard (bd 276/04bh): every TISSUE point sits INSIDE its TISSUE_RANGE band (so the per-sample
     sampler draws around a physically-consistent centre), except the documented known discrepancies.
     Catches point/range drift; a new out-of-band point fails until it's explained."""
-    from core.data.dynamic.mri_physics import TISSUE_RANGE
     for name, fields in TISSUE.items():
         for field, (t1, t2, _pd) in fields.items():
             (t1lo, t1hi), (t2lo, t2hi) = MriPhysics.tissue_range(name, field)
@@ -118,7 +130,7 @@ def test_sample_heart_tissue_stays_in_band_and_splits_by_o2():
 def test_tissue_spread_changes_paint_end_to_end():
     """Integration: turning tissue_spread on flows a different physical contrast through bssfp_signal ->
     a different painted image (same seed), and stays finite. The knob is wired, not dead."""
-    base = dict(synth_p=1.0, bg=FlatBgCfg())
+    base = {"synth_p": 1.0, "bg": FlatBgCfg()}
     torch.manual_seed(3); off, _ = synthesize_from_labels(_mask(), SynthCfg(**base, tissue_spread=0.0), N)
     torch.manual_seed(3); on, _ = synthesize_from_labels(_mask(), SynthCfg(**base, tissue_spread=1.0), N)
     assert torch.isfinite(on).all()
@@ -137,7 +149,9 @@ def test_paint_orders_by_physics():
     """Pure bSSFP paint -> blood classes (RV, cav) brighter than the myo region."""
     torch.manual_seed(0)
     img, _ = synthesize_from_labels(_mask(1), _fixed(), N)
-    band = lambda c: img[0, 0, c * 2:(c + 1) * 2].mean()
+
+    def band(c):
+        return img[0, 0, c * 2:(c + 1) * 2].mean()
     assert band(1) > band(2) and band(3) > band(2)              # RV,cav (blood) > myo
 
 
@@ -197,7 +211,6 @@ def test_acquisition_derived_and_reference_override(tmp_path):
     """Acquisition is DERIVED from physics (contrast-optimal flip capped by SAR, TR floor, TE=TR/2), not
     tabulated: acquisition_for == derive_acquisition by field, flip within the SAR cap, 3T flip < 1.5T,
     field-invariant to vendor; a verified reference/ leaf overrides per (vendor, field)."""
-    from core.data.dynamic.mri_physics import _TR_MID, SAR_FLIP_CAP
     tr15, te15, f15 = MriPhysics.derive_acquisition(1.5)
     tr3, te3, f3 = MriPhysics.derive_acquisition(3.0)
     assert (tr15, te15) == (_TR_MID, _TR_MID / 2.0)             # TR = cited-band mid, TE=TR/2 (derived)
@@ -206,7 +219,6 @@ def test_acquisition_derived_and_reference_override(tmp_path):
     assert MriPhysics.acquisition_for("Siemens", 1.5) == (tr15, te15, f15)  # base = derivation, vendor-invariant
     assert MriPhysics.acquisition_for("GE", 1.5) == MriPhysics.acquisition_for("Philips", 1.5)
     assert MriPhysics.acquisition_for("X", 2.8)[2] == f3         # field snaps to nearest tabulated (3T)
-    from core.data.static.reference import Reference
     (tmp_path / "acquisition.yaml").write_text(
         "acquisition:\n  Siemens:\n"
         "    flip_deg_1p5t: {value: 62, source: dicom-mined, based_on: x, extracted_by: computed, verified: true}\n")
@@ -218,9 +230,6 @@ def test_acquisition_derived_and_reference_override(tmp_path):
 def test_background_strategy_dispatch_and_zero_real():
     """Each bg variant builds its strategy (cfg.bg.build(); one rep per equivalence class); flat/procedural
     are ZERO-REAL (no real_img needed) and paint the whole FOV; partition/hybrid need a real image."""
-    from pydantic import ValidationError
-
-    from core.data.dynamic.synth import FlatBg, HybridBg, PartitionBg, ProceduralBg
     assert isinstance(FlatBgCfg().build(), FlatBg)
     assert isinstance(ProceduralBgCfg().build(), ProceduralBg)
     assert isinstance(PartitionBgCfg().build(), PartitionBg)
@@ -246,14 +255,6 @@ def test_excise_heart_removes_the_heart():
 def test_acquisition_matched_is_fixed_randomized_is_not():
     """cfg.acq.build(): matched pins field/TR/flip/vendor to the target (bd 7pto); randomized/legacy
     vary per sample. One rep per acq variant."""
-    from core.data.dynamic.synth import (
-        LegacyAcq,
-        LegacyAcqCfg,
-        MatchedAcq,
-        MatchedAcqCfg,
-        RandomizedAcq,
-        RandomizedAcqCfg,
-    )
     cfg = SynthCfg(acq=MatchedAcqCfg(match_field=3.0, match_tr_ms=3.2, match_flip_deg=45.0, match_vendor="GE"),
                    fields=(1.5, 3.0), vendors=("Siemens", "GE"))
     assert isinstance(cfg.acq.build(), MatchedAcq)

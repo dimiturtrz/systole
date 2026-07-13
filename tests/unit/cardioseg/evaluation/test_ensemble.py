@@ -9,10 +9,10 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-import cardioseg.evaluation.ensemble as E
-from cardioseg.evaluation.ensemble import Ensemble
-from core.data.static.labels import FOREGROUND
-from core.model import Model
+import cardioseg.evaluation.ensemble as E  # noqa: E402
+from cardioseg.evaluation.ensemble import Ensemble  # noqa: E402
+from core.data.static.labels import FOREGROUND  # noqa: E402
+from core.model import Model  # noqa: E402
 
 SIZE = 32
 
@@ -29,7 +29,7 @@ def test_ensemble_decomposition():
 
 
 def _acc():
-    return {c: 0.0 for c in FOREGROUND}, {c: 0.0 for c in FOREGROUND}
+    return dict.fromkeys(FOREGROUND, 0.0), dict.fromkeys(FOREGROUND, 0.0)
 
 
 def test_dice_fold_perfect():

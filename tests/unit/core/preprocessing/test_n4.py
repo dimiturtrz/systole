@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("SimpleITK")
+import core.preprocessing.n4 as n4mod
 from core.preprocessing.n4 import N4Cfg
 
 
@@ -52,7 +53,6 @@ def test_n4cfg_validates_ranges():
 
 def test_n4_sitk_error_fallback(monkeypatch):
     """_n4_sitk class: an ITK RuntimeError inside Execute -> pass the input through unchanged."""
-    import core.preprocessing.n4 as n4mod
 
     class _Boom:
         def SetMaximumNumberOfIterations(self, *_): pass

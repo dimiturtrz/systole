@@ -1,5 +1,7 @@
 """SplitResolver — resolves a split family@version into (train, val, test) Sources: highest-semver
 _latest, the labelled-complement train, and the full resolve triple (no test/val leak into train)."""
+from typing import ClassVar
+
 import polars as pl
 
 from core.data.ingest.source import StaticSource
@@ -18,7 +20,7 @@ def _cloud():
 
 class _Fam:
     name = "fam"
-    versions = {"1.0.0": SplitDef(
+    versions: ClassVar = {"1.0.0": SplitDef(
         test=lambda c: StaticSource(c.filter(V("labelled") & (V("vendor") == "Canon")), "canon"),
         val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "acdc"))}
 

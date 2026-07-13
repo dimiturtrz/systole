@@ -11,14 +11,14 @@ import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
-import cardioseg.evaluation.validate as V
-from cardioseg.evaluation.validate import (
+import cardioseg.evaluation.validate as V  # noqa: E402
+from cardioseg.evaluation.validate import (  # noqa: E402
     CLASS_NAMES,
     EvalCfg,
     Evaluator,
     _ClassScores,
 )
-from core.model import Model
+from core.model import Model  # noqa: E402
 
 SP = (1.0, 1.0, 1.0)   # isotropic spacing (mm); Dice is spacing-free, surface uses it
 SIZE = 32
@@ -144,8 +144,8 @@ def test_summarize_dict_and_mae(caplog):
     """summarize returns the JSON-able metrics dict: per-class Dice by name, mean Dice, EF MAE over
     rows, and passes boundary through. EF MAE = mean|ef_gt-ef_pred|."""
     dice = {1: 0.9, 2: 0.8, 3: 1.0}
-    ef_rows = [dict(patient="p1", group="A", ef_gt=50.0, ef_pred=54.0, edv_gt=1, edv_pred=1),
-               dict(patient="p2", group="B", ef_gt=60.0, ef_pred=58.0, edv_gt=1, edv_pred=1)]
+    ef_rows = [{"patient": "p1", "group": "A", "ef_gt": 50.0, "ef_pred": 54.0, "edv_gt": 1, "edv_pred": 1},
+               {"patient": "p2", "group": "B", "ef_gt": 60.0, "ef_pred": 58.0, "edv_gt": 1, "edv_pred": 1}]
     surf = {c: {"hd95": 3.0, "assd": 1.0} for c in CLASS_NAMES}
     with caplog.at_level(logging.INFO, logger="cardioseg.validate"):
         out = Evaluator.summarize(dice, ef_rows, surf)

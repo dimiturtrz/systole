@@ -8,6 +8,7 @@ import pytest
 from cardioseg.pipeline import (
     AnalysisStage,
     Ctx,
+    DataStage,
     EvaluateStage,
     ExportStage,
     Pipeline,
@@ -61,7 +62,6 @@ def test_is_done_gates_on_artifact(tmp_path, stage, artifact):
 
 def test_data_stage_never_done(tmp_path):
     """data is process-if-missing -> always 'runs' (a no-op scan when built), never gated done."""
-    from cardioseg.pipeline import DataStage
     assert DataStage().is_done(_ctx(tmp_path)) is False
 
 

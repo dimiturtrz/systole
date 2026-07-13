@@ -4,8 +4,11 @@ the equivalence classes of the code→canonical mapping so a scheme change can't
 import numpy as np
 import pytest
 import pyvista as pv
+import torch
 
+from core.data.dynamic.anatomy import PoolBuildCfg
 from core.data.dynamic.mrxcat import Mrxcat
+from core.data.dynamic.synth import MrxcatBgCfg, SynthCfg, SynthPainter
 
 
 def _write_vti(path, nz=6):
@@ -57,7 +60,6 @@ def test_tissue_map_keeps_heart_and_surrounding_organs():
     """Whole-FOV paint map (q4ww): heart codes → canonical heart classes; surrounding organs kept as
     paintable tissue classes (lung/liver/fat), body soft tissue → muscle, outside/bone → bg. NB code 2
     is a BROAD raw-XCAT label (not just RV wall) → muscle, not myo (render caught the stray-myo bug)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     raw = np.array([[1, 5, 6], [15, 13, 50], [2, 9, 0], [31, 0, 0]])
     #                myo LVcav RVcav | lung liver fat | broad→musc soft→musc outside | bone outside outside
     got = Mrxcat.to_tissue_map(raw)
@@ -68,7 +70,6 @@ def test_tissue_map_keeps_heart_and_surrounding_organs():
 def test_place_heart_in_fov_swaps_anatomy():
     """SSM x MRXCAT (majh): excise the phantom's heart, paste OUR heart at its location. Result keeps
     surrounding tissue + carries our heart classes; the old phantom-heart pixels not covered → muscle."""
-    from core.data.dynamic.mrxcat import Mrxcat
     fov = np.full((60, 60), 6, np.uint8)                 # muscle body
     fov[20:40, 20:40] = 2                                # phantom myo block
     fov[26:34, 26:34] = 3                                # phantom LV-cav
@@ -83,9 +84,6 @@ def test_place_heart_in_fov_swaps_anatomy():
 def test_fovbg_paints_wholefov_map():
     """Integration: bg_mode='mrxcat' paints an 8-class FOV tissue map (FovBg + named_tissue_params) with
     no bg invention — every class rendered by its tissue, image finite, heart target recoverable."""
-    import torch
-
-    from core.data.dynamic.synth import MrxcatBgCfg, SynthCfg, SynthPainter
     fov = torch.zeros((2, 64, 64), dtype=torch.long)
     fov[:, 20:44, 20:44] = 6                              # muscle body
     fov[:, 24:40, 24:40] = 2                              # myo
@@ -95,7 +93,6 @@ def test_fovbg_paints_wholefov_map():
     assert img.shape == (2, 1, 64, 64) and torch.isfinite(img).all()
     """Regression: MRXCAT hearts are small + OFF-CENTRE in a big whole-torso frame; a plain centre
     fit_square crops them away (empty pool). _heart_crop_scale must recover + centre them."""
-    from core.data.dynamic.mrxcat import Mrxcat
     big = np.zeros((920, 920), np.uint8)                 # whole-torso-sized frame
     big[60:90, 100:130] = 2                              # myo ring-ish, off-centre (top-left)
     big[68:82, 108:122] = 3                              # LV-cav inside
@@ -110,13 +107,11 @@ def test_fovbg_paints_wholefov_map():
 
 def test_heart_crop_scale_empty_returns_none():
     """No foreground in the slice -> None (no heart to crop)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     assert Mrxcat._heart_crop_scale(np.zeros((64, 64), np.uint8), size=32, target_px=20) is None
 
 
 def test_heart_crop_scale_noop_zoom_branch():
     """Heart bbox already ~= target_px -> the |scale-1|<eps branch skips _zoom; still fit_square'd."""
-    from core.data.dynamic.mrxcat import Mrxcat
     s = np.zeros((40, 40), np.uint8)
     s[10:30, 10:30] = 2                                  # 20-px bbox == target -> no rescale
     out = Mrxcat._heart_crop_scale(s, size=48, target_px=20)
@@ -126,7 +121,6 @@ def test_heart_crop_scale_noop_zoom_branch():
 def test_fov_window_crops_chest_window():
     """_fov_window: crop a scale x (heart-bbox) window centred on the heart, resize to size. Keeps
     surrounding tissue classes (equivalence class: heart present -> square window with context)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     s = np.full((120, 120), 6, np.uint8)                 # muscle body
     s[50:70, 50:70] = 2                                  # heart myo block, centred
     s[54:66, 54:66] = 3                                  # LV-cav
@@ -138,14 +132,12 @@ def test_fov_window_crops_chest_window():
 
 def test_fov_window_no_heart_returns_none():
     """No heart classes {1,2,3} in the slice -> None (nothing to centre a window on)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     s = np.full((64, 64), 6, np.uint8)                   # muscle only, no heart
     assert Mrxcat._fov_window(s, size=32, scale=3.0) is None
 
 
 def test_place_heart_in_fov_absent_heart_returns_fov():
     """None-safe: our heart is all-bg -> the phantom FOV returned unchanged."""
-    from core.data.dynamic.mrxcat import Mrxcat
     fov = np.full((40, 40), 6, np.uint8)
     fov[10:30, 10:30] = 2                                # phantom heart present
     out = Mrxcat.place_heart_in_fov(fov, np.zeros((20, 20), np.uint8))   # our heart empty
@@ -154,7 +146,6 @@ def test_place_heart_in_fov_absent_heart_returns_fov():
 
 def test_place_heart_in_fov_absent_phantom_returns_fov():
     """None-safe: the phantom FOV has no heart classes -> returned unchanged."""
-    from core.data.dynamic.mrxcat import Mrxcat
     fov = np.full((40, 40), 6, np.uint8)                 # muscle only, no heart to excise
     heart = np.zeros((20, 20), np.uint8); heart[8:12, 8:12] = 3
     assert np.array_equal(Mrxcat.place_heart_in_fov(fov, heart), fov)
@@ -162,8 +153,6 @@ def test_place_heart_in_fov_absent_phantom_returns_fov():
 
 def test_build_pool_empty_dir_returns_empty(tmp_path):
     """No .vti files -> a well-formed empty pool [0,size,size] uint8 (I/O shell, empty branch)."""
-    from core.data.dynamic.anatomy import PoolBuildCfg
-    from core.data.dynamic.mrxcat import Mrxcat
     out_path, shape = Mrxcat.build_pool(tmp_path, tmp_path / "pool.npz", PoolBuildCfg(size=32))
     assert shape == (0, 32, 32)
     assert np.load(out_path)["slices"].shape == (0, 32, 32)
@@ -171,14 +160,12 @@ def test_build_pool_empty_dir_returns_empty(tmp_path):
 
 def test_build_fov_pool_empty_dir_returns_empty(tmp_path):
     """No .vti -> empty 8-class FOV pool [0,size,size] (I/O shell, empty branch)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     _, shape = Mrxcat.build_fov_pool(tmp_path, tmp_path / "fov.npz", size=32)
     assert shape == (0, 32, 32)
 
 
 def test_build_ssm_fov_pool_no_backgrounds_empty(tmp_path):
     """SSM x MRXCAT with an empty .vti dir -> no XCAT backgrounds -> empty pool (no composite emitted)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     rodero = np.zeros((3, 32, 32), np.uint8)
     rodero[:, 8:24, 8:24] = 2                            # a tiny heart pool
     rp = tmp_path / "rodero.npz"
@@ -190,7 +177,6 @@ def test_build_ssm_fov_pool_no_backgrounds_empty(tmp_path):
 # ── .vti I/O-driven paths: real read + real build inner loops on a synthetic phantom ─────────────
 def test_load_vti_labels_roundtrip(vti_dir):
     """load_vti_labels reads the `labels` array into [nz,ny,nx] with the written codes intact."""
-    from core.data.dynamic.mrxcat import Mrxcat
     vol = Mrxcat.load_vti_labels(vti_dir / "phantom.vti")
     assert vol.shape == (6, 30, 30)                      # axis 0 = slices
     assert set(np.unique(vol)) == {0, 1, 5, 6, 13}       # the codes we wrote
@@ -198,8 +184,6 @@ def test_load_vti_labels_roundtrip(vti_dir):
 
 def test_build_pool_populates_canonical_slices(vti_dir):
     """build_pool: .vti -> canonical -> heart-crop+scale -> fit_square. Emits heart-only 4-class slices."""
-    from core.data.dynamic.anatomy import PoolBuildCfg
-    from core.data.dynamic.mrxcat import Mrxcat
     out_path, shape = Mrxcat.build_pool(vti_dir, vti_dir / "pool.npz",
                                  PoolBuildCfg(size=48, min_fg=5, min_cav_frac=0.02))
     arr = np.load(out_path)["slices"]
@@ -210,8 +194,6 @@ def test_build_pool_populates_canonical_slices(vti_dir):
 
 def test_build_pool_min_fg_drops_all(vti_dir):
     """min_fg above every slice's heart px -> all slices dropped -> empty pool (guard branch)."""
-    from core.data.dynamic.anatomy import PoolBuildCfg
-    from core.data.dynamic.mrxcat import Mrxcat
     _, shape = Mrxcat.build_pool(vti_dir, vti_dir / "pool.npz", PoolBuildCfg(size=48, min_fg=10 ** 6))
     assert shape == (0, 48, 48)
 
@@ -219,8 +201,6 @@ def test_build_pool_min_fg_drops_all(vti_dir):
 def test_build_pool_min_cav_frac_drops_all(vti_dir):
     """min_cav_frac ~1 -> every slice's cavity is below the fraction of fg -> all dropped (line 134
     cavity-composition guard, the apex-slice over-representation fix)."""
-    from core.data.dynamic.anatomy import PoolBuildCfg
-    from core.data.dynamic.mrxcat import Mrxcat
     _, shape = Mrxcat.build_pool(vti_dir, vti_dir / "pool.npz",
                           PoolBuildCfg(size=48, min_fg=5, min_cav_frac=0.99))
     assert shape == (0, 48, 48)
@@ -228,14 +208,12 @@ def test_build_pool_min_cav_frac_drops_all(vti_dir):
 
 def test_build_fov_pool_min_fg_drops_all(vti_dir):
     """build_fov_pool: min_fg above every slice's heart px -> all slices skipped -> empty (line 181)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     _, shape = Mrxcat.build_fov_pool(vti_dir, vti_dir / "fov.npz", size=48, min_fg=10 ** 6)
     assert shape == (0, 48, 48)
 
 
 def test_build_fov_pool_populates_8class(vti_dir):
     """build_fov_pool: .vti -> tissue map -> chest window. Keeps surrounding organ classes (>3)."""
-    from core.data.dynamic.mrxcat import Mrxcat
     out_path, shape = Mrxcat.build_fov_pool(vti_dir, vti_dir / "fov.npz", size=48, min_fg=5)
     arr = np.load(out_path)["slices"]
     assert shape == arr.shape and arr.shape[0] > 0
@@ -244,7 +222,6 @@ def test_build_fov_pool_populates_8class(vti_dir):
 
 def test_build_ssm_fov_pool_composites(vti_dir):
     """build_ssm_fov_pool: OUR rodero hearts composited into XCAT chest windows -> one slice per heart."""
-    from core.data.dynamic.mrxcat import Mrxcat
     rodero = np.zeros((4, 48, 48), np.uint8)
     rodero[:, 16:32, 16:32] = 2; rodero[:, 20:28, 20:28] = 3   # tiny heart pool (N=4)
     rp = vti_dir / "rodero.npz"; np.savez_compressed(rp, slices=rodero)

@@ -10,6 +10,8 @@ Kept fast + hermetic: real ACDC val/test (skips without the gated dataset, like 
 SYNTH train pool is mocked tiny (one load_pool patch) so the dynamic/composite epoch is ~20 slices not
 ~10k, and tracking is a no-op (no mlflow). device=cpu, epochs=1, n_patients caps val/test eval.
 """
+import math
+
 import numpy as np
 import pytest
 
@@ -52,5 +54,5 @@ def test_train_seg_e2e_smoke(split, tmp_path, monkeypatch):
 
     assert model is not None
     dm = results["val"]["dice_mean"]
-    assert isinstance(dm, float) and dm == dm            # finite (not NaN) — the whole chain produced a score
+    assert isinstance(dm, float) and not math.isnan(dm)  # finite (not NaN) — the whole chain produced a score
     assert any(tmp_path.rglob("model.pth"))              # save step wrote the model under the staging dir
