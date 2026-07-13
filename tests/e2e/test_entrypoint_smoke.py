@@ -4,7 +4,7 @@ didn't break CLI wiring — `--help` short-circuits argparse BEFORE any real wor
 import + module-level class-dispatch + parser setup with no data/GPU. In-process via runpy (no subprocess
 spawn) so it stays fast.
 
-Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremental fill under bd j4m2.
+Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremental fill under bd h7vy.2.
 The 28->5 entry-point consolidation (bd axri) folded the eval/data/analysis/export one-offs into group
 dispatchers — each `python -m <group> <subcommand>` shares one argparse router.
 """
