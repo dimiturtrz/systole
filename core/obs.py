@@ -32,7 +32,7 @@ class _AppendHandler(logging.Handler):
 
     def emit(self, record):
         try:
-            with open(self.path, "a", encoding="utf-8") as f:
+            with Path(self.path).open("a", encoding="utf-8") as f:
                 f.write(self.format(record) + "\n")
         except OSError:
             self.handleError(record)

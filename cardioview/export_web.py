@@ -166,8 +166,8 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
             fn = f"{name}_{tag}_{source}.gltf"
             Mesh.export_glb(m, spacing, OUT / fn)
             glb[tag] = fn
-        entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source=source,
-                     pred=volumes(masks, spacing), gt=volumes(build_masks(case, "gt"), spacing), glb=glb)
+        entry = {"patient": name, "group": case.get("group"), "held_out": (name in held), "source": source,
+                 "pred": volumes(masks, spacing), "gt": volumes(build_masks(case, "gt"), spacing), "glb": glb}
         upsert_manifest(entry, ctx.model_name)
         log.info("  %-11s %-5s static  EF %s%% (GT %s%%)", name, str(case.get("group")),
                  entry["pred"].get("ef"), entry["gt"].get("ef"))
@@ -228,11 +228,11 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
     ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
     case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
     gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
-    entry = dict(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
-                 pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
-                 frames=files, ed_idx=ed_k, es_idx=es_k,
-                 glb={"ED": files[ed_k], "ES": files[es_k]},
-                 slices=slice_files, sliceD=int(masks[0].shape[0]))
+    entry = {"patient": name, "group": case.get("group"), "held_out": (name in held), "source": "pred",
+             "pred": {"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, "gt": gt,
+             "frames": files, "ed_idx": ed_k, "es_idx": es_k,
+             "glb": {"ED": files[ed_k], "ES": files[es_k]},
+             "slices": slice_files, "sliceD": int(masks[0].shape[0])}
     upsert_manifest(entry, ctx.model_name)
     log.info("  %-11s %-5s BEATING %d frames  EF %s%% (GT %s%%)", name, str(case.get("group")),
              len(files), entry["pred"]["ef"], gt.get("ef"))

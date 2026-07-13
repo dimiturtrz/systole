@@ -30,7 +30,8 @@ class Paths:
         if not shutil.which("wslpath"):
             return None
         try:
-            out = subprocess.run(["wslpath", flag, raw], capture_output=True, text=True,
+            # trusted: fixed argv (no shell); `raw` is a path passed as an argv element, not interpolated
+            out = subprocess.run(["wslpath", flag, raw], capture_output=True, text=True,  # noqa: S603, S607
                                  timeout=5, check=True).stdout.strip()
             return out or None
         except (subprocess.SubprocessError, OSError):          # nonzero exit / timeout / wslpath vanished
