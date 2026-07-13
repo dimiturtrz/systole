@@ -176,7 +176,7 @@ def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — 
 
 def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
     """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
-    cfg = AcdcAdapter._parse_info_cfg(pdir)
+    cfg = AcdcAdapter.parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 

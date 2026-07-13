@@ -8,21 +8,21 @@ import numpy as np
 from core.data.static.mri.acdc import LABEL_MAP, AcdcAdapter
 
 
-# --- _parse_info_cfg: 'key: value' lines -> dict; missing file -> {} ---
-def test_parse_info_cfg_reads_pairs(tmp_path):
+# --- parse_info_cfg: 'key: value' lines -> dict; missing file -> {} ---
+def testparse_info_cfg_reads_pairs(tmp_path):
     (tmp_path / "Info.cfg").write_text("ED: 1\nES: 12\nGroup: DCM\nHeight: 170.0\nWeight: 75.0\n")
-    cfg = AcdcAdapter._parse_info_cfg(tmp_path)
+    cfg = AcdcAdapter.parse_info_cfg(tmp_path)
     assert cfg["ED"] == "1" and cfg["ES"] == "12" and cfg["Group"] == "DCM"
     assert cfg["Height"] == "170.0"
 
 
-def test_parse_info_cfg_missing_file_empty(tmp_path):
-    assert AcdcAdapter._parse_info_cfg(tmp_path / "nope") == {}
+def testparse_info_cfg_missing_file_empty(tmp_path):
+    assert AcdcAdapter.parse_info_cfg(tmp_path / "nope") == {}
 
 
-def test_parse_info_cfg_ignores_colonless_lines(tmp_path):
+def testparse_info_cfg_ignores_colonless_lines(tmp_path):
     (tmp_path / "Info.cfg").write_text("ED: 1\n# a comment with no key\nGroup: NOR\n")
-    cfg = AcdcAdapter._parse_info_cfg(tmp_path)
+    cfg = AcdcAdapter.parse_info_cfg(tmp_path)
     assert cfg == {"ED": "1", "Group": "NOR"}
 
 
