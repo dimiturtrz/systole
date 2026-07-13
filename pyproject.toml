@@ -96,15 +96,21 @@ select = [
     "C408", "C420",  # unnecessary dict() call / dict-comprehension (use a literal / dict.fromkeys)
     "SIM105", "SIM108", "SIM300",  # contextlib.suppress / ternary / no-yoda
     "PERF401", "PLW0108", "E731",  # list.extend / no-wrapper-lambda / def-not-lambda-assignment
+    "E402", "ICN001",  # imports at top (module-level alias assignments relocated below) / matplotlib-as-mpl
 ]
 # N* REVERSED ON (was OFF): pep8-naming gates CASE only, not length — so the ML idioms (design matrices
 # X/Y, tensor dims, MRI-physics relaxation names) are preserved via [tool.ruff.lint.pep8-naming]
 # ignore-names, and every OTHER wrong-case name renames. Length/short-name stays a review concern (ruff
 # has no length rule + no plugin API for one).
-# OFF by decision: D* (docstrings not mandated), ANN* (annotations = the deferred type axis),
-# RUF001-003 (our → × λ math unicode is intentional; RUF100 ON), E701/E702
-# (compaction kept), TRY/EM/SIM/UP (opinionated churn), NPY002 (legacy np.random KEPT — modernizing to
-# Generator changes the RNG stream, breaking seed-comparability with existing runs).
+# OFF by decision (bd l5q8 records the tranche reasoning): D* (docstrings not mandated); ANN* (the
+# deferred type axis, bd rp8l); RUF001-003 (the → × λ math unicode is intentional; RUF100 ON); E701/E702
+# (the `a; b` / `if x: y` compaction is kept); NPY002 (legacy np.random — modernizing to Generator changes
+# the RNG stream, breaking seed-comparability with existing runs); TRY003 + EM101/EM102 (opinionated
+# exception-message verbosity); G004 (f-strings in logging kept — readability over lazy-% micro-perf);
+# COM812 (conflicts with the formatter); ARG002/004/005 (unused args are the add_args(ap)/run(args)/
+# build() interface-conformance signatures); TID252 (relative intra-package imports are intentional — a
+# sub-package's own public surface); UP* (pyupgrade churn; annotation modernization belongs to the type
+# axis). SLF001 (private-member-access) is a pending pass — bd 1sg0.
 
 [tool.ruff.lint.pep8-naming]
 # The ONLY allowlisted idioms are ones with no honest descriptive form — every name that carries a

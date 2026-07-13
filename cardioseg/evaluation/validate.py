@@ -15,8 +15,6 @@ from pydantic import BaseModel
 
 from core.config import _VALIDATE
 from core.data.static.store import Store
-
-load_arrays = Store.load_arrays
 from core.evaluate import CLASSES, Evaluate
 
 # The predict_volume kernel moved to core.inference (shared by the viewer + uncertainty decomposition);
@@ -25,6 +23,8 @@ from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
+
+load_arrays = Store.load_arrays
 
 log = logging.getLogger("cardioseg.validate")
 

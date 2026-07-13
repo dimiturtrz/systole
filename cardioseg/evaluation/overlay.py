@@ -9,11 +9,11 @@ ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact sh
 import logging
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 import numpy as np
 import torch
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 

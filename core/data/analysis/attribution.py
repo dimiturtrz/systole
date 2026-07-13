@@ -17,11 +17,11 @@ import json
 import logging
 from pathlib import Path
 
-import matplotlib
+import matplotlib as mpl
 import torch
 from captum.attr import Saliency
 
-matplotlib.use("Agg")
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.config import FLAGSHIP_REF
