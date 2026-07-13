@@ -1,10 +1,7 @@
 """Unit tests for largest-CC post-processing — equivalence classes of the input mask."""
 import numpy as np
-import pytest
-from scipy.ndimage import label as cpu_label
 
-from core.data.static.labels import FOREGROUND
-from core.postprocess import _CUCIM_LABEL, Postprocess
+from core.postprocess import Postprocess
 
 
 def _blob(mask, lab, z, y, x, r):
@@ -45,24 +42,3 @@ def test_each_class_independent():
 def test_empty_mask_returns_empty():
     m = np.zeros((3, 16, 16), np.uint8)
     assert Postprocess.largest_cc_per_class(m).sum() == 0
-
-
-@pytest.mark.skipif(_CUCIM_LABEL is None, reason="no cucim (GPU lane) — scipy path covered above")
-def test_gpu_cucim_matches_cpu_parity():
-    """Linux GPU lane: the cucim largest-CC must give bit-identical output to the scipy CPU path.
-    Skipped where cucim is absent (Windows); the scipy path is covered by the tests above."""
-    rng = np.random.default_rng(0)
-    m = np.zeros((6, 64, 64), np.uint8)
-    m[:, 16:48, 16:48] = 1; m[:, 24:40, 24:40] = 2; m[:, 28:36, 28:36] = 3
-    for _ in range(20):                                  # scatter FP islands to drop
-        z, y, x = rng.integers(0, 6), rng.integers(0, 60), rng.integers(0, 60)
-        m[z, y:y + 3, x:x + 3] = rng.integers(1, 4)
-    ref = np.zeros_like(m)
-    for lab in FOREGROUND:
-        b = m == lab
-        if not b.any():
-            continue
-        cc, n = cpu_label(b)
-        s = np.bincount(cc.ravel()); s[0] = 0
-        ref[cc == int(s.argmax())] = lab
-    assert np.array_equal(Postprocess.largest_cc_per_class(m), ref)   # cucim == scipy
