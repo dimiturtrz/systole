@@ -181,7 +181,9 @@ class Uncertainty:
         rocauc = float(roc_auc_score(wrong, ent_all))
         auprc = float(average_precision_score(wrong, ent_all))
 
-        # aleatoric/epistemic decomposition (BALD) over foreground — how much uncertainty is reducible
+        # aleatoric/epistemic decomposition (BALD) over foreground — how much uncertainty is reducible.
+        # Members are TTA flips (weak proxy for a posterior), so epistemic is a LOWER BOUND: a deep
+        # ensemble surfaces more model disagreement, so the true reducible fraction is >= this (bd zxcm).
         ale_m = float(np.concatenate(ales).mean()); epi_m = float(np.concatenate(epis).mean())
         epi_frac = epi_m / max(ale_m + epi_m, 1e-9)
 
@@ -190,21 +192,21 @@ class Uncertainty:
              "error_detection": {"auprc": round(auprc, 3), "base_rate": round(base, 3),
                                  "lift_over_base": round(auprc / max(base, 1e-6), 1), "rocauc": round(rocauc, 3)},
              "decomposition": {"aleatoric": round(ale_m, 4), "epistemic": round(epi_m, 4),
-                               "epistemic_fraction": round(epi_frac, 3)},
+                               "epistemic_fraction_tta_lb": round(epi_frac, 3)},
              "n_cases": len(cases), "most_uncertain": cases[:8]}, indent=2))
 
         Uncertainty._reliability_plot(bins, e, out)
 
         log.info(f"ECE {e:.3f} | boundary/interior {bratio:.2f}x | error-detect AUPRC {auprc:.3f} "
                  f"(base {base:.3f}, {auprc/max(base,1e-6):.1f}x) ROC-AUC {rocauc:.3f} | "
-                 f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible) | "
+                 f"aleatoric {ale_m:.3f} / epistemic {epi_m:.3f} ({epi_frac:.0%} reducible, TTA lower bound) | "
                  f"most-uncertain: {cases[0]['case']} ({cases[0]['uncertainty']:.3f})")
         log.info(f"-> {out}/uncertainty_map.png, reliability.png, uncertainty.json")
 
         tracker = Tracker("cardioseg", run.name)
         trk = tracker.track_run(run_dir=run)      # resume the train run
         ev = args.eval
-        trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac", epi_frac)
+        trk.metric(f"{ev}_ece", e); trk.metric(f"{ev}_epistemic_frac_tta_lb", epi_frac)
         trk.metric(f"{ev}_err_auprc", auprc); trk.metric(f"{ev}_boundary_ratio", bratio)
         trk.artifact(out / "uncertainty.json"); trk.artifact(out / "reliability.png")
         trk.end()

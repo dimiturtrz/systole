@@ -45,7 +45,7 @@ SMALL_N = 10   # groups below this are flagged — per-group stats are noisy
 
 class Distribution:
     @staticmethod
-    def collect(run: Path, device: str, meta_rows):  # pragma: no cover  (loads the model + GPU predict_volume per case over the real store)
+    def collect(run: Path, device: str, meta_rows, *, tta: bool = True):  # pragma: no cover  (loads the model + GPU predict_volume per case over the real store)
         """One record per subject: dice + boundary distances per class, EF gt/pred, and the
         stratification keys (vendor/pathology/field) straight from the store's meta — for the
         stratified views. Pure eval on the existing model (no retrain).
@@ -72,7 +72,7 @@ class Distribution:
                 k = tag.lower()
                 if f"{k}_img" not in case:
                     continue
-                pred = Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=True))
+                pred = Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=tta))
                 gt = Preprocess.stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
@@ -254,6 +254,7 @@ class Distribution:
                         help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
         ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
         ap.add_argument("--seed", type=int, default=0)
+        ap.add_argument("--no-tta", dest="tta", action="store_false", help="disable test-time flips (default: on)")
 
     @staticmethod
     def run(args):  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
@@ -270,7 +271,7 @@ class Distribution:
             log.warning("excluded %d/%d '%s' subjects the model TRAINED on — leak-free distribution (bd h9bz)",
                         n_excl, len(df), args.eval)
         label = f" ({args.eval}{', held-out' if args.holdout else ''}, n={len(kept)})"
-        rows = Distribution.collect(run, device, kept)
+        rows = Distribution.collect(run, device, kept, tta=args.tta)
         dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
 
         out = run / "plots"
