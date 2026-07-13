@@ -8,6 +8,7 @@ Tier-2 (deep e2e: run each main with mocked I/O + assert output) is the incremen
 The 28->5 entry-point consolidation (bd axri) folded the eval/data/analysis/export one-offs into group
 dispatchers — each `python -m <group> <subcommand>` shares one argparse router.
 """
+import importlib
 import runpy
 import sys
 
@@ -32,3 +33,22 @@ def test_entrypoint_help_exits_clean(mod, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         runpy.run_module(mod, run_name="__main__")
     assert exc.value.code in (0, None)   # argparse --help exits 0
+
+
+# --- Tier-2 (bd h7vy.2): the DISPATCH loop that `--help` never reaches ---
+# --help short-circuits argparse before the group router runs `COMMANDS[cmd].run(args)`. This drives the
+# router with argv `[group, subcommand]` and the command's `run` mocked, asserting it was dispatched to —
+# so the subcommand routing (not just parser setup) is smoked with no data/GPU. `render` is the exemplar:
+# its own work is a GPU run-time diagnostic (correctly not unit-tested), but its DISPATCH must stay wired.
+@pytest.mark.parametrize("mod, subcmd, cls_path", [
+    ("core.data.analysis", "render", "core.data.analysis.render.Render"),
+])
+def test_dispatch_routes_to_subcommand(mod, subcmd, cls_path, monkeypatch):
+    """`python -m <group> <subcommand>` routes to that command's `run` (mocked) — dispatch wiring intact."""
+    mod_name, cls_name = cls_path.rsplit(".", 1)
+    command = getattr(importlib.import_module(mod_name), cls_name)
+    called = []
+    monkeypatch.setattr(command, "run", staticmethod(lambda args: called.append(subcmd)))
+    monkeypatch.setattr(sys, "argv", [mod.split(".")[-1], subcmd])
+    runpy.run_module(mod, run_name="__main__")
+    assert called == [subcmd]   # the router reached the command, not just the parser
