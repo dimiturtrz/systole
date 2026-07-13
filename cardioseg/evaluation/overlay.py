@@ -73,8 +73,9 @@ class Overlay:
     def _case(model, path, size, device):
         case = load_arrays(path)
         spacing = tuple(float(s) for s in case["spacing"])
-        pred_ed = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["ed_img"], size, device, tta=True))
-        pred_es = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case["es_img"], size, device, tta=True))
+        inf = Inference(model, size, device)
+        pred_ed = Postprocess.largest_cc_per_class(inf.predict_volume(case["ed_img"], tta=True))
+        pred_es = Postprocess.largest_cc_per_class(inf.predict_volume(case["es_img"], tta=True))
         gt_ed = Preprocess.stack_slices(case["ed_gt"], size)
         img_ed = Preprocess.stack_slices(case["ed_img"], size, 0.0)
         ef_p, _, _ = Measure.ejection_fraction(pred_ed, pred_es, spacing)

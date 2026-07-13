@@ -52,7 +52,7 @@ class Uncertainty:
             epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
         NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
         here is a lower-bound proxy, not deep-ensemble gold."""
-        pred, mean, members = Inference.predict_volume_members(model, vol_img, size, device)  # mean [D,C,H,W]; members [K,D,C,H,W]
+        pred, mean, members = Inference(model, size, device).predict_volume_members(vol_img)  # mean [D,C,H,W]; members [K,D,C,H,W]
         logc = np.log(mean.shape[1])
         total = -(mean * (mean + 1e-12).log()).sum(1) / logc                        # H[mean]
         aleat = (-(members * (members + 1e-12).log()).sum(2)).mean(0) / logc        # mean_k H[p_k]

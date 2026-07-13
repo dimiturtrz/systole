@@ -71,7 +71,7 @@ class Distribution:
                 k = tag.lower()
                 if f"{k}_img" not in case:
                     continue
-                pred = Postprocess.largest_cc_per_class(Inference.predict_volume(model, case[f"{k}_img"], SIZE, device, tta=True))
+                pred = Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=True))
                 gt = Preprocess.stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it

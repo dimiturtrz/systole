@@ -188,7 +188,7 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
         img = Preprocess.zscore(Preprocess.resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
-        masks[k] = Postprocess.largest_cc_per_class(Inference.predict_volume(ctx.model, img, SIZE, ctx.device, tta=True))
+        masks[k] = Postprocess.largest_cc_per_class(Inference(ctx.model, SIZE, ctx.device).predict_volume(img, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
 

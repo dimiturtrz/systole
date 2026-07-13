@@ -43,7 +43,7 @@ class Ensemble:
     def decompose(models, vol_img, size, device):
         """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
         [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
-        mems = [Inference.predict_volume_probs(m, vol_img, size, device)[1] for m in models]   # each [D,C,H,W]
+        mems = [Inference(m, size, device).predict_volume_probs(vol_img)[1] for m in models]   # each [D,C,H,W]
         members = torch.stack(mems)                                                  # [K,D,C,H,W]
         mean = members.mean(0)
         logc = np.log(mean.shape[1])

@@ -62,7 +62,7 @@ class SoftEval:
             sp = tuple(float(s) for s in case["spacing"])
             vols = {}
             for tag in ("ed", "es"):
-                _, mean = Inference.predict_volume_probs(model, case[f"{tag}_img"], SIZE, dev)   # [D,C,H,W] softmax
+                _, mean = Inference(model, SIZE, dev).predict_volume_probs(case[f"{tag}_img"])   # [D,C,H,W] softmax
                 p = mean.float().cpu().numpy()
                 blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
                 hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
