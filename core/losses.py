@@ -37,7 +37,7 @@ class Losses:
         stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
         scale-free (paired with the dimensionless vol_loss). Pass the learnable log-vars as parameters in
         the optimizer."""
-        return sum(torch.exp(-s) * l + s for l, s in zip(loss_terms, log_vars, strict=True))
+        return sum(torch.exp(-s) * lt + s for lt, s in zip(loss_terms, log_vars, strict=True))
 
 
 class DiceCEHD:
