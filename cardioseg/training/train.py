@@ -39,6 +39,25 @@ from ..evaluation.validate import EvalCfg, Evaluator
 from ..tracking import Tracker
 from .ef_lane import EfLane
 
+# Declarative CLI-arg -> cfg mapping (bd cardiac-seg-dlj0): one table replaces the per-flag if-ladder.
+# Each row is (arg name, cfg dotted path, is_flag). is_flag=False -> a set SCALAR, copied when the arg is
+# not None; is_flag=True -> a store_true SWITCH, set True only when present/truthy (an absent flag must
+# NOT clobber the cfg default with False). `out` targets the renamed `out_dir` field.
+_CLI_FIELDS = [
+    ("epochs", "epochs", False), ("batch", "batch", False), ("patience", "patience", False),
+    ("workers", "workers", False), ("seed", "seed", False), ("n_patients", "n_patients", False),
+    ("ef_lambda", "ef_lambda", False), ("out", "out_dir", False),
+    ("n4", "generator.data.n4", True), ("ef_learn", "ef_learn", True), ("ef_kaggle", "ef_kaggle", True),
+]
+
+
+def _set_cfg_path(cfg, path: str, value) -> None:
+    """setattr along a dotted cfg path ('generator.data.n4' -> cfg.generator.data.n4 = value)."""
+    *parents, leaf = path.split(".")
+    for parent in parents:
+        cfg = getattr(cfg, parent)
+    setattr(cfg, leaf, value)
+
 
 class Train:
     """The train.py orchestration surface (the free funcs folded in as staticmethods): the CLI arg->cfg
@@ -89,17 +108,11 @@ class Train:
         coded --split is applied by the caller (it needs list_splits validation) before this. Pure mapping —
         no IO, so the whole CLI contract is testable without training."""
         a = args if isinstance(args, dict) else vars(args)         # Namespace -> dict; also accept a plain dict
-        for attr in ("epochs", "batch", "patience", "workers", "seed", "n_patients", "ef_lambda"):
-            if a.get(attr) is not None:
-                setattr(cfg, attr, a[attr])
-        if a.get("n4"):
-            cfg.generator.data.n4 = True
-        if a.get("ef_learn"):
-            cfg.ef_learn = True
-        if a.get("ef_kaggle"):
-            cfg.ef_kaggle = True
-        if a.get("out"):
-            cfg.out_dir = a["out"]
+        for arg, path, is_flag in _CLI_FIELDS:
+            value = a.get(arg)
+            applies = bool(value) if is_flag else value is not None
+            if applies:
+                _set_cfg_path(cfg, path, True if is_flag else value)
         Hparams.apply_overrides(cfg, a.get("overrides") or [])
         return cfg
 
