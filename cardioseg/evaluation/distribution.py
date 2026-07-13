@@ -27,6 +27,7 @@ from scipy.stats import gaussian_kde
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate
 from core.hparams import Hparams
 from core.inference import Inference
@@ -262,7 +263,7 @@ class Distribution:
         df = splits.Splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
         # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
         d_model = Hparams.from_json(run / "config.json").generator.data
-        trained = splits.ModelSplit(d_model, store.load(list(d_model.sources), inplane=d_model.inplane, n4=d_model.n4)).train_keys()
+        trained = splits.ModelSplit(d_model, store.load(list(d_model.sources), Recipe(inplane=d_model.inplane, n4=d_model.n4))).train_keys()
         kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
         n_excl = len(df) - len(kept)
         if n_excl:

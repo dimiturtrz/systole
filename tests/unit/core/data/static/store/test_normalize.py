@@ -8,6 +8,7 @@ import numpy as np
 from core.data.static.reference import Reference
 from core.data.static.store import normalize as normalize_mod
 from core.data.static.store.normalize import Normalizer
+from core.data.static.store.query import Recipe
 from core.preprocessing.n4 import N4Cfg
 
 
@@ -50,7 +51,7 @@ def test_apply_case_threads_recipe(tmp_path, monkeypatch):
     """apply_case forwards inplane/n4/n4_params/norm and the loader to preprocess_case."""
     captured = _capture_preprocess(monkeypatch)
     cfg = N4Cfg()
-    n = Normalizer(1.25, n4=True, n4_params=cfg, nyul=False, norm="blood")
+    n = Normalizer(Recipe(inplane=1.25, n4=True, n4_params=cfg, norm="blood"))
     loader = object()
     out = n.apply_case(tmp_path / "s1", loader)
     assert out == {"ed_img": np.zeros((1, 1))} or "ed_img" in out
@@ -64,17 +65,17 @@ def test_apply_case_nyul_standard_gated_on_flag(tmp_path, monkeypatch):
     std = np.array([0.0, 1.0])
 
     captured = _capture_preprocess(monkeypatch)
-    Normalizer(nyul=False, nyul_standard=std).apply_case(tmp_path / "s", None)
+    Normalizer(Recipe(nyul=False), nyul_standard=std).apply_case(tmp_path / "s", None)
     assert captured["nyul_standard"] is None                     # gate off -> None
 
     captured = _capture_preprocess(monkeypatch)
-    Normalizer(nyul=True, nyul_standard=std).apply_case(tmp_path / "s", None)
+    Normalizer(Recipe(nyul=True), nyul_standard=std).apply_case(tmp_path / "s", None)
     assert captured["nyul_standard"] is std                      # gate on -> the standard
 
 
 # --- construction: recipe fields stored verbatim (defaults + explicit) ---
 def test_construction_defaults_and_explicit():
     d = Normalizer()
-    assert d.n4 is False and d.nyul is False and d.norm == "zscore" and d.nyul_standard is None
-    e = Normalizer(2.0, n4=True, nyul=True, norm="blood")
-    assert e.inplane == 2.0 and e.n4 is True and e.nyul is True and e.norm == "blood"
+    assert d.recipe.n4 is False and d.recipe.nyul is False and d.recipe.norm == "zscore" and d.nyul_standard is None
+    e = Normalizer(Recipe(inplane=2.0, n4=True, nyul=True, norm="blood"))
+    assert e.recipe.inplane == 2.0 and e.recipe.n4 is True and e.recipe.nyul is True and e.recipe.norm == "blood"

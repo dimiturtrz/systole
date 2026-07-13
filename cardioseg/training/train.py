@@ -197,8 +197,7 @@ class Train:
         if d.split:
             srcs = list(Splits.load_split(Splits.parse_ref(d.split)[0]).sources or d.sources)
         with timed(log, "store.load + split"):
-            meta = store.load(srcs, inplane=d.inplane, n4=d.n4, n4_params=d.n4_params,
-                              workers=cfg.workers, nyul=d.nyul, norm=d.norm)
+            meta = store.load(srcs, d.recipe, workers=cfg.workers)
             if d.split:                                 # NEW-STYLE: a coded-filter family owns the partition
                 r = Splits.resolve_cfg(d, meta)
                 train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam

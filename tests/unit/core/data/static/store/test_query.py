@@ -13,7 +13,9 @@ from core.config import DEFAULT_INPLANE
 from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.store.query import (
     AcqReference,
+    DataCfg,
     MetaBuilder,
+    Recipe,
     Store,
 )
 from core.preprocessing.n4 import N4Cfg
@@ -29,11 +31,19 @@ load_arrays = Store.load_arrays
 # Store now binds the preprocessing recipe at construction; these thin helpers keep the recipe-per-call
 # test bodies (which exercise each recipe axis) unchanged against the new session API.
 def param_key(inplane=DEFAULT_INPLANE, **recipe):
-    return Store(inplane, **recipe).param_key()
+    return Store(Recipe(inplane=inplane, **recipe)).param_key()
 
 
 def dataset_dir(dataset, inplane=DEFAULT_INPLANE, **recipe):
-    return Store(inplane, **recipe).dataset_dir(dataset)
+    return Store(Recipe(inplane=inplane, **recipe)).dataset_dir(dataset)
+
+
+def test_datacfg_recipe_bridges_flat_fields():
+    """DataCfg.recipe carries the flat (serialized) preprocessing fields into the Recipe value object,
+    and addressing through it matches addressing with the loose params."""
+    r = DataCfg(inplane=1.25, n4=True, nyul=True, norm="blood").recipe
+    assert (r.inplane, r.n4, r.nyul, r.norm) == (1.25, True, True, "blood")
+    assert Store(r).param_key() == param_key(1.25, n4=True, nyul=True, norm="blood")
 
 
 # --- _region_of: mapped country / unmapped / null ---

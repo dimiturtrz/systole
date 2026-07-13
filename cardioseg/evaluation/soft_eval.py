@@ -22,6 +22,7 @@ from cardioseg.evaluation.uncertainty import Uncertainty
 from core.data.static import splits
 from core.data.static.labels import LV_CAV
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
@@ -41,7 +42,7 @@ class SoftEval:
     @staticmethod
     def _val(run: Path):  # pragma: no cover  (store.load + split need the real data tree on disk)
         d = Hparams.from_json(run / "config.json").generator.data
-        meta = store.load(list(d.sources), inplane=d.inplane).filter(pl.col("labelled"))
+        meta = store.load(list(d.sources), Recipe(inplane=d.inplane)).filter(pl.col("labelled"))
         _, val, _ = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                       val_datasets=d.val_datasets, val_vendors=d.val_vendors)
         return val

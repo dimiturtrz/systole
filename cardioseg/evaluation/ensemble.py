@@ -20,6 +20,7 @@ import torch
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
 from core.data.static.store.build import Build as store
+from core.data.static.store.query import Recipe
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
@@ -93,7 +94,7 @@ class Ensemble:
     @staticmethod
     def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
         d = cfg.generator.data
-        meta = store.load(list(d.sources), inplane=d.inplane, n4=d.n4).filter(pl.col("labelled"))
+        meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
         ms = splits.ModelSplit(d, meta)
         if which.lower() == "val":                          # the held-out val split (split-derived, not a literal)
             return ms.val
