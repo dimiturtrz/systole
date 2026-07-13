@@ -84,19 +84,19 @@ class SyncNumbers:
 
     @staticmethod
     def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
-        a, n = _G["dice"], _NN["ge"]["dice"]
+        ours, nnunet = _G["dice"], _NN["ge"]["dice"]
 
-        def dd(k):
-            return (n[k] - a[k]) * 100
+        def dice_delta(structure):
+            return (nnunet[structure] - ours[structure]) * 100
         return "\n".join([
             "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
             "|---|---|---|---|---|---|---|",
-            f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {a['mean']:.3f} | {a['LV-cav']:.3f} | "
-            f"{a['LV-myo']:.3f} | {a['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
-            f"| **nnU-Net** (50 ep, 1 fold) | **{n['mean']:.3f}** | **{n['LV-cav']:.3f}** | **{n['LV-myo']:.3f}** | "
-            f"**{n['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
-            f"| Δ (nnU-Net − ours) | +{dd('mean'):.1f} | +{dd('LV-cav'):.1f} | +{dd('LV-myo'):.1f} | "
-            f"+{dd('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
+            f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {ours['mean']:.3f} | {ours['LV-cav']:.3f} | "
+            f"{ours['LV-myo']:.3f} | {ours['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
+            f"| **nnU-Net** (50 ep, 1 fold) | **{nnunet['mean']:.3f}** | **{nnunet['LV-cav']:.3f}** | **{nnunet['LV-myo']:.3f}** | "
+            f"**{nnunet['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
+            f"| Δ (nnU-Net − ours) | +{dice_delta('mean'):.1f} | +{dice_delta('LV-cav'):.1f} | +{dice_delta('LV-myo'):.1f} | "
+            f"+{dice_delta('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
         ])
 
     @staticmethod

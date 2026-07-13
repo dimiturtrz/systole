@@ -241,11 +241,12 @@ class MetaBuilder:
                 meta = {}
             arrays = dict(np.load(data_dir / f, allow_pickle=True))
             rows.append(self._row(case, arrays, meta, f))
-        def _dt(k):
-            if k in ("age", "height", "weight", "bsa"):
+        def _column_dtype(column):
+            if column in ("age", "height", "weight", "bsa"):
                 return pl.Float64
-            return pl.Boolean if k == "labelled" else pl.Utf8
-        pl.DataFrame(rows, schema={k: _dt(k) for k in META_FIELDS}, strict=False).write_csv(out / "meta.csv")
+            return pl.Boolean if column == "labelled" else pl.Utf8
+        schema = {column: _column_dtype(column) for column in META_FIELDS}
+        pl.DataFrame(rows, schema=schema, strict=False).write_csv(out / "meta.csv")
         return out / "meta.csv"
 
     @staticmethod
