@@ -13,6 +13,7 @@ from typing import Protocol, TypedDict, runtime_checkable
 
 import nibabel as nib
 import numpy as np
+from jaxtyping import Integer
 from scipy import ndimage
 
 from core.types import Image, Mask, Spacing, Volume
@@ -167,7 +168,7 @@ class Base:
         return out
 
     @staticmethod
-    def apply_label_map(gt: Mask, label_map: dict[int, int]) -> Mask:
+    def apply_label_map(gt: Integer[np.ndarray, "*grid"], label_map: dict[int, int]) -> Integer[np.ndarray, "*grid"]:
         """Remap raw integer labels to the canonical convention. Identity map -> unchanged."""
         if not label_map or all(k == v for k, v in label_map.items()):
             return gt
@@ -178,7 +179,7 @@ class Base:
         return out
 
     @staticmethod
-    def identify_lv_cavity(mask: Mask, myo_label: int = LV_MYO) -> tuple[int | None, dict[int, float]]:
+    def identify_lv_cavity(mask: Integer[np.ndarray, "*grid"], myo_label: int = LV_MYO) -> tuple[int | None, dict[int, float]]:
         """Geometrically identify the LV-cavity label: the non-myo foreground label most enclosed
         by the myocardium ring. Trusts geometry, not a remembered int. mask [D,H,W] or [H,W].
         Returns (lv_label, scores) where score = fraction of a label's shell touching myocardium."""

@@ -27,7 +27,7 @@ class Inference:
         return np.stack([Preprocess.fit_square(vol_img[z].astype(np.float32), self.size, 0.0)
                          for z in range(vol_img.shape[0])])
 
-    def predict_volume_members(self, vol_img: Volume):
+    def predict_volume_members(self, vol_img: Float[np.ndarray, "d h w"]):
         """Run the 4 TTA flips and keep them as a cheap K-member ensemble for uncertainty decomposition.
         Returns (pred uint8 [D,size,size], mean_softmax [D,C,size,size], members [K,D,C,size,size]) on
         `device`. The members enable the aleatoric/epistemic (BALD) split; mean is their average."""
@@ -47,7 +47,7 @@ class Inference:
             pred = mean.argmax(1).to(torch.uint8).cpu().numpy()
         return pred, mean, members
 
-    def predict_volume_probs(self, vol_img: Volume):
+    def predict_volume_probs(self, vol_img: Float[np.ndarray, "d h w"]):
         """Mean-softmax over the 4 TTA flips — the shared inference primitive. Returns
         (pred uint8 [D,size,size], mean_softmax [D,C,size,size]). See predict_volume_members for the
         per-member stack used by the uncertainty decomposition."""

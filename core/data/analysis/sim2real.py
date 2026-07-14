@@ -17,6 +17,7 @@ import math
 
 import polars as pl
 import torch
+from jaxtyping import Float
 
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.mri_physics import MriPhysics
@@ -39,7 +40,7 @@ class Sim2Real:
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 
     @staticmethod
-    def fit_acquisition(real_means: torch.Tensor, n_classes: int,
+    def fit_acquisition(real_means: Float[torch.Tensor, "*n"], n_classes: int,
                         tr_grid=(2.5, 6.0, 36), fl_grid=(20.0, 80.0, 31), fields=(1.5, 3.0)) -> dict:
         """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
         real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.

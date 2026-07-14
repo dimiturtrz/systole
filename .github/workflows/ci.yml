@@ -141,14 +141,12 @@ jobs:
           uv run python -m devtools.state_candidates
           uv run python -m devtools.data_clumps
           uv run python -m devtools.lcom
-      # Shape-contract coverage — advisory (bd cardiac-seg-m8xq, epic wk8m): a public method whose
+      # Shape-contract coverage — ENFORCED (bd cardiac-seg-m8xq/4y7y, epic wk8m): a public method whose
       # param/return is a bare np.ndarray/torch.Tensor (or array alias) without a jaxtyping shape is a
-      # silent shape assumption. ADVISORY for now — the remaining bare boundaries are deliberate
-      # (multi-array / union-tuple returns, list-of-array reductions); graduates to blocking once the
-      # curated surface hits zero (the ratchet). A NEW bare-array boundary shows in the log.
-      - name: Shape contracts — advisory (bare array/tensor boundaries lack a jaxtyping shape)
-        continue-on-error: true
-        run: uv run python -m devtools.shape_contracts
+      # silent shape assumption. The curated surface hit zero (all 23 boundaries annotated), so the gate
+      # graduated to blocking (--assert exits 1) — a NEW bare-array boundary now fails the merge.
+      - name: Shape contracts — enforced (bare array/tensor boundaries must carry a jaxtyping shape)
+        run: uv run python -m devtools.shape_contracts --assert
       # Magic literals — advisory (bd cardiac-seg-wir7): generalizes PLR2004 (comparison-only) to the
       # untapped contexts. A string token recurring >=4x is domain vocabulary masquerading as a literal
       # (StrEnum/constant candidate); a constant-string-key dict SET rebuilt in >=2 places is an implicit

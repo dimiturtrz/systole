@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 
 import torch
+from jaxtyping import Float, Integer
 
 # tissue -> field (Tesla) -> (T1 ms, T2 ms, PD). Two fields = the cross-vendor relaxation axis.
 TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
@@ -144,8 +145,8 @@ class MriPhysics:
         return [c for c in range(n_classes) if _HEART.get(c) == "blood"]
 
     @staticmethod
-    def bssfp_signal(T1: torch.Tensor, T2: torch.Tensor, PD: torch.Tensor,
-                     TR: torch.Tensor, flip: torch.Tensor) -> torch.Tensor:
+    def bssfp_signal(T1: Float[torch.Tensor, "..."], T2: Float[torch.Tensor, "..."], PD: Float[torch.Tensor, "..."],
+                     TR: Float[torch.Tensor, "..."], flip: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
         """Balanced-SSFP steady-state ON-RESONANCE signal (Freeman–Hill). T1/T2/TR in ms, flip in radians;
         broadcasting tensors. S = PD·sinα·(1−E1) / (1−(E1−E2)cosα − E1·E2), E1=exp(−TR/T1), E2=exp(−TR/T2).
         The passband (max) value; off-resonance banding multiplies this — see `banding`."""
@@ -155,7 +156,7 @@ class MriPhysics:
         return PD * s * (1.0 - e1) / (1.0 - (e1 - e2) * c - e1 * e2)
 
     @staticmethod
-    def banding(T2: torch.Tensor, TR: torch.Tensor, dphi) -> torch.Tensor:
+    def banding(T2: Float[torch.Tensor, "..."], TR: Float[torch.Tensor, "..."], dphi) -> Float[torch.Tensor, "..."]:
         """bSSFP off-resonance banding factor in (0, 1], normalized to 1 at the passband (dphi=0). dphi =
         off-resonance precession per TR (rad, = 2π·Δf·TR). ratio = (1−E2) / |1−E2·e^{iφ}|
         = (1−E2)/√(1−2E2cosφ+E2²): =1 at φ=0, dips toward φ=±π, and the dip is DEEPER for long-T2 tissue
@@ -179,8 +180,8 @@ class MriPhysics:
         return table[f]
 
     @staticmethod
-    def sample_heart_tissue(t1: torch.Tensor, t2: torch.Tensor, fi: torch.Tensor,  # noqa: PLR0913
-                            fields: tuple[float, ...], n_classes: int, spread: float):
+    def sample_heart_tissue(t1: Float[torch.Tensor, "*b *n"], t2: Float[torch.Tensor, "*b *n"], fi: Integer[torch.Tensor, "*b"],  # noqa: PLR0913
+                            fields: tuple[float, ...], n_classes: int, spread: float) -> tuple[Float[torch.Tensor, "*b *n"], Float[torch.Tensor, "*b *n"]]:
         """Per-sample redraw of HEART-class (blood/myo) T1/T2 from the literature TISSUE_RANGE band, lerped
         from the current point value by `spread` (0=point/off, 1=full uniform band). Physically-constrained
         breadth (UltimateSynth) in place of decorrelated jitter: contrast then flows through bssfp_signal, so

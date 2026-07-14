@@ -10,8 +10,8 @@ subscript (`Float`/`Int`/`Integer`/`Bool`/`Shaped`/`UInt8`/… `[array, "…"]`)
 (or an array alias) on a public method is flagged.
 
 Scope: only PUBLIC methods (name not underscore-prefixed) — the boundaries. Private helpers, dunders,
-and CLI `add_args`/`run` handlers are exempt (interior / framework signatures). Advisory first (like the
-class-shape smells); graduates to blocking once the tree is clean.
+and CLI `add_args`/`run` handlers are exempt (interior / framework signatures). BLOCKING (`--assert`
+exits 1 on any bare boundary) now that the tree is clean — a new bare-array boundary fails the merge.
 
     python -m devtools.shape_contracts core cardioseg
 """
@@ -112,10 +112,14 @@ def main():
                                  description="flag public array/tensor boundaries lacking a jaxtyping shape")
     ap.add_argument("packages", nargs="*", default=["core", "cardioseg"],
                     help="package dirs to scan (default: core cardioseg)")
+    ap.add_argument("--assert", dest="assert_clean", action="store_true",
+                    help="exit 1 if any bare-array boundary remains (the blocking CI gate)")
     args = ap.parse_args()
     Obs.setup()
     rows = scan(args.packages)
     log.info("%s", report(rows))
+    if args.assert_clean and rows:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
