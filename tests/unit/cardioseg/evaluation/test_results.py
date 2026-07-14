@@ -6,12 +6,13 @@ import numpy as np
 
 from cardioseg.evaluation.results import Results
 from core.data.static.labels import CLASSES
+from core.measure import AgreementStats
 
 RV, MYO, CAV = tuple(CLASSES)   # 1, 2, 3
 
 
 def _stats(mae=4.2, bias=-3.1, loa=(-12.0, 5.8)):
-    return {"mae": mae, "bias": bias, "loa": list(loa)}
+    return AgreementStats(n=0, bias=bias, sd=0.0, mae=mae, loa=list(loa), mean_gt=0.0)
 
 
 def _dists(sd=1.0):

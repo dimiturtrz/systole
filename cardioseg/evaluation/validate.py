@@ -79,7 +79,7 @@ class _ClassScores:
             surface_dist = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if surface_dist.size:
                 metrics = Evaluate.surface_metrics(surface_dist)
-                self.surf[cl]["hd95"].append(metrics["hd95"]); self.surf[cl]["assd"].append(metrics["assd"])
+                self.surf[cl]["hd95"].append(metrics.hd95); self.surf[cl]["assd"].append(metrics.assd)
 
     def dice(self) -> dict[int, float]:
         return {cl: (self.inter[cl] / self.denom[cl] if self.denom[cl] else float("nan"))

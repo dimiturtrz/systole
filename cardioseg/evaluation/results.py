@@ -22,9 +22,9 @@ from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
-from core.evaluate import CLASSES, Evaluate
+from core.evaluate import CLASSES, Evaluate, SurfaceMetrics
 from core.hparams import Hparams
-from core.measure import Measure
+from core.measure import AgreementStats, Measure
 from core.model import Model
 from core.registry import _DB_URI, Registry
 
@@ -49,7 +49,7 @@ class Results:
     `_axis`/`build` that feed it. Grouped so the published-JSON shape lives with the eval that fills it."""
 
     @staticmethod
-    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: dict) -> dict:
+    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: AgreementStats) -> dict:
         """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
         stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
         EF MAE/bias/LoA). No model, no store — extracted from `_axis` so the exact JSON shape + rounding
@@ -58,14 +58,15 @@ class Results:
         dice, hd95, assd = {}, {}, {}
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
-            m = Evaluate.surface_metrics(pooled) if pooled.size else {"hd95": float("nan"), "assd": float("nan")}
+            nan = float("nan")
+            m = Evaluate.surface_metrics(pooled) if pooled.size else SurfaceMetrics(nan, nan, nan)
             dice[name] = round(float(np.mean(dice_acc[cl])), 3)
-            hd95[name] = round(float(m["hd95"]), 1)
-            assd[name] = round(float(m["assd"]), 2)
+            hd95[name] = round(float(m.hd95), 1)
+            assd[name] = round(float(m.assd), 2)
         return {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
-                "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats["mae"], 1),
-                "ef_bias": round(ef_stats["bias"], 1),
-                "ef_loa": [round(ef_stats["loa"][0], 1), round(ef_stats["loa"][1], 1)]}
+                "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats.mae, 1),
+                "ef_bias": round(ef_stats.bias, 1),
+                "ef_loa": [round(ef_stats.loa[0], 1), round(ef_stats.loa[1], 1)]}
 
     @staticmethod
     def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)

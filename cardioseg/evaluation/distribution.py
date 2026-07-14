@@ -115,7 +115,7 @@ class Distribution:
                 continue
             m = Evaluate.surface_metrics(sd)
             ax.plot(xs, gaussian_kde(sd)(xs), color=color, lw=2,
-                    label=f"{name}  ASSD {m['assd']:.1f} · HD95 {m['hd95']:.1f} mm")
+                    label=f"{name}  ASSD {m.assd:.1f} · HD95 {m.hd95:.1f} mm")
         ax.set_xlabel("boundary distance (mm)")
         ax.set_ylabel("density")
         ax.set_title(f"Per-class boundary-distance distribution{label}")
@@ -131,7 +131,7 @@ class Distribution:
         gt = np.asarray(ef_gt, dtype=float)
         pred = np.asarray(ef_pred, dtype=float)
         stats = Measure.ef_statistics(gt, pred)
-        bias, (lo, hi) = stats["bias"], stats["loa"]
+        bias, (lo, hi) = stats.bias, stats.loa
         raw_diff = pred - gt
         ok = ~np.isnan(raw_diff)
         n_collapsed = int((~ok).sum())
@@ -204,7 +204,7 @@ class Distribution:
         for grp, rs in g.items():
             d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
             s = Measure.ef_statistics([r["ef_gt"] for r in rs], [r["ef_pred"] for r in rs])
-            mae, bias, gt_ef = s["mae"], s["bias"], s["mean_gt"]
+            mae, bias, gt_ef = s.mae, s.bias, s.mean_gt
             mean_d = float(np.mean(list(d.values())))
             flag = "  (small n)" if len(rs) < SMALL_N else ""
             log.info(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
@@ -222,7 +222,7 @@ class Distribution:
             return
         groups = list(g)
         mean_dice = [np.mean([r["dice"][c] for r in g[gr] for c in CLASSES if "dice" in r]) for gr in groups]
-        ef_mae = [Measure.ef_statistics([r["ef_gt"] for r in g[gr]], [r["ef_pred"] for r in g[gr]])["mae"]
+        ef_mae = [Measure.ef_statistics([r["ef_gt"] for r in g[gr]], [r["ef_pred"] for r in g[gr]]).mae
                   for gr in groups]
         ns = [len(g[gr]) for gr in groups]
         small = [n < SMALL_N for n in ns]
@@ -286,8 +286,8 @@ class Distribution:
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size])
             m = Evaluate.surface_metrics(pooled)
-            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-        log.info(f"=== EF Bland-Altman: bias {s['bias']:+.1f}% · 95% LoA [{Distribution.lo_hi(s['bias'], s['sd'])}] · MAE {s['mae']:.1f}%")
+            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m.assd:.2f}  HD95 {m.hd95:.2f}  HD {m.hd:.1f} mm")
+        log.info(f"=== EF Bland-Altman: bias {s.bias:+.1f}% · 95% LoA [{Distribution.lo_hi(s.bias, s.sd)}] · MAE {s.mae:.1f}%")
 
         # --- stratified (only axes with >1 group present) ---
         strata = {}

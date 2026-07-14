@@ -187,6 +187,6 @@ def test_surface_metric_ordering_is_consistent():
     b = _cube(8, 64, 8)                                    # concentric -> a gap all around
     sd = Evaluate.surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
     m = Evaluate.surface_metrics(sd)
-    assert m["assd"] <= m["hd95"] <= m["hd"]               # mean <= 95th pct <= max
-    assert np.isclose(m["hd95"], Evaluate.hd95(a, b, 3, (1.5, 1.5, 1.5)))
-    assert np.isclose(m["assd"], Evaluate.assd(a, b, 3, (1.5, 1.5, 1.5)))
+    assert m.assd <= m.hd95 <= m.hd               # mean <= 95th pct <= max
+    assert np.isclose(m.hd95, Evaluate.hd95(a, b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(m.assd, Evaluate.assd(a, b, 3, (1.5, 1.5, 1.5)))

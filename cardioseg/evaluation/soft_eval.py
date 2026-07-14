@@ -95,4 +95,4 @@ class SoftEval:
         log.info(f"ECE: {e:.4f}")
         for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
             s = Measure.ef_statistics(gt, pred)
-            log.info(f"{name:28} EF MAE {s['mae']:5.1f}%  bias {s['bias']:+5.1f}%")
+            log.info(f"{name:28} EF MAE {s.mae:5.1f}%  bias {s.bias:+5.1f}%")

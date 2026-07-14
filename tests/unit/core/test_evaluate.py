@@ -52,7 +52,7 @@ def _square(n=30, lo=10, hi=20, shift=0, label=3):
 
 
 def _hd(a, b, label, spacing=None):
-    return Evaluate.surface_metrics(Evaluate.surface_distances(a, b, label, spacing))["hd"]
+    return Evaluate.surface_metrics(Evaluate.surface_distances(a, b, label, spacing)).hd
 
 
 def test_identical_is_zero():
@@ -60,12 +60,12 @@ def test_identical_is_zero():
     sd = Evaluate.surface_distances(a, a, 3)
     assert sd.size > 0
     m = Evaluate.surface_metrics(sd)
-    assert m["hd"] == 0 and m["hd95"] == 0 and m["assd"] == 0
+    assert m.hd == 0 and m.hd95 == 0 and m.assd == 0
 
 
 def test_metrics_ordered_assd_le_hd95_le_hd():
     m = Evaluate.surface_metrics(Evaluate.surface_distances(_square(), _square(shift=3), 3))
-    assert m["assd"] <= m["hd95"] <= m["hd"]
+    assert m.assd <= m.hd95 <= m.hd
 
 
 def test_hd_matches_shift():
