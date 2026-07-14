@@ -7,6 +7,8 @@ metric arch axis import-linter's categorical layer contracts can't express):
   bottleneck (in*out)    classic tangle      -> prime refactor target
   betweenness            chokepoint          -> where to place a boundary/interface
   cycles (SCC>1)         tangle              -> break (import-linter gates layer cycles)
+  instability I=Ce/(Ce+Ca)  stable vs. volatile  -> depend in the direction of stability
+  main-seq. distance |A+I-1|  balance of A vs I  -> off it = zone of pain / uselessness (advisory)
 
 `report` is the one-shot EXPLORER (ranked tables). `--assert` is the GATE: it fails when a module is a
 god-module (fan-in AND fan-out BOTH over a degree), a new import cycle appears, a file blows the line
@@ -19,6 +21,7 @@ an advisory chokepoint warning that never blocks. Thresholds live in `pyproject
 from __future__ import annotations
 
 import argparse
+import ast
 import logging
 import tomllib
 from pathlib import Path
@@ -32,7 +35,14 @@ log = logging.getLogger("devtools.graph")
 
 # Fitness thresholds — SPEC [tool.structure] defaults, overridable in pyproject. Chosen so the blocking
 # rules start CLEAN on a fresh project and ratchet: fan-in&out both>8, file>750 lines, any import cycle.
-_DEFAULTS = {"bottleneck_degree": 8, "file_max": 750, "file_min": 0, "betweenness_max": 0.10, "test_layout": "mirror"}
+_DEFAULTS = {
+    "bottleneck_degree": 8,
+    "file_max": 750,
+    "file_min": 0,
+    "betweenness_max": 0.10,
+    "main_sequence_max": 0.0,  # advisory main-sequence distance ceiling; 0 = OFF (no honest universal one)
+    "test_layout": "mirror",
+}
 _STRUCTURAL = ("__init__.py", "__main__.py")  # package plumbing — exempt from the test-mirror rule + line floor
 _ADVISORY_PREVIEW = 15  # advisory lines shown before "… +N more" (avoid log spam)
 
@@ -134,11 +144,95 @@ def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
     ]
 
 
+# Martin's stability metrics (bd x3b). Edges are importer -> imported, so in_degree = afferent coupling Ca
+# (who depends on me) and out_degree = efferent Ce (who I depend on). Instability I = Ce/(Ce+Ca) and
+# abstractness A = abstract-classes / classes place a module on the A-I plane; distance from the "main
+# sequence" (the ideal A + I = 1 line) is D = |A + I - 1|.
+_ABSTRACT_BASES = {"ABC", "ABCMeta", "Protocol"}
+_ABSTRACT_DECORATORS = {"abstractmethod", "abstractproperty"}
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """The trailing name of a Name/Attribute node (`abc.ABC` -> 'ABC'), else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _is_abstract(cls: ast.ClassDef) -> bool:
+    """A class is abstract if it subclasses ABC/Protocol, sets metaclass=ABCMeta, or has an @abstractmethod."""
+    if any(_dotted(b) in _ABSTRACT_BASES for b in cls.bases):
+        return True
+    if any(kw.arg == "metaclass" and _dotted(kw.value) == "ABCMeta" for kw in cls.keywords):
+        return True
+    return any(
+        isinstance(m, ast.FunctionDef | ast.AsyncFunctionDef)
+        and any(_dotted(d) in _ABSTRACT_DECORATORS for d in m.decorator_list)
+        for m in cls.body
+    )
+
+
+def _module_file(mod: str) -> Path | None:
+    """The .py file backing a dotted module name (`a.b` -> a/b.py or a/b/__init__.py), if it exists."""
+    parts = mod.split(".")
+    for cand in (Path(*parts).with_suffix(".py"), Path(*parts) / "__init__.py"):
+        if cand.exists():
+            return cand
+    return None
+
+
+def abstractness(mod: str) -> float | None:
+    """Martin's A = abstract classes / total classes in the module (None if no backing file or no classes)."""
+    f = _module_file(mod)
+    if f is None:
+        return None
+    classes = [n for n in ast.walk(ast.parse(f.read_text(encoding="utf-8"))) if isinstance(n, ast.ClassDef)]
+    if not classes:
+        return None
+    return sum(_is_abstract(c) for c in classes) / len(classes)
+
+
+def instability(g: nx.DiGraph) -> dict[str, float]:
+    """Martin's I = Ce/(Ce+Ca): 0 = maximally STABLE (only depended-on), 1 = maximally UNSTABLE (only
+    depends on others). Isolated nodes (no coupling) are skipped — I is undefined there."""
+    ind, outd = dict(g.in_degree()), dict(g.out_degree())
+    return {n: outd[n] / (outd[n] + ind[n]) for n in g if outd[n] + ind[n] > 0}
+
+
+def main_sequence_distance(g: nx.DiGraph) -> dict[str, float]:
+    """D = |A + I - 1|: distance from the main sequence. High D = the zone of PAIN (stable + concrete, hard
+    to extend) or the zone of USELESSNESS (abstract + unstable). Only modules with classes (A defined)."""
+    out = {}
+    for n, i in instability(g).items():
+        a = abstractness(n)
+        if a is not None:
+            out[n] = abs(a + i - 1)
+    return out
+
+
+def _off_main_sequence(g: nx.DiGraph, mx: float) -> list[str]:
+    """Advisory. OFF at mx<=0 (the default): a concrete stable leaf legitimately sits at D≈1, so there is no
+    honest universal threshold — a repo opts in by setting `main_sequence_max`, then flags modules past it."""
+    if mx <= 0:
+        return []
+    return [
+        f"{n}: main-sequence distance {d:.2f} > {mx} — off the main sequence (zone of pain/uselessness)"
+        for n, d in main_sequence_distance(g).items()
+        if d > mx
+    ]
+
+
 def assert_fitness(g: nx.DiGraph, files: list[tuple[str, int]], cfg: dict) -> tuple[list[str], list[str]]:
     """(blocking, advisory) fitness violations. BLOCKING = god-module, import cycle, god-file (clean on a
     fresh project, so they ratchet); ADVISORY = line-floor (off by default) + chokepoint (never blocks)."""
     blocking = _god_modules(g, cfg["bottleneck_degree"]) + _cycles(g) + _oversized(files, cfg["file_max"])
-    advisory = _undersized(files, cfg["file_min"]) + _chokepoints(g, cfg["betweenness_max"])
+    advisory = (
+        _undersized(files, cfg["file_min"])
+        + _chokepoints(g, cfg["betweenness_max"])
+        + _off_main_sequence(g, cfg["main_sequence_max"])
+    )
     return blocking, advisory
 
 
@@ -159,6 +253,8 @@ def report(g: nx.DiGraph, top: int) -> str:
         ("fan-out (orchestrators)", outd.items()),
         ("bottleneck (fan-in x fan-out)", [(m, ind[m] * outd[m]) for m in g]),
         ("chokepoints (betweenness)", nx.betweenness_centrality(g).items()),
+        ("instability I=Ce/(Ce+Ca)", instability(g).items()),
+        ("main-sequence distance |A+I-1|", main_sequence_distance(g).items()),
     ):
         out.append(f"{title}:")
         out += [
