@@ -71,7 +71,7 @@ def test_assert_flag_exit_code(tmp_path):
     pkg = tmp_path / "pkg"
     pkg.mkdir()
     def _run():
-        return subprocess.run([sys.executable, "-m", "devtools.shape_contracts", str(pkg), "--assert"],
+        return subprocess.run([sys.executable, "-m", "devtools.shape_contracts", str(pkg), "--assert"],  # noqa: S603
                               cwd=_REPO, capture_output=True).returncode
     (pkg / "m.py").write_text("class M:\n    @staticmethod\n    def a(mask: np.ndarray): ...\n")
     assert _run() == 1                                          # bare boundary -> gate fails
