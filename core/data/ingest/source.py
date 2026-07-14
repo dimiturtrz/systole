@@ -21,7 +21,7 @@ from jaxtyping import Integer
 from core.data.dynamic import dataset as _dataset
 from core.data.dynamic.generator import Generator
 from core.data.static.labels import Labels
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 
 class SubjectIds:

@@ -24,8 +24,7 @@ from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
-from core.shapecheck import shapecheck
-from core.types import Spacing
+from core.types import Spacing, shapecheck
 
 load_arrays = Store.load_arrays
 

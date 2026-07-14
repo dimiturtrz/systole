@@ -17,8 +17,7 @@ from scipy.ndimage import zoom
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import Nyul
-from core.shapecheck import shapecheck
-from core.types import Spacing, Volume
+from core.types import Spacing, Volume, shapecheck
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
 # model trains on. The single source of truth. Slices (z) are left untouched (2D-model convention).

@@ -29,7 +29,7 @@ from core.model import Model
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 log = logging.getLogger("cardioseg.overlay")
 

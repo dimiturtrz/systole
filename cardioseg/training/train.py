@@ -34,7 +34,7 @@ from core.losses import Losses, PartialLabelDiceCE, SoftDiceCE
 from core.model import Model
 from core.obs import Obs, timed
 from core.registry import MODEL_NAME, Registry
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from ..evaluation.modelcard import ModelCard
 from ..evaluation.validate import EvalCfg, Evaluator

@@ -27,10 +27,11 @@ dependencies = [
     "mlflow", "psutil", "pynvml",    # experiment tracking + model registry (the store); psutil/pynvml = system metrics
     "captum",                        # attribution saliency diagnostic (data/analysis/attribution)
     "jaxtyping",                     # tensor SHAPE/dtype annotations (Float[Tensor,"B C H W"]); inert without a runtime checker, so no prod cost — beartype (dev) enforces them in tests
+    "beartype",                      # runtime checker jaxtyping delegates to; @shapecheck (core.types) enforces shapes
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "beartype"]   # beartype = the runtime checker the jaxtyping import hook wires up in tests (conftest); a wrong-shape tensor raises at the call
+dev = ["pytest", "pytest-cov"]
 devtools = ["grimp", "networkx"]   # import-graph architecture diagnostic (devtools/graph.py, bd au0o)
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
@@ -38,7 +39,7 @@ mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 
 # The code branches on availability (single capability gate), scipy/CPU fallback on Windows. Install
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov", "beartype"]
+all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

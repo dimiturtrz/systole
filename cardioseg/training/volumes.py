@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from jaxtyping import Float
 
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 
 class VolLoss:

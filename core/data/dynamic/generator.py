@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
 from core.data.static.store import DataCfg
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from .augment import AugCfg
 from .pipeline import Batch, Pipeline

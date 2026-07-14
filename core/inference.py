@@ -10,8 +10,7 @@ import torch
 from jaxtyping import Float, UInt8
 
 from core.preprocessing.preprocess import Preprocess
-from core.shapecheck import shapecheck
-from core.types import Volume
+from core.types import Volume, shapecheck
 
 _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
 

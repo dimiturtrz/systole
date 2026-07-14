@@ -15,7 +15,7 @@ from jaxtyping import Bool, Integer
 from scipy.ndimage import label as _cc_label
 
 from core.data.static.labels import FOREGROUND
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 
 class Postprocess:

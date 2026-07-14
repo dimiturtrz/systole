@@ -23,8 +23,7 @@ from skimage.measure import marching_cubes
 from core.config import Config
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
 from core.postprocess import Postprocess
-from core.shapecheck import shapecheck
-from core.types import Spacing
+from core.types import Spacing, shapecheck
 
 log = logging.getLogger("cardioseg.mesh")
 

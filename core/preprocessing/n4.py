@@ -16,8 +16,7 @@ from jaxtyping import Float, Shaped
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
-from core.shapecheck import shapecheck
-from core.types import Spacing
+from core.types import Spacing, shapecheck
 
 
 class N4Cfg(BaseModel):

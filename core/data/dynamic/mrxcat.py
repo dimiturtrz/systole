@@ -34,7 +34,7 @@ from scipy.ndimage import zoom as _zoom
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.preprocessing.preprocess import Preprocess
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
 

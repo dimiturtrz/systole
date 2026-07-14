@@ -24,7 +24,7 @@ from core.data.static import splits
 from core.data.static.store.build import Build as store
 from core.registry import Registry
 from core.run import Run
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty

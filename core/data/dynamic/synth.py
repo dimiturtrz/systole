@@ -30,7 +30,7 @@ from jaxtyping import Float, Int, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from .augment import Augmentor
 from .mri_physics import TR_RANGE_MS, MriPhysics

@@ -36,7 +36,7 @@ from jaxtyping import Float, Integer
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 _GAUSSIAN_RADIUS_SIGMAS = 3.0    # Gaussian kernel half-width in units of σ (covers ~99.7% of the mass)
 

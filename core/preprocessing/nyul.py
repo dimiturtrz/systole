@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 from jaxtyping import Float, Shaped
 
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 # percentile landmarks: robust tails (p1/p99) + deciles. The tails anchor the scale, deciles the shape.
 LANDMARKS: tuple[int, ...] = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99)

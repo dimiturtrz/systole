@@ -6,6 +6,8 @@ would be wrong, so they decide whether the model can be trusted, not the mean Di
 Shapes: pred/gt are same-shape label maps ([H, W] or [D, H, W]); the ops are
 shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
+from numbers import Real
+
 import numpy as np
 from jaxtyping import Bool, Float, Integer
 
@@ -13,8 +15,7 @@ from core.data.static.labels import (  # noqa: F401  (CLASSES re-exported for ba
     CLASSES,
     FOREGROUND,
 )
-from core.shapecheck import shapecheck
-from core.types import Real
+from core.types import shapecheck
 
 try:
     from scipy.ndimage import binary_erosion, distance_transform_edt

@@ -25,7 +25,7 @@ from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import Store
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from .volumes import VolLoss
 

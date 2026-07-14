@@ -11,8 +11,7 @@ import numpy as np
 from jaxtyping import Float, Integer
 
 from core.data.static.labels import LV_CAV
-from core.shapecheck import shapecheck
-from core.types import Spacing
+from core.types import Spacing, shapecheck
 
 LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)
 

@@ -33,7 +33,7 @@ from core.inference import Inference
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
-from core.shapecheck import shapecheck
+from core.types import shapecheck
 
 from ..tracking import Tracker
 

@@ -364,6 +364,7 @@ name = "cardioseg"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "beartype" },
     { name = "captum" },
     { name = "jaxtyping" },
     { name = "matplotlib" },
@@ -390,14 +391,12 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
-    { name = "beartype" },
     { name = "nnunetv2" },
     { name = "opencv-python-headless" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
 dev = [
-    { name = "beartype" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -418,8 +417,7 @@ nnunet = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beartype", marker = "extra == 'all'" },
-    { name = "beartype", marker = "extra == 'dev'" },
+    { name = "beartype" },
     { name = "captum" },
     { name = "cucim-cu13", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "cupy-cuda13x", marker = "sys_platform == 'linux' and extra == 'gpu'" },

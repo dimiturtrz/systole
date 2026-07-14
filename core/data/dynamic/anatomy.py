@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
+from numbers import Integral
 from pathlib import Path
 
 import numpy as np
@@ -35,8 +36,7 @@ from scipy.ndimage import zoom as _zoom
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
 from core.preprocessing.preprocess import Preprocess
-from core.shapecheck import shapecheck
-from core.types import Integral
+from core.types import shapecheck
 
 
 class MeshError(Exception):
