@@ -54,6 +54,7 @@ addopts = "--import-mode=importlib"
 # god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
 # (never blocks): betweenness > betweenness_max (noisy).
 [tool.structure]
+# >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these.
 bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
 file_max = 750              # god-file ceiling (largest today ~548)
 file_min = 0                # OFF (owner decision): no honest floor exists — the small files are SSOT /
@@ -61,6 +62,7 @@ file_min = 0                # OFF (owner decision): no honest floor exists — t
 #                             split), which the repo's own principles produce; a floor would flag legit
 #                             leaves and miss real "too-thin" modules (a responsibility judgment, not lines).
 betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
+# <<< LOCAL-SLOT: arch-thresholds
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
@@ -68,7 +70,9 @@ betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
 # later axis (bd rp8l).
 [tool.ruff]
 line-length = 120
+# >>> LOCAL-SLOT: ruff-exclude — edit freely, the template will not overwrite intent here
 extend-exclude = ["baselines", "cardioview/web/node_modules", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
+# <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
 select = [
@@ -151,8 +155,10 @@ ignore-names = [
 # eats entry-point/no-fan-in false positives). ignore_names/decorators kill the pydantic FPs (a
 # ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
 [tool.vulture]
+# >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "cardioseg", "cardioview"]
 exclude = ["baselines", "*/node_modules/*", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
+# <<< LOCAL-SLOT: vulture-scan
 min_confidence = 60
 # ignore_names = names vulture must treat as USED — without them it reports each as dead code. Every one
 # IS referenced, but only through a path vulture's static name-match can't follow (iteration, string keys,
@@ -179,8 +185,10 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # so the >=80 core+cardioseg floor stays calibrated to LIBRARY logic and isn't moved by the viewer's
 # render/onnx shells (all pragma'd). bd cardiac-seg-3vbc.
 [tool.coverage.run]
+# >>> LOCAL-SLOT: coverage-scan — edit freely, the template will not overwrite intent here
 source = ["core", "cardioseg"]
 omit = ["*/data/analysis/*", "*_build.py", "core/export_onnx.py"]
+# <<< LOCAL-SLOT: coverage-scan
 
 [tool.coverage.report]
 show_missing = true
@@ -195,6 +203,8 @@ exclude_lines = [
 # import-linter (grimp engine): the dependency rule as a STATIC import-graph contract, not prose. core is
 # the shared kernel — it must import NEITHER trainer (cardioseg) NOR viewer (cardioview); the viewer
 # depends only on core. CI fails the day a new upward edge lands. bd cardiac-seg-dsz2.
+# >>> LOCAL-SLOT: import-contracts — layering scope + directional rules; root_packages widens to the
+# scope-only viewer (cardioview) that carries layer rules but isn't in the arch set. Edit freely.
 [tool.importlinter]
 root_packages = ["core", "cardioseg", "cardioview"]
 
@@ -219,6 +229,7 @@ name = "store read surface (query) is preprocessing-free (normalization is a dow
 type = "forbidden"
 source_modules = ["core.data.static.store.query"]
 forbidden_modules = ["core.preprocessing.preprocess", "core.preprocessing.nyul"]
+# <<< LOCAL-SLOT: import-contracts
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

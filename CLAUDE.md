@@ -141,6 +141,18 @@ circulars by **extraction**, never lazy imports), **no dead noqa** (RUF100). noq
 advisory (the dense hand-tuned style). Config `pyproject [tool.ruff]`; evaluating vulture + coverage
 next (advisory).
 
+## Scaffolding
+
+Guardrails are provisioned by the in-house **sdlc-scaffold** copier template — `.copier-answers.yml`
+pins the version (`_commit`). The gate config, `devtools/` engines, and the runner wiring are
+**template-owned**: don't hand-edit them to pass a gate — fix upstream in the scaffold and
+`uvx copier update`, or edit only within the `# >>> LOCAL-SLOT` regions of `pyproject.toml`. `copier
+update` pulls scaffold improvements as reviewable steps. cardiac-seg is the ORIGIN repo (where
+`magic_literals` + `shape_contracts` were born + promoted up), so it currently runs a **superset** of the
+scaffold base — the extra ruff codes, the jaxtyping shape gate, the magic-literal count ratchet — ahead
+of the base pending upstream (bd cardiac-seg-zjaf; scaffold vip.1/vip.2). Those converge into the base on
+a later `copier update`; until then they are the repo's own rules, not a dodge.
+
 ## Conventions & Patterns
 
 - **Tasks → `bd` (beads) only** (see above). **Data lives out of repo** under `<data>/raw/` (gitignored).
