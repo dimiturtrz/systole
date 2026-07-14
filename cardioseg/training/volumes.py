@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float
+
+from core.shapecheck import shapecheck
 
 
 class VolLoss:
@@ -15,8 +18,9 @@ class VolLoss:
     staticmethod): supervises LV-cav VOLUME — what EF depends on, which per-pixel Dice is blind to."""
 
     @staticmethod
-    def vol_loss(edv_pred: torch.Tensor, esv_pred: torch.Tensor, edv_gt, esv_gt,
-                 delta: float = 0.1) -> torch.Tensor:
+    @shapecheck
+    def vol_loss(edv_pred: Float[torch.Tensor, "*k"], esv_pred: Float[torch.Tensor, "*k"], edv_gt, esv_gt,
+                 delta: float = 0.1) -> Float[torch.Tensor, ""]:
         """DIMENSIONLESS volume-consistency loss — both volumes normalized by the (stable, >0) GT EDV, so
         the mL scale cancels: spacing / heart-size / dataset invariant, and ~the same magnitude as Dice+CE
         (so its weight is O(1), not a unit-coupled magic number). Huber (robust to the odd mis-scaled

@@ -16,6 +16,7 @@ from pathlib import Path
 import mlflow
 import numpy as np
 import torch
+from jaxtyping import Float, Integer
 from mlflow.exceptions import MlflowException
 
 from core.data.analysis.attribution import Attribution
@@ -33,6 +34,7 @@ from core.losses import Losses, PartialLabelDiceCE, SoftDiceCE
 from core.model import Model
 from core.obs import Obs, timed
 from core.registry import MODEL_NAME, Registry
+from core.shapecheck import shapecheck
 
 from ..evaluation.modelcard import ModelCard
 from ..evaluation.validate import EvalCfg, Evaluator
@@ -114,7 +116,8 @@ class Train:
         return cfg
 
     @staticmethod
-    def val_dice(model, Ximg, Ymsk, batch: int, device) -> float:
+    @shapecheck
+    def val_dice(model, Ximg: Float[torch.Tensor, "n c h w"], Ymsk: Integer[torch.Tensor, "n h w"], batch: int, device) -> float:
         """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
         Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
         inter = dict.fromkeys(FOREGROUND, 0.0)

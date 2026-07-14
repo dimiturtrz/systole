@@ -16,6 +16,7 @@ import logging
 import numpy as np
 import polars as pl
 import torch
+from jaxtyping import Float, Integer
 
 from core.config import FLAGSHIP_REF
 from core.data.ingest.splits import Splits
@@ -23,6 +24,7 @@ from core.data.static import splits
 from core.data.static.store.build import Build as store
 from core.registry import Registry
 from core.run import Run
+from core.shapecheck import shapecheck
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty
@@ -36,7 +38,8 @@ class Calibrate:
     axis. The free helpers folded in as staticmethods — the fit and the ECE-at-T evaluation."""
 
     @staticmethod
-    def fit_temperature(logits: np.ndarray, labels: np.ndarray, device: str = "cpu") -> float:
+    @shapecheck
+    def fit_temperature(logits: Float[np.ndarray, "*n c"], labels: Integer[np.ndarray, "*n"], device: str = "cpu") -> float:
         """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
         logits_tensor = torch.tensor(logits, dtype=torch.float32, device=device)
         labels_tensor = torch.tensor(labels, dtype=torch.long, device=device)
@@ -54,7 +57,8 @@ class Calibrate:
         return float(log_temperature.exp().detach())
 
     @staticmethod
-    def _ece_at(logits: np.ndarray, labels: np.ndarray, temperature: float) -> float:
+    @shapecheck
+    def _ece_at(logits: Float[np.ndarray, "*n c"], labels: Integer[np.ndarray, "*n"], temperature: float) -> float:
         """ECE of softmax(logits/T) vs labels (reuses uncertainty.ece on max-prob conf / correctness)."""
         scaled_logits = logits / temperature
         scaled_logits = scaled_logits - scaled_logits.max(1, keepdims=True)

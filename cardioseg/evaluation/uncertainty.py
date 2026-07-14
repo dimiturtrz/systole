@@ -21,6 +21,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from jaxtyping import Bool, Float, Integer
 from scipy.ndimage import binary_erosion
 from sklearn.metrics import average_precision_score, roc_auc_score
 
@@ -32,6 +33,7 @@ from core.inference import Inference
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
+from core.shapecheck import shapecheck
 
 from ..tracking import Tracker
 
@@ -44,7 +46,8 @@ class Uncertainty:
     per-case collection orchestration + reliability/overlay plots for the eval CLI."""
 
     @staticmethod
-    def tta_uncertainty(model, vol_img, size, device):
+    @shapecheck
+    def tta_uncertainty(model, vol_img: Float[np.ndarray, "d h w"], size, device):
         """Decompose predictive uncertainty over the 4 TTA flips (a cheap K-member ensemble).
         Returns (pred, total, conf, aleatoric, epistemic) — total/aleatoric/epistemic each [D,size,size]
         in [0,1] (normalized by log C):
@@ -62,13 +65,15 @@ class Uncertainty:
         return pred, total.cpu().numpy(), conf.cpu().numpy(), aleat.cpu().numpy(), epi.cpu().numpy()
 
     @staticmethod
-    def _boundary(mask):
+    @shapecheck
+    def _boundary(mask: Integer[np.ndarray, "h w"]) -> Bool[np.ndarray, "h w"]:
         """1-voxel boundary band of the foreground (per slice)."""
         fg = mask > 0
         return fg & ~binary_erosion(fg, iterations=1)
 
     @staticmethod
-    def ece(conf, correct, n_bins=15):
+    @shapecheck
+    def ece(conf: Float[np.ndarray, "*n"], correct: Float[np.ndarray, "*n"], n_bins=15):
         """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram."""
         edges = np.linspace(0, 1, n_bins + 1)
         e, bins = 0.0, []
@@ -82,7 +87,8 @@ class Uncertainty:
         return float(e), bins
 
     @staticmethod
-    def boundary_interior_uncertainty(pred, ent):
+    @shapecheck
+    def boundary_interior_uncertainty(pred: Integer[np.ndarray, "d h w"], ent: Float[np.ndarray, "d h w"]):
         """Per-slice mean entropy on the foreground boundary band vs the interior. Returns two lists
         (bnd means, interior means) — a slice contributes to each only where that region is non-empty."""
         bnd_u, int_u = [], []
@@ -93,7 +99,8 @@ class Uncertainty:
         return bnd_u, int_u
 
     @staticmethod
-    def foreground_uncertainty(pred, gt, maps):
+    @shapecheck
+    def foreground_uncertainty(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], maps):
         """Pure per-case fold: select foreground voxels (pred>0 OR gt>0) from the per-voxel maps
         `maps = (ent, conf, ale, epi)` and return the pooled arrays (conf, correct, ent, ale, epi) +
         the scalar per-case uncertainty (mean fg entropy, 0 if empty)."""
