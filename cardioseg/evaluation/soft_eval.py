@@ -61,27 +61,27 @@ class SoftEval:
             case = store.load_arrays(r["path"])
             if "ed_img" not in case or "es_img" not in case:
                 continue
-            sp = tuple(float(s) for s in case["spacing"])
-            vols = {}
-            for tag in (p.lower() for p in Phase):
+            spacing = tuple(float(v) for v in case["spacing"])
+            volumes = {}
+            for tag in (phase.lower() for phase in Phase):
                 _, mean = Inference(model, SIZE, dev).predict_volume_probs(case[f"{tag}_img"])   # [D,C,H,W] softmax
-                p = mean.float().cpu().numpy()
-                blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
-                hard = Postprocess.largest_cc_per_class(p.argmax(1).astype(np.uint8))            # argmax + CC
+                probs = mean.float().cpu().numpy()
+                blood = probs[:, LV_CAV]                                             # [D,H,W] blood prob
+                hard = Postprocess.largest_cc_per_class(probs.argmax(1).astype(np.uint8))        # argmax + CC
                 gate = hard == LV_CAV
                 gt = Preprocess.stack_slices(case[f"{tag}_gt"], SIZE, dtype=np.uint8)
-                vols[tag] = {"hard": Measure.label_volume_ml(hard, LV_CAV, sp),
-                             "soft": Measure.expected_volume_ml(blood * gate, sp),
-                             "gt": Measure.label_volume_ml(gt, LV_CAV, sp)}
+                volumes[tag] = {"hard": Measure.label_volume_ml(hard, LV_CAV, spacing),
+                                "soft": Measure.expected_volume_ml(blood * gate, spacing),
+                                "gt": Measure.label_volume_ml(gt, LV_CAV, spacing)}
                 # calibration over foreground voxels (pred or gt non-bg)
                 fg = (gt > 0) | (hard > 0)
-                conf_all.append(p.max(1)[fg]); corr_all.append((p.argmax(1)[fg] == gt[fg]).astype(float))
-            rows.append((SoftEval._ef(vols[Phase.ED.lower()]["gt"], vols[Phase.ES.lower()]["gt"]),
-                         SoftEval._ef(vols[Phase.ED.lower()]["hard"], vols[Phase.ES.lower()]["hard"]),
-                         SoftEval._ef(vols[Phase.ED.lower()]["soft"], vols[Phase.ES.lower()]["soft"])))
-        a = np.array(rows)                                  # [n, 3] = gt, hard, soft
+                conf_all.append(probs.max(1)[fg]); corr_all.append((probs.argmax(1)[fg] == gt[fg]).astype(float))
+            rows.append((SoftEval._ef(volumes[Phase.ED.lower()]["gt"], volumes[Phase.ES.lower()]["gt"]),
+                         SoftEval._ef(volumes[Phase.ED.lower()]["hard"], volumes[Phase.ES.lower()]["hard"]),
+                         SoftEval._ef(volumes[Phase.ED.lower()]["soft"], volumes[Phase.ES.lower()]["soft"])))
+        ef_triples = np.array(rows)                         # [n, 3] = gt, hard, soft
         conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
-        return a, Uncertainty.ece(conf, corr)[0]
+        return ef_triples, Uncertainty.ece(conf, corr)[0]
 
     @staticmethod
     def add_args(ap):
@@ -89,10 +89,10 @@ class SoftEval:
 
     @staticmethod
     def run(args):  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
-        arr, e = SoftEval.evaluate(Registry.resolve(args.run))
-        gt, hard, soft = arr[:, 0], arr[:, 1], arr[:, 2]
-        log.info(f"\n=== {args.run}  (n={len(arr)}) ===")
-        log.info(f"ECE: {e:.4f}")
+        ef_triples, ece = SoftEval.evaluate(Registry.resolve(args.run))
+        gt, hard, soft = ef_triples[:, 0], ef_triples[:, 1], ef_triples[:, 2]
+        log.info(f"\n=== {args.run}  (n={len(ef_triples)}) ===")
+        log.info(f"ECE: {ece:.4f}")
         for name, pred in (("HARD (argmax+CC count)", hard), ("SOFT (expected vol, late)", soft)):
-            s = Measure.ef_statistics(gt, pred)
-            log.info(f"{name:28} EF MAE {s.mae:5.1f}%  bias {s.bias:+5.1f}%")
+            ef_stats = Measure.ef_statistics(gt, pred)
+            log.info(f"{name:28} EF MAE {ef_stats.mae:5.1f}%  bias {ef_stats.bias:+5.1f}%")

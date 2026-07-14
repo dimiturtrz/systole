@@ -46,26 +46,26 @@ def test_dice_empty_and_partial_classes():
 
 
 def _square(n=30, lo=10, hi=20, shift=0, label=3):
-    a = np.zeros((n, n), int)
-    a[lo:hi, lo + shift:hi + shift] = label
-    return a
+    mask = np.zeros((n, n), int)
+    mask[lo:hi, lo + shift:hi + shift] = label
+    return mask
 
 
-def _hd(a, b, label, spacing=None):
-    return Evaluate.surface_metrics(Evaluate.surface_distances(a, b, label, spacing)).hd
+def _hd(mask_a, mask_b, label, spacing=None):
+    return Evaluate.surface_metrics(Evaluate.surface_distances(mask_a, mask_b, label, spacing)).hd
 
 
 def test_identical_is_zero():
-    a = _square()
-    sd = Evaluate.surface_distances(a, a, 3)
-    assert sd.size > 0
-    m = Evaluate.surface_metrics(sd)
-    assert m.hd == 0 and m.hd95 == 0 and m.assd == 0
+    mask = _square()
+    surf_dist = Evaluate.surface_distances(mask, mask, 3)
+    assert surf_dist.size > 0
+    surf = Evaluate.surface_metrics(surf_dist)
+    assert surf.hd == 0 and surf.hd95 == 0 and surf.assd == 0
 
 
 def test_metrics_ordered_assd_le_hd95_le_hd():
-    m = Evaluate.surface_metrics(Evaluate.surface_distances(_square(), _square(shift=3), 3))
-    assert m.assd <= m.hd95 <= m.hd
+    surf = Evaluate.surface_metrics(Evaluate.surface_distances(_square(), _square(shift=3), 3))
+    assert surf.assd <= surf.hd95 <= surf.hd
 
 
 def test_hd_matches_shift():

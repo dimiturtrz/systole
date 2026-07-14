@@ -59,10 +59,10 @@ class Results:
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
             nan = float("nan")
-            m = Evaluate.surface_metrics(pooled) if pooled.size else SurfaceMetrics(nan, nan, nan)
+            surf = Evaluate.surface_metrics(pooled) if pooled.size else SurfaceMetrics(nan, nan, nan)
             dice[name] = round(float(np.mean(dice_acc[cl])), 3)
-            hd95[name] = round(float(m.hd95), 1)
-            assd[name] = round(float(m.assd), 2)
+            hd95[name] = round(float(surf.hd95), 1)
+            assd[name] = round(float(surf.assd), 2)
         return {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
                 "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats.mae, 1),
                 "ef_bias": round(ef_stats.bias, 1),

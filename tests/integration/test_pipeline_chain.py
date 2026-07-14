@@ -183,10 +183,10 @@ def test_ef_invariant_to_spacing_volumes_scale():
 
 def test_surface_metric_ordering_is_consistent():
     """surface_distances -> surface_metrics agrees with the hd/hd95/assd helpers, mean<=p95<=max."""
-    a = _cube(8, 64, 12)
-    b = _cube(8, 64, 8)                                    # concentric -> a gap all around
-    sd = Evaluate.surface_distances(a, b, 3, spacing=(1.5, 1.5, 1.5))
-    m = Evaluate.surface_metrics(sd)
-    assert m.assd <= m.hd95 <= m.hd               # mean <= 95th pct <= max
-    assert np.isclose(m.hd95, Evaluate.hd95(a, b, 3, (1.5, 1.5, 1.5)))
-    assert np.isclose(m.assd, Evaluate.assd(a, b, 3, (1.5, 1.5, 1.5)))
+    mask_a = _cube(8, 64, 12)
+    mask_b = _cube(8, 64, 8)                               # concentric -> a gap all around
+    surf_dist = Evaluate.surface_distances(mask_a, mask_b, 3, spacing=(1.5, 1.5, 1.5))
+    surf = Evaluate.surface_metrics(surf_dist)
+    assert surf.assd <= surf.hd95 <= surf.hd               # mean <= 95th pct <= max
+    assert np.isclose(surf.hd95, Evaluate.hd95(mask_a, mask_b, 3, (1.5, 1.5, 1.5)))
+    assert np.isclose(surf.assd, Evaluate.assd(mask_a, mask_b, 3, (1.5, 1.5, 1.5)))
