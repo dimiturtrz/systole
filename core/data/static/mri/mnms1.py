@@ -14,6 +14,7 @@ from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
 )
@@ -38,7 +39,7 @@ class Mnms1Adapter(DatasetAdapter):
     """M&Ms-1: 6-centre / 4-vendor (incl. Canon); richest demographics (age/sex/BSA). Owns its M&Ms-1
     marker detection, root resolution, CSV keying, SA path resolution, frame-index parsing, and meta
     assembly (the free helpers folded in as staticmethods)."""
-    name = "mnms1"
+    name = Dataset.MNMS1
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):

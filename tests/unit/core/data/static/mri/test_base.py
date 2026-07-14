@@ -8,9 +8,16 @@ from core.data.static.mri.base import (
     LV_MYO,
     MNM_LABEL_MAP,
     Base,
+    Dataset,
     Phase,
     Vendor,
 )
+
+
+# --- Dataset StrEnum: value == the processed-folder / V('dataset') / adapter.name string ---
+def test_dataset_values_match_names():
+    assert Dataset.ACDC == "acdc" and Dataset.CMRXMOTION == "cmrxmotion"   # drop-in for the name literals
+    assert set(Dataset) >= {"acdc", "mnm2", "mnms1", "cmrxmotion", "scd"}  # the store datasets are members
 
 
 # --- Vendor / Phase StrEnums: canonical value + case-insensitive _missing_ ---

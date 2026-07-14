@@ -20,6 +20,7 @@ from core.data.dynamic.synth import ProceduralBgCfg
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import SYNTH_MAIN_TEST
+from core.data.static.mri.base import Dataset
 
 V = pl.col
 
@@ -47,7 +48,7 @@ class SynthMain:
         "1.0.0": SplitDef(
             train=lambda c: DynamicSource(pool=SynthMain.pool(POOL), bg=ProceduralBgCfg(),
                                           note=f"Rodero {POOL}, zero-real procedural bg"),
-            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
+            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == Dataset.ACDC)),
                                        "ACDC real val (held from test; synth val = 6rd7)"),
             # all seg real minus ACDC val (642, locked); lambda defers the global lookup (testset swap)
             test=lambda c: SYNTH_MAIN_TEST.source(c),  # noqa: PLW0108

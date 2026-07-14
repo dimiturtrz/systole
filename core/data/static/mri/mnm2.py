@@ -15,6 +15,7 @@ from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
 )
@@ -25,7 +26,7 @@ LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&
 class Mnm2Adapter(DatasetAdapter):
     """M&M-2: multi-vendor training source; owns its dataset-dir search, subject-code CSV keying, and
     meta assembly (folded in as staticmethods). Labels remapped to canonical via label_map."""
-    name = "mnm2"
+    name = Dataset.MNM2
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):

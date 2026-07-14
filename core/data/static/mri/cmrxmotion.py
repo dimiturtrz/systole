@@ -19,6 +19,7 @@ from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
     Phase,
@@ -36,7 +37,7 @@ CENTRE, COUNTRY = "Fudan (Shanghai)", "China"
 class CmrxMotionAdapter(DatasetAdapter):
     """CMRxMotion: single-vendor motion-robustness axis; owns its acquisition-dir search, IQA-grade
     lookup, and 4D-singleton frame load (folded in as staticmethods). Labels remapped to canonical."""
-    name = "cmrxmotion"
+    name = Dataset.CMRXMOTION
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):
@@ -50,14 +51,14 @@ class CmrxMotionAdapter(DatasetAdapter):
         if root is not None:
             bases.append(Path(root))
         raw = Path(Config.data_root("raw"))
-        bases += [raw / "cmrxmotion", raw, raw.parent]
+        bases += [raw / Dataset.CMRXMOTION, raw, raw.parent]
         subs = ("data", ".", "cmrxmotion/data")
         for base in bases:
             for sub in subs:
                 cand = base if sub == "." else base / sub
                 if cand.is_dir() and any(cand.glob("P[0-9][0-9][0-9]-[0-9]")):
                     return cand
-        return raw / "cmrxmotion" / "data"
+        return raw / Dataset.CMRXMOTION / "data"
 
     @staticmethod
     def _iqa(root: str | Path | None = None) -> dict[str, dict[str, str]]:

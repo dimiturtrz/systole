@@ -25,7 +25,7 @@ import numpy as np
 from skimage.draw import polygon
 
 from core.config import Config
-from core.data.static.mri.base import Base, DatasetAdapter, PatientData, Phase, Vendor
+from core.data.static.mri.base import Base, Dataset, DatasetAdapter, PatientData, Phase, Vendor
 from core.data.static.mri.dicom import Dicom
 
 _IRCCI = "contours-manual/IRCCI-expert"
@@ -34,7 +34,7 @@ _IRCCI = "contours-manual/IRCCI-expert"
 class ScdAdapter(DatasetAdapter):
     """SCD adapter — owns its DICOM+contour parsing (the free helpers folded in as staticmethods): patient
     dir discovery, contour-dir renaming, polygon rasterization to canonical {0,2,3}, and ED/ES-by-endo-area."""
-    name = "scd"
+    name = Dataset.SCD
     label_map: ClassVar[dict[int, int]] = {}                 # masks built canonical from contours; no remap
 
     def __init__(self, root: str | Path | None = None):

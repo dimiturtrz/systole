@@ -14,6 +14,7 @@ import polars as pl
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import STATIC_MAIN_TEST
+from core.data.static.mri.base import Dataset
 
 V = pl.col
 
@@ -26,7 +27,7 @@ class StaticMain:
             # unseen vendors + motion cohort (147, locked); lambda defers the global lookup (testset swap)
             test=lambda c: STATIC_MAIN_TEST.source(c),  # noqa: PLW0108
             val=lambda c: StaticSource(
-                c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),
+                c.filter(V("labelled") & (V("dataset") == Dataset.ACDC)), "ACDC centre-shift"),
             # train = labelled complement (Siemens + Philips)
         ),
     }

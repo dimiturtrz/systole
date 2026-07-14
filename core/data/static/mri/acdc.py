@@ -11,20 +11,21 @@ from pathlib import Path
 from core.config import Config
 from core.data.static.mri.base import (
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
     Vendor,
 )
 
 # Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
-DATA_ROOT = str(Path(Config.data_root("raw")) / "acdc")
+DATA_ROOT = str(Path(Config.data_root("raw")) / Dataset.ACDC)
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 
 class AcdcAdapter(DatasetAdapter):
     """ACDC: single-centre Siemens (Dijon), the canonical-label held-out test set. Owns its patient
     discovery + Info.cfg parsing + frame-path resolution (folded in as staticmethods)."""
-    name = "acdc"
+    name = Dataset.ACDC
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):

@@ -57,6 +57,20 @@ class Phase(StrEnum):
         return None
 
 
+class Dataset(StrEnum):
+    """Dataset identity — the processed/<name>/ folder, the V('dataset') column value, an adapter's
+    `name`. One source of truth for the names scattered as literals across adapters/splits/testsets/
+    eval/normalization. Homed here (not the registry) so adapters can name themselves Dataset.X without
+    the registry->adapter import cycle; the registry re-exposes it + owns the wired-cohort subset."""
+    ACDC = "acdc"
+    MNM2 = "mnm2"
+    MNMS1 = "mnms1"
+    CMRXMOTION = "cmrxmotion"
+    SCD = "scd"
+    KAGGLE = "kaggle"
+    MRXCAT = "mrxcat"
+
+
 class Frame(TypedDict):
     """One cardiac-phase frame: image + its label mask, both [D, H, W]."""
     img: Image
