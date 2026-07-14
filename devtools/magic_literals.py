@@ -151,7 +151,7 @@ def main():
         prog="python -m devtools.magic_literals",
         description="recurring string literals + repeated dict key-sets",
     )
-    ap.add_argument("packages", nargs="*", default=["src"], help="package dirs to scan")
+    ap.add_argument("packages", nargs="+", help="package dirs to scan (>=1 required, no 'src' fallback)")
     ap.add_argument(
         "--max-strings",
         type=int,

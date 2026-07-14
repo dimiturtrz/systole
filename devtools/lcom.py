@@ -186,7 +186,7 @@ def main():
     ap = argparse.ArgumentParser(
         prog="python -m devtools.lcom", description="rank classes by LCOM4 cohesion (>=2 = split candidate)"
     )
-    ap.add_argument("packages", nargs="*", default=["src"])
+    ap.add_argument("packages", nargs="+", help="package dirs to scan (>=1 required, no 'src' fallback)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = scan(args.packages)

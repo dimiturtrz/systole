@@ -300,9 +300,9 @@ def main():
     ap = argparse.ArgumentParser(description="Import-graph architecture diagnostic + fitness gate.")
     ap.add_argument(
         "packages",
-        nargs="*",
-        default=["src"],
-        help="root packages to graph (default: src)",
+        nargs="+",
+        help="root packages to graph (>=1 required — no 'src' fallback, so a mis-invocation errors "
+        "loudly instead of silently scanning a nonexistent dir and vacuously passing)",
     )
     ap.add_argument("--top", type=int, default=10, help="rows per ranked table")
     ap.add_argument(
@@ -312,7 +312,7 @@ def main():
         help="fitness GATE: exit 1 on a god-module / import cycle / god-file / test-mirror gap (advisory: chokepoint)",
     )
     args = ap.parse_args()
-    packages = args.packages or ["src"]
+    packages = args.packages
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     if args.assert_:
         raise SystemExit(_run_assert(packages))

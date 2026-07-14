@@ -128,7 +128,11 @@ def main():
         prog="python -m devtools.shape_contracts",
         description="flag public array/tensor boundaries lacking a jaxtyping shape",
     )
-    ap.add_argument("packages", nargs="*", help="package dirs to scan")
+    ap.add_argument(
+        "packages",
+        nargs="+",
+        help="package dirs to scan (>=1 required — no-arg would scan nothing and pass --assert vacuously)",
+    )
     ap.add_argument(
         "--assert",
         dest="assert_clean",

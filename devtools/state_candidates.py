@@ -121,7 +121,7 @@ def main():
     ap = argparse.ArgumentParser(
         prog="python -m devtools.state_candidates", description="rank namespace-classes by latent shared instance state"
     )
-    ap.add_argument("packages", nargs="*", default=["src"], help="package dirs to scan (default: src)")
+    ap.add_argument("packages", nargs="+", help="package dirs to scan (>=1 required, no 'src' fallback)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = scan(args.packages)
