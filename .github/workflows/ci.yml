@@ -28,10 +28,12 @@ jobs:
       # `Float[Tensor, "b c h w"]` dim strings misread as bad forward refs) must be repeated on the CLI —
       # else a fresh ml gen with any jaxtyping annotation red-CIs on its own shipped config (bd skr GAP1).
       - name: Lint — enforced (shipped source, full select)
-        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,E501,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,SLF001 --ignore F722
-      # ADVISORY (never blocks): full curated config over the whole tree, surfaces any pending families.
+        run: uvx ruff@0.15.13 check core cardioseg --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722
+      # ADVISORY (never blocks): full curated config over the whole tree, surfaces any pending families +
+      # the advisory-only codes (E501/SLF001 — cosmetic / house-gate-conflicting, bd 4c2/8ex): reported,
+      # never a merge gate.
       - name: Lint — advisory full (non-blocking)
-        run: uvx ruff@0.15.13 check . --statistics || true
+        run: uvx ruff@0.15.13 check . --statistics --extend-select E501,SLF001 || true
       # ADVISORY: format drift, shown but never blocks.
       - name: Format — advisory (non-blocking)
         run: uvx ruff@0.15.13 format --check . || true
@@ -60,11 +62,19 @@ jobs:
         with:
           node-version: "20"
       - name: Duplication — enforced (jscpd, DRY axis; blocks over threshold)
-        run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
+        run: npx --yes jscpd core cardioseg --config devtools/jscpd.json
       # >>> LOCAL-SLOT: ci-lint-steps — repo-specific lint/shape steps that ride ON TOP of the base gates
       # (a viewer-tree extra lint, an un-silenced advisory family, a repo-only static gate). The base gates
       # above are template-owned + regenerated; steps added in this region survive copier update. Empty by
       # default — mechanism identical across repos, only the CONTENTS are a per-repo FACT (bd skr GAP3).
+      # Wider hygiene SCOPE (per-repo FACT, bd cardiac-seg-9mu): base enforced-lint + jscpd scan `packages`
+      # (core cardioseg); cardiac also lints its viewer python + tests and dedup-scans the viewer TS source.
+      # Same RULES (ruff reads pyproject select/ignore/per-file-ignores; jscpd same config), wider PATHS —
+      # carried here since v1.0 computes base scope from `packages` (scaffold-fsl tracks folding back to base).
+      - name: Lint — enforced (viewer python + tests; pyproject config = same rules, wider scope)
+        run: uvx ruff@0.15.13 check cardioview tests
+      - name: Duplication — enforced (jscpd incl. viewer TS source; wider scope)
+        run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
       # Magic STRINGS in COMPARISONS — advisory (bd cardiac-seg-1ln7): PLR2004 defaults to allow
       # ["str","bytes"], silencing string magic values in comparisons; re-run with the allow-list emptied
       # to surface them. The cross-file magic_literals ratchet already blocks NEW recurring literals.
@@ -80,7 +90,7 @@ jobs:
     # NAME is a per-repo FACT (data_env_var, bd skr GAP3a) — a repo whose adapters read a different name
     # overrides it in .copier-answers.yml so tests SKIP here instead of erroring on a missing env.
     env:
-      CARDIAC_DATA: /tmp/nodata
+      CARDIOSEG_DATA: /tmp/nodata
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -111,24 +121,24 @@ jobs:
       # ruff PLR2004 can't see.
       - name: Magic literals — enforced (ratchet over [tool.magic_literals] ceiling)
         run: uv run python -m devtools.magic_literals core cardioseg
+      # Shape contracts — ENFORCED (GRADUATED advisory->blocking, bd vip.4): every public array/tensor
+      # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor. A fresh gen has 0 boundaries
+      # (passes); from the first typed boundary on, a bare one fails the merge — the ratchet at work. Aliases
+      # in [tool.shape_contracts]. (Was advisory; graduated once cardiac proved a real ml tree stays clean.)
+      - name: Shape contracts — enforced (jaxtyping boundaries; devtools/shape_contracts.py --assert)
+        run: uv run python -m devtools.shape_contracts core cardioseg --assert
       # Class-shape smells — ADVISORY explorers (never block): LCOM4 cohesion, Fowler data-clumps, and
-      # namespace-classes with latent shared state + shape-contracts (bare array/tensor boundaries).
-      # Heuristics that rank refactor candidates — surfaced for the reviewer, never a merge gate.
-      - name: Class-shape smells — advisory (LCOM / data-clumps / namespace-state / shape-contracts)
+      # namespace-classes with latent shared state. Heuristics ranking refactor candidates — reviewer signal.
+      - name: Class-shape smells — advisory (LCOM / data-clumps / namespace-state)
         continue-on-error: true
         run: |
           uv run python -m devtools.state_candidates core cardioseg
           uv run python -m devtools.lcom core cardioseg
           uv run python -m devtools.data_clumps core cardioseg
-          uv run python -m devtools.shape_contracts core cardioseg
-      # >>> LOCAL-SLOT: ci-test-steps — repo-specific test/coverage/gate steps on top of the base (a
-      # separate viewer-coverage floor calibrated to library logic, or shape_contracts --assert as a
-      # BLOCKING step for a boundary-clean ml repo that graduates ahead of the base advisory). Survives
-      # copier update; empty by default (bd skr GAP3).
-      # Shape contracts — ENFORCED (bd cardiac-seg-m8xq): cardiac's tensor boundaries are all annotated, so
-      # it graduates ahead of the base advisory — a NEW bare-array boundary fails the merge.
-      - name: Shape contracts — enforced (bare array/tensor boundaries must carry a jaxtyping shape)
-        run: uv run python -m devtools.shape_contracts --assert core cardioseg
+      # >>> LOCAL-SLOT: ci-test-steps — repo-specific test/coverage/gate steps on top of the base (e.g. a
+      # separate viewer-coverage floor calibrated to library logic, or a repo-only enforced check). Survives
+      # copier update; empty by default (bd skr GAP3). (shape_contracts --assert graduated to a BASE ml gate
+      # in v0.18, bd vip.4 — now blocking above, so cardiac's ahead-of-base slot copy is dropped.)
       # cardioview logic tests + coverage, REPORTED separately (own .coverage.cardioview, advisory) so the
       # core+cardioseg floor stays calibrated to library logic. bd cardiac-seg-3vbc.
       - name: cardioview tests + coverage (logic, advisory)

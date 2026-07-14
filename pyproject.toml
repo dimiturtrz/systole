@@ -88,7 +88,7 @@ extend-exclude = ["baselines", "cardioview/web/node_modules", "cardioview/web/di
 # <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "B", "E501", "I", "T201", "FBT", "BLE001", "S110", "S101", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "SLF001"]
+select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123"]
 ignore = [
     # jaxtyping shape strings — `Float[Tensor, "b c h w"]` is a deliberate runtime-checked annotation;
     # F722 misreads the dim string as a malformed forward ref. jaxtyping's own FAQ prescribes disabling it.
@@ -112,13 +112,13 @@ ignore = [
 ignore-names = ["X*", "Y*", "B", "C", "H", "W", "T1", "T2", "TR", "PD", "F", "sitk", "store", "timed"]
 # <<< LOCAL-SLOT: pep8-naming
 
-# Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); privates-under-test are the
-# point of a unit test (SLF001); mock classes mirror external PascalCase APIs + local math/alias scratch
-# (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE gates (imports-at-top, real bugs, dead
-# code) still apply to tests.
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
-"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+# Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); mock classes mirror external
+# PascalCase APIs + local math/alias scratch (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE
+# gates (imports-at-top, real bugs, dead code) still apply to tests. (SLF001 is no longer enforced anywhere
+# — moved to the advisory surface, bd 8ex — so it needs no tests carve-out.)
+"__init__.py" = ["F401"]
+"tests/**" = ["S101", "PLR2004", "FBT", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
 # >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
 # that must never raise). Add lines here; copier update won't overwrite this region.
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
