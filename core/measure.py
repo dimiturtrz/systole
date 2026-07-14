@@ -15,6 +15,7 @@ from jaxtyping import Float, Integer
 from core.data.static.labels import LV_CAV
 from core.types import Spacing, shapecheck
 
+_MIN_FIT_PAIRS = 2  # a line needs >=2 distinct points; below this a calibration fit is undefined
 LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)
 
 
@@ -28,6 +29,19 @@ class AgreementStats:
     mae: float
     loa: list[float]
     mean_gt: float
+
+
+@dataclass(frozen=True)
+class EfCalibration:
+    """Post-hoc linear EF correction ef_corr = slope * ef_pred + intercept, fit on a held-out set.
+    Removes a systematic bias in the derived EF number (masks good, ratio biased) without touching the
+    model. Identity (slope=1, intercept=0) is the no-op — degenerate fits fall back to it."""
+    slope: float
+    intercept: float
+
+    def apply(self, ef_pred: Float[np.ndarray, "*n"]) -> Float[np.ndarray, "*n"]:
+        """Correct predicted EF(s); NaN (undefined EF) passes through unchanged."""
+        return self.slope * np.asarray(ef_pred, dtype=float) + self.intercept
 
 
 class Measure:
@@ -73,6 +87,20 @@ class Measure:
         sd = float(diff.std(ddof=1)) if n > 1 else 0.0
         return AgreementStats(n, bias, sd, float(np.abs(diff).mean()),
                               [bias - LOA_Z * sd, bias + LOA_Z * sd], float(g.mean()))
+
+    @staticmethod
+    def fit_ef_calibration(ef_gt, ef_pred) -> EfCalibration:
+        """Least-squares linear fit ef_gt ~ slope * ef_pred + intercept over paired EF arrays (percent).
+        NaN pairs (undefined EF) dropped. Selection axis: fit on VAL, apply once to TEST (leak rule).
+        Degenerate (<2 pairs or no spread in ef_pred) -> identity, so a bad axis never distorts EF."""
+        g = np.asarray(ef_gt, dtype=float)
+        p = np.asarray(ef_pred, dtype=float)
+        ok = ~(np.isnan(g) | np.isnan(p))
+        g, p = g[ok], p[ok]
+        if p.size < _MIN_FIT_PAIRS or np.ptp(p) == 0:
+            return EfCalibration(1.0, 0.0)
+        slope, intercept = np.polyfit(p, g, 1)
+        return EfCalibration(float(slope), float(intercept))
 
     @staticmethod
     @shapecheck

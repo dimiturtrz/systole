@@ -4,7 +4,7 @@ here we pin the statistics helper (sample-count classes + NaN handling) and the 
 """
 import numpy as np
 
-from core.measure import LOA_Z, Measure
+from core.measure import LOA_Z, EfCalibration, Measure
 
 
 def test_ef_statistics_empty_is_all_nan():
@@ -44,6 +44,35 @@ def test_ef_statistics_drops_nan_pairs():
     ef_stats = Measure.ef_statistics(gt, pred)
     assert ef_stats.n == 1                         # only pair 0 survives
     assert ef_stats.bias == 4.0
+
+
+def test_fit_ef_calibration_recovers_linear_bias():
+    """Exact-fit class: pred = (gt - b)/a  -> fitting gt ~ a*pred + b recovers (a,b), apply undoes it."""
+    gt = np.array([30.0, 45.0, 55.0, 70.0])
+    pred = 0.8 * gt - 4.0                              # a known affine distortion of the true EF
+    cal = Measure.fit_ef_calibration(gt, pred)
+    assert abs(cal.slope - 1.25) < 1e-6 and abs(cal.intercept - 5.0) < 1e-6   # inverse of (0.8, -4)
+    assert np.allclose(cal.apply(pred), gt)
+
+
+def test_fit_ef_calibration_degenerate_is_identity():
+    """Boundary classes: <2 pairs, or no spread in pred (all equal) -> identity (no distortion)."""
+    assert Measure.fit_ef_calibration([50.0], [40.0]) == EfCalibration(1.0, 0.0)
+    assert Measure.fit_ef_calibration([40.0, 60.0], [50.0, 50.0]) == EfCalibration(1.0, 0.0)
+
+
+def test_fit_ef_calibration_drops_nan_pairs():
+    """NaN class: undefined-EF pairs dropped before the fit (a NaN in either member removes the pair)."""
+    gt = np.array([30.0, np.nan, 55.0, 70.0])
+    pred = np.array([20.0, 40.0, np.nan, 60.0])       # only pairs 0 and 3 survive -> 2 points, a clean line
+    cal = Measure.fit_ef_calibration(gt, pred)
+    assert abs(cal.slope - 1.0) < 1e-6 and abs(cal.intercept - 10.0) < 1e-6   # (30,20),(70,60): gt=pred+10
+
+
+def test_ef_calibration_apply_passes_nan_through():
+    """apply is a plain affine map; a NaN EF (undefined) stays NaN, never a fabricated corrected value."""
+    out = EfCalibration(1.25, 5.0).apply(np.array([40.0, np.nan]))
+    assert out[0] == 55.0 and np.isnan(out[1])
 
 
 def test_expected_volume_ml_is_prob_mass_times_voxel():

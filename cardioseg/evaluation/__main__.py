@@ -8,6 +8,7 @@ from core.obs import Obs
 
 from .calibrate import Calibrate
 from .distribution import Distribution
+from .ef_calibrate import EfCalibrate
 from .ensemble import Ensemble
 from .matrix import Matrix
 from .modelcard import ModelCard
@@ -18,7 +19,7 @@ from .sync_numbers import SyncNumbers
 from .uncertainty import Uncertainty
 
 COMMANDS = {
-    "calibrate": Calibrate, "distribution": Distribution, "ensemble": Ensemble,
+    "calibrate": Calibrate, "ef_calibrate": EfCalibrate, "distribution": Distribution, "ensemble": Ensemble,
     "matrix": Matrix, "modelcard": ModelCard, "overlay": Overlay, "results": Results,
     "soft_eval": SoftEval, "sync_numbers": SyncNumbers, "uncertainty": Uncertainty,
     "persist": Persist,
