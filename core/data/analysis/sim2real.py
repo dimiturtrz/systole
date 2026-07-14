@@ -22,6 +22,7 @@ from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.mri_physics import MriPhysics
 from core.data.static import splits
 from core.data.static.labels import CLASSES
+from core.data.static.mri.base import Vendor
 from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
 
@@ -70,7 +71,7 @@ class Sim2Real:
         n_classes = len(CLASSES) + 1
         meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)
         log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
-        for vendor in ("Siemens", "Philips", "GE", "Canon"):
+        for vendor in Vendor:
             df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
             if df.height == 0:
                 continue

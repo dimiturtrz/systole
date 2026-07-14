@@ -18,6 +18,7 @@ from pathlib import Path
 import polars as pl
 
 from core.data.ingest.source import StaticSource
+from core.data.static.mri.base import Vendor
 from core.data.static.store.build import Build as store
 
 log = logging.getLogger("cardioseg.testsets")
@@ -90,8 +91,8 @@ class TestSets:
 
 
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
-CANON = TestSets.ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
-GE = TestSets.ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
+CANON = TestSets.ts("canon", "seg4", _IN_SEG & (V("vendor") == Vendor.CANON))
+GE = TestSets.ts("ge", "seg4", _IN_SEG & (V("vendor") == Vendor.GE))
 CMRXMOTION = TestSets.ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
 ACDC = TestSets.ts("acdc", "seg4", V("dataset") == "acdc")
 MNM2 = TestSets.ts("mnm2", "seg4", V("dataset") == "mnm2")
@@ -101,7 +102,7 @@ SCD_LV = TestSets.ts("scd_lv", "seg_lv", V("dataset") == "scd")
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
 STATIC_MAIN_TEST = TestSets.ts("static_main_test", "seg4",
-                                _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
+                                _IN_SEG & (V("vendor").is_in([Vendor.GE, Vendor.CANON]) | (V("dataset") == "cmrxmotion")))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
 SYNTH_MAIN_TEST = TestSets.ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
 

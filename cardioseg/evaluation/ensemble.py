@@ -20,6 +20,7 @@ from jaxtyping import Float, Integer
 
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
+from core.data.static.mri.base import Phase
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
 from core.inference import Inference
@@ -81,16 +82,16 @@ class Ensemble:
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"]); sp = tuple(float(s) for s in case["spacing"])
             preds, gts = {}, {}
-            for tag in ("ed", "es"):
+            for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
                     continue
                 pred = Postprocess.largest_cc_per_class(Ensemble.decompose(models, case[f"{tag}_img"], size, device)[0])
                 gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.uint8)
                 preds[tag], gts[tag] = pred, gt
                 Ensemble._dice_fold(pred, gt, inter, den)
-            if "ed" in preds and "es" in preds:
-                efp = Measure.ejection_fraction(preds["ed"], preds["es"], sp)[0]
-                efg = Measure.ejection_fraction(gts["ed"], gts["es"], sp)[0]
+            if Phase.ED.lower() in preds and Phase.ES.lower() in preds:
+                efp = Measure.ejection_fraction(preds[Phase.ED.lower()], preds[Phase.ES.lower()], sp)[0]
+                efg = Measure.ejection_fraction(gts[Phase.ED.lower()], gts[Phase.ES.lower()], sp)[0]
                 if not (np.isnan(efp) or np.isnan(efg)):
                     diffs.append(efp - efg)
         return Ensemble._score_summary(inter, den, diffs)
@@ -118,7 +119,7 @@ class Ensemble:
         ea, ee, ta, te = [], [], [], []
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
-            for tag in ("ed", "es"):
+            for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
                     continue
                 pred, _, ale, epi = Ensemble.decompose(models, case[f"{tag}_img"], size, device)

@@ -21,13 +21,15 @@ from core.data.static.mri.base import (
     Base,
     DatasetAdapter,
     PatientData,
+    Phase,
+    Vendor,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
 
 # Single scanner across the challenge: Siemens MAGNETOM Vida 3T, at Fudan University
 # (Zhangjiang International Brain Imaging Center, Shanghai); healthy volunteers (no pathology).
-VENDOR, FIELD_T, SCANNER = "Siemens", 3.0, "MAGNETOM Vida"
+VENDOR, FIELD_T, SCANNER = Vendor.SIEMENS, 3.0, "MAGNETOM Vida"
 CENTRE, COUNTRY = "Fudan (Shanghai)", "China"
 
 
@@ -66,7 +68,7 @@ class CmrxMotionAdapter(DatasetAdapter):
     def _grade(case: Path) -> str | None:
         """Worst motion grade across the case's ED/ES frames (conservative case-level severity)."""
         iqa = CmrxMotionAdapter._iqa(case.parent.parent)
-        gs = [iqa.get(f"{case.name}-{t}", {}).get("Label") for t in ("ED", "ES")]
+        gs = [iqa.get(f"{case.name}-{t}", {}).get("Label") for t in Phase]
         gs = [g for g in gs if g]
         return max(gs) if gs else None
 

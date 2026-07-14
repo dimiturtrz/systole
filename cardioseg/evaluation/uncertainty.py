@@ -28,6 +28,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.labels import Labels
+from core.data.static.mri.base import Phase
 from core.data.static.store.build import Build as store
 from core.inference import Inference
 from core.preprocessing.preprocess import SIZE, Preprocess
@@ -119,7 +120,7 @@ class Uncertainty:
         saved = False
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
-            for tag in ("ed", "es"):
+            for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
                     continue
                 pred, ent, conf, ale, epi = Uncertainty.tta_uncertainty(model, case[f"{tag}_img"], SIZE, device)
@@ -129,7 +130,7 @@ class Uncertainty:
                 cases.append({"case": f"{Path(r['path']).stem}_{tag.upper()}", "uncertainty": score})
                 b, i = Uncertainty.boundary_interior_uncertainty(pred, ent)
                 bnd_u.extend(b); int_u.extend(i)
-                if not saved and eval_name == "acdc" and tag == "ed":  # one overlay PNG
+                if not saved and eval_name == "acdc" and tag == Phase.ED.lower():  # one overlay PNG
                     z = int(np.argmax([(g > 0).sum() for g in gt]))
                     Uncertainty._save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", Preprocess.fit_square, SIZE, plt)
                     saved = True

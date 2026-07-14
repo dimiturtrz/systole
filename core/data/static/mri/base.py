@@ -7,6 +7,7 @@ labels to this via `label_map`, so one model's labels mean the same thing across
 Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm.
 """
 import csv
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, TypedDict, runtime_checkable
 
@@ -22,6 +23,38 @@ LV_MYO = 2   # LV-myocardium; the identify_lv_cavity ring label (canonical home:
 MNM_LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}
 
 _CSV_CACHE: dict[str, dict[str, dict[str, str]]] = {}
+
+
+class Vendor(StrEnum):
+    """Scanner vendor, canonical casing as emitted in acquisition metadata. One source of truth
+    for the four names that were scattered as literals across adapters/splits/reference."""
+    SIEMENS = "Siemens"
+    PHILIPS = "Philips"
+    GE = "GE"
+    CANON = "Canon"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Vendor | None":
+        """Case-insensitive lookup (a CSV/DICOM field may ship 'SIEMENS'/'ge')."""
+        if isinstance(value, str):
+            low = value.strip().lower()
+            return next((m for m in cls if m.value.lower() == low), None)
+        return None
+
+
+class Phase(StrEnum):
+    """Cardiac-cycle phase tag. Members are the canonical uppercase forms; `_missing_` folds the
+    ED/ed/ES/es case drift so Phase('ed') is Phase.ED. StrEnum == its str value, so it stays a
+    drop-in key for the PatientData/Frame dicts keyed by 'ED'/'ES'."""
+    ED = "ED"
+    ES = "ES"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Phase | None":
+        if isinstance(value, str):
+            up = value.strip().upper()
+            return next((m for m in cls if m.value == up), None)
+        return None
 
 
 class Frame(TypedDict):
@@ -89,7 +122,7 @@ class Base:
         frame|None) for that cardiac phase, or None to skip it; the adapter-specific bit is just that
         closure. Loads each frame (4D-aware via `frame`), remaps the mask to canonical, carries spacing."""
         out: PatientData = {"group": group, "spacing": None}
-        for tag in ("ED", "ES"):
+        for tag in Phase:
             r = resolve(tag)
             if r is None:
                 continue

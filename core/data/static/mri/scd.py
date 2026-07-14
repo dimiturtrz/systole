@@ -25,7 +25,7 @@ import numpy as np
 from skimage.draw import polygon
 
 from core.config import Config
-from core.data.static.mri.base import Base, DatasetAdapter, PatientData
+from core.data.static.mri.base import Base, DatasetAdapter, PatientData, Phase, Vendor
 from core.data.static.mri.dicom import Dicom
 
 _IRCCI = "contours-manual/IRCCI-expert"
@@ -140,7 +140,7 @@ class ScdAdapter(DatasetAdapter):
             return out
         ed_i, es_i, spacing = self.select_ed_es(by_slice)    # pragma: no cover  only reached with real gathered DICOM recs; select_ed_es tested directly
         out["spacing"] = spacing                             # pragma: no cover
-        for tag, recs in (("ED", ed_i), ("ES", es_i)):       # pragma: no cover
+        for tag, recs in ((Phase.ED, ed_i), (Phase.ES, es_i)):       # pragma: no cover
             out[tag] = {"img": np.stack([r["img"] for r in recs]).astype(np.float32),  # pragma: no cover
                         "gt": np.stack([r["mask"] for r in recs])}
         return out                                            # pragma: no cover
@@ -150,7 +150,7 @@ class ScdAdapter(DatasetAdapter):
         case = Path(case)
         info = self._patient_csv(self._root(self.root)).get(case.name, {})
         m = {"group": info.get("Pathology"), "sex": info.get("Gender"), "age": info.get("Age"),
-             "vendor": "GE", "original_id": info.get("OriginalID"),        # SCD = single-vendor (GE Signa)
+             "vendor": Vendor.GE, "original_id": info.get("OriginalID"),        # SCD = single-vendor (GE Signa)
              "centre": "Sunnybrook Health Sciences Centre", "country": "Canada"}   # single-centre Toronto
         sax = self._sax_series_dir(case)                                  # real acquisition + scanner from DICOM —
         dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip/model the NIfTI sets lack

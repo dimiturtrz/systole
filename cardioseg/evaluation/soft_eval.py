@@ -21,6 +21,7 @@ import polars as pl
 from cardioseg.evaluation.uncertainty import Uncertainty
 from core.data.static import splits
 from core.data.static.labels import LV_CAV
+from core.data.static.mri.base import Phase
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
 from core.hparams import Hparams
@@ -62,7 +63,7 @@ class SoftEval:
                 continue
             sp = tuple(float(s) for s in case["spacing"])
             vols = {}
-            for tag in ("ed", "es"):
+            for tag in (p.lower() for p in Phase):
                 _, mean = Inference(model, SIZE, dev).predict_volume_probs(case[f"{tag}_img"])   # [D,C,H,W] softmax
                 p = mean.float().cpu().numpy()
                 blood = p[:, LV_CAV]                                                 # [D,H,W] blood prob
@@ -75,9 +76,9 @@ class SoftEval:
                 # calibration over foreground voxels (pred or gt non-bg)
                 fg = (gt > 0) | (hard > 0)
                 conf_all.append(p.max(1)[fg]); corr_all.append((p.argmax(1)[fg] == gt[fg]).astype(float))
-            rows.append((SoftEval._ef(vols["ed"]["gt"], vols["es"]["gt"]),
-                         SoftEval._ef(vols["ed"]["hard"], vols["es"]["hard"]),
-                         SoftEval._ef(vols["ed"]["soft"], vols["es"]["soft"])))
+            rows.append((SoftEval._ef(vols[Phase.ED.lower()]["gt"], vols[Phase.ES.lower()]["gt"]),
+                         SoftEval._ef(vols[Phase.ED.lower()]["hard"], vols[Phase.ES.lower()]["hard"]),
+                         SoftEval._ef(vols[Phase.ED.lower()]["soft"], vols[Phase.ES.lower()]["soft"])))
         a = np.array(rows)                                  # [n, 3] = gt, hard, soft
         conf = np.concatenate(conf_all); corr = np.concatenate(corr_all)
         return a, Uncertainty.ece(conf, corr)[0]

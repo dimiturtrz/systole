@@ -30,6 +30,7 @@ from jaxtyping import Float, Int, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
+from core.data.static.mri.base import Vendor
 from core.types import shapecheck
 
 from .augment import Augmentor
@@ -184,7 +185,7 @@ class SynthCfg(BaseModel):
     #                                                the cav-too-bright fidelity fix). 0 = on-resonance
     fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
     #                                                = the dominant cross-vendor relaxation axis
-    vendors: tuple[str, ...] = ("Siemens", "Philips", "GE", "Canon")   # sampled per-sample -> emitted as
+    vendors: tuple[str, ...] = tuple(Vendor)   # sampled per-sample -> emitted as
     #                                                metadata so synth carries provenance + flows the same
     #                                                harmonization path as real (return_meta=True)
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)

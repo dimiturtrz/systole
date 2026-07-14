@@ -13,6 +13,7 @@ from core.data.static.mri.base import (
     Base,
     DatasetAdapter,
     PatientData,
+    Vendor,
 )
 
 # Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
@@ -81,7 +82,7 @@ class AcdcAdapter(DatasetAdapter):
             "group": cfg.get("Group"),
             "height": Base.to_float(cfg.get("Height")), "weight": Base.to_float(cfg.get("Weight")),
             "age": None, "sex": None,
-            "vendor": "Siemens", "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
+            "vendor": Vendor.SIEMENS, "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
             "scanner": "Siemens Aera/Trio",                # two units, not recorded per-subject
             "centre": "Dijon", "country": "France",        # CHU Dijon (single centre)
             "_source": {"vendor": "paper", "field_T": "paper", "country": "paper", "rest": "Info.cfg"},

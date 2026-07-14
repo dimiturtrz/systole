@@ -22,6 +22,7 @@ from skimage.measure import marching_cubes
 
 from core.config import Config
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
+from core.data.static.mri.base import Phase
 from core.postprocess import Postprocess
 from core.types import Spacing, shapecheck
 
@@ -105,7 +106,7 @@ class Mesh:
     @staticmethod
     def add_args(ap):
         ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
-        ap.add_argument("--frame", default="ed", choices=["ed", "es"])
+        ap.add_argument("--frame", default=Phase.ED, type=Phase, choices=list(Phase))
         ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
         ap.add_argument("--out", default=None, help="output root (default: <data>/meshes/ from paths.yaml)")
         ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])

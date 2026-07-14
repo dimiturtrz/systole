@@ -21,7 +21,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
-from core.data.static.mri.base import Base
+from core.data.static.mri.base import Base, Phase
 
 log = logging.getLogger("cardioseg.eda")
 
@@ -38,7 +38,7 @@ class Eda:
         case_data = AcdcAdapter().load_ed_es(patient_dir)
         spacing = case_data["spacing"]
         log.info(f"\n=== {patient_dir.name} | group={case_data.get('group','?')} ===")
-        for tag in ("ED", "ES"):
+        for tag in Phase:
             if tag not in case_data:
                 continue
             img, gt = case_data[tag]["img"], case_data[tag]["gt"]
@@ -53,7 +53,7 @@ class Eda:
 
     @staticmethod
     def save_viz(patient_dir, d, out_png):
-        rows = [tag for tag in ("ED", "ES") if tag in d]
+        rows = [tag for tag in Phase if tag in d]
         if not rows:
             return
         fig, axes = plt.subplots(len(rows), 3, figsize=(9, 3 * len(rows)), squeeze=False)

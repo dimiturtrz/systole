@@ -15,6 +15,7 @@ from jaxtyping import Float, Integer, Shaped
 from scipy.ndimage import zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
+from core.data.static.mri.base import Phase
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import Nyul
 from core.types import Spacing, Volume, shapecheck
@@ -116,7 +117,7 @@ class Preprocess:
         sp = d["spacing"]
         out = {"group": d.get("group"), "patient": patient_dir.name}
         new_sp = sp
-        for tag in ("ED", "ES"):
+        for tag in Phase:
             if tag not in d:
                 continue
             img, isp = Preprocess.resample_inplane(d[tag]["img"], sp, target_inplane, is_mask=False)

@@ -22,6 +22,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from core.data.static.mri.base import Phase
 from core.data.static.store import Store
 from core.obs import Obs
 
@@ -45,7 +46,7 @@ class ACDCSliceDataset(Dataset):
         self,
         npz_paths: list[str | Path],
         size: int = SIZE,
-        frames: tuple[str, ...] = ("ED", "ES"),
+        frames: tuple[str, ...] = tuple(Phase),
         *,
         keep_empty: bool = False,
         augment: bool = False,

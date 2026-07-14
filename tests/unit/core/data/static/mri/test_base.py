@@ -8,7 +8,28 @@ from core.data.static.mri.base import (
     LV_MYO,
     MNM_LABEL_MAP,
     Base,
+    Phase,
+    Vendor,
 )
+
+
+# --- Vendor / Phase StrEnums: canonical value + case-insensitive _missing_ ---
+def test_vendor_canonical_values_and_casefold():
+    assert tuple(Vendor) == ("Siemens", "Philips", "GE", "Canon")   # canonical casing == the old literals
+    assert Vendor.GE == "GE"                                        # StrEnum member IS its str value
+    assert Vendor("siemens") is Vendor.SIEMENS                      # _missing_ folds a lowercase field
+    assert Vendor("GE") is Vendor.GE                                # exact hit
+    with pytest.raises(ValueError, match="Fuji"):
+        Vendor("Fuji")                                             # unknown -> ValueError, not silent
+
+
+def test_phase_canonical_values_and_casefold():
+    assert tuple(Phase) == ("ED", "ES")
+    assert Phase.ED == "ED" and Phase.ED.lower() == "ed"           # drop-in for the lowercase store keys
+    assert Phase("ed") is Phase.ED and Phase("es") is Phase.ES      # the ED/ed case drift folds to one member
+    assert Phase("ES") is Phase.ES
+    with pytest.raises(ValueError, match="mid"):
+        Phase("mid")
 
 
 # --- to_float: parseable / None / garbage ---

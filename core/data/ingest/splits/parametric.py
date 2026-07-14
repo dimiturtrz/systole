@@ -19,6 +19,7 @@ import polars as pl
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import SEG
+from core.data.static.mri.base import Vendor
 
 V = pl.col
 
@@ -27,7 +28,7 @@ V = pl.col
 class Parametric:
     name: ClassVar[str] = "parametric"
     sources: ClassVar[tuple[str, ...]] = ()
-    test_vendors: tuple[str, ...] = ("Canon", "GE")     # vendors held out of train entirely (the OOD test)
+    test_vendors: tuple[str, ...] = (Vendor.CANON, Vendor.GE)     # vendors held out of train entirely (the OOD test)
     test_datasets: tuple[str, ...] = ("cmrxmotion",)    # whole datasets held out (e.g. the motion cohort)
     train_vendors: tuple[str, ...] = ()                 # if set: restrict TRAIN to these vendors only (bd 5r7n)
     val_dataset: str = "acdc"                           # the domain-shift tuning centre

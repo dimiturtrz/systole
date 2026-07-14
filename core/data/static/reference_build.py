@@ -11,9 +11,10 @@ import numpy as np
 import polars as pl
 from omegaconf import OmegaConf
 
-from core.config import DEFAULT_INPLANE, KNOWN_VENDORS
+from core.config import DEFAULT_INPLANE
 from core.data.dynamic.mri_physics import SAR_FLIP_CAP, TR_RANGE_MS, MriPhysics
 from core.data.static.labels import CLASSES
+from core.data.static.mri.base import Phase, Vendor
 from core.data.static.reference import Reference
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe, Store
@@ -23,7 +24,7 @@ log = logging.getLogger("cardioseg.reference_build")
 
 _MIN_LEVEL_PX = 50   # min pooled px for a per-vendor per-class intensity level to be recorded
 
-_VENDORS = ("Siemens", "Philips", "GE", "Canon")
+_VENDORS = tuple(Vendor)
 
 
 class ReferenceBuild:
@@ -127,7 +128,7 @@ class ReferenceBuild:
         for r in df.iter_rows(named=True):
             v = r.get("vendor") or "unknown"
             case = store.load_arrays(r["path"])
-            for tag in ("ed", "es"):
+            for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
                     continue
                 img = np.asarray(case[f"{tag}_img"], np.float32)
@@ -182,7 +183,7 @@ class ReferenceBuild:
         # DICOM-mined measurements. Canon block flagged: no Canon-specific cine literature exists.
         acq = {v: {"tr_ms": leaf(tr15), "te_ms": leaf(te15),
                    "flip_deg_1p5t": leaf(f15), "flip_deg_3t": leaf(f30)}
-               for v in KNOWN_VENDORS}
+               for v in Vendor}
 
         base_dir = Path(out_dir) if out_dir is not None else Reference.reference_dir()
         base_dir.mkdir(parents=True, exist_ok=True)

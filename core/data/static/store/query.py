@@ -23,6 +23,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, Config
+from core.data.static.mri.base import Phase, Vendor
 from core.data.static.mri.pathology import Pathology
 from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.reference import Reference
@@ -68,7 +69,7 @@ class DataCfg(BaseModel):
     # split is code, not criteria. Recorded to config.json for lineage. Empty -> legacy criteria path.
     split: str = ""
     test_datasets: tuple[str, ...] = ("cmrxmotion",)
-    test_vendors: tuple[str, ...] = ("Canon", "GE")
+    test_vendors: tuple[str, ...] = (Vendor.CANON, Vendor.GE)
     val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
     val_vendors: tuple[str, ...] = ()
     train_vendors: tuple[str, ...] = ()              # if set: restrict TRAIN to these vendors only (the
@@ -203,16 +204,16 @@ class MetaBuilder:
         if not v:
             return None
         s = str(v).upper()
-        for key, short in (("SIEMENS", "Siemens"), ("PHILIPS", "Philips"), ("GE", "GE"), ("CANON", "Canon")):
-            if key in s:
-                return short
+        for m in Vendor:
+            if m.name in s:
+                return m.value
         return str(v)
 
     @staticmethod
     def _is_labelled(arrays: dict) -> bool:
         """Usable masks = both ED and ES present with non-empty GT (M&Ms-1 zero-fills withheld GT)."""
         ok = []
-        for tag in ("ed", "es"):
+        for tag in (p.lower() for p in Phase):
             gt = arrays.get(f"{tag}_gt")
             ok.append(gt is not None and bool((gt > 0).any()))
         return all(ok)
