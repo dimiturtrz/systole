@@ -37,6 +37,14 @@ jobs:
       # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
       - name: Lint — advisory full (non-blocking)
         run: uvx ruff@0.15.13 check . --statistics || true
+      # Magic STRINGS — advisory (bd cardiac-seg-1ln7): ruff PLR2004 defaults to allow-magic-value-types
+      # ["str","bytes"], so string magic values in comparisons are silenced. This re-runs PLR2004 with the
+      # allow-list emptied to surface them (the enforced lint above keeps the default, numeric-only, so CI
+      # stays green). Ratchets to enforced once the StrEnum/named-constant migration clears them; the
+      # non-comparison + cross-file cases are the devtools/magic_literals radar below.
+      - name: Magic strings — advisory (PLR2004 un-silenced, comparisons)
+        continue-on-error: true
+        run: uvx ruff@0.15.13 check core cardioseg cardioview --select PLR2004 --config 'lint.pylint.allow-magic-value-types=[]' || true
       # ADVISORY: `ruff format` not applied yet (bd i851) — shows the pending reformat, does not block.
       - name: Format — advisory (non-blocking)
         run: uvx ruff@0.15.13 format --check . || true

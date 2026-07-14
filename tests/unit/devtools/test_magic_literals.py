@@ -22,6 +22,17 @@ def test_value_tokens_counted_keys_and_subscripts_excluded():
     assert sorted(toks) == ["GE", "GE", "GE"]   # 3 value-position "GE" (call arg, dict value, assign); no "vendor"
 
 
+def test_comparison_operands_excluded():
+    """A string in a comparison is ruff PLR2004's domain (bd 1ln7), so the detector defers it; the same
+    token in a value/arg position still counts."""
+    toks = _string_literals(_tree("""
+        if x == "GE": pass          # comparison operand -> ruff's job (excluded)
+        if "GE" != y: pass          # left operand too (excluded)
+        z = tag("GE")               # value/arg position (counted)
+    """))
+    assert toks == ["GE"]           # only the arg-position one
+
+
 def test_framework_and_prose_not_counted():
     """argparse action literals (stoplist) and prose/messages (have spaces -> not identifier-shaped) drop."""
     toks = _string_literals(_tree('''

@@ -1,8 +1,10 @@
 """Magic-literal detector (bd cardiac-seg-wir7): the untapped context PLR2004 misses.
 
-PLR2004 (enforced) flags a magic value only in a COMPARISON (`x == "acdc"`). But the same bare literal as
-a dict key (`d["acdc"]`), an argument (`load("acdc")`), an assignment, or a return value is just as magic
-and is ungated. Two frequency-based smells surface here:
+PLR2004 flags a magic value only in a COMPARISON (`x == "acdc"`), and by default it even ALLOWS strings
+(`allow-magic-value-types` defaults to `["str", "bytes"]`); un-silenced (bd cardiac-seg-1ln7) it owns the
+comparison context. But the same bare literal as a dict key (`d["acdc"]`), an argument (`load("acdc")`),
+an assignment, or a return value is ungated, and ruff never aggregates across files. This detector owns
+that gap — the non-comparison, cross-file-frequency signal — and defers comparisons to ruff. Two smells:
 
   1. **recurring string literal** — a short, identifier-shaped string that appears >= THRESHOLD times is
      domain vocabulary (a vendor / phase / dataset / task tag) masquerading as a literal. It belongs in a
@@ -45,14 +47,18 @@ def _is_token(value: object) -> bool:
 
 
 def _string_literals(tree: ast.AST) -> list[str]:
-    """Identifier-shaped string constants in a VALUE position — dict KEYS are excluded (a repeated key is
-    a schema FIELD name, caught by the key-set smell; a repeated value/arg is an ENUM candidate). Docstrings
-    aren't tokens, so they drop out too."""
-    field_ids = {id(k) for n in ast.walk(tree) if isinstance(n, ast.Dict) for k in n.keys if k is not None}
-    field_ids |= {id(n.slice) for n in ast.walk(tree)              # `d["vendor"]` subscript = a field ref,
-                  if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)}  # not a value token
+    """Identifier-shaped string constants in a VALUE position, EXCLUDING three contexts owned elsewhere:
+      - dict KEYS + subscript indices (`d["vendor"]`) — schema FIELD refs, caught by the key-set smell;
+      - COMPARISON operands (`x == "GE"`) — ruff PLR2004 owns those (with allow-magic-value-types=[], bd
+        cardiac-seg-1ln7), so this detector doesn't double-flag them.
+    What's left is the value/arg-position recurrence ruff can't see across files. Docstrings aren't tokens."""
+    excluded = {id(k) for n in ast.walk(tree) if isinstance(n, ast.Dict) for k in n.keys if k is not None}
+    excluded |= {id(n.slice) for n in ast.walk(tree)               # `d["vendor"]` subscript = a field ref
+                 if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)}
+    excluded |= {id(operand) for n in ast.walk(tree) if isinstance(n, ast.Compare)  # x == "GE" -> ruff PLR2004
+                 for operand in (n.left, *n.comparators) if isinstance(operand, ast.Constant)}
     return [n.value for n in ast.walk(tree)
-            if isinstance(n, ast.Constant) and _is_token(n.value) and id(n) not in field_ids]
+            if isinstance(n, ast.Constant) and _is_token(n.value) and id(n) not in excluded]
 
 
 def _key_sets(tree: ast.AST) -> list[tuple[frozenset[str], int]]:
