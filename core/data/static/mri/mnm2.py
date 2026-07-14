@@ -18,6 +18,7 @@ from core.data.static.mri.base import (
     Dataset,
     DatasetAdapter,
     PatientData,
+    PatientMeta,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
@@ -59,7 +60,7 @@ class Mnm2Adapter(DatasetAdapter):
                              key_transform=lambda c: c.zfill(3))
 
     @staticmethod
-    def _meta_from_info(info: dict) -> dict:
+    def _meta_from_info(info: dict) -> PatientMeta:
         """PURE M&M-2 meta from one CSV row: disease/vendor/scanner pass through, FIELD float-parsed;
         centre null (not published) + country fixed Spain (3 Spanish hospitals, paper)."""
         return {

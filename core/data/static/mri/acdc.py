@@ -14,6 +14,7 @@ from core.data.static.mri.base import (
     Dataset,
     DatasetAdapter,
     PatientData,
+    PatientMeta,
     Vendor,
 )
 
@@ -76,7 +77,7 @@ class AcdcAdapter(DatasetAdapter):
 
         return Base.load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
-    def meta(self, case: Path) -> dict:
+    def meta(self, case: Path) -> PatientMeta:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
         cfg = self.parse_info_cfg(case)
         return {

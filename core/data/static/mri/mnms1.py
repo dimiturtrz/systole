@@ -17,6 +17,7 @@ from core.data.static.mri.base import (
     Dataset,
     DatasetAdapter,
     PatientData,
+    PatientMeta,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
@@ -116,7 +117,7 @@ class Mnms1Adapter(DatasetAdapter):
         return int(float(idx))
 
     @staticmethod
-    def meta_from_row(row: dict) -> dict:
+    def meta_from_row(row: dict) -> PatientMeta:
         """PURE M&Ms-1 meta from one CSV row: centre code -> (readable site, country) via the paper map,
         vendor from either spelling, demographics float-parsed. Unknown centre -> (raw code, None country)."""
         name, country = CENTRES.get(str(row.get("Centre")).strip(), (row.get("Centre"), None))

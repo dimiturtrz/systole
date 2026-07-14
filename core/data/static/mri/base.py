@@ -85,6 +85,23 @@ class PatientData(TypedDict, total=False):
     ES: Frame                  # end-systole (emptiest)
 
 
+class PatientMeta(TypedDict, total=False):
+    """One subject's acquisition + demographics (an adapter's meta()). One declared schema so the key
+    set can't silently drift across the acdc/mnm2/mnms1 builders; total=False — each adapter fills the
+    subset its source ships. `_source` records provenance per field (which came from paper vs a file)."""
+    group: str | None
+    height: float | None
+    weight: float | None
+    age: float | None
+    sex: str | None
+    vendor: Vendor | str | None
+    field_T: float | list[float] | None
+    scanner: str | None
+    centre: str | None
+    country: str | None
+    _source: dict[str, str]
+
+
 class Base:
     """The shared MRI-adapter free helpers, folded in as staticmethods (CSV parse, NIfTI load, the ED/ES
     loader skeleton, label remap, geometric LV-cavity id). Every adapter + the store call these."""

@@ -7,6 +7,7 @@ Shapes: pred/gt are same-shape label maps ([H, W] or [D, H, W]); the ops are
 shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
 from numbers import Real
+from typing import TypedDict
 
 import numpy as np
 from jaxtyping import Bool, Float, Integer
@@ -24,6 +25,13 @@ except ImportError:
 
 
 HD_PERCENTILE = 95  # robust-Hausdorff percentile (drops the top 5% boundary-distance outliers)
+
+
+class SurfaceMetrics(TypedDict):
+    """Boundary-distance summary: max Hausdorff, robust HD95, average symmetric surface distance (mm)."""
+    hd: float
+    hd95: float
+    assd: float
 
 
 class Evaluate:
@@ -64,7 +72,7 @@ class Evaluate:
 
     @staticmethod
     @shapecheck
-    def surface_metrics(sd: Float[np.ndarray, "..."]) -> dict[str, float]:
+    def surface_metrics(sd: Float[np.ndarray, "..."]) -> SurfaceMetrics:
         """HD / HD95 / ASSD from a precomputed surface-distance array (one pass, no recompute)."""
         if sd.size == 0:
             return {"hd": float("nan"), "hd95": float("nan"), "assd": float("nan")}
