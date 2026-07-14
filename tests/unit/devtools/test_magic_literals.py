@@ -1,9 +1,15 @@
 """Unit tests for the magic-literal detector (bd cardiac-seg-wir7): the recurring-string smell (value
-tokens, with dict-key / subscript / framework exclusions) and the repeated dict-key-set smell."""
+tokens, with dict-key / subscript / framework exclusions), the repeated dict-key-set smell, and the
+count-ratchet gate (bd cardiac-seg-1ln7)."""
 import ast
+import subprocess
+import sys
 import textwrap
+from pathlib import Path
 
 from devtools.magic_literals import _key_sets, _string_literals, scan_key_sets, scan_strings
+
+_REPO = Path(__file__).resolve().parents[3]
 
 
 def _tree(src):
@@ -65,3 +71,16 @@ def test_small_or_dynamic_dicts_ignored():
     """A 1-key dict, or a dict with a non-constant key, isn't a schema."""
     assert _key_sets(_tree('x = {"only": 1}')) == []           # < min size 2
     assert _key_sets(_tree('x = {k: 1, "b": 2}')) == []        # non-constant key -> not a fixed schema
+
+
+def test_count_ratchet_exit_code(tmp_path):
+    """The gate: --max-strings blocks (exit 1) when the recurring-string count exceeds the ceiling, and
+    passes (exit 0) at or under it — a regression guard on the frozen legit floor, no per-token list."""
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "m.py").write_text('a="GE"\nb="GE"\nc="GE"\nd="GE"\n')   # one recurring token ("GE", 4x)
+    def _run(ceiling):
+        return subprocess.run([sys.executable, "-m", "devtools.magic_literals", str(pkg),  # noqa: S603
+                               "--max-strings", str(ceiling)], cwd=_REPO, capture_output=True).returncode
+    assert _run(0) == 1                                          # 1 token > ceiling 0 -> blocks
+    assert _run(1) == 0                                          # 1 token <= ceiling 1 -> passes

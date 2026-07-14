@@ -14,10 +14,15 @@ that gap — the non-comparison, cross-file-frequency signal — and defers comp
      is built in >= 2 places, is an implicit record schema. Nothing enforces every construction site uses
      the same keys, so a typo/missing key drifts silently -> it wants a dataclass / TypedDict.
 
-Advisory only: frequency is a heuristic (some repeats are legitimately dicts/strings — polars rows, JSON,
-prose is already filtered out). A regression radar, never a blocker.
+Frequency is a heuristic (some repeats are legitimately dicts/strings — polars column names, matplotlib/
+torch API vocab, path segments, nan; prose/framework literals are already filtered out). Because that
+legitimate floor is real and NOT enum-able, the gate blocks as a COUNT RATCHET (`--max-strings` /
+`--max-key-sets`), not at zero and without a per-token whitelist: the current floor is frozen as a
+ceiling, and a NEW recurring literal pushes the count over and fails the merge. Migrate it to an enum, or
+raise the ceiling in the same commit with a reason. Run without the ceilings for the plain advisory report.
 
-    python -m devtools.magic_literals core cardioseg
+    python -m devtools.magic_literals core cardioseg                       # report
+    python -m devtools.magic_literals core cardioseg --max-strings 48 --max-key-sets 11   # ratchet (CI)
 """
 from __future__ import annotations
 
@@ -114,9 +119,27 @@ def main():
                                  description="recurring string literals + repeated dict key-sets")
     ap.add_argument("packages", nargs="*", default=["core", "cardioseg"],
                     help="package dirs to scan (default: core cardioseg)")
+    ap.add_argument("--max-strings", type=int, default=None,
+                    help="regression ratchet: exit 1 if the recurring-string count exceeds this ceiling")
+    ap.add_argument("--max-key-sets", type=int, default=None,
+                    help="regression ratchet: exit 1 if the repeated-key-set count exceeds this ceiling")
     args = ap.parse_args()
     Obs.setup()
-    log.info("%s", report(scan_strings(args.packages), scan_key_sets(args.packages)))
+    strings, key_sets = scan_strings(args.packages), scan_key_sets(args.packages)
+    log.info("%s", report(strings, key_sets))
+    # Ceilings freeze the legitimate floor (polars column names, matplotlib/torch API vocab, path
+    # segments, nan) that isn't enum-able WITHOUT a per-token whitelist: any NEW recurring literal
+    # pushes the count over the ceiling and fails the merge. Re-migrate it to an enum, or raise the
+    # ceiling in the SAME commit with a reason (a conscious acknowledgement, not a silent silence).
+    over = []
+    if args.max_strings is not None and len(strings) > args.max_strings:
+        over.append(f"strings {len(strings)} > {args.max_strings}")
+    if args.max_key_sets is not None and len(key_sets) > args.max_key_sets:
+        over.append(f"key-sets {len(key_sets)} > {args.max_key_sets}")
+    if over:
+        log.error("magic-literal ratchet exceeded (%s) — migrate the new literal or raise the ceiling with a reason",
+                  "; ".join(over))
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -37,11 +37,12 @@ jobs:
       # being cleaned so the count is visible in CI. Becomes the enforced gate once it hits zero.
       - name: Lint — advisory full (non-blocking)
         run: uvx ruff@0.15.13 check . --statistics || true
-      # Magic STRINGS — advisory (bd cardiac-seg-1ln7): ruff PLR2004 defaults to allow-magic-value-types
-      # ["str","bytes"], so string magic values in comparisons are silenced. This re-runs PLR2004 with the
-      # allow-list emptied to surface them (the enforced lint above keeps the default, numeric-only, so CI
-      # stays green). Ratchets to enforced once the StrEnum/named-constant migration clears them; the
-      # non-comparison + cross-file cases are the devtools/magic_literals radar below.
+      # Magic STRINGS in COMPARISONS — advisory by design (bd cardiac-seg-1ln7): ruff PLR2004 defaults to
+      # allow-magic-value-types ["str","bytes"], silencing string magic values in comparisons. This re-runs
+      # it with the allow-list emptied to surface them. STAYS advisory: the enum-able comparisons are already
+      # Vendor/Phase/Dataset/Tissue members; the rest are legitimate mode/column-value compares, and the
+      # cross-file magic_literals ratchet below already blocks NEW recurring literals repo-wide (comparisons
+      # included). Blocking PLR2004-allow[]=[] would need a per-token whitelist (rejected — no-gaming).
       - name: Magic strings — advisory (PLR2004 un-silenced, comparisons)
         continue-on-error: true
         run: uvx ruff@0.15.13 check core cardioseg cardioview --select PLR2004 --config 'lint.pylint.allow-magic-value-types=[]' || true
@@ -147,11 +148,14 @@ jobs:
       # graduated to blocking (--assert exits 1) — a NEW bare-array boundary now fails the merge.
       - name: Shape contracts — enforced (bare array/tensor boundaries must carry a jaxtyping shape)
         run: uv run python -m devtools.shape_contracts --assert
-      # Magic literals — advisory (bd cardiac-seg-wir7): generalizes PLR2004 (comparison-only) to the
-      # untapped contexts. A string token recurring >=4x is domain vocabulary masquerading as a literal
-      # (StrEnum/constant candidate); a constant-string-key dict SET rebuilt in >=2 places is an implicit
-      # record schema that can drift (typo/missing key -> dataclass/TypedDict). Frequency is heuristic, so
-      # ADVISORY — a radar for magic strings + drift-prone record-dicts, never a blocker.
-      - name: Magic literals — advisory (recurring strings / repeated dict schemas)
-        continue-on-error: true
-        run: uv run python -m devtools.magic_literals
+      # Magic literals — ENFORCED as a count RATCHET (bd cardiac-seg-wir7/1ln7): generalizes PLR2004
+      # (comparison-only) to the untapped contexts — a string recurring >=4x is domain vocab masquerading
+      # as a literal; a constant-string-key dict SET rebuilt in >=2 places is a drift-prone record schema.
+      # The enum-able domain values (vendor/phase/dataset/task/tissue/pathology) are migrated; the residual
+      # (48 strings / 11 key-sets) is the LEGITIMATE floor — polars column names, matplotlib/torch API vocab,
+      # path segments, nan — that is NOT enum-able. Rather than a per-token whitelist (rejected — no-gaming),
+      # the gate FREEZES that floor as a count ceiling: a NEW recurring literal pushes the count over and
+      # fails the merge. To add one legitimately, migrate it to an enum OR raise the ceiling in the same
+      # commit with a reason. Same regression-guard shape as the jscpd 1% / coverage floors.
+      - name: Magic literals — enforced (count ratchet: no new recurring literal / drift-prone schema)
+        run: uv run python -m devtools.magic_literals --max-strings 48 --max-key-sets 11
