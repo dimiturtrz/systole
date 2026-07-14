@@ -18,12 +18,14 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Int, Shaped
 
 from core.data.static.labels import LV_CAV
 from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import Store
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
+from core.types import shapecheck
 
 from .volumes import VolLoss
 
@@ -36,25 +38,29 @@ class EfLane:
     soft-cavity segment-sum, and `build_aux` — the single home for the aux-objective contract."""
 
     @staticmethod
-    def stack(vol, size: int, device: str) -> torch.Tensor:
+    @shapecheck
+    def stack(vol: Float[np.ndarray, "d h w"], size: int, device: str) -> Float[torch.Tensor, "d 1 s s"]:
         """[D,H,W] numpy -> [D,1,size,size] float32 on device (grid-fit, no augmentation)."""
         slices = [torch.from_numpy(Preprocess.fit_square(vol[z], size, 0.0)) for z in range(vol.shape[0])]
         return torch.stack(slices)[:, None].to(device)
 
     @staticmethod
-    def zscore(s):
+    @shapecheck
+    def zscore(s: Shaped[np.ndarray, "..."]) -> Float[np.ndarray, "..."]:
         s = s.astype(np.float32)
         return (s - s.mean()) / (s.std() + 1e-6)
 
     @staticmethod
-    def ef_ratio(ed: torch.Tensor, es: torch.Tensor) -> torch.Tensor:
+    @shapecheck
+    def ef_ratio(ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"]) -> Float[torch.Tensor, "*k"]:
         """EF% from per-subject ED/ES cavity totals (any consistent unit — px or mL): (ED-ES)/ED×100. The
         spacing cancels (a ratio), so this works straight on pixel-count vols. ED clamped at 1e-6 so an
         all-empty prediction gives 0/ε≈0% not a NaN. Scalar or [K]-vector; the pure core of KaggleEF.loss."""
         return (ed - es) / ed.clamp_min(1e-6) * 100.0
 
     @staticmethod
-    def ef_ratio_loss(ed: torch.Tensor, es: torch.Tensor, targets, delta: float = 0.1) -> torch.Tensor:
+    @shapecheck
+    def ef_ratio_loss(ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets, delta: float = 0.1) -> Float[torch.Tensor, ""]:
         """Huber loss of predicted EF-ratio vs csv EF targets, both in [0,1] (÷100). Dimensionless, spacing-
         invariant — the KaggleEF objective. `targets` in percent; a [K] tensor/list. Pulled out of .loss so
         the weak-supervision math is testable with synthetic cavity totals (no cine, no GPU forward)."""
@@ -63,7 +69,8 @@ class EfLane:
         return F.huber_loss(ef_pred / 100, target_tensor.to(ef_pred) / 100, delta=delta)
 
     @staticmethod
-    def cav_volume(model, stacks, sizes, lv: int, *, amp: bool) -> torch.Tensor:
+    @shapecheck
+    def cav_volume(model, stacks: Float[torch.Tensor, "n 1 h w"], sizes: Int[torch.Tensor, "*k"], lv: int, *, amp: bool) -> Float[torch.Tensor, "*k"]:
         """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
         by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
         owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)

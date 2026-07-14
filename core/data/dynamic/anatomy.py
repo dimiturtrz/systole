@@ -16,10 +16,12 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
+from numbers import Integral
 from pathlib import Path
 
 import numpy as np
 import pyvista as pv
+from jaxtyping import Bool, Float, Integer
 from PIL import Image
 from pydantic import BaseModel
 from scipy.ndimage import (
@@ -34,6 +36,7 @@ from scipy.ndimage import zoom as _zoom
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, MYO, RV  # 3 / 2 / 1
 from core.preprocessing.preprocess import Preprocess
+from core.types import shapecheck
 
 
 class MeshError(Exception):
@@ -100,7 +103,8 @@ class Anatomy:
         raise KeyError(f"no region-tag cell array (looked for ID/elemTag); have {list(mesh.cell_data)}")
 
     @staticmethod
-    def _rot_to_z(axis: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def _rot_to_z(axis: Float[np.ndarray, "3"]) -> Float[np.ndarray, "3 3"]:
         """Rodrigues rotation matrix taking unit `axis` -> +z."""
         axis = axis / (np.linalg.norm(axis) + 1e-9)
         z_axis = np.array([0.0, 0.0, 1.0])
@@ -146,7 +150,8 @@ class Anatomy:
         return out
 
     @staticmethod
-    def _wall_mask(mesh, region_id: int, grid, tag: str) -> np.ndarray:
+    @shapecheck
+    def _wall_mask(mesh, region_id: int, grid, tag: str) -> Bool[np.ndarray, "*n"]:
         """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
         grid points that lie in the myocardium)."""
         region_mesh = mesh.threshold([region_id, region_id], scalars=tag)
@@ -155,7 +160,9 @@ class Anatomy:
         return np.asarray(selection["SelectedPoints"]).astype(bool)
 
     @staticmethod
-    def _slice_labels(lw: np.ndarray, rw: np.ndarray, rv_close: int = 3) -> np.ndarray:
+    @shapecheck
+    def _slice_labels(lw: Bool[np.ndarray, "h w"], rw: Bool[np.ndarray, "h w"],
+                      rv_close: int = 3) -> Integer[np.ndarray, "h w"]:
         """Pure per-SAX-slice cavity recovery: given the boolean LV-wall (`lw`) and RV-wall (`rw`) rasters,
         return a 3-class label slice (RV-cav 1 / LV-myo 2 / LV-cav 3). Empty (all-bg) if the LV wall is too
         thin to close a cavity ring. LV ring -> LV-cav; LV+RV walls together -> RV-cav (see voxelize doc)."""
@@ -181,8 +188,9 @@ class Anatomy:
         return out
 
     @staticmethod
+    @shapecheck
     def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
-                 rv_close: int = 3) -> np.ndarray:
+                 rv_close: int = 3) -> Integer[np.ndarray, "d h w"]:
         """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
         Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
         LV-cav; LV+RV walls together -> RV-cav). D slices at `slice_mm`, in-plane at `inplane` (mm)."""
@@ -203,7 +211,8 @@ class Anatomy:
         return out
 
     @staticmethod
-    def _scale_to_target(vol: np.ndarray, target_px: int) -> np.ndarray:
+    @shapecheck
+    def _scale_to_target(vol: Integer[np.ndarray, "d h w"], target_px: Integral) -> Integer[np.ndarray, "d h2 w2"]:
         """Uniformly in-plane rescale a [D,H,W] label volume so its GLOBAL max fg-bbox longest side hits
         `target_px` (nearest-neighbour, label-preserving). No-op if the heart has no foreground."""
         fg = vol > 0
@@ -249,7 +258,9 @@ class Anatomy:
         return len(vtk_paths)
 
     @staticmethod
-    def pathology_deform(mask: np.ndarray, k: int = 0, rv_k: int = 0) -> np.ndarray:
+    @shapecheck
+    def pathology_deform(mask: Integer[np.ndarray, "*grid"], k: int = 0,
+                         rv_k: int = 0) -> Integer[np.ndarray, "*grid"]:
         """Label-space pathology SOURCE (bd vpn5): remodel LV and/or RV to synthesize the DCM/HCM/abnormal-RV
         tail the healthy SSM misses, keeping the OUTER LV size fixed + myo a RING (topology-safe — the naive-
         deform dead-end, bd bwp). k>0 = DILATE LV cavity into myo (thin wall -> DCM); k<0 = shrink/thicken
@@ -270,7 +281,8 @@ class Anatomy:
         return out
 
     @staticmethod
-    def build_pathology_pool(pool: np.ndarray, out_path: str | Path,
+    @shapecheck
+    def build_pathology_pool(pool: Integer[np.ndarray, "n h w"], out_path: str | Path,
                              cfg: PathologyPoolCfg | None = None) -> tuple[Path, tuple]:
         """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
         HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
@@ -348,7 +360,8 @@ class Anatomy:
         return out_path, pool_array.shape
 
     @staticmethod
-    def load_pool(path: str | Path) -> np.ndarray:
+    @shapecheck
+    def load_pool(path: str | Path) -> Integer[np.ndarray, "n s s"]:
         """Load the anatomy pool [N, size, size] (label maps) built by build_pool."""
         return np.load(str(path))["slices"]
 

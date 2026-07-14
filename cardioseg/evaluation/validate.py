@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from jaxtyping import Float, Integer
 from pydantic import BaseModel
 
 from core.config import _VALIDATE
@@ -23,6 +24,7 @@ from core.inference import Inference
 from core.measure import Measure
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
+from core.types import Spacing, shapecheck
 
 load_arrays = Store.load_arrays
 
@@ -57,7 +59,8 @@ class _ClassScores:
         self.denom = dict.fromkeys(CLASS_NAMES, 0.0)
         self.surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
 
-    def add(self, pred, gt, spacing):
+    @shapecheck
+    def add(self, pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], spacing: Spacing):
         """Fold one predicted volume into the accumulators."""
         # Dice numerator/denominator for ALL classes in one shot: one-hot pred/gt to [...,C] and reduce
         # over the spatial axes (no python class loop). 2*|P∩G| and |P|+|G| per class.
@@ -99,7 +102,8 @@ class Evaluator:
         self.model, self.device, self.cfg = model, device, cfg or EvalCfg()
 
     @staticmethod
-    def _foreground_samples(logits, y, per_vol, rng):
+    @shapecheck
+    def _foreground_samples(logits: Float[np.ndarray, "*n c"], y: Integer[np.ndarray, "*n"], per_vol, rng) -> tuple[Float[np.ndarray, "*m c"], Integer[np.ndarray, "*m"]]:
         """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
         (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
         pred = logits.argmax(1)

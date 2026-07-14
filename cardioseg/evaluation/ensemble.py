@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
+from jaxtyping import Float, Integer
 
 from core.data.static import splits
 from core.data.static.labels import FOREGROUND
@@ -28,6 +29,7 @@ from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
+from core.types import shapecheck
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty
@@ -41,7 +43,8 @@ class Ensemble:
     and the eval-frame / headroom orchestration that the CLI drives."""
 
     @staticmethod
-    def decompose(models, vol_img, size, device):
+    @shapecheck
+    def decompose(models, vol_img: Float[np.ndarray, "d h w"], size, device):
         """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
         [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
         mems = [Inference(m, size, device).predict_volume_probs(vol_img)[1] for m in models]   # each [D,C,H,W]
@@ -55,7 +58,8 @@ class Ensemble:
         return pred.cpu().numpy(), total.cpu().numpy(), aleat.cpu().numpy(), epi.cpu().numpy()
 
     @staticmethod
-    def _dice_fold(pred, gt, inter, den):
+    @shapecheck
+    def _dice_fold(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], inter, den):
         """Fold one (pred, gt) label-map pair into the running per-class Dice inter/den accumulators."""
         for cl in FOREGROUND:
             p, g = pred == cl, gt == cl

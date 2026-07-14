@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import numpy as np
 import SimpleITK as sitk
+from jaxtyping import Float, Shaped
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
-from core.types import Spacing, Volume
+from core.types import Spacing, shapecheck
 
 
 class N4Cfg(BaseModel):
@@ -27,14 +28,16 @@ class N4Cfg(BaseModel):
     fwhm: float = Field(0.15, gt=0)            # bias-field FWHM
 
     @staticmethod
-    def n4_bias(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
-                iters=(50, 50, 50), fwhm: float = 0.15) -> Volume:
+    @shapecheck
+    def n4_bias(vol: Shaped[np.ndarray, "d h w"], spacing: Spacing | None = None, shrink: int = 4,
+                iters=(50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
         """N4-correct one [D,H,W] volume — SimpleITK (the reference, correct implementation)."""
         return N4Cfg._n4_sitk(vol, spacing, shrink, iters, fwhm)
 
     @staticmethod
-    def _n4_sitk(vol: Volume, spacing: Spacing | None = None, shrink: int = 4,
-                 iters=(50, 50, 50), fwhm: float = 0.15) -> Volume:
+    @shapecheck
+    def _n4_sitk(vol: Shaped[np.ndarray, "d h w"], spacing: Spacing | None = None, shrink: int = 4,
+                 iters=(50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
         """N4-correct one [D, H, W] volume. Returns the corrected volume (same shape/dtype-ish float32).
 
         `shrink` downsamples for the fit (speed); the estimated field is applied at full resolution.

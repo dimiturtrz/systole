@@ -1,7 +1,9 @@
 # Generation architecture — one process, many operations
 
-> Status: **living first cut** (2026-07-02). The point is to give the tangle of synth pipelines a
-> shared skeleton so we can fix it piece by piece. Expect this to evolve — emergent architecture.
+> The synth pipelines share one skeleton. The forward path is a composable **Transform pipeline**
+> (`pipeline.py`); generation is a **Source** behind the same seam as real data (`source.py` + the
+> `ingest/` layer); the **FIT** operator lives in `inverse.py`; the **shape-coverage** metric in
+> `analysis/shape_coverage.py`. Entry points are mapped at the bottom.
 
 ## The one idea
 
@@ -25,8 +27,8 @@ We call the full set of hidden causes **θ** (theta). It splits into three group
 
 | group | what | where in code |
 |---|---|---|
-| **shape** (anatomy) | the label map: which voxel is RV-cav / myo / LV-cav / bg | `anatomy.voxelize` (SSM meshes), or a real GT mask |
-| **color** (appearance) | tissue T1/T2/PD **and** acquisition (field, TR, flip) → contrast | `mri_physics` + `Acquisition` strategy in `synth.py` |
+| **shape** (anatomy) | the label map: which voxel is RV-cav / myo / LV-cav / bg | `Anatomy.voxelize` (SSM meshes), or a real GT mask |
+| **color** (appearance) | tissue T1/T2/PD **and** acquisition (field, TR, flip) → contrast | `mri_physics` + `Acquisition` strategy in `synth.py` (painter = `SynthPainter.synthesize_from_labels`) |
 | **nuisance** (framing) | position/pan, rotation, field-of-view margin, blur, noise | `augment.py` + the corruption chain in `synth.py` |
 
 Each group can be sourced three ways — this is the **control axis**:
@@ -48,9 +50,10 @@ Our pipelines are just these operations with different factors sourced different
 | pipeline (bead) | operation | shape | color | what it is |
 |---|---|---|---|---|
 | **repaint** | FIX shape=real, SAMPLE color | real mask | randomized | recolor real anatomy (**color-axis only**, flattered) |
-| **generate** (`b6tb`, current full-synth) | SAMPLE shape + color | SSM (Rodero) | randomized | full generation (shape+color) |
-| **augmentation** (`pwih`) | SAMPLE synth, MIX with real | mixed | randomized | synth as a robustness additive to real training |
-| **inverse / digital twin** (`ncph`) | FIT | real (given) | **controlled** (fit) | recover interpretable qMRI params from a scan |
+| **generate** (`b6tb` ✓, full-synth) | SAMPLE shape + color | SSM (Rodero) | randomized | full generation (shape+color) |
+| **composite** (`uch6` ✓) | SAMPLE, UNION of sources | SSM ∪ pathology pool | randomized | many sources unioned into one dataset (`CompositeGenerator`) |
+| **augmentation** (`pwih` ✓) | SAMPLE synth, MIX with real | mixed | randomized | synth as a robustness additive to real training |
+| **inverse / digital twin** (`ncph`, `inverse.py`) | FIT | real (given) | **controlled** (fit) | recover interpretable qMRI params from a scan — loop built, but acquisition is **not identifiable** from one frame (see below) |
 | **harmonization** (future) | FIT then re-SAMPLE color | real | re-rendered | "same heart, other scanner" (a counterfactual) |
 | **torso** (`hpy`) | richer shape+bg factor | whole-FOV | randomized | structured other-organs instead of blob bg |
 | **coverage metric** (`uy4d`) | measure SAMPLE vs real | — | — | does generated θ-space **encompass** real |
@@ -126,7 +129,7 @@ sliced by the frame edge is a genuinely different, harder input).
 - **support / manifold** — the region of possible inputs the generator can produce; "how much space we
   model". Coverage = does that region contain the real data's region.
 
-## Generation SOURCES — a composite all-synthetic dataset (2026-07-02)
+## Generation SOURCES — a composite all-synthetic dataset
 
 The goal is **all-synthetic training data**, and no single generator reaches the whole real manifold.
 So think of it as a **portfolio of sources**, each ENTERING the DAG at a different point with a different
@@ -137,6 +140,7 @@ Each source covers a different region; the union covers more than any one.
 |---|---|---|---|---|
 | **fully parametric** | top (invent shape params → mesh → paint) | HIGH — every factor a knob | limited (needs a shape generator) | painter ✓, shape-invent ✗ |
 | **SSM (Rodero)** | shape = pre-built mesh → voxelize → paint | MED — SSM mode weights | healthy + MILD pathology (±3SD) | ✓ (pool_1000) |
+| **pathology pool** | SSM meshes pushed into the DCM/HCM/RV tail | MED — pathology knobs | dilated/thick tail SSM ±3SD misses | ✓ (`pool_pathology`, unioned via `CompositeGenerator`, `uch6`) |
 | **label-space edit** | shape = deform existing label maps | MED — deform params | variations; pathology via dilation | build (`vpn5`) |
 | **MRXCAT** | whole thing (torso+heart+physics) → we consume its **label `.vti`**, paint with our engine | LOW–MED — pathology knobs | whole-FOV + pathology + structured bg | `hpy` — adapter `core/data/dynamic/mrxcat.py` ✓ (`to_canonical`/`load_vti_labels`/`build_pool`; remap geometrically verified — myo ring encloses LV-cav). Tool = external checkout (public ETH repo, MIT-cited): `git clone https://gitlab.ethz.ch/ibt-cmr-public/mrxcat-2.0.git external/mrxcat2 && git -C external/mrxcat2 checkout 9f396a9` — kept in gitignored `external/`, never vendored (fetch to be folded into the mrxcat generation CLI, bd cardiac-seg-8pfl); XCAT torso Duke-gated but example bundled. NB MRXCAT paints myo UNIFORM by construction (`fixLVTexture` meanLV) — confirms our myo over-spread is low-res-PV, not physics |
 | **learned prior** | shape = sample a learned model | LOW — latent | the real manifold incl pathology | future (`vpn5` option) |
@@ -155,13 +159,21 @@ python -m core.data.dynamic.mrxcat build-fov-pool --vti-dir external/mrxcat2/<vt
 python -m core.data.dynamic.mrxcat build-ssm-fov-pool --rodero-pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/ssm_fov_pool.npz
 ```
 
-**Composition is cheap** (union of label pools → the painter is shared): `pool_composite = concat(sourceA,
-sourceB, …)`. The VALUE is *diverse sources*, not one bigger source. Coverage is measured per source and
-on the union (`shape_coverage`, `static_compare`), so we can see which source fills which gap — e.g. SSM
-covers normals (NOR 0.49), the DCM/RV tail needs label-space or learned or MRXCAT. Control degree is a
+**Composition is cheap** (union of label pools → the painter is shared): `CompositeGenerator` concatenates
+source pools; `SynthComposite` (`ingest/splits/synth_composite.py`) is the split that trains on it. The
+VALUE is *diverse sources*, not one bigger source. Coverage is measured per source and on the union
+(`shape_coverage`, `static_compare`), so we can see which source fills which gap — e.g. SSM covers normals
+(NOR 0.49), the DCM/RV tail needs the pathology pool / label-space / learned / MRXCAT. Control degree is a
 *feature*: high-control sources (parametric) for targeted gaps, whole-thing sources (MRXCAT) for breadth.
 
-## Current implementation map (what's built, where) — 2026-07-02
+**Result — coverage ≠ Dice:** the SSM ∪ pathology composite pushes shape coverage ~0.78 → ~0.94 (the
+pathology pool fills the DCM/HCM tail SSM misses) but zero-real TEST Dice does **not** move (within 2-seed
+noise). Closing coverage does not close Dice, so the remaining ceiling is shape/color **fidelity**
+(boundary/texture detail), not coverage — the next fidelity lever is within-slice texture or a learned
+shape prior (`vpn5`), not more coverage sources. Unioning the full pool thrashes VRAM, so `DynamicSource`
+caps per-source residency.
+
+## Implementation map (what's built, where)
 
 **Factors / mechanisms (the forward process):**
 
@@ -184,9 +196,9 @@ covers normals (NOR 0.49), the DCM/RV tail needs label-space or learned or MRXCA
 
 | operator | code | status |
 |---|---|---|
-| **SAMPLE** (generate) | `generator.py`: `Generator.batch` + `synthesize_from_labels` | ✅ |
+| **SAMPLE** (generate) | `generator.py`: `Generator` / `CompositeGenerator`; forward as a composable Transform list in `pipeline.py`; `SynthPainter.synthesize_from_labels` | ✅ |
 | **FIX** (condition on real) | repaint path (`synth_p`<1, real masks) + `train.py` anatomy real-bg branch (excise) | ✅ |
-| **FIT** (invert / twin) | — | ⛔ (`ncph`) |
+| **FIT** (invert / twin) | `inverse.py`: `Inverse` — differentiable render, gradient descent to θ | 🟡 loop built + converges, but the one-frame heart fit is **degenerate** (`ncph`/`ixea`, see note) |
 
 **Control axis realized:** real ✅ (`store`) · parametric ✅ (SSM + `mri_physics` + strategies) · learned ⛔.
 
@@ -195,18 +207,58 @@ covers normals (NOR 0.49), the DCM/RV tail needs label-space or learned or MRXCA
 | metric | code | status |
 |---|---|---|
 | color coverage (W1, location/spread, by-vendor) | `core/data/analysis/synth_fidelity.py` | ✅ |
-| shape coverage (embedding) | — | ⛔ (`uy4d`) |
+| shape coverage (embedding) | `core/data/analysis/shape_coverage.py` (`python -m core.data.analysis shape-coverage`) | ✅ (`uy4d`) |
 | downstream Dice (cross-vendor) | `cardioseg/evaluation/validate` + `training/train.py` | ✅ |
-| inverse recon error | — | ⛔ (`ncph`) |
+| inverse recon error | `inverse.py` (the FIT residual = the probe) | 🟡 (`ncph`/`ixea`) |
 
 **Reading it:** the whole **forward SAMPLE path is built** (parametric shape+color, all four bg strategies,
-acquisition strategies, corruption chain), plus **FIX** (repaint + excised real-bg) and the **color-coverage
-metric**. The gaps are the three that unlock the rest: **FIT** (`ncph`, the twin), **shape-coverage metric**
-(`uy4d`), and the **learned shape prior** (`vpn5`) — with framing (`x8ne`) and per-vendor color (`ex1`) as
-smaller fills.
+acquisition strategies, corruption chain, composite union), plus **FIX** (repaint + excised real-bg), both
+coverage metrics (**color** + **shape**), and the **FIT** loop (`inverse.py`). What's left is not
+mechanism but *fidelity + identifiability*: the composite showed coverage is saturated yet Dice-flat, so
+the open levers are a **learned shape prior** (`vpn5`) and texture fidelity for the forward path, and
+**multi-acquisition input** (`5ev5`) to make the twin identifiable — with framing (`x8ne`) and per-vendor
+color (`ex1`) as smaller fills.
+
+## Identifiability of the FIT operator (`ncph`/`ixea`)
+
+The FIT loop is mechanically correct (differentiable render, gradient descent, converges) but the
+one-frame heart fit is **degenerate by construction**. The heart has only TWO tissue levels (blood,
+myocardium; RV-cav == LV-cav == blood). Uncalibrated MRI intensity is only comparable after a gain/bias
+normalization, and an affine map takes two levels onto two levels **exactly** for *any* acquisition — so
+the acquisition signal (the blood/myo contrast ratio) is normalized away and acquisition is **not
+identifiable at all** from one frame (not even a single param). Breaking the degeneracy needs one of:
+(a) **multiple acquisitions** of the same anatomy (varied flip/TR — real qMRI, `5ev5`); (b) **absolute-
+calibrated intensity** (which uncalibrated cardiac MRI doesn't give — the whole domain problem); or
+(c) **≥3 known tissue levels**. So the digital twin needs multi-acquisition input; the probe use (does
+the forward physics span this scan?) still works from the recon residual.
+
+## Entry points (the committed CLIs)
+
+Generation and its analysis are reproducible commands (no REPL). The three group dispatchers:
+
+```bash
+# data / pool builders  — python -m core.data <cmd>
+python -m core.data build-pool …      # SSM (Rodero) anatomy pools (Anatomy)
+python -m core.data mrxcat …          # MRXCAT fetch + label pools (Mrxcat)
+python -m core.data twin …            # the FIT operator / inverse fit (Inverse)
+python -m core.data consolidate …     # real-store build; also: reference, lock-testsets, kaggle-ef
+
+# generation analysis   — python -m core.data.analysis <cmd>
+python -m core.data.analysis shape-coverage …   # shape embedding coverage (uy4d)
+python -m core.data.analysis synth-fidelity …   # per-class colour W1
+python -m core.data.analysis static-compare …   # source-vs-real / union coverage
+#   also: attribution, eda, render, sim2real
+```
+
+**Splits** — a generation source is consumed as a named, hash-frozen split family (`core.data.ingest`),
+the same seam real data flows through: `static_main`, `static_all`, `synth_main`, `synth_composite`
+(registered in `ingest/splits/__init__.py`; `Splits.load_split(name)` → resolve via `SplitResolver`).
+Train picks one with `--split <name>`.
 
 ## Current beads on this graph
 
-`b6tb` (color/shape coverage of *generate*), `pwih` (augmentation MIX), `hpy` (richer shape+bg factor),
-`ncph` (the FIT operator / twin), `uy4d` (shape-coverage metric). Each is a node or operator above,
-not a free-floating pipeline.
+Closed: `b6tb` (generate coverage), `pwih` (augmentation MIX), `uy4d` (shape-coverage metric), `uch6`
+(composite sources), `8pfl` (pool-build CLI), `mirs` (real-bg excise bug). Open: `hpy` (MRXCAT richer
+shape+bg), `ncph`/`5ev5` (the twin / multi-acquisition identifiability), `vpn5` (learned/label-space
+pathology shape prior), `x8ne` (framing/FOV margin), `ex1` (per-vendor conditioned color). Each is a node
+or operator above, not a free-floating pipeline.

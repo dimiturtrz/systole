@@ -32,9 +32,11 @@ import math
 
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Integer
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
+from core.types import shapecheck
 
 _GAUSSIAN_RADIUS_SIGMAS = 3.0    # Gaussian kernel half-width in units of σ (covers ~99.7% of the mass)
 
@@ -82,7 +84,8 @@ class Augmentor:
         self.cfg = cfg or AugCfg()                               # session hyperparams (geometric + intensity)
 
     @staticmethod
-    def gaussian_kernel(sigma: float) -> torch.Tensor:
+    @shapecheck
+    def gaussian_kernel(sigma: float) -> Float[torch.Tensor, "k k"]:
         """Separable 2D Gaussian kernel (sum=1), radius 3σ."""
         r = max(1, math.ceil(_GAUSSIAN_RADIUS_SIGMAS * sigma))
         xs = torch.arange(-r, r + 1, dtype=torch.float32)
@@ -91,7 +94,9 @@ class Augmentor:
         return torch.outer(g, g)
 
     @staticmethod
-    def soften(mask: torch.Tensor, sigma: float, n_classes: int) -> torch.Tensor:
+    @shapecheck
+    def soften(mask: Integer[torch.Tensor, "b h w"], sigma: float,
+               n_classes: int) -> Float[torch.Tensor, "b c h w"]:
         """Hard integer mask [B, H, W] -> soft probabilistic target [B, C, H, W] (channels sum to 1).
 
         One-hot, then per-class Gaussian blur (boundary-uncertainty width ≈ σ voxels), then renormalize
@@ -108,11 +113,12 @@ class Augmentor:
         oh = F.conv2d(oh, kk, padding=pad, groups=n_classes)
         return oh / oh.sum(dim=1, keepdim=True).clamp_min(1e-6)
 
+    @shapecheck
     def augment_batch(
         self,
-        img: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        img: Float[torch.Tensor, "b 1 h w"],
+        mask: Integer[torch.Tensor, "b h w"],
+    ) -> tuple[Float[torch.Tensor, "b 1 h w"], Integer[torch.Tensor, "b h w"]]:
         """Augment a batch on its device. img [B,1,H,W] float, mask [B,H,W] long. Returns (img, mask).
 
         Per-sample flip * rotate * scale via a single affine grid_sample (bilinear image, nearest

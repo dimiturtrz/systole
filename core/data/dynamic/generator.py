@@ -15,10 +15,12 @@ different SynthCfg — and a future learned (GAN) generator slots in behind the 
 from __future__ import annotations
 
 import torch
+from jaxtyping import Bool, Float, Integer
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE
 from core.data.static.store import DataCfg
+from core.types import shapecheck
 
 from .augment import AugCfg
 from .pipeline import Batch, Pipeline
@@ -42,9 +44,10 @@ class Generator:
     augments (real-pixel perturbation), and softens the target — returning (x [B,1,H,W], yt) ready for
     the model. synth_p=0 -> pure real; synth_p=1 -> pure synthetic; in between -> per-sample mix."""
 
-    def __init__(self, cfg: GeneratorCfg, X: torch.Tensor, Y: torch.Tensor,  # noqa: PLR0913  constructor init inputs (Generator holds the state)
-                 n_classes: int, device: str, force_synth: torch.Tensor | None = None,
-                 valid: torch.Tensor | None = None):
+    @shapecheck
+    def __init__(self, cfg: GeneratorCfg, X: Float[torch.Tensor, "n 1 h w"], Y: Integer[torch.Tensor, "n h w"],  # noqa: PLR0913  constructor init inputs (Generator holds the state)
+                 n_classes: int, device: str, force_synth: Bool[torch.Tensor, "*n"] | None = None,
+                 valid: Bool[torch.Tensor, "n c"] | None = None):
         self.cfg = cfg
         self.X, self.Y = X, Y
         self.n = X.shape[0]                       # resident slice count — the epoch-loop seam (also CompositeGenerator)
@@ -59,7 +62,8 @@ class Generator:
         # if-ladder — sweepable (physically-constrained diversity), and each op is unit-testable.
         self.pipeline = Pipeline.build(cfg, n_classes)
 
-    def batch(self, idx: torch.Tensor, *, pin: bool = False):
+    @shapecheck
+    def batch(self, idx: Integer[torch.Tensor, "*b"], *, pin: bool = False):
         """Collapsed batch for the resident indices: build the Batch, run it through the pipeline
         (index real -> synth replace -> augment -> soften), return (x, yt, valid). `valid` is None
         unless the source is partial-label (then [B,C] for the loss)."""
@@ -87,7 +91,8 @@ class CompositeGenerator:
         self.n = int(sizes.sum())
         self.offsets = torch.cat([torch.zeros(1, dtype=torch.long), sizes.cumsum(0)])   # [len+1] boundaries
 
-    def batch(self, idx: torch.Tensor, *, pin: bool = False):
+    @shapecheck
+    def batch(self, idx: Integer[torch.Tensor, "*b"], *, pin: bool = False):
         """Route the global indices to their child generators, paint each child's rows with its own
         pipeline, and concatenate — one collapsed batch of mixed-source samples."""
         xs, ys = [], []

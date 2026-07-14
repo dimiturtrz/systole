@@ -6,13 +6,16 @@ would be wrong, so they decide whether the model can be trusted, not the mean Di
 Shapes: pred/gt are same-shape label maps ([H, W] or [D, H, W]); the ops are
 shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
+from numbers import Real
+
 import numpy as np
+from jaxtyping import Bool, Float, Integer
 
 from core.data.static.labels import (  # noqa: F401  (CLASSES re-exported for back-compat callers: validate/distribution/results)
     CLASSES,
     FOREGROUND,
 )
-from core.types import Mask, Spacing
+from core.types import shapecheck
 
 try:
     from scipy.ndimage import binary_erosion, distance_transform_edt
@@ -28,7 +31,8 @@ class Evaluate:
     ranking is the point — the worst cases are where a clinical measure would be wrong."""
 
     @staticmethod
-    def dice(pred: Mask, gt: Mask, label: int) -> float:
+    @shapecheck
+    def dice(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], label: int) -> float:
         """Dice overlap for one label: 2|P∩G| / (|P|+|G|), in [0, 1]."""
         p, g = (pred == label), (gt == label)
         denom = p.sum() + g.sum()
@@ -37,12 +41,15 @@ class Evaluate:
         return 2.0 * np.logical_and(p, g).sum() / denom
 
     @staticmethod
-    def _surface(m: Mask) -> Mask:
+    @shapecheck
+    def _surface(m: Bool[np.ndarray, "*grid"]) -> Bool[np.ndarray, "*grid"]:
         """Boundary voxels of a binary mask (region minus its erosion)."""
         return m & ~binary_erosion(m)
 
     @staticmethod
-    def surface_distances(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> np.ndarray:
+    @shapecheck
+    def surface_distances(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
+                          label: int, spacing: tuple[Real, ...] | None = None) -> Float[np.ndarray, "..."]:
         """Symmetric boundary-distance array (mm if spacing given): distance from each surface
         voxel of pred to gt, and gt to pred, pooled. This IS the error distribution — HD/HD95/ASSD
         are summaries of it, and the KDE plots it directly. Empty array if either label is absent."""
@@ -56,18 +63,23 @@ class Evaluate:
         return np.concatenate([dt_g[Evaluate._surface(p)], dt_p[Evaluate._surface(g)]]).astype(float)
 
     @staticmethod
-    def surface_metrics(sd: np.ndarray) -> dict[str, float]:
+    @shapecheck
+    def surface_metrics(sd: Float[np.ndarray, "..."]) -> dict[str, float]:
         """HD / HD95 / ASSD from a precomputed surface-distance array (one pass, no recompute)."""
         if sd.size == 0:
             return {"hd": float("nan"), "hd95": float("nan"), "assd": float("nan")}
         return {"hd": float(sd.max()), "hd95": float(np.percentile(sd, HD_PERCENTILE)), "assd": float(sd.mean())}
 
     @staticmethod
-    def hd95(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:
+    @shapecheck
+    def hd95(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
+             label: int, spacing: tuple[Real, ...] | None = None) -> float:
         """95th-percentile boundary distance — robust Hausdorff (drops the top 5% outliers)."""
         return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing))["hd95"]
 
     @staticmethod
-    def assd(pred: Mask, gt: Mask, label: int, spacing: Spacing | None = None) -> float:
+    @shapecheck
+    def assd(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
+             label: int, spacing: tuple[Real, ...] | None = None) -> float:
         """Average symmetric surface distance — the mean of the boundary-distance distribution."""
         return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing))["assd"]

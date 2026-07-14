@@ -49,8 +49,11 @@ class DataCfg(BaseModel):
     lock-hashed, reproducible partition — prefer it for headline runs; the criteria path here is the
     FLEXIBLE one — TEST = live criteria (`test_datasets`/`test_vendors`), train/val = the labelled rest,
     with `train_vendors`/`val_*` knobs for ad-hoc holdouts (e.g. the single-vendor-train regime, bd 5r7n,
-    or `--set test_vendors=('GE',)`) that no frozen coded split expresses. It is NOT deprecated — retiring
-    it would need those parametric knobs ported into a coded split family first (bd cardiac-seg follow-up).
+    or `--set test_vendors=('GE',)`). Those knobs are now ALSO expressible as a coded split — the
+    `parametric` family (core.data.ingest.splits.parametric) takes the same test_vendors/test_datasets/
+    train_vendors as constructor params, content-hashed per combo. So retirement of this criteria path is
+    UNBLOCKED (bd gz19): it can be collapsed onto the coded path (criteria branch + split_from_cfg legacy
+    semantics) in a follow-up. It is kept this pass — still the default when `split` is empty.
     Serialized to config.json (the run self-documents its split); the criteria defaults = the generalization
     split (ACDC centre-shift VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE

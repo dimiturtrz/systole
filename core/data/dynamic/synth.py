@@ -26,9 +26,11 @@ from typing import Annotated, Literal
 
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Int, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
+from core.types import shapecheck
 
 from .augment import Augmentor
 from .mri_physics import TR_RANGE_MS, MriPhysics
@@ -388,7 +390,8 @@ class SynthPainter:
     for clean backgrounds (`excise_heart`, also the entry point train.py calls on real images)."""
 
     @staticmethod
-    def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> torch.Tensor:  # noqa: PLR0913  geometry params (b,h,w,amp,steps — independent)
+    @shapecheck
+    def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> Float[torch.Tensor, "b h w 2"]:  # noqa: PLR0913  geometry params (b,h,w,amp,steps — independent)
         """DIFFEOMORPHIC (topology-preserving) elastic warp as a grid_sample grid [B,H,W,2]. A coarse 5x5
         velocity field (U[-amp,amp], bicubic-upsampled) is INTEGRATED by scaling-and-squaring so the map
         stays invertible — it can't fold/tear the anatomy. The old `ident + disp` (non-integrated) folds at
@@ -406,7 +409,9 @@ class SynthPainter:
         return ident + d
 
     @staticmethod
-    def excise_heart(img: torch.Tensor, gt: torch.Tensor, iters: int = 40) -> torch.Tensor:
+    @shapecheck
+    def excise_heart(img: Float[torch.Tensor, "b 1 h w"], gt: Integer[torch.Tensor, "b h w"],
+                     iters: int = 40) -> Float[torch.Tensor, "b 1 h w"]:
         """Remove the heart from a REAL image so it can serve as a clean BACKGROUND for a DIFFERENT
         (synthetic) heart. Zero the heart pixels (gt>0) and inpaint the hole by iterative neighbour
         diffusion (masked 3x3 mean, growing the known region inward) — otherwise the real image's own
@@ -424,8 +429,9 @@ class SynthPainter:
         return out
 
     @staticmethod
-    def synthesize_from_labels(mask: torch.Tensor, cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
-                               real_img: torch.Tensor | None = None, *, return_meta: bool = False):
+    @shapecheck
+    def synthesize_from_labels(mask: Int[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
+                               real_img: Float[torch.Tensor, "*b 1 h w"] | None = None, *, return_meta: bool = False):
         # complexity noqa above: a linear bSSFP pipeline of optional physical effects (mu/sg/oh threaded), not
         # control-flow complexity — splitting would fragment one signal model into ~8-tensor helpers. Kept whole.
         """Generate a synthetic z-scored image (and its label map) from an integer label mask.

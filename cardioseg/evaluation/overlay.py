@@ -12,6 +12,7 @@ from pathlib import Path
 import matplotlib as mpl
 import numpy as np
 import torch
+from jaxtyping import Integer
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -28,6 +29,7 @@ from core.model import Model
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
+from core.types import shapecheck
 
 log = logging.getLogger("cardioseg.overlay")
 
@@ -47,7 +49,8 @@ class Overlay:
     HCM_GROUP = "HCM"
 
     @staticmethod
-    def _mid_slice(gt_vol):
+    @shapecheck
+    def _mid_slice(gt_vol: Integer[np.ndarray, "d h w"]) -> int:
         """Slice index with the most foreground (mid-ventricular)."""
         return int(np.argmax([(s > 0).sum() for s in gt_vol]))
 
