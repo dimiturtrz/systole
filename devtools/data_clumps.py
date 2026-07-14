@@ -95,7 +95,7 @@ def main():
         prog="python -m devtools.data_clumps",
         description="find param sets that travel together (Introduce Parameter Object)",
     )
-    ap.add_argument("packages", nargs="*", default=["src"])
+    ap.add_argument("packages", nargs="+", help="package dirs to scan (>=1 required, no 'src' fallback)")
     ap.add_argument(
         "--min-support", type=int, default=_MIN_SUPPORT, help="a param pair must co-occur in >= this many functions"
     )
