@@ -1,47 +1,62 @@
-"""Shape-contract coverage gate (bd cardiac-seg-m8xq): a public boundary function whose parameter or
-return is an ARRAY/TENSOR type must carry a jaxtyping annotation, so the shape is a checked contract and
-not a silent assumption. This is the mechanical ratchet behind the codebase-wide rollout (epic wk8m):
-it SURFACES bare-array boundaries, the author fixes each by giving it a jaxtyping type (a dtype-only
-`"..."` is the honest answer for a shape-agnostic reduction).
+"""Shape-contract coverage gate (ML domain): a public boundary function whose parameter or return is an
+ARRAY/TENSOR type must carry a jaxtyping annotation, so the shape is a CHECKED contract and not a silent
+assumption. The mechanical ratchet behind a codebase-wide shape rollout — it SURFACES bare-array
+boundaries and the author fixes each by giving it a jaxtyping type (a dtype-only `"..."` is the honest
+answer for a shape-agnostic reduction).
 
-What counts as an array annotation: `np.ndarray` / `numpy.ndarray`, `torch.Tensor` / `Tensor`, or the
-array aliases (`Volume`/`Mask`/`Image`/`Slice2D`/`Batch`). What SATISFIES the contract: a jaxtyping
-subscript (`Float`/`Int`/`Integer`/`Bool`/`Shaped`/`UInt8`/… `[array, "…"]`). A bare array annotation
-(or an array alias) on a public method is flagged.
+What counts as an array annotation: `np.ndarray` / `numpy.ndarray`, `torch.Tensor` / `Tensor`, or a
+repo's array aliases (`[tool.shape_contracts] array_aliases` — e.g. `Volume`/`Mask`/`Image`). What
+SATISFIES the contract: a jaxtyping subscript (`Float`/`Int`/`Integer`/`Bool`/`Shaped`/… `[array, "…"]`).
+A bare array annotation (or an array alias) on a public method is flagged.
 
-Scope: only PUBLIC methods (name not underscore-prefixed) — the boundaries. Private helpers, dunders,
-and CLI `add_args`/`run` handlers are exempt (interior / framework signatures). BLOCKING (`--assert`
-exits 1 on any bare boundary) now that the tree is clean — a new bare-array boundary fails the merge.
+Scope: only PUBLIC methods (name not underscore-prefixed) — the boundaries. Private helpers, dunders, and
+CLI `add_args`/`run` handlers are exempt (interior / framework signatures). Ships ADVISORY (report-only,
+exit 0). A repo opts into the blocking ratchet with `--assert` once its tree is clean — a new bare-array
+boundary then fails the merge.
 
-    python -m devtools.shape_contracts core cardioseg
+    python -m devtools.shape_contracts <packages>            # advisory report
+    python -m devtools.shape_contracts <packages> --assert   # blocking (exit 1 on any bare boundary)
 """
+
 from __future__ import annotations
 
 import argparse
 import ast
 import logging
+import tomllib
 from pathlib import Path
 
-from core.obs import Obs
+log = logging.getLogger("devtools.shape_contracts")
 
-log = logging.getLogger("cardioseg.devtools.shape_contracts")
-
-_ARRAY_NAMES = {"ndarray", "Tensor", "Volume", "Mask", "Image", "Slice2D", "Batch"}
+# The universal array types every ML repo shares. Repo-specific aliases (core.types names that also denote
+# an array — Volume/Mask/…) are additive via [tool.shape_contracts] array_aliases, read below.
+_ARRAY_NAMES = {"ndarray", "Tensor"}
 _JAXTYPING = {"Float", "Int", "Integer", "UInt", "UInt8", "Bool", "Shaped", "Num", "Inexact", "Complex"}
-_EXEMPT = {"add_args", "run"}          # CLI dispatcher handlers (framework signature, args is a Namespace)
+_EXEMPT = {"add_args", "run"}  # CLI dispatcher handlers (framework signature, args is a Namespace)
 
 
-def _is_array_anno(node: ast.expr | None) -> bool:
+def array_names(pyproject: str = "pyproject.toml") -> set[str]:
+    """The array-type names to flag: the builtin `ndarray`/`Tensor` plus the repo's `array_aliases` slot."""
+    p = Path(pyproject)
+    if not p.exists():
+        return set(_ARRAY_NAMES)
+    aliases = (
+        tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("shape_contracts", {}).get("array_aliases", [])
+    )
+    return _ARRAY_NAMES | set(aliases)
+
+
+def _is_array_anno(node: ast.expr | None, names: set[str]) -> bool:
     """True if the annotation names a bare array type (np.ndarray / Tensor / an array alias) — the thing
     that must instead carry a jaxtyping shape. Looks through `X | None` unions."""
     if node is None:
         return False
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):     # T | None
-        return _is_array_anno(node.left) or _is_array_anno(node.right)
-    if isinstance(node, ast.Attribute):                                    # np.ndarray / torch.Tensor
-        return node.attr in _ARRAY_NAMES
-    if isinstance(node, ast.Name):                                         # Tensor / Volume / Mask …
-        return node.id in _ARRAY_NAMES
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):  # T | None
+        return _is_array_anno(node.left, names) or _is_array_anno(node.right, names)
+    if isinstance(node, ast.Attribute):  # np.ndarray / torch.Tensor
+        return node.attr in names
+    if isinstance(node, ast.Name):  # Tensor / Volume / Mask …
+        return node.id in names
     return False
 
 
@@ -67,36 +82,37 @@ def _annotations(fn: ast.FunctionDef) -> list[tuple[str, ast.expr | None]]:
     return out
 
 
-def _bare_array_slots(fn: ast.FunctionDef) -> list[str]:
+def _bare_array_slots(fn: ast.FunctionDef, names: set[str]) -> list[str]:
     """Param/return labels whose annotation is a bare array type without a jaxtyping shape."""
-    return [label for label, anno in _annotations(fn)
-            if _is_array_anno(anno) and not _is_jaxtyping_anno(anno)]
+    return [label for label, anno in _annotations(fn) if _is_array_anno(anno, names) and not _is_jaxtyping_anno(anno)]
 
 
 def _public(fn: ast.FunctionDef) -> bool:
     return not fn.name.startswith("_") and fn.name not in _EXEMPT
 
 
-def analyze(path: Path) -> list[tuple[int, str, list[str]]]:
-    """(lineno, qualname, bare-slots) for every public function in a file with a bare-array boundary."""
+def analyze(path: Path, names: set[str]) -> list[tuple[int, str, list[str]]]:
+    """(lineno, qualname, bare-slots) for every public method in a file with a bare-array boundary."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     out = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             for m in node.body:
                 if isinstance(m, ast.FunctionDef) and _public(m):
-                    slots = _bare_array_slots(m)
+                    slots = _bare_array_slots(m, names)
                     if slots:
                         out.append((m.lineno, f"{node.name}.{m.name}", slots))
     return out
 
 
-def scan(packages: list[str]) -> list[tuple[str, int, str, list[str]]]:
+def scan(packages: list[str], names: set[str] | None = None) -> list[tuple[str, int, str, list[str]]]:
     """(file, lineno, qualname, slots) for every bare-array boundary across the packages."""
+    if names is None:
+        names = array_names()
     rows = []
     for pkg in packages:
         for path in sorted(Path(pkg).rglob("*.py")):
-            rows.extend((str(path), ln, name, slots) for ln, name, slots in analyze(path))
+            rows.extend((str(path), ln, name, slots) for ln, name, slots in analyze(path, names))
     return rows
 
 
@@ -108,14 +124,19 @@ def report(rows: list[tuple[str, int, str, list[str]]]) -> str:
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="python -m devtools.shape_contracts",
-                                 description="flag public array/tensor boundaries lacking a jaxtyping shape")
-    ap.add_argument("packages", nargs="*", default=["core", "cardioseg"],
-                    help="package dirs to scan (default: core cardioseg)")
-    ap.add_argument("--assert", dest="assert_clean", action="store_true",
-                    help="exit 1 if any bare-array boundary remains (the blocking CI gate)")
+    ap = argparse.ArgumentParser(
+        prog="python -m devtools.shape_contracts",
+        description="flag public array/tensor boundaries lacking a jaxtyping shape",
+    )
+    ap.add_argument("packages", nargs="*", help="package dirs to scan")
+    ap.add_argument(
+        "--assert",
+        dest="assert_clean",
+        action="store_true",
+        help="exit 1 if any bare-array boundary remains (the blocking CI gate)",
+    )
     args = ap.parse_args()
-    Obs.setup()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = scan(args.packages)
     log.info("%s", report(rows))
     if args.assert_clean and rows:

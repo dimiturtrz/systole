@@ -128,7 +128,7 @@ jobs:
       # fail). Thresholds in pyproject [tool.structure]. Runs here (tests job) for the synced devtools
       # env (grimp/networkx). bd cardiac-seg-g0b2.
       - name: Architecture fitness — enforced (devtools/graph.py --assert)
-        run: uv run python -m devtools.graph --assert
+        run: uv run python -m devtools.graph --assert core cardioseg
       # Class-shape smells — advisory (devtools AST detectors, bd cardiac-seg-h7vy.4 / xj5d). The three
       # smells the promotions targeted: state_candidates (namespace-class with latent shared state ->
       # __init__), data_clumps (params travelling together -> Introduce Parameter Object), lcom (LCOM4
@@ -139,15 +139,15 @@ jobs:
       - name: Class-shape smells — advisory (namespace / data-clump / LCOM)
         continue-on-error: true
         run: |
-          uv run python -m devtools.state_candidates
-          uv run python -m devtools.data_clumps
-          uv run python -m devtools.lcom
+          uv run python -m devtools.state_candidates core cardioseg
+          uv run python -m devtools.data_clumps core cardioseg
+          uv run python -m devtools.lcom core cardioseg
       # Shape-contract coverage — ENFORCED (bd cardiac-seg-m8xq/4y7y, epic wk8m): a public method whose
       # param/return is a bare np.ndarray/torch.Tensor (or array alias) without a jaxtyping shape is a
       # silent shape assumption. The curated surface hit zero (all 23 boundaries annotated), so the gate
       # graduated to blocking (--assert exits 1) — a NEW bare-array boundary now fails the merge.
       - name: Shape contracts — enforced (bare array/tensor boundaries must carry a jaxtyping shape)
-        run: uv run python -m devtools.shape_contracts --assert
+        run: uv run python -m devtools.shape_contracts --assert core cardioseg
       # Magic literals — ENFORCED as a count RATCHET (bd cardiac-seg-wir7/1ln7): generalizes PLR2004
       # (comparison-only) to the untapped contexts — a string recurring >=4x is domain vocab masquerading
       # as a literal; a constant-string-key dict SET rebuilt in >=2 places is a drift-prone record schema.
@@ -158,4 +158,4 @@ jobs:
       # fails the merge. To add one legitimately, migrate it to an enum OR raise the ceiling in the same
       # commit with a reason. Same regression-guard shape as the jscpd 1% / coverage floors.
       - name: "Magic literals — enforced (count ratchet: no new recurring literal / drift-prone schema)"
-        run: uv run python -m devtools.magic_literals --max-strings 48 --max-key-sets 11
+        run: uv run python -m devtools.magic_literals core cardioseg

@@ -1,16 +1,17 @@
-"""Data-clump detector (bd cardiac-seg-o07n): Fowler's 'Data Clumps' — param names that keep travelling
-together across function signatures want to be ONE object (Introduce Parameter Object). Where ruff's
-PLR0913 only counts a signature's ARITY, this catches WHICH params co-occur repo-wide, so a recurring
-tuple like (inplane, n4, n4_params, nyul, norm) surfaces as a Recipe candidate. Bundling a long positional
-list into an object also downgrades Page-Jones connascence-of-position → -of-name.
+"""Data-clump detector: Fowler's 'Data Clumps' — param names that keep travelling together across
+function signatures want to be ONE object (Introduce Parameter Object). Where ruff's PLR0913 only counts a
+signature's ARITY, this catches WHICH params co-occur repo-wide, so a recurring tuple surfaces as a
+parameter-object candidate. Bundling a long positional list into an object also downgrades Page-Jones
+connascence-of-position → -of-name.
 
 Signal: a clump = a param SET (>= `min_clump` params) that is carried WHOLE by >= `min_support`
 functions (support = # signatures whose params are a superset). Only MAXIMAL sets are reported (a set is
 dropped if a larger set with >= its support exists), so the recurring tuple surfaces, not its subsets.
 Frequent-subset counting (not connected components) — the latter over-merges via hub params like `size`.
 
-    python -m devtools.data_clumps core cardioseg
+    python -m devtools.data_clumps src mypackage
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,15 +20,13 @@ import logging
 from itertools import combinations
 from pathlib import Path
 
-from core.obs import Obs
-
-log = logging.getLogger("cardioseg.devtools.data_clumps")
+log = logging.getLogger("devtools.data_clumps")
 
 _SELF = {"self", "cls"}
-_MIN_SUPPORT = 4          # a param SET must be carried whole by >= this many functions to count
-_MIN_CLUMP = 3            # a clump must bundle >= this many params (a pair is just a long-arg smell)
-_MIN_PARAMS = 3           # only signatures with >= this many params can seed a clump
-_MAX_CLUMP = 6            # cap enumerated subset size (bounds the candidate blow-up; real clumps are small)
+_MIN_SUPPORT = 4  # a param SET must be carried whole by >= this many functions to count
+_MIN_CLUMP = 3  # a clump must bundle >= this many params (a pair is just a long-arg smell)
+_MIN_PARAMS = 3  # only signatures with >= this many params can seed a clump
+_MAX_CLUMP = 6  # cap enumerated subset size (bounds the candidate blow-up; real clumps are small)
 
 
 def _params(fn: ast.FunctionDef) -> set[str]:
@@ -65,8 +64,9 @@ def _support(clump: frozenset[str], funcs: list[tuple[set[str], str]]) -> list[s
     return [f for ps, f in funcs if clump <= ps]
 
 
-def clumps(packages: list[str], min_support: int = _MIN_SUPPORT, min_clump: int = _MIN_CLUMP
-           ) -> list[tuple[int, tuple[str, ...], int, list[str]]]:
+def clumps(
+    packages: list[str], min_support: int = _MIN_SUPPORT, min_clump: int = _MIN_CLUMP
+) -> list[tuple[int, tuple[str, ...], int, list[str]]]:
     """Ranked (support, params, size, example_files) MAXIMAL data clumps, highest support first. `support`
     = functions carrying ALL the clump's params; a clump is dropped if a larger clump with >= its support
     exists (so the whole travelling tuple shows, not its subsets)."""
@@ -75,10 +75,11 @@ def clumps(packages: list[str], min_support: int = _MIN_SUPPORT, min_clump: int 
     frequent = sorted(((s, cl) for s, cl in frequent if s >= min_support), key=lambda r: (-r[0], -len(r[1])))
     kept: list[tuple[int, frozenset[str]]] = []
     for support, cl in frequent:
-        if not any(cl < c2 and s2 >= support for s2, c2 in kept):    # keep only maximal-at-this-support
+        if not any(cl < c2 and s2 >= support for s2, c2 in kept):  # keep only maximal-at-this-support
             kept.append((support, cl))
-    return sorted(((s, tuple(sorted(cl)), len(cl), sorted(set(_support(cl, funcs)))[:3]) for s, cl in kept),
-                  reverse=True)
+    return sorted(
+        ((s, tuple(sorted(cl)), len(cl), sorted(set(_support(cl, funcs)))[:3]) for s, cl in kept), reverse=True
+    )
 
 
 def report(rows: list[tuple[int, tuple[str, ...], int, list[str]]]) -> str:
@@ -90,14 +91,17 @@ def report(rows: list[tuple[int, tuple[str, ...], int, list[str]]]) -> str:
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="python -m devtools.data_clumps",
-                                 description="find param sets that travel together (Introduce Parameter Object)")
-    ap.add_argument("packages", nargs="*", default=["core", "cardioseg"])
-    ap.add_argument("--min-support", type=int, default=_MIN_SUPPORT,
-                    help="a param pair must co-occur in >= this many functions")
+    ap = argparse.ArgumentParser(
+        prog="python -m devtools.data_clumps",
+        description="find param sets that travel together (Introduce Parameter Object)",
+    )
+    ap.add_argument("packages", nargs="*", default=["src"])
+    ap.add_argument(
+        "--min-support", type=int, default=_MIN_SUPPORT, help="a param pair must co-occur in >= this many functions"
+    )
     ap.add_argument("--min-clump", type=int, default=_MIN_CLUMP, help="a clump must bundle >= this many params")
     args = ap.parse_args()
-    Obs.setup()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = clumps(args.packages, args.min_support, args.min_clump)
     log.info("%d data clumps\n%s", len(rows), report(rows))
 

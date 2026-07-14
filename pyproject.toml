@@ -65,6 +65,17 @@ betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
 test_layout = "mirror"      # every logic module needs tests/unit/<pkg>/<path>/test_<name>.py (0/79 unmirrored)
 # <<< LOCAL-SLOT: arch-thresholds
 
+# magic-literals ENFORCED ratchet (devtools/magic_literals.py) — the recurring-string / repeated-key-set
+# floor is frozen as a ceiling; a NEW magic literal pushes the count over and fails the merge (migrate it
+# to a StrEnum/constant, or raise the ceiling in the same commit with a reason). MECHANISM = base gate
+# (all repos run it enforced); NUMBERS = per-repo FACT (cardiac's legit non-enum-able floor: polars
+# column names, matplotlib/torch API vocab, path segments, nan). bd cardiac-seg-wir7/1ln7.
+[tool.magic_literals]
+# >>> LOCAL-SLOT: magic-ceilings — this repo's frozen literal floor (raise only with a documented reason)
+max_strings = 48
+max_key_sets = 11
+# <<< LOCAL-SLOT: magic-ceilings
+
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
 # style. Escape hatch is per-line `# noqa: <code>`, used sparingly. `ty`/type-checking is a separate,
