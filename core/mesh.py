@@ -16,12 +16,15 @@ from pathlib import Path
 
 import numpy as np
 import pyvista as pv
+from jaxtyping import Integer
 from scipy.ndimage import zoom
 from skimage.measure import marching_cubes
 
 from core.config import Config
 from core.data.static.labels import CLASSES  # {label: (name, hexcolor)}
 from core.postprocess import Postprocess
+from core.shapecheck import shapecheck
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.mesh")
 
@@ -37,8 +40,9 @@ class Mesh:
     marching-cubes surface, colored GLB scene, per-chamber STL, and the subject-dir export driver."""
 
     @staticmethod
-    def chamber_surface(mask: np.ndarray, label: int, spacing, iso: float = MESH_MM,
-                        decimate: float = DECIMATE):
+    @shapecheck
+    def chamber_surface(mask: Integer[np.ndarray, "d h w"], label: int, spacing: Spacing,
+                        iso: float = MESH_MM, decimate: float = DECIMATE):
         """Smooth chamber surface (pyvista PolyData, world mm) or None if the chamber is absent/tiny.
         largest-CC -> isotropic linear resample (no z-staircase) -> zero-pad (cap open base/apex) ->
         marching cubes -> Taubin smooth -> decimate -> oriented normals."""
@@ -58,7 +62,9 @@ class Mesh:
         return mesh.compute_normals(auto_orient_normals=True, split_vertices=False)
 
     @staticmethod
-    def export_glb(mask: np.ndarray, spacing, path: str | Path, iso: float = MESH_MM) -> Path:
+    @shapecheck
+    def export_glb(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, path: str | Path,
+                   iso: float = MESH_MM) -> Path:
         """Colored multi-chamber GLB (glTF 2.0). Myocardium semi-transparent so the cavity shows."""
         pl = pv.Plotter(off_screen=True)
         for label, (_name, color) in CLASSES.items():
@@ -70,7 +76,9 @@ class Mesh:
         return path
 
     @staticmethod
-    def export_stl(mask: np.ndarray, spacing, out_dir: str | Path, stem: str, iso: float = MESH_MM) -> list[Path]:
+    @shapecheck
+    def export_stl(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, out_dir: str | Path,
+                   stem: str, iso: float = MESH_MM) -> list[Path]:
         """One STL per chamber -> out_dir/<stem>_<chamber>.stl. Returns the written paths."""
         out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
         written = []
@@ -82,7 +90,8 @@ class Mesh:
         return written
 
     @staticmethod
-    def export_meshes(mask: np.ndarray, spacing, subject: str, formats=("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
+    @shapecheck
+    def export_meshes(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, subject: str, formats=("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
                       iso: float = MESH_MM, root: str | Path | None = None) -> Path:
         """Write chamber meshes for one subject to <data>/meshes/<subject>/ (or `root`). GLB (colored
         scene) + STL (per chamber) by default. Returns the subject dir."""

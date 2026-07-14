@@ -11,12 +11,14 @@ on-disk processed/<dataset>/<paramkey>/ layout + caching.
 from pathlib import Path
 
 import numpy as np
+from jaxtyping import Float, Integer, Shaped
 from scipy.ndimage import zoom
 
 from core.config import DEFAULT_INPLANE, DEFAULT_SIZE
 from core.preprocessing.n4 import N4Cfg
 from core.preprocessing.nyul import Nyul
-from core.types import Image, Slice2D, Spacing, Volume
+from core.shapecheck import shapecheck
+from core.types import Spacing, Volume
 
 # In-plane resample target (mm). ACDC/M&M in-plane is ~1.2-1.6 mm; 1.5 is the common grid the 2D
 # model trains on. The single source of truth. Slices (z) are left untouched (2D-model convention).
@@ -31,7 +33,8 @@ class Preprocess:
     names kept): load -> resample in-plane -> (N4) -> (Nyúl) -> z-score."""
 
     @staticmethod
-    def fit_square(arr: Slice2D, size: int, pad_value: float = 0) -> Slice2D:
+    @shapecheck
+    def fit_square(arr: Shaped[np.ndarray, "h w"], size: int, pad_value: float = 0) -> Shaped[np.ndarray, "s s"]:
         """Centre pad/crop a [H, W] array to [size, size] — the model-grid fit, used by both the
         training Dataset and inference (predict_volume stacks fit-squared slices)."""
         h, w = arr.shape
@@ -45,14 +48,17 @@ class Preprocess:
         return out
 
     @staticmethod
-    def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> np.ndarray:
+    @shapecheck
+    def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> Shaped[np.ndarray, "d s s"]:
         """fit_square each [H,W] slice to the model grid and stack -> [D, size, size]. The one-liner the
         eval modules repeat for GT/label volumes; `dtype` casts the stack (uint8/int64 label maps)."""
         out = np.stack([Preprocess.fit_square(s, size, pad_value) for s in slices])
         return out.astype(dtype) if dtype is not None else out
 
     @staticmethod
-    def blood_anchor(img: Image, gt, blood=(1, 3), eps: float = ZSCORE_EPS) -> Image:
+    @shapecheck
+    def blood_anchor(img: Float[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
+                     blood=(1, 3), eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
         """Two-point affine intensity normalization: background-air -> 0, blood pool -> 1. Composition-robust
         harmonization anchored on PHYSICAL references (air + blood, present on every scan, meaning the same
         thing) instead of z-score's FOV-sensitive mean/std. Measured to halve cross-vendor tissue-level
@@ -65,14 +71,17 @@ class Preprocess:
         return (img - a) / ((b - a) + eps)
 
     @staticmethod
-    def zscore(img: Image, eps: float = ZSCORE_EPS) -> Image:
+    @shapecheck
+    def zscore(img: Shaped[np.ndarray, "*grid"], eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
         """Per-volume z-score on the whole array (uncalibrated intensity -> zero-mean)."""
         img = img.astype(np.float32)
         return (img - img.mean()) / (img.std() + eps)
 
     @staticmethod
+    @shapecheck
     def resample_inplane(
-        arr: Volume, spacing: Spacing, target_inplane: float = TARGET_INPLANE, *, is_mask: bool = False
+        arr: Shaped[np.ndarray, "d h w"], spacing: Spacing, target_inplane: float = TARGET_INPLANE,
+        *, is_mask: bool = False
     ) -> tuple[Volume, Spacing]:
         """Resample H,W (not D) of a [D, H, W] array to target_inplane mm.
 

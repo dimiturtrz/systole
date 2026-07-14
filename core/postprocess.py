@@ -11,17 +11,19 @@ speedup for a second code path. (The `gpu` extra exists for `losses.py`'s bounda
 transform, not for this.)
 """
 import numpy as np
+from jaxtyping import Bool, Integer
 from scipy.ndimage import label as _cc_label
 
 from core.data.static.labels import FOREGROUND
-from core.types import Mask
+from core.shapecheck import shapecheck
 
 
 class Postprocess:
     """Largest-connected-component clean-up (the free helpers folded in as staticmethods)."""
 
     @staticmethod
-    def largest_cc_binary(binary: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def largest_cc_binary(binary: Bool[np.ndarray, "*grid"]) -> Bool[np.ndarray, "*grid"]:
         """Largest connected component of a boolean volume (drop stray islands). CPU/scipy.
         Shared by mesh export and cardioview geometry; the per-class path below inlines it."""
         lab, n = _cc_label(binary)
@@ -32,7 +34,9 @@ class Postprocess:
         return lab == int(sizes.argmax())
 
     @staticmethod
-    def largest_cc_per_class(mask: Mask, labels: tuple[int, ...] = FOREGROUND) -> Mask:
+    @shapecheck
+    def largest_cc_per_class(mask: Integer[np.ndarray, "*grid"],
+                             labels: tuple[int, ...] = FOREGROUND) -> Integer[np.ndarray, "*grid"]:
         """Keep only the largest 3D connected component of each foreground class.
 
         mask: [D, H, W] integer label map (classes disjoint, as from argmax). Returns a cleaned

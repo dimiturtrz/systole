@@ -15,6 +15,9 @@ Ref: Nyúl, Udupa & Zhang, IEEE TMI 2000. Deep-dive 2026-06-21_intensity-normali
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float, Shaped
+
+from core.shapecheck import shapecheck
 
 # percentile landmarks: robust tails (p1/p99) + deciles. The tails anchor the scale, deciles the shape.
 LANDMARKS: tuple[int, ...] = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99)
@@ -26,17 +29,21 @@ class Nyul:
     helpers (`image_landmarks`, `fit_standard`) stay static — they run BEFORE an instance exists, to derive
     the standard a `Nyul(standard)` is then constructed with."""
 
-    def __init__(self, standard: np.ndarray):
+    @shapecheck
+    def __init__(self, standard: Shaped[np.ndarray, "..."]):
         self.standard = np.asarray(standard, dtype=np.float64)   # fitted standard landmark scale (session)
 
     @staticmethod
-    def image_landmarks(img: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+    @shapecheck
+    def image_landmarks(img: Shaped[np.ndarray, "*grid"],
+                        mask: Shaped[np.ndarray, "*grid"] | None = None) -> Float[np.ndarray, "..."]:
         """Intensity at each percentile in LANDMARKS, over `mask` (foreground) if given else the whole image."""
         v = img[mask.astype(bool)] if mask is not None else img.reshape(-1)
         return np.percentile(v.astype(np.float64), LANDMARKS)
 
     @staticmethod
-    def fit_standard(landmark_rows: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def fit_standard(landmark_rows: Shaped[np.ndarray, "..."]) -> Float[np.ndarray, "..."]:
         """Learn the standard scale from per-image landmarks [N, len(LANDMARKS)]: rescale each image's
         landmarks to [0,1] by its own (first,last) landmark, then average -> the standard landmark vector
         (monotonic, in [0,1]). Robust to each image's arbitrary intensity range."""
@@ -45,7 +52,9 @@ class Nyul:
         scaled = (rows - lo) / np.clip(hi - lo, 1e-6, None)
         return scaled.mean(axis=0)
 
-    def transform(self, img: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+    @shapecheck
+    def transform(self, img: Shaped[np.ndarray, "*grid"],
+                  mask: Shaped[np.ndarray, "*grid"] | None = None) -> Float[np.ndarray, "*grid"]:
         """Map `img` onto this instance's standard scale: piecewise-linear interp from the image's own
         landmarks to the standard landmarks. Values outside the landmark range extrapolate linearly at the
         end segments (np clamps to the standard endpoints — acceptable, tails are p1/p99). Returns a float
@@ -55,7 +64,8 @@ class Nyul:
         return np.interp(img.astype(np.float64), lm, self.standard)
 
     @staticmethod
-    def _dedup_monotone(lm: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    @shapecheck
+    def _dedup_monotone(lm: Float[np.ndarray, "..."], eps: float = 1e-6) -> Float[np.ndarray, "..."]:
         """Force strictly increasing landmarks (flat histograms can tie percentiles) so np.interp is valid."""
         out = lm.astype(np.float64).copy()
         for i in range(1, len(out)):
