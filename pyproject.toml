@@ -54,6 +54,7 @@ addopts = "--import-mode=importlib"
 # god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
 # (never blocks): betweenness > betweenness_max (noisy).
 [tool.structure]
+# >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these.
 bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
 file_max = 750              # god-file ceiling (largest today ~548)
 file_min = 0                # OFF (owner decision): no honest floor exists — the small files are SSOT /
@@ -61,126 +62,105 @@ file_min = 0                # OFF (owner decision): no honest floor exists — t
 #                             split), which the repo's own principles produce; a floor would flag legit
 #                             leaves and miss real "too-thin" modules (a responsibility judgment, not lines).
 betweenness_max = 0.10      # advisory chokepoint threshold (max today ~0.04)
+main_sequence_max = 0.0     # advisory Martin main-sequence distance |A+I-1| ceiling — 0 = OFF (bd x3b)
+test_layout = "mirror"      # every logic module needs tests/unit/<pkg>/<path>/test_<name>.py (0/79 unmirrored)
+# <<< LOCAL-SLOT: arch-thresholds
+
+# magic-literals ENFORCED ratchet (devtools/magic_literals.py) — the recurring-string / repeated-key-set
+# floor is frozen as a ceiling; a NEW magic literal pushes the count over and fails the merge (migrate it
+# to a StrEnum/constant, or raise the ceiling in the same commit with a reason). MECHANISM = base gate
+# (all repos run it enforced); NUMBERS = per-repo FACT (cardiac's legit non-enum-able floor: polars
+# column names, matplotlib/torch API vocab, path segments, nan). bd cardiac-seg-wir7/1ln7.
+[tool.magic_literals]
+# >>> LOCAL-SLOT: magic-ceilings — this repo's frozen literal floor (raise only with a documented reason)
+max_strings = 48
+max_key_sets = 11
+# <<< LOCAL-SLOT: magic-ceilings
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house
 # style. Escape hatch is per-line `# noqa: <code>`, used sparingly. `ty`/type-checking is a separate,
-# later axis (bd rp8l).
+# later axis (bd rp8l). Per-code rationale lives in CLAUDE.md (## Static analysis) + git history.
 [tool.ruff]
 line-length = 120
+# >>> LOCAL-SLOT: ruff-exclude — edit freely, the template will not overwrite intent here
 extend-exclude = ["baselines", "cardioview/web/node_modules", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
+# <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = [
-    "F",        # pyflakes — unused imports/vars, undefined names (real bugs)
-    "B",        # bugbear — likely bugs (mutable defaults, raise-without-from, zip-without-strict)
-    "E501",     # line-too-long only (NOT E701/E702 — the `a; b` / `if x: y` compaction stays)
-    "I",        # isort — import ordering (autofix)
-    "T201",     # print — logging is the rule
-    "FBT",      # boolean-trap — bools must be keyword-only (f(amp=True), def f(*, amp=...))
-    "BLE001",   # blind except — broad `except Exception` swallows real bugs
-    "S110",     # try-except-pass — silent swallow (worse than BLE)
-    "C901",     # mccabe complexity — enforces the low-ifs / strategy-pattern rule
-    "PLR0912",  # too-many-branches — same
-    "PLR0913",  # too-many-arguments — nudges toward config objects (the repo's pattern)
-    "PLR0915",  # too-many-statements — split it
-    "PLR2004",  # magic-value-comparison — name the constant
-    "PLC0415",  # import-outside-top-level — imports go to the top (optional deps: top-level try/except)
-    "RUF100",   # unused-noqa — a noqa that suppresses nothing (stale after a fix) gets removed
-    "N",        # pep8-naming — case convention (CamelCase class, lowercase func/var/arg). The idiom
-    #             allowlist below carves out the deliberate ML/physics single-caps; everything else renames.
-    "E741", "E742", "E743",  # ambiguous `l`/`O`/`I` as variable/class/function names
-    "PLR0124",  # comparison-with-itself — a `x == x` typo/NaN-idiom (use isnan explicitly)
-    "PLR1714",  # repeated-equality — `a != x and a != y` -> `a not in (x, y)`
-    "PLW3301",  # nested-min-max — flatten `max(max(...), ...)`
-    "RUF012",   # mutable-class-default — a shared mutable class attr is an aliasing bug (annotate ClassVar)
-    "RUF005", "RUF007", "RUF010", "RUF022", "RUF046",  # collection/pairwise/conversion/sort/cast cleanups
-    "C408", "C420",  # unnecessary dict() call / dict-comprehension (use a literal / dict.fromkeys)
-    "SIM",      # flake8-simplify (full family): collapse nested ifs/withs, bool-return, loop->any/all, no-yoda
-    "PERF401", "PLW0108", "E731",  # list.extend / no-wrapper-lambda / def-not-lambda-assignment
-    "E402", "ICN001",  # imports at top (module-level alias assignments relocated below) / matplotlib-as-mpl
-    "S603", "S607", "PTH123",  # subprocess review (trusted internal calls carry a bare noqa) / Path.open
-    "SLF001",   # private-member-access — cross-class `_x` reach; promote to the owner's public API (or cls)
-]
+select = ["F", "B", "E501", "I", "T201", "FBT", "BLE001", "S110", "S101", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "SLF001"]
 ignore = [
-    "F722",     # jaxtyping shape strings — `Float[Tensor, "b c h w"]` (bd zwno) is a deliberate runtime-
-    #             checked annotation; F722 misreads the dim string as a malformed forward ref. jaxtyping's
-    #             own FAQ prescribes disabling F722. The rest of the F family stays enforced.
+    # jaxtyping shape strings — `Float[Tensor, "b c h w"]` is a deliberate runtime-checked annotation;
+    # F722 misreads the dim string as a malformed forward ref. jaxtyping's own FAQ prescribes disabling it.
+    "F722",
 ]
-# N* REVERSED ON (was OFF): pep8-naming gates CASE only, not length — so the ML idioms (design matrices
-# X/Y, tensor dims, MRI-physics relaxation names) are preserved via [tool.ruff.lint.pep8-naming]
-# ignore-names, and every OTHER wrong-case name renames. Length/short-name stays a review concern (ruff
-# has no length rule + no plugin API for one).
-# OFF by decision (bd l5q8 records the tranche reasoning): D* (docstrings not mandated); ANN* (the
-# deferred type axis, bd rp8l); RUF001-003 (the → × λ math unicode is intentional; RUF100 ON); E701/E702
-# (the `a; b` / `if x: y` compaction is kept); NPY002 (legacy np.random — modernizing to Generator changes
-# the RNG stream, breaking seed-comparability with existing runs); TRY003 + EM101/EM102 (opinionated
-# exception-message verbosity); G004 (f-strings in logging kept — readability over lazy-% micro-perf);
-# COM812 (conflicts with the formatter); ARG002/004/005 (unused args are the add_args(ap)/run(args)/
-# build() interface-conformance signatures); TID252 (relative intra-package imports are intentional — a
-# sub-package's own public surface); UP* (pyupgrade churn; annotation modernization belongs to the type
-# axis). SLF001 (private-member-access) is a pending pass — bd 1sg0.
+# OFF by decision (bd l5q8): D* (docstrings not mandated); ANN* (deferred type axis, bd rp8l); RUF001-003
+# (the → × λ math unicode is intentional; RUF100 ON); E701/E702 (the `a; b` / `if x: y` compaction kept);
+# NPY002 (legacy np.random — modernizing changes the RNG stream, breaking seed-comparability); TRY003 +
+# EM101/EM102 (exception-message verbosity); G004 (f-strings in logging kept); COM812 (formatter conflict);
+# ARG002/004/005 (unused args = add_args(ap)/run(args)/build() interface signatures); TID252 (relative
+# intra-package imports intentional); UP* (pyupgrade churn — annotation modernization is the type axis).
 
+# pep8-naming (N): case convention is a UNIVERSAL rule; the allowlisted idioms are per-repo FACTS. Every
+# name that carries a meaning renames — only symbols with no honest descriptive form belong here (a dodge
+# makes the gate useless). X*/Y* = ML design matrices + image/mask tensor pairs; B/C/H/W = tensor-shape
+# unpacking dims; T1/T2/TR/PD = MRI-physics literature symbols; F = torch.nn.functional; sitk = SimpleITK
+# alias; store = Build imported as the store facade; timed = lowercase decorator-class.
 [tool.ruff.lint.pep8-naming]
-# The ONLY allowlisted idioms are ones with no honest descriptive form — every name that carries a
-# meaning is renamed, not dodged (a dodge makes the gate useless). What stays: X*/Y* = ML design
-# matrices + image/mask tensor pairs (Ximg, Xtr, Yva…); B/C/H/W = tensor-shape unpacking dims
-# (`B, C, H, W = x.shape`); T1/T2/TR/PD = MRI-physics literature symbols (relaxation / repetition /
-# proton-density); F = torch.nn.functional; sitk = SimpleITK canonical alias; store = Build imported as
-# the store facade; timed = lowercase decorator-class (reads as a function decorator at the call site).
-ignore-names = [
-    "X*", "Y*",
-    "B", "C", "H", "W",
-    "T1", "T2", "TR", "PD",
-    "F", "sitk", "store", "timed",
-]
+# >>> LOCAL-SLOT: pep8-naming — ignore-names VOCAB (this repo's ML/physics idioms); the block is shared,
+# only its contents differ. Add domain symbols (MRI T1/T2/TR/PD, canonical lib aliases…) here.
+ignore-names = ["X*", "Y*", "B", "C", "H", "W", "T1", "T2", "TR", "PD", "F", "sitk", "store", "timed"]
+# <<< LOCAL-SLOT: pep8-naming
 
+# Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); privates-under-test are the
+# point of a unit test (SLF001); mock classes mirror external PascalCase APIs + local math/alias scratch
+# (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE gates (imports-at-top, real bugs, dead
+# code) still apply to tests.
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports are intentional (the package's public surface)
-# tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); privates-under-test are
-# the point of a unit test (SLF001); mock classes mirror external PascalCase APIs — SimpleITK, mlflow.
-# pytorch (N801/N802); test-local math scratch + module aliases (N806/N803/N812); fixtures take many
-# params (PLR0913). The SUBSTANTIVE gates (imports-at-top, real bugs, dead code) still apply to tests.
-"**/tests/**" = ["PLR2004", "FBT", "SLF001", "N801", "N802", "N806", "N803", "N812", "PLR0913"]
+"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+# >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
+# that must never raise). Add lines here; copier update won't overwrite this region.
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
+# <<< LOCAL-SLOT: per-file-ignores
 
-# Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg ONLY
+# Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg+cardioview
 # (NOT tests): a prod symbol referenced solely by a test then surfaces as dead here, instead of being
 # masked by its test fan-in (the trap that fools both vulture and coverage). CI runs two tiers —
 # conf>=80 blocks (near-certain: redundant conditions, unused locals), conf>=60 warns (dead funcs, but
-# eats entry-point/no-fan-in false positives). ignore_names/decorators kill the pydantic FPs (a
-# ClassVar `model_config` + validator methods look unused but are framework-called). bd cardiac-seg-5ogp.
+# eats entry-point/no-fan-in false positives). bd cardiac-seg-5ogp.
 [tool.vulture]
+# >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "cardioseg", "cardioview"]
 exclude = ["baselines", "*/node_modules/*", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
+# <<< LOCAL-SLOT: vulture-scan
 min_confidence = 60
-# ignore_names = names vulture must treat as USED — without them it reports each as dead code. Every one
-# IS referenced, but only through a path vulture's static name-match can't follow (iteration, string keys,
-# framework dispatch, external-lib attribute). NOT a "don't care" list — each entry is a documented FP:
+# ignore_names = symbols vulture must treat as USED — each IS referenced, but through a path its static
+# name-match can't follow (framework dispatch, iteration, string keys, external-lib attribute). NOT a
+# "don't care" list — a documented FP each:
 #   model_config     pydantic reads `model_config = _VALIDATE` via its metaclass (never our code)
 #   azimuth/elevation  written to a pyvista Camera (`pl.camera.azimuth = 35`); the read is inside pyvista
 #   BG               Label.BG only materialized by iteration — `tuple(int(c) for c in Label)`
 #   PHILIPS          Vendor.PHILIPS only materialized by iteration — `tuple(Vendor)` (no per-vendor filter)
 #   _missing_        the StrEnum case-fold hook, invoked by the enum on `Phase(x)` (e.g. mesh.py type=Phase)
 #   sex/field_T/scanner/centre  PatientMeta fields written in adapter meta(), read as polars `pl.col(...)`
-# (SurfaceMetrics/AgreementStats are dataclasses now → attribute access, so their fields need no entry;
-#  PatientData ED/ES need none either — Phase.ED/ES reference the same names.)
+# >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives
 ignore_names = ["model_config", "azimuth", "elevation", "BG", "PHILIPS", "_missing_", "sex", "field_T", "scanner", "centre"]
+# <<< LOCAL-SLOT: vulture-ignore-names
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Measures core+cardioseg. The denominator is LIBRARY logic, not scripts: omit
 # the exploratory analysis CLIs + offline builders + the onnx export (no import fan-in, need raw data
 # on disk — counting them just drags the % with code that isn't unit-testable). Data ADAPTERS stay in
 # (low coverage there is honest signal to close, not noise to hide). exclude_lines drops the __main__
-# entry blocks + protocol stubs from the count. Gate is ADVISORY (CI prints, never fails) until a
-# baseline floor is set + ratcheted. bd cardiac-seg-emko.
-# cardioview is measured SEPARATELY (not in this source list): the CI cardioview step runs
-# `pytest cardioview/tests --cov=cardioview` into its own .coverage.cardioview and prints it advisory,
-# so the >=80 core+cardioseg floor stays calibrated to LIBRARY logic and isn't moved by the viewer's
-# render/onnx shells (all pragma'd). bd cardiac-seg-3vbc.
+# entry blocks + protocol stubs from the count. Enforced floor 90 (ratcheted from 80, bd cardiac-seg-xf8r).
+# cardioview is measured SEPARATELY (CI cardioview step, own .coverage.cardioview) so the core+cardioseg
+# floor stays calibrated to LIBRARY logic. bd cardiac-seg-emko / 3vbc.
 [tool.coverage.run]
+# >>> LOCAL-SLOT: coverage-scan — edit freely, the template will not overwrite intent here
 source = ["core", "cardioseg"]
 omit = ["*/data/analysis/*", "*_build.py", "core/export_onnx.py"]
+# <<< LOCAL-SLOT: coverage-scan
 
 [tool.coverage.report]
 show_missing = true
@@ -195,6 +175,8 @@ exclude_lines = [
 # import-linter (grimp engine): the dependency rule as a STATIC import-graph contract, not prose. core is
 # the shared kernel — it must import NEITHER trainer (cardioseg) NOR viewer (cardioview); the viewer
 # depends only on core. CI fails the day a new upward edge lands. bd cardiac-seg-dsz2.
+# >>> LOCAL-SLOT: import-contracts — layering scope + directional rules; root_packages widens to the
+# scope-only viewer (cardioview) that carries layer rules but isn't in the arch set. Edit freely.
 [tool.importlinter]
 root_packages = ["core", "cardioseg", "cardioview"]
 
@@ -219,6 +201,15 @@ name = "store read surface (query) is preprocessing-free (normalization is a dow
 type = "forbidden"
 source_modules = ["core.data.static.store.query"]
 forbidden_modules = ["core.preprocessing.preprocess", "core.preprocessing.nyul"]
+# <<< LOCAL-SLOT: import-contracts
+
+# Shape-contract gate (devtools/shape_contracts.py, base ml-gate) — a public array/tensor boundary must
+# carry a jaxtyping shape, not a bare `np.ndarray`/`Tensor`. The universal `ndarray`/`Tensor` are builtin;
+# this repo's array ALIASES (core.types names that also mean "an array") are the FACT that varies.
+[tool.shape_contracts]
+# >>> LOCAL-SLOT: shape-aliases — this repo's array-alias type names (core.types)
+array_aliases = ["Volume", "Image", "Mask", "Batch"]
+# <<< LOCAL-SLOT: shape-aliases
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there explicitly so uv resolves the
 # cu130 wheel (both Windows + Linux have the RTX 5090) instead of the CPU build. `explicit` = only

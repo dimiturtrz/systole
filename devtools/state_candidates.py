@@ -1,25 +1,16 @@
-"""Namespace-class detector (bd cardiac-seg-h7vy.4): the y2fi in-a-class migration folded free funcs as
-`@staticmethod`, so a class whose methods all thread the SAME param(s) is a namespace bag with LATENT
-instance state — that shared param belongs in `__init__`, not every signature. This ranks those
-promotion candidates so the cleanup is evidence-driven, not eyeballed.
+"""Namespace-class detector: a class whose methods (folded from free funcs as `@staticmethod`) all thread
+the SAME param(s) is a namespace bag with LATENT instance state — that shared param belongs in `__init__`,
+not every signature. This ranks those promotion candidates so the cleanup is evidence-driven, not
+eyeballed.
 
 Signal: for each class with >=2 staticmethods and no `__init__`, count how many methods share each param
 name; a param carried by >=half the methods (and >=2) is latent state. Score = sum of those shared
 counts, so a class where many methods thread many common params ranks highest. Dispatcher command classes
 (`add_args`+`run`) and already-stateful classes (have `__init__`) are skipped.
 
-The discriminator the human applies to a surfaced candidate is SESSION-vs-DATA: promote a shared param to
-`__init__` ONLY if it's a configured-once SESSION held across calls; it STAYS static if it's per-call DATA
-(the array being transformed) or a swept axis. Two sub-rules encoded here to cut false positives:
-  - **constant-default = knob, not session** (bd cardiac-seg-w9p0): a param defaulted to a module constant
-    or literal (`labels=FOREGROUND`, `size=256`) is an optional knob with a sensible default — a real
-    session is required/computed, not defaulted-to-a-constant — so it's excluded from the shared count.
-  - **per-call DATA still surfaces** (the input `mask`/`vol` shared by the transform methods): the detector
-    can't tell it from session state by AST, so it's surfaced and the human keeps it static. That's why
-    e.g. `Postprocess` (mask is the per-call array; labels is a constant-default) correctly STAYS static.
-
-    python -m devtools.state_candidates core cardioseg
+    python -m devtools.state_candidates src mypackage
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,9 +19,9 @@ import logging
 from collections import Counter
 from pathlib import Path
 
-from core.obs import Obs
+from devtools.omit import coverage_omit, matches_omit
 
-log = logging.getLogger("cardioseg.devtools.state_candidates")
+log = logging.getLogger("devtools.state_candidates")
 
 _SELF = {"self", "cls"}
 _MIN_METHODS = 2
@@ -38,38 +29,19 @@ _MIN_METHODS = 2
 
 def _staticmethods(cls: ast.ClassDef) -> list[ast.FunctionDef]:
     """The @staticmethod-decorated defs of a class (the migrated free funcs)."""
-    return [n for n in cls.body
-            if isinstance(n, ast.FunctionDef)
-            and any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in n.decorator_list)]
-
-
-def _is_constant_default(node: ast.expr) -> bool:
-    """A default that marks its param as a KNOB, not session state: a literal (`256`, `"zscore"`) or a
-    module constant (an UPPER_CASE Name like `FOREGROUND`). A configured session is required or computed,
-    not defaulted to a constant."""
-    return isinstance(node, ast.Constant) or (isinstance(node, ast.Name) and node.id.isupper())
-
-
-def _constant_defaulted(fn: ast.FunctionDef) -> set[str]:
-    """Param names whose default is a constant/literal (bd cardiac-seg-w9p0) — excluded from the
-    session-candidate set. Positional defaults align to the TAIL of posonly+args; kwonly pair with
-    kw_defaults (None = no default)."""
-    args = fn.args
-    positional = [*args.posonlyargs, *args.args]
-    out = {p.arg for p, d in zip(positional[len(positional) - len(args.defaults):], args.defaults, strict=True)
-           if _is_constant_default(d)}
-    out |= {p.arg for p, d in zip(args.kwonlyargs, args.kw_defaults, strict=True)
-            if d is not None and _is_constant_default(d)}
-    return out
+    return [
+        n
+        for n in cls.body
+        if isinstance(n, ast.FunctionDef)
+        and any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in n.decorator_list)
+    ]
 
 
 def _params(fn: ast.FunctionDef) -> set[str]:
-    """Session-candidate param names: positional + keyword-only, minus self/cls and minus the
-    constant-defaulted knobs (those are optional knobs, not configured session state)."""
+    """Positional + keyword-only param names, minus self/cls."""
     args = fn.args
     names = [a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
-    constant_defaulted = _constant_defaulted(fn)
-    return {n for n in names if n not in _SELF and n not in constant_defaulted}
+    return {n for n in names if n not in _SELF}
 
 
 def _is_command(names: set[str]) -> bool:
@@ -83,11 +55,20 @@ def _is_pydantic_config(cls: ast.ClassDef) -> bool:
     return any(isinstance(b, ast.Name) and b.id == "BaseModel" for b in cls.bases)
 
 
+def _is_autograd_function(cls: ast.ClassDef) -> bool:
+    """A torch.autograd.Function (base `Function` / `autograd.Function`): forward/backward thread `ctx`
+    by the framework API — a contract, not promotable instance state. Skip like a pydantic config."""
+    return any(
+        (isinstance(b, ast.Name) and b.id == "Function") or (isinstance(b, ast.Attribute) and b.attr == "Function")
+        for b in cls.bases
+    )
+
+
 def shared_state(cls: ast.ClassDef) -> dict[str, int]:
     """Param names carried by >=2 and >=half of a class's staticmethods = its latent instance state.
-    Empty if the class has an __init__ (already stateful), is a pydantic config, is a CLI command, or
-    has too few methods."""
-    if _is_pydantic_config(cls):
+    Empty if the class has an __init__ (already stateful), is a pydantic config, an autograd.Function, a
+    CLI command, or has too few methods."""
+    if _is_pydantic_config(cls) or _is_autograd_function(cls):
         return {}
     if any(isinstance(n, ast.FunctionDef) and n.name == "__init__" for n in cls.body):
         return {}
@@ -114,10 +95,15 @@ def analyze(path: Path) -> list[tuple[int, str, int, dict[str, int]]]:
 
 
 def scan(packages: list[str]) -> list[tuple[int, str, str, int, dict[str, int]]]:
-    """Ranked (score, class, file, n_methods, shared) across every .py under the packages, high score first."""
+    """Ranked (score, class, file, n_methods, shared) across every .py under the packages, high score
+    first. Coverage-omitted shells (`[tool.coverage] omit`, via omit.py — the same 'not logic' set the
+    test-mirror gate exempts) are skipped: a runner/adapter's shared params are its data, not identity."""
+    omit = coverage_omit()
     rows = []
     for pkg in packages:
         for path in sorted(Path(pkg).rglob("*.py")):
+            if matches_omit(str(path), omit):
+                continue
             rows.extend((sc, name, str(path), n, sh) for sc, name, n, sh in analyze(path))
     return sorted(rows, reverse=True)
 
@@ -132,12 +118,12 @@ def report(rows: list[tuple[int, str, str, int, dict[str, int]]]) -> str:
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="python -m devtools.state_candidates",
-                                 description="rank namespace-classes by latent shared instance state")
-    ap.add_argument("packages", nargs="*", default=["core", "cardioseg"],
-                    help="package dirs to scan (default: core cardioseg)")
+    ap = argparse.ArgumentParser(
+        prog="python -m devtools.state_candidates", description="rank namespace-classes by latent shared instance state"
+    )
+    ap.add_argument("packages", nargs="*", default=["src"], help="package dirs to scan (default: src)")
     args = ap.parse_args()
-    Obs.setup()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = scan(args.packages)
     log.info("%d promotion candidates\n%s", len(rows), report(rows))
 

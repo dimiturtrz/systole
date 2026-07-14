@@ -263,6 +263,11 @@ modeling decisions, the measurement correctness, and the evaluation. Data-struct
 evaluation discipline carry over from prior ML work; the clinical specifics I learn as I go
 ([learning/](learning/)).
 
+## Development
+Tooling and quality gates are provisioned by an in-house copier template (sdlc-scaffold); refresh with
+`uvx copier update`, which pins the template version in `.copier-answers.yml`. The gate theory — the
+test pyramid, the static-analysis axes — has its one home in that template's docs, not duplicated here.
+
 ## References
 - **ACDC** — Bernard et al., *Deep Learning Techniques for Automatic MRI Cardiac Multi-structures
   Segmentation and Diagnosis: Is the Problem Solved?*, IEEE TMI 2018.

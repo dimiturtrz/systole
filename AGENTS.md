@@ -36,6 +36,16 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Scaffolding
+
+Guardrails are provisioned by the in-house **sdlc-scaffold** copier template — `.copier-answers.yml`
+pins the version. The gate config, `devtools/` engines, and the runner wiring are **template-owned**:
+don't hand-edit them to pass a gate — fix upstream in the scaffold and `uvx copier update`, or edit only
+within the `# >>> LOCAL-SLOT` regions of `pyproject.toml`. cardiac-seg is the ORIGIN repo, so it runs a
+**superset** of the scaffold base (extra ruff codes, the jaxtyping shape gate, the magic-literal ratchet)
+ahead of the base pending upstream (bd cardiac-seg-zjaf; scaffold vip.1/vip.2) — the repo's own rules,
+not a dodge.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:3216161c -->
 ## Beads Issue Tracker
 
