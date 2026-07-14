@@ -50,9 +50,8 @@ def test_append_handler_emit_swallows_io_error(tmp_path):
 def test_timed_logs_start_and_done(caplog):
     """timed logs START on enter and DONE (+elapsed) on exit, on the given logger."""
     log = logging.getLogger("cardioseg.test_timed")
-    with caplog.at_level(logging.INFO, logger=log.name):
-        with timed(log, "load data"):
-            pass
+    with caplog.at_level(logging.INFO, logger=log.name), timed(log, "load data"):
+        pass
     msgs = [r.getMessage() for r in caplog.records]
     assert any("START load data" in m for m in msgs)
     assert any("DONE" in m and "load data" in m for m in msgs)
