@@ -29,11 +29,11 @@ V = pl.col
 
 
 class Task(StrEnum):
-    """What a TestSet's metrics mean: seg4 (all 4 classes), seg_lv (SCD, no RV -> myo+cav only), or ef
-    (ejection-fraction regression). The frozen-manifest task tag lives here, beside TestSet."""
+    """What a TestSet's metrics mean: seg4 (all 4 classes) or seg_lv (SCD, no RV -> myo+cav only). The
+    frozen-manifest task tag lives here, beside TestSet. (An `ef` regression task joins when the EF lane
+    builds an EF testset — bd ax4a; not added speculatively.)"""
     SEG4 = "seg4"
     SEG_LV = "seg_lv"
-    EF = "ef"
 
 # Locks live in a committed lockfile (DATA, derived) — not hand-pasted into the source (predicates are
 # CODE). `python -m core.data lock-testsets --freeze` writes it; `--check` fails on drift (CI). Absent file

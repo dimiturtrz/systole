@@ -69,7 +69,6 @@ class Dataset(StrEnum):
     CMRXMOTION = "cmrxmotion"
     SCD = "scd"
     KAGGLE = "kaggle"
-    MRXCAT = "mrxcat"
 
 
 class Frame(TypedDict):

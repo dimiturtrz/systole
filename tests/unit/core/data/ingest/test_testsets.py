@@ -12,7 +12,7 @@ V = pl.col
 
 
 def test_task_values():
-    assert (Task.SEG4, Task.SEG_LV, Task.EF) == ("seg4", "seg_lv", "ef")   # drop-in for the task-tag literals
+    assert (Task.SEG4, Task.SEG_LV) == ("seg4", "seg_lv")   # drop-in for the task-tag literals
 
 
 def _cloud():

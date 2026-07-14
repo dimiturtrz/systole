@@ -154,7 +154,7 @@ ignore-names = [
 paths = ["core", "cardioseg", "cardioview"]
 exclude = ["baselines", "*/node_modules/*", "cardioview/web/dist", "mri-sim", ".staging", "runs"]
 min_confidence = 60
-ignore_names = ["model_config", "azimuth", "elevation", "BG", "ED", "ES"]  # framework-structural FPs vulture can't see used: pydantic model_config; pyvista Camera setters azimuth/elevation; Label enum member BG (read via enum iteration); PatientData TypedDict fields ED/ES (accessed by string key)
+ignore_names = ["model_config", "azimuth", "elevation", "BG", "ED", "ES", "PHILIPS", "_missing_", "sex", "field_T", "scanner", "centre", "loa", "mean_gt", "shapecheck_off"]  # framework-structural FPs vulture can't see used: pydantic model_config; pyvista Camera setters azimuth/elevation; enum members read only via enum iteration (Label.BG, Vendor.PHILIPS in tuple(Vendor)); the StrEnum _missing_ case-fold hook (called by enum machinery); TypedDict fields accessed by string key (PatientData ED/ES, PatientMeta sex/field_T/scanner/centre, AgreementStats loa/mean_gt); shapecheck_off (the provided hot-path escape API, jaxtyped(typechecker=None))
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Measures core+cardioseg. The denominator is LIBRARY logic, not scripts: omit
