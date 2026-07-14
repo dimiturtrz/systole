@@ -28,11 +28,13 @@ from pathlib import Path
 
 import numpy as np
 import pyvista as pv
+from jaxtyping import Integer
 from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.preprocessing.preprocess import Preprocess
+from core.shapecheck import shapecheck
 
 from .anatomy import REAL_SIZE_PX, Anatomy, PoolBuildCfg
 
@@ -77,7 +79,8 @@ class Mrxcat:
     builders + CLI command handlers. Consumes MRXCAT LABEL volumes only; contrast is our shared painter."""
 
     @staticmethod
-    def to_canonical(vol: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def to_canonical(vol: Integer[np.ndarray, "*grid"]) -> Integer[np.ndarray, "*grid"]:
         """Remap an MRXCAT/XCAT integer label volume to our canonical 4-class map (uint8). Unmapped codes → bg."""
         out = np.zeros_like(vol, dtype=np.uint8)
         for src, dst in _XCAT_TO_CANON.items():
@@ -85,7 +88,8 @@ class Mrxcat:
         return out
 
     @staticmethod
-    def to_tissue_map(vol: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def to_tissue_map(vol: Integer[np.ndarray, "*grid"]) -> Integer[np.ndarray, "*grid"]:
         """Whole-FOV paint map (uint8 0..7, classes = `FOV_TISSUE`): heart + surrounding organs, each a
         paintable tissue. Body soft tissue (unlisted, non-air, non-bone codes) → muscle; outside air / bone → bg."""
         out = np.zeros_like(vol, dtype=np.uint8)
@@ -96,7 +100,8 @@ class Mrxcat:
         return out
 
     @staticmethod
-    def load_vti_labels(path: str | Path) -> np.ndarray:
+    @shapecheck
+    def load_vti_labels(path: str | Path) -> Integer[np.ndarray, "nz ny nx"]:
         """Read an MRXCAT `.vti` phantom → integer label volume [nz, ny, nx] (the `labels` point array).
         pyvista (the `viz` extra, lazy) — same reader family as `anatomy.load`. VTK ImageData is x-fastest;
         reshape Fortran-order to (nx,ny,nz) then move to (nz,ny,nx) so axis 0 indexes short-axis-ish slices."""
@@ -106,7 +111,9 @@ class Mrxcat:
         return np.moveaxis(lab, 2, 0)                  # → [nz, ny, nx]
 
     @staticmethod
-    def _heart_crop_scale(s: np.ndarray, size: int, target_px: int) -> np.ndarray | None:
+    @shapecheck
+    def _heart_crop_scale(s: Integer[np.ndarray, "h w"], size: int,
+                          target_px: int) -> Integer[np.ndarray, "s s"] | None:
         """MRXCAT is WHOLE-TORSO (920²): the heart is a small, OFF-CENTRE region, so a plain centre
         `fit_square` crops it away. Crop to the heart bbox, uniformly scale (nearest, label-preserving) so
         its longest side hits `target_px`, then centre `fit_square` to `size` — heart-filling like the SSM
@@ -152,7 +159,9 @@ class Mrxcat:
         return out_path, arr.shape
 
     @staticmethod
-    def _fov_window(s: np.ndarray, size: int, scale: float) -> np.ndarray | None:
+    @shapecheck
+    def _fov_window(s: Integer[np.ndarray, "h w"], size: int,
+                    scale: float) -> Integer[np.ndarray, "s s"] | None:
         """Crop a `scale`×(heart-bbox) chest WINDOW centred on the heart (realistic cardiac FOV — surrounding
         lung/liver/chest wall, not the whole torso), resize to `size` (nearest). Keeps the whole-FOV context
         the SSM pool lacks, unlike `_heart_crop_scale` (heart-only). None if no heart."""
@@ -189,7 +198,9 @@ class Mrxcat:
         return out_path, arr.shape
 
     @staticmethod
-    def place_heart_in_fov(fov: np.ndarray, heart: np.ndarray) -> np.ndarray:
+    @shapecheck
+    def place_heart_in_fov(fov: Integer[np.ndarray, "H W"],
+                           heart: Integer[np.ndarray, "h w"]) -> Integer[np.ndarray, "H W"]:
         """SSM × MRXCAT (bd majh): drop OUR heart (canonical 1/2/3, heart-centred) into an XCAT whole-FOV
         tissue map — excise the phantom's own heart (→ muscle) and paste ours scaled to that heart's size at
         its location. Gives OUR anatomy diversity inside MRXCAT's realistic surrounding context, without XCAT

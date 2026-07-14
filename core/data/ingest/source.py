@@ -16,10 +16,12 @@ from typing import Protocol, runtime_checkable
 
 import polars as pl
 import torch
+from jaxtyping import Integer
 
 from core.data.dynamic import dataset as _dataset
 from core.data.dynamic.generator import Generator
 from core.data.static.labels import Labels
+from core.shapecheck import shapecheck
 
 
 class SubjectIds:
@@ -87,7 +89,8 @@ class StaticSource:
         return Generator(gen_cfg, X, Y, n_classes, device, force_synth=None,
                          valid=self._valid_mask(owners, n_classes, device))
 
-    def _valid_mask(self, owners, n_classes: int, device: str):
+    @shapecheck
+    def _valid_mask(self, owners: Integer[torch.Tensor, "*n"], n_classes: int, device: str):
         """Per-slice class-validity [N,C] bool (labels.valid_row of each slice's dataset). None if every
         slice is full-label — keeps the full-label path mask-free (loss stays on the standard recipe)."""
         ds = self._f.get_column("dataset").to_list()            # per-path dataset, aligned to paths()
