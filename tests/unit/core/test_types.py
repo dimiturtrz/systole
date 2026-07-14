@@ -1,7 +1,7 @@
-"""core.types tests: the shape/units vocabulary (aliases + Spacing) AND the @shapecheck decorators that
-live here (bd cardiac-seg-zwno; folded from test_shapecheck when shapecheck.py was collapsed into
+"""core.types tests: the shape/units vocabulary (aliases + Spacing) AND the @shapecheck decorator that
+lives here (bd cardiac-seg-zwno; folded from test_shapecheck when shapecheck.py was collapsed into
 core.types). beartype is a base dependency, so @shapecheck is LIVE — a wrong shape/dtype raises at the
-call; @shapecheck_off is the never-checked hot-path escape."""
+call."""
 from numbers import Real
 
 import numpy as np
@@ -9,7 +9,7 @@ import pytest
 from jaxtyping import Float, TypeCheckError
 
 from core import types
-from core.types import shapecheck, shapecheck_off
+from core.types import shapecheck
 
 
 def test_array_aliases_are_ndarray():
@@ -27,15 +27,10 @@ def test_spacing_is_real_triple():
     assert types.Spacing == tuple[Real, Real, Real]
 
 
-# --- @shapecheck / @shapecheck_off ---
+# --- @shapecheck ---
 
 @shapecheck
 def _sum(x: Float[np.ndarray, "d h w"]) -> float:
-    return float(x.sum())
-
-
-@shapecheck_off
-def _sum_hot(x: Float[np.ndarray, "d h w"]) -> float:
     return float(x.sum())
 
 
@@ -54,10 +49,6 @@ def test_wrong_shape_raises():
         _sum(np.ones(4, np.float32))
 
 
-def test_shapecheck_off_is_inert():
-    """The hot-path escape pins checker=None, so a wrong-ndim array does NOT raise — the annotation is
-    documentation only, no per-call check."""
-    assert _sum_hot(np.ones(4, np.float32)) == 4.0     # 1D where "d h w" expected — not checked
 
 
 def test_scalar_convention_tower_and_numbers_tower():

@@ -18,8 +18,8 @@ shape as its image. An Image is float intensities of the same shape.
 `@shapecheck` lives here too — it makes a boundary's jaxtyping annotations (`Float[Tensor, "b c h w"]`)
 LIVE via beartype, so a wrong-shape / wrong-dtype array raises at the call. It's O(1) per call (reads
 .shape/.dtype), independent of tensor size — negligible at the coarse seams this codebase uses (no tiny
-per-element functions). `@shapecheck_off` (checker None) is the escape for a genuinely hot call: the
-annotation stays as documentation but is never checked.
+per-element functions). A genuinely hot call that wants the annotation as docs only just leaves `@shapecheck`
+off — a bare jaxtyping annotation is inert without the decorator.
 """
 # stdlib numeric tower: numpy scalars register with the numbers ABCs, so `numbers.Real` admits
 # float/np.float32/np.float64 (and `numbers.Integral` int/np.int*) — the numpy-scalar-tolerant annotation
@@ -43,4 +43,3 @@ Batch = np.ndarray                        # [B, C, H, W]
 
 # is_pep484_tower: an `int` also satisfies a bare `float` annotation (and np.float64, a real float subclass).
 shapecheck = jaxtyped(typechecker=_beartype(conf=BeartypeConf(is_pep484_tower=True)))
-shapecheck_off = jaxtyped(typechecker=None)   # hot-path escape: annotation kept as docs, never checked
