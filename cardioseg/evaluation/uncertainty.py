@@ -28,7 +28,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
 from core.data.static.labels import Labels
-from core.data.static.mri.base import Phase
+from core.data.static.mri.base import Dataset, Phase
 from core.data.static.store.build import Build as store
 from core.inference import Inference
 from core.preprocessing.preprocess import SIZE, Preprocess
@@ -164,7 +164,7 @@ class Uncertainty:
     @staticmethod
     def add_args(ap):
         ap.add_argument("--run", default=FLAGSHIP_REF)
-        ap.add_argument("--eval", default="acdc", choices=["acdc", "canon"])
+        ap.add_argument("--eval", default=Dataset.ACDC, choices=[Dataset.ACDC, "canon"])
 
     @staticmethod
     def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes

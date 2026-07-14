@@ -26,6 +26,8 @@ from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
+from core.data.static.mri.base import Dataset
+from core.data.static.mri.registry import SEG_DATASETS
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate
@@ -250,7 +252,7 @@ class Distribution:
     @staticmethod
     def add_args(ap):
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
-        ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
+        ap.add_argument("--eval", default=Dataset.ACDC, choices=[*SEG_DATASETS, "canon"],
                         help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
         ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
         ap.add_argument("--seed", type=int, default=0)
