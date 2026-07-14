@@ -157,5 +157,5 @@ jobs:
       # the gate FREEZES that floor as a count ceiling: a NEW recurring literal pushes the count over and
       # fails the merge. To add one legitimately, migrate it to an enum OR raise the ceiling in the same
       # commit with a reason. Same regression-guard shape as the jscpd 1% / coverage floors.
-      - name: Magic literals — enforced (count ratchet: no new recurring literal / drift-prone schema)
+      - name: "Magic literals — enforced (count ratchet: no new recurring literal / drift-prone schema)"
         run: uv run python -m devtools.magic_literals --max-strings 48 --max-key-sets 11
