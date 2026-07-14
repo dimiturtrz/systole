@@ -14,6 +14,8 @@ import logging
 import re
 from pathlib import Path
 
+from core.data.static.mri.pathology import PathologyClass
+
 log = logging.getLogger("cardioseg.sync_numbers")
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root (…/cardioseg/evaluation/ -> repo)
@@ -55,8 +57,9 @@ class SyncNumbers:
     @staticmethod
     def strata() -> str:
         st = _A.get("strata", {})
-        order = [("dilated", "dilated (DCM)"), ("ischemic", "ischemic (MINF)"), ("rv_congenital", "rv_congenital"),
-                 ("normal", "normal (NOR)"), ("hypertrophic", "**hypertrophic (HCM)**")]
+        order = [(PathologyClass.DILATED, "dilated (DCM)"), (PathologyClass.ISCHEMIC, "ischemic (MINF)"),
+                 (PathologyClass.RV_CONGENITAL, "rv_congenital"), (PathologyClass.NORMAL, "normal (NOR)"),
+                 (PathologyClass.HYPERTROPHIC, "**hypertrophic (HCM)**")]
         rows = ["| pathology | gtEF | mean Dice | EF MAE | EF bias |", "|---|---|---|---|---|"]
         for g, lab in order:
             s = st.get(g)

@@ -22,9 +22,10 @@ import polars as pl
 from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
-from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, KNOWN_DATASETS, Config
+from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, Config
+from core.data.static.mri.base import Dataset, Phase, Vendor
 from core.data.static.mri.pathology import Pathology
-from core.data.static.mri.registry import AdapterRegistry
+from core.data.static.mri.registry import SEG_DATASETS, AdapterRegistry
 from core.data.static.reference import Reference
 from core.preprocessing.n4 import N4Cfg
 
@@ -57,7 +58,7 @@ class DataCfg(BaseModel):
     Serialized to config.json (the run self-documents its split); the criteria defaults = the generalization
     split (ACDC centre-shift VAL + Canon/GE unseen-vendor + cmrxmotion TEST)."""
     model_config = _VALIDATE
-    sources: tuple[str, ...] = KNOWN_DATASETS
+    sources: tuple[str, ...] = SEG_DATASETS
     # Split = criteria over the cloud. TEST = unseen vendors (Canon + GE) held out entirely, plus
     # cmrxmotion as a whole (single-vendor Siemens motion-robustness set — must be held out by
     # dataset, else it'd silently join Siemens train). VAL = ACDC (a held-out centre/protocol) — a
@@ -67,9 +68,9 @@ class DataCfg(BaseModel):
     # train/val/test partition (via core.data.ingest.split.resolve) and the criteria below are ignored — the
     # split is code, not criteria. Recorded to config.json for lineage. Empty -> legacy criteria path.
     split: str = ""
-    test_datasets: tuple[str, ...] = ("cmrxmotion",)
-    test_vendors: tuple[str, ...] = ("Canon", "GE")
-    val_datasets: tuple[str, ...] = ("acdc",)        # held-out domain for val (empty -> random val_frac)
+    test_datasets: tuple[str, ...] = (Dataset.CMRXMOTION,)
+    test_vendors: tuple[str, ...] = (Vendor.CANON, Vendor.GE)
+    val_datasets: tuple[str, ...] = (Dataset.ACDC,)        # held-out domain for val (empty -> random val_frac)
     val_vendors: tuple[str, ...] = ()
     train_vendors: tuple[str, ...] = ()              # if set: restrict TRAIN to these vendors only (the
     #                                                scarce/single-vendor regime; val/test intact — bd 5r7n)
@@ -105,7 +106,7 @@ class DataCfg(BaseModel):
 # The real raw datasets that get consolidated, one processed/<name>/ each. NOT the same as the
 # adapter registry: "canon" is a registered adapter but it's a vendor SLICE of mnms1 (a split query,
 # vendor=="Canon"), never its own processed folder — else its subjects double-count in the cloud.
-SOURCE_DATASETS = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
+SOURCE_DATASETS = list(SEG_DATASETS)
 
 # common meta schema — the unified cloud columns. `file` points at the npz in data/; `raw_path` is
 # the original scan dir (the scan's "filename"); `labelled` flags usable masks (M&Ms-1 + CMRxMotion
@@ -203,16 +204,16 @@ class MetaBuilder:
         if not v:
             return None
         s = str(v).upper()
-        for key, short in (("SIEMENS", "Siemens"), ("PHILIPS", "Philips"), ("GE", "GE"), ("CANON", "Canon")):
-            if key in s:
-                return short
+        for m in Vendor:
+            if m.name in s:
+                return m.value
         return str(v)
 
     @staticmethod
     def _is_labelled(arrays: dict) -> bool:
         """Usable masks = both ED and ES present with non-empty GT (M&Ms-1 zero-fills withheld GT)."""
         ok = []
-        for tag in ("ed", "es"):
+        for tag in (p.lower() for p in Phase):
             gt = arrays.get(f"{tag}_gt")
             ok.append(gt is not None and bool((gt > 0).any()))
         return all(ok)

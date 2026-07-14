@@ -17,11 +17,13 @@ import math
 
 import polars as pl
 import torch
+from jaxtyping import Float
 
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.mri_physics import MriPhysics
 from core.data.static import splits
 from core.data.static.labels import CLASSES
+from core.data.static.mri.base import Vendor
 from core.data.static.store.build import Build as store
 from core.hparams import TrainCfg
 
@@ -38,7 +40,7 @@ class Sim2Real:
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 
     @staticmethod
-    def fit_acquisition(real_means: torch.Tensor, n_classes: int,
+    def fit_acquisition(real_means: Float[torch.Tensor, "*n"], n_classes: int,
                         tr_grid=(2.5, 6.0, 36), fl_grid=(20.0, 80.0, 31), fields=(1.5, 3.0)) -> dict:
         """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
         real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
@@ -70,7 +72,7 @@ class Sim2Real:
         n_classes = len(CLASSES) + 1
         meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)
         log.info(f"{'vendor':10} {'n':>4}  field  TR   flip  | residual | real z(heart) vs synth")
-        for vendor in ("Siemens", "Philips", "GE", "Canon"):
+        for vendor in Vendor:
             df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
             if df.height == 0:
                 continue

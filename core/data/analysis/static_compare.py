@@ -15,6 +15,7 @@ import logging
 
 import numpy as np
 import torch
+from jaxtyping import Integer
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
 from core.data.dynamic.anatomy import Anatomy
@@ -36,7 +37,7 @@ class StaticCompare:
     assembly, and the W1 + median comparison panel."""
 
     @staticmethod
-    def geom_metrics(mask: np.ndarray) -> dict | None:
+    def geom_metrics(mask: Integer[np.ndarray, "*grid"]) -> dict | None:
         """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
         foreground = mask > 0
         if int(foreground.sum()) < _MIN_FG_PX:

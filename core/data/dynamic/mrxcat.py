@@ -32,6 +32,7 @@ from jaxtyping import Integer
 from scipy.ndimage import zoom as _zoom
 
 from core.config import DEFAULT_SIZE
+from core.data.dynamic.mri_physics import Tissue
 from core.data.static.labels import LV_CAV, RV  # 3 / 1
 from core.preprocessing.preprocess import Preprocess
 from core.types import shapecheck
@@ -57,8 +58,8 @@ _XCAT_TO_CANON = {1: 2, 5: LV_CAV, 6: 1}          # LV_wall→myo, LV_blood→LV
 # (aligned to mri_physics.TISSUE) so the painter renders each by physical bSSFP contrast. XCAT code groups
 # per MRXCAT's own `defineTissuePropertiesMRXCAT` (authoritative). Seg target still = to_canonical (heart
 # only); this drives the painted background only — two consistent views of the same phantom volume.
-FOV_TISSUE = {0: "lung", 1: "blood", 2: "myocardium", 3: "blood",  # 0 bg/air (lung=darkest TISSUE) | 1 RV-cav
-              4: "lung", 5: "liver", 6: "muscle", 7: "fat"}          # 2 myo | 3 LV-cav | + surrounding organs
+FOV_TISSUE = {0: Tissue.LUNG, 1: Tissue.BLOOD, 2: Tissue.MYOCARDIUM, 3: Tissue.BLOOD,  # 0 bg/air | 1 RV-cav
+              4: Tissue.LUNG, 5: Tissue.LIVER, 6: Tissue.MUSCLE, 7: Tissue.FAT}          # 2 myo | 3 LV-cav | organs
 _XCAT_TO_FOV = {1: 2, 5: 3, 6: 1,                       # heart: LV-wall→myo, LV-blood→LV-cav, RV-blood→RV-cav
                 #  (code 2 is a BROAD raw-XCAT label, not just RV wall — render showed stray myo; → muscle)
                 15: 4, 16: 4,                            # lung (air-filled)

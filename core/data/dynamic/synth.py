@@ -30,6 +30,7 @@ from jaxtyping import Float, Int, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
+from core.data.static.mri.base import Vendor
 from core.types import shapecheck
 
 from .augment import Augmentor
@@ -184,7 +185,7 @@ class SynthCfg(BaseModel):
     #                                                the cav-too-bright fidelity fix). 0 = on-resonance
     fields: tuple[float, ...] = (1.5, 3.0)          # field strengths (T) sampled per-sample — T1/T2 shift
     #                                                = the dominant cross-vendor relaxation axis
-    vendors: tuple[str, ...] = ("Siemens", "Philips", "GE", "Canon")   # sampled per-sample -> emitted as
+    vendors: tuple[str, ...] = tuple(Vendor)   # sampled per-sample -> emitted as
     #                                                metadata so synth carries provenance + flows the same
     #                                                harmonization path as real (return_meta=True)
     jitter: float = Field(0.4, ge=0)               # residual per-class signal perturbation (extra breadth)
@@ -230,12 +231,12 @@ class Background(ABC):
     keeps_heart_aligned: bool = False                        # True -> painter must NOT deform (heart
 
     @abstractmethod                                          #         must line up with the real hole)
-    def extend(self, mask: torch.Tensor, n_classes: int, dev,
-               real_img: torch.Tensor | None = None) -> tuple[torch.Tensor, int]:
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         """-> (ext [B,H,W] long, n_paint). bg pixels (label 0) may be relabeled to n_classes+tier."""
 
-    def compose(self, img: torch.Tensor, mask: torch.Tensor,
-                real_img: torch.Tensor | None) -> torch.Tensor:
+    def compose(self, img: Float[torch.Tensor, "*b 1 *h *w"], mask: Integer[torch.Tensor, "*b *grid"],
+                real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Float[torch.Tensor, "*b 1 *h *w"]:
         return img                                           # default: painter output is final
 
     def paint_params(self, n_classes: int, n_paint: int, field: float, dev):
@@ -243,7 +244,7 @@ class Background(ABC):
         tiers (`tissue_params`). A strategy that assigns each class an EXPLICIT tissue (FovBg) overrides."""
         return MriPhysics.tissue_params(n_classes, n_paint - n_classes, field, dev)
 
-    def seg_target(self, mask: torch.Tensor) -> torch.Tensor:
+    def seg_target(self, mask: Integer[torch.Tensor, "*b *grid"]) -> Integer[torch.Tensor, "*b *grid"]:
         """The SEG label map from the (painted) label map. Default: the paint map IS the target. A
         strategy whose paint map carries EXTRA non-target classes (FovBg's whole-FOV tissues) restricts
         it to the segmentation classes — so paint and train target decouple with no caller change."""

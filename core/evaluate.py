@@ -6,6 +6,7 @@ would be wrong, so they decide whether the model can be trusted, not the mean Di
 Shapes: pred/gt are same-shape label maps ([H, W] or [D, H, W]); the ops are
 shape-agnostic (they reduce over the whole array). spacing is (z, y, x) mm.
 """
+from dataclasses import dataclass
 from numbers import Real
 
 import numpy as np
@@ -24,6 +25,14 @@ except ImportError:
 
 
 HD_PERCENTILE = 95  # robust-Hausdorff percentile (drops the top 5% boundary-distance outliers)
+
+
+@dataclass(frozen=True)
+class SurfaceMetrics:
+    """Boundary-distance summary: max Hausdorff, robust HD95, average symmetric surface distance (mm)."""
+    hd: float
+    hd95: float
+    assd: float
 
 
 class Evaluate:
@@ -64,22 +73,22 @@ class Evaluate:
 
     @staticmethod
     @shapecheck
-    def surface_metrics(sd: Float[np.ndarray, "..."]) -> dict[str, float]:
+    def surface_metrics(sd: Float[np.ndarray, "..."]) -> SurfaceMetrics:
         """HD / HD95 / ASSD from a precomputed surface-distance array (one pass, no recompute)."""
         if sd.size == 0:
-            return {"hd": float("nan"), "hd95": float("nan"), "assd": float("nan")}
-        return {"hd": float(sd.max()), "hd95": float(np.percentile(sd, HD_PERCENTILE)), "assd": float(sd.mean())}
+            return SurfaceMetrics(float("nan"), float("nan"), float("nan"))
+        return SurfaceMetrics(float(sd.max()), float(np.percentile(sd, HD_PERCENTILE)), float(sd.mean()))
 
     @staticmethod
     @shapecheck
     def hd95(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
              label: int, spacing: tuple[Real, ...] | None = None) -> float:
         """95th-percentile boundary distance — robust Hausdorff (drops the top 5% outliers)."""
-        return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing))["hd95"]
+        return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing)).hd95
 
     @staticmethod
     @shapecheck
     def assd(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
              label: int, spacing: tuple[Real, ...] | None = None) -> float:
         """Average symmetric surface distance — the mean of the boundary-distance distribution."""
-        return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing))["assd"]
+        return Evaluate.surface_metrics(Evaluate.surface_distances(pred, gt, label, spacing)).assd

@@ -13,16 +13,27 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 import polars as pl
 
 from core.data.ingest.source import StaticSource
+from core.data.static.mri.base import Vendor
+from core.data.static.mri.registry import SEG_DATASETS, Dataset
 from core.data.static.store.build import Build as store
 
 log = logging.getLogger("cardioseg.testsets")
 
 V = pl.col
+
+
+class Task(StrEnum):
+    """What a TestSet's metrics mean: seg4 (all 4 classes) or seg_lv (SCD, no RV -> myo+cav only). The
+    frozen-manifest task tag lives here, beside TestSet. (An `ef` regression task joins when the EF lane
+    builds an EF testset — bd ax4a; not added speculatively.)"""
+    SEG4 = "seg4"
+    SEG_LV = "seg_lv"
 
 # Locks live in a committed lockfile (DATA, derived) — not hand-pasted into the source (predicates are
 # CODE). `python -m core.data lock-testsets --freeze` writes it; `--check` fails on drift (CI). Absent file
@@ -35,7 +46,7 @@ _LOCKS: dict[str, str] = json.loads(_LOCKFILE.read_text()) if _LOCKFILE.exists()
 # predicate like vendor=="GE" is SOURCE-INDEPENDENT: without the scope it would also match SCD's GE
 # subjects when SCD is loaded, making the set (and its lock) depend on what else is in the cloud. The
 # scope is part of the test-set's definition — coded data-values, not an opaque name.
-SEG = ["acdc", "mnm2", "mnms1", "cmrxmotion"]
+SEG = list(SEG_DATASETS)
 _IN_SEG = V("dataset").is_in(SEG)
 
 
@@ -43,7 +54,7 @@ _IN_SEG = V("dataset").is_in(SEG)
 class TestSet:
     __test__ = False                         # not a pytest test class (name starts with "Test")
     name: str
-    task: str
+    task: Task
     predicate: pl.Expr                       # coded filter (labelled AND'd in by source())
     lock: str = ""                           # sha256 of resolved ids; "" until frozen
 
@@ -60,7 +71,7 @@ class TestSets:
     `TestSets.ts(...)`). Holds no state — the TestSet instances live at module level."""
 
     @staticmethod
-    def ts(name: str, task: str, predicate: pl.Expr) -> TestSet:
+    def ts(name: str, task: Task, predicate: pl.Expr) -> TestSet:
         """A TestSet with its lock pulled from the committed lockfile (empty until --freeze)."""
         return TestSet(name, task, predicate, _LOCKS.get(name, ""))
 
@@ -90,20 +101,20 @@ class TestSets:
 
 
 # ── granular eval targets (the matrix scores on these), scoped to the seg cohort ─────────────────
-CANON = TestSets.ts("canon", "seg4", _IN_SEG & (V("vendor") == "Canon"))
-GE = TestSets.ts("ge", "seg4", _IN_SEG & (V("vendor") == "GE"))
-CMRXMOTION = TestSets.ts("cmrxmotion", "seg4", V("dataset") == "cmrxmotion")
-ACDC = TestSets.ts("acdc", "seg4", V("dataset") == "acdc")
-MNM2 = TestSets.ts("mnm2", "seg4", V("dataset") == "mnm2")
-MNMS1 = TestSets.ts("mnms1", "seg4", V("dataset") == "mnms1")
-SCD_LV = TestSets.ts("scd_lv", "seg_lv", V("dataset") == "scd")
+CANON = TestSets.ts("canon", Task.SEG4, _IN_SEG & (V("vendor") == Vendor.CANON))
+GE = TestSets.ts("ge", Task.SEG4, _IN_SEG & (V("vendor") == Vendor.GE))
+CMRXMOTION = TestSets.ts("cmrxmotion", Task.SEG4, V("dataset") == Dataset.CMRXMOTION)
+ACDC = TestSets.ts("acdc", Task.SEG4, V("dataset") == Dataset.ACDC)
+MNM2 = TestSets.ts("mnm2", Task.SEG4, V("dataset") == Dataset.MNM2)
+MNMS1 = TestSets.ts("mnms1", Task.SEG4, V("dataset") == Dataset.MNMS1)
+SCD_LV = TestSets.ts("scd_lv", Task.SEG_LV, V("dataset") == Dataset.SCD)
 
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
-STATIC_MAIN_TEST = TestSets.ts("static_main_test", "seg4",
-                                _IN_SEG & (V("vendor").is_in(["GE", "Canon"]) | (V("dataset") == "cmrxmotion")))
+STATIC_MAIN_TEST = TestSets.ts("static_main_test", Task.SEG4,
+                                _IN_SEG & (V("vendor").is_in([Vendor.GE, Vendor.CANON]) | (V("dataset") == Dataset.CMRXMOTION)))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
-SYNTH_MAIN_TEST = TestSets.ts("synth_main_test", "seg4", _IN_SEG & (V("dataset") != "acdc"))
+SYNTH_MAIN_TEST = TestSets.ts("synth_main_test", Task.SEG4, _IN_SEG & (V("dataset") != Dataset.ACDC))
 
 # the matrix's default granular battery (over-held models score OOD on the ones they didn't train)
 MATRIX_TESTSETS: list[TestSet] = [CANON, GE, CMRXMOTION, ACDC, MNM2, MNMS1, SCD_LV]
@@ -112,4 +123,4 @@ _ALL: list[TestSet] = [*MATRIX_TESTSETS, STATIC_MAIN_TEST, SYNTH_MAIN_TEST]
 TESTSETS: dict[str, TestSet] = {ts.name: ts for ts in _ALL}     # lookup by name (CLI / reporting)
 
 # datasets any TestSet can reference (incl SCD, not in the default seg SOURCE_DATASETS) — the eval cloud
-EVAL_SOURCES = ["acdc", "mnm2", "mnms1", "cmrxmotion", "scd"]
+EVAL_SOURCES = [*SEG_DATASETS, Dataset.SCD]

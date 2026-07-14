@@ -18,6 +18,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import numpy as np
+from jaxtyping import Float, Integer
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -38,7 +39,7 @@ class ShapeCoverage:
     metric over the shape-descriptor cloud."""
 
     @staticmethod
-    def shape_features(mask: np.ndarray) -> np.ndarray | None:
+    def shape_features(mask: Integer[np.ndarray, "*grid"]) -> Float[np.ndarray, "*n"] | None:
         """Interpretable SHAPE-only descriptors for one 2D label map, or None if ~empty. Scale/position-
         invariant where sensible so it compares generated vs real anatomy, not framing artifacts."""
         foreground = mask > 0
@@ -73,7 +74,7 @@ class ShapeCoverage:
         return out
 
     @staticmethod
-    def coverage(real: np.ndarray, synth: np.ndarray) -> dict:
+    def coverage(real: Float[np.ndarray, "*n d"], synth: Float[np.ndarray, "*n d"]) -> dict:
         """Standardize by REAL stats; for each real point the nearest synth point (does synth cover real),
         and the reverse (does synth extrapolate beyond real). Distances in std-units of the real cloud."""
         real_mean, real_std = real.mean(0), real.std(0) + 1e-9

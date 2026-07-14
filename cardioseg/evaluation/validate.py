@@ -15,6 +15,7 @@ from jaxtyping import Float, Integer
 from pydantic import BaseModel
 
 from core.config import _VALIDATE
+from core.data.static.mri.base import Phase
 from core.data.static.store import Store
 from core.evaluate import CLASSES, Evaluate
 
@@ -78,7 +79,7 @@ class _ClassScores:
             surface_dist = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
             if surface_dist.size:
                 metrics = Evaluate.surface_metrics(surface_dist)
-                self.surf[cl]["hd95"].append(metrics["hd95"]); self.surf[cl]["assd"].append(metrics["assd"])
+                self.surf[cl]["hd95"].append(metrics.hd95); self.surf[cl]["assd"].append(metrics.assd)
 
     def dice(self) -> dict[int, float]:
         return {cl: (self.inter[cl] / self.denom[cl] if self.denom[cl] else float("nan"))
@@ -152,7 +153,7 @@ class Evaluator:
         self.model.eval()
         for p in npz_paths:
             case = load_arrays(p)
-            for tag in ("ed", "es"):
+            for tag in (phase.lower() for phase in Phase):
                 if f"{tag}_img" not in case:
                     continue
                 squared_slices = np.stack([Preprocess.fit_square(slice_img.astype(np.float32), size, 0.0) for slice_img in case[f"{tag}_img"]])

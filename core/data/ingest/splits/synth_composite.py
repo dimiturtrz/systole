@@ -18,6 +18,7 @@ from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.splits.synth_main import SynthMain
 from core.data.ingest.testsets import SYNTH_MAIN_TEST
+from core.data.static.mri.base import Dataset
 
 V = pl.col
 
@@ -49,7 +50,7 @@ class SynthComposite:
                 [SynthComposite._synth_source(_SSM, "Rodero SSM (healthy manifold)"),
                  SynthComposite._synth_source(_PATHOLOGY, "label-space pathology (DCM/HCM/RV tail)")],
                 note="SSM + pathology (source union, per-source painter)"),
-            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")),
+            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == Dataset.ACDC)),
                                        "ACDC real val (held from test)"),
             # all seg real minus ACDC val (locked); lambda defers the global lookup (testset swap)
             test=lambda c: SYNTH_MAIN_TEST.source(c),  # noqa: PLW0108

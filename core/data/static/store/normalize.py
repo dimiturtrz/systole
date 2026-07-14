@@ -11,6 +11,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from core.config import DEFAULT_INPLANE
+from core.data.static.mri.base import Phase
 from core.data.static.mri.registry import AdapterRegistry
 from core.data.static.reference import Reference
 from core.data.static.store.query import SOURCE_DATASETS, Recipe
@@ -57,9 +58,9 @@ class Normalizer:
             adapter = AdapterRegistry.get_adapter(name)
             for case in adapter.cases()[:per_dataset]:
                 d = adapter.load_ed_es(case)
-                if "ED" not in d:
+                if Phase.ED not in d:
                     continue
-                img, _ = Preprocess.resample_inplane(d["ED"]["img"], d["spacing"], inplane, is_mask=False)
+                img, _ = Preprocess.resample_inplane(d[Phase.ED]["img"], d["spacing"], inplane, is_mask=False)
                 rows.append(Nyul.image_landmarks(img))
         std = Nyul.fit_standard(np.stack(rows))
         p = Normalizer.ref_path(); p.parent.mkdir(parents=True, exist_ok=True)

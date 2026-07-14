@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Integer
 from PIL import Image
 
 from .mri_physics import MriPhysics
@@ -37,8 +38,8 @@ class Inverse:
     """The FIT operator as a namespace: differentiable heart render + acquisition fit (bd ncph/ixea)."""
 
     @staticmethod
-    def render_heart(seg: torch.Tensor, tr: torch.Tensor, flip_deg: torch.Tensor, n_classes: int,  # noqa: PLR0913  physics params (independent scalars)
-                     field: float, device) -> torch.Tensor:
+    def render_heart(seg: Integer[torch.Tensor, "*b *grid"], tr: Float[torch.Tensor, "*b 1"], flip_deg: Float[torch.Tensor, "*b 1"], n_classes: int,  # noqa: PLR0913  physics params (independent scalars)
+                     field: float, device) -> Float[torch.Tensor, "*b 1 *h *w"]:
         """Deterministic, differentiable bSSFP paint of the HEART classes (bg=0, excluded from any loss).
         seg [B,H,W] long; tr/flip_deg [B,1]; -> signal [B,1,H,W]. Tissue T1/T2/PD at literature values
         (tissue_params, no bg tiers). Differentiable wrt tr and flip_deg."""
@@ -53,7 +54,7 @@ class Inverse:
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 
     @staticmethod
-    def fit_acquisition(real_img: torch.Tensor, seg: torch.Tensor, n_classes: int, field: float = 1.5,  # noqa: PLR0913  physics params (independent scalars)
+    def fit_acquisition(real_img: Float[torch.Tensor, "*b 1 *h *w"], seg: Integer[torch.Tensor, "*b *grid"], n_classes: int, field: float = 1.5,  # noqa: PLR0913  physics params (independent scalars)
                         fit_params: tuple[str, ...] = ("flip",), tr0: float = 3.0, flip0: float = 50.0,
                         steps: int = 400, lr: float = 0.5, device: str = "cpu") -> dict:
         """FIT the acquisition θ (subset in `fit_params`, default flip only = identifiable) to ONE real scan

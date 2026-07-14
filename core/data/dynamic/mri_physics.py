@@ -15,8 +15,23 @@ Approximate — fine for domain randomization.
 from __future__ import annotations
 
 import math
+from enum import StrEnum
 
 import torch
+from jaxtyping import Float, Integer
+
+
+class Tissue(StrEnum):
+    """The tissue types the physics tables + generation vocabulary key on. One source of truth for the
+    names that were scattered as literals across _HEART / the bg ladder / the MRXCAT FOV map. Members
+    are their string value, so they still index the string-keyed TISSUE/TISSUE_RANGE tables."""
+    BLOOD = "blood"
+    MYOCARDIUM = "myocardium"
+    FAT = "fat"
+    LUNG = "lung"
+    LIVER = "liver"
+    MUSCLE = "muscle"
+
 
 # tissue -> field (Tesla) -> (T1 ms, T2 ms, PD). Two fields = the cross-vendor relaxation axis.
 TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
@@ -43,13 +58,13 @@ TISSUE_RANGE: dict[str, dict[float, tuple[tuple[float, float], tuple[float, floa
 }
 
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
-_HEART = {1: "blood", 2: "myocardium", 3: "blood"}
+_HEART = {1: Tissue.BLOOD, 2: Tissue.MYOCARDIUM, 3: Tissue.BLOOD}
 # background intensity ladder dark -> bright; bg tiers INTERPOLATE params along it (no collisions, any K).
 # NB ends at fat, NOT blood: appending a blood endmember was measured to WORSEN synth-real fidelity
 # (mean W1 0.515->0.57, bg 0.236->0.295) — bg composition already matches real (bg location ~0.005), so
 # the pure-synth gap is NOT background. It's blood-pool over-brightness (LV-cav W1 0.93, ~all location
 # 0.91, shape 0.05). See bd 276 / ap6 notes. (measured 2026-07-01)
-_BG_LADDER = ("lung", "liver", "muscle", "fat")
+_BG_LADDER = (Tissue.LUNG, Tissue.LIVER, Tissue.MUSCLE, Tissue.FAT)
 
 
 # --- cine bSSFP acquisition, DERIVED from physics (not tabulated paper mid-bands) ---
@@ -83,8 +98,8 @@ class MriPhysics:
         """Flip (deg, integer sweep) maximizing |S_blood - S_myo| bSSFP contrast at `field`, from the TISSUE
         T1/T2 table. Cine targets blood-myocardium contrast; this DERIVES the flip that maximizes it rather
         than quoting a routine-protocol value (which is SNR-, not contrast-, optimized)."""
-        bt1, bt2, bpd = MriPhysics._params("blood", field)
-        mt1, mt2, mpd = MriPhysics._params("myocardium", field)
+        bt1, bt2, bpd = MriPhysics._params(Tissue.BLOOD, field)
+        mt1, mt2, mpd = MriPhysics._params(Tissue.MYOCARDIUM, field)
         a = torch.arange(1.0, 91.0)
         rad = a * math.pi / 180.0
         tr = torch.tensor(tr_ms)
@@ -109,8 +124,8 @@ class MriPhysics:
         Sampling across this band gives contrast DIVERSITY (measured: the single contrast-optimal point
         trains WORSE — fidelity != training value, bd 276). Field-driven; contrast-optimal sits inside it."""
         f = min(SAR_FLIP_CAP, key=lambda x: abs(x - float(field))) if field else 1.5
-        bt1, bt2, bpd = MriPhysics._params("blood", f)
-        mt1, mt2, mpd = MriPhysics._params("myocardium", f)
+        bt1, bt2, bpd = MriPhysics._params(Tissue.BLOOD, f)
+        mt1, mt2, mpd = MriPhysics._params(Tissue.MYOCARDIUM, f)
         a = torch.arange(1.0, 91.0)
         rad = a * math.pi / 180.0
         tr = torch.tensor(_TR_MID)
@@ -141,11 +156,11 @@ class MriPhysics:
     def blood_classes(n_classes: int) -> list[int]:
         """Label indices whose tissue is blood (RV + LV cavities) — the pools that show flow signal
         variation in cine, so they get the extra `flow` texture."""
-        return [c for c in range(n_classes) if _HEART.get(c) == "blood"]
+        return [c for c in range(n_classes) if _HEART.get(c) == Tissue.BLOOD]
 
     @staticmethod
-    def bssfp_signal(T1: torch.Tensor, T2: torch.Tensor, PD: torch.Tensor,
-                     TR: torch.Tensor, flip: torch.Tensor) -> torch.Tensor:
+    def bssfp_signal(T1: Float[torch.Tensor, "..."], T2: Float[torch.Tensor, "..."], PD: Float[torch.Tensor, "..."],
+                     TR: Float[torch.Tensor, "..."], flip: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
         """Balanced-SSFP steady-state ON-RESONANCE signal (Freeman–Hill). T1/T2/TR in ms, flip in radians;
         broadcasting tensors. S = PD·sinα·(1−E1) / (1−(E1−E2)cosα − E1·E2), E1=exp(−TR/T1), E2=exp(−TR/T2).
         The passband (max) value; off-resonance banding multiplies this — see `banding`."""
@@ -155,7 +170,7 @@ class MriPhysics:
         return PD * s * (1.0 - e1) / (1.0 - (e1 - e2) * c - e1 * e2)
 
     @staticmethod
-    def banding(T2: torch.Tensor, TR: torch.Tensor, dphi) -> torch.Tensor:
+    def banding(T2: Float[torch.Tensor, "..."], TR: Float[torch.Tensor, "..."], dphi) -> Float[torch.Tensor, "..."]:
         """bSSFP off-resonance banding factor in (0, 1], normalized to 1 at the passband (dphi=0). dphi =
         off-resonance precession per TR (rad, = 2π·Δf·TR). ratio = (1−E2) / |1−E2·e^{iφ}|
         = (1−E2)/√(1−2E2cosφ+E2²): =1 at φ=0, dips toward φ=±π, and the dip is DEEPER for long-T2 tissue
@@ -179,8 +194,8 @@ class MriPhysics:
         return table[f]
 
     @staticmethod
-    def sample_heart_tissue(t1: torch.Tensor, t2: torch.Tensor, fi: torch.Tensor,  # noqa: PLR0913
-                            fields: tuple[float, ...], n_classes: int, spread: float):
+    def sample_heart_tissue(t1: Float[torch.Tensor, "*b *n"], t2: Float[torch.Tensor, "*b *n"], fi: Integer[torch.Tensor, "*b"],  # noqa: PLR0913
+                            fields: tuple[float, ...], n_classes: int, spread: float) -> tuple[Float[torch.Tensor, "*b *n"], Float[torch.Tensor, "*b *n"]]:
         """Per-sample redraw of HEART-class (blood/myo) T1/T2 from the literature TISSUE_RANGE band, lerped
         from the current point value by `spread` (0=point/off, 1=full uniform band). Physically-constrained
         breadth (UltimateSynth) in place of decorrelated jitter: contrast then flows through bssfp_signal, so
@@ -198,7 +213,7 @@ class MriPhysics:
             t1hi = torch.tensor([bd[0][1] for bd in bands], device=dev)[fi]
             t2lo = torch.tensor([bd[1][0] for bd in bands], device=dev)[fi]
             t2hi = torch.tensor([bd[1][1] for bd in bands], device=dev)[fi]
-            if tissue == "blood":                                                # oxygenation splits the T2 band
+            if tissue == Tissue.BLOOD:                                           # oxygenation splits the T2 band
                 mid = 0.5 * (t2lo + t2hi)
                 if _CAVITY_O2.get(c) == "high":
                     t2lo = mid
@@ -229,7 +244,7 @@ class MriPhysics:
         background tiers INTERPOLATE params smoothly along _BG_LADDER (dark->bright) so K tiers give K
         distinct backgrounds (no round() collisions). Index 0 (bg) = muscle fallback."""
         rows: list[tuple[float, float, float]] = [
-            MriPhysics._params(_HEART.get(c, "muscle"), field) for c in range(n_classes)
+            MriPhysics._params(_HEART.get(c, Tissue.MUSCLE), field) for c in range(n_classes)
         ]
         ladder = [MriPhysics._params(nm, field) for nm in _BG_LADDER]
         for t in range(n_bg_tiers):

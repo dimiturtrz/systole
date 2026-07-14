@@ -13,12 +13,12 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from core.config import KNOWN_DATASETS, Config
-from core.data.static.mri.registry import AdapterRegistry
+from core.config import Config
+from core.data.static.mri.registry import SEG_DATASETS, AdapterRegistry
 
 log = logging.getLogger("cardioseg.persist")
 
-_DATASETS = KNOWN_DATASETS
+_DATASETS = SEG_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"
 
 

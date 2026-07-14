@@ -18,6 +18,7 @@ import logging
 import numpy as np
 import polars as pl
 import torch
+from jaxtyping import Float, Integer
 
 from core.data.dynamic.dataset import ACDCSliceDataset
 from core.data.dynamic.synth import MatchedAcqCfg, SynthPainter
@@ -63,7 +64,7 @@ class SynthFidelity:
         self.cfg, self.n_classes, self.device, self.size = cfg, n_classes, device, size
 
     @staticmethod
-    def wasserstein1d(a: torch.Tensor, b: torch.Tensor, q: int = 100) -> float:
+    def wasserstein1d(a: Float[torch.Tensor, "*n"], b: Float[torch.Tensor, "*n"], q: int = 100) -> float:
         """1-D Wasserstein-1 (earth-mover) distance between two samples via quantile differences:
         mean |Q_a(t) - Q_b(t)| over q evenly-spaced quantiles t. Sample-size-agnostic. Pure -> testable."""
         if a.numel() == 0 or b.numel() == 0:
@@ -76,7 +77,7 @@ class SynthFidelity:
         return float((torch.quantile(subsample(a).float(), quantiles) - torch.quantile(subsample(b).float(), quantiles)).abs().mean())
 
     @staticmethod
-    def dprime(a: torch.Tensor, b: torch.Tensor) -> float:
+    def dprime(a: Float[torch.Tensor, "*n"], b: Float[torch.Tensor, "*n"]) -> float:
         """Separability of two 1-D samples. |mean diff| / pooled SD; nan if either < 50 pts (SD unstable)."""
         if a.numel() < _MIN_DPRIME_PTS or b.numel() < _MIN_DPRIME_PTS:
             return float("nan")
@@ -92,7 +93,7 @@ class SynthFidelity:
         return dprimes
 
     @staticmethod
-    def separability(X: torch.Tensor, Y: torch.Tensor, cfg, n_classes: int, device: str) -> dict:
+    def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg, n_classes: int, device: str) -> dict:
         """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
         and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
         synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
@@ -156,7 +157,7 @@ class SynthFidelity:
             band[_NAMES[c]] = {"min": round(min(values), 3), "max": round(max(values), 3)} if values else {}
         return {"per_vendor": per_vendor, "band_across_vendors": band}
 
-    def distance(self, X: torch.Tensor, Y: torch.Tensor, q: int = 100) -> dict:
+    def distance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], q: int = 100) -> dict:
         """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
         SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
         (z-units) + the mean and worst class — the break localized."""
@@ -182,7 +183,7 @@ class SynthFidelity:
                 "mean_w1": round(sum(values) / len(values), 3) if values else float("nan"),
                 "worst_class": worst}
 
-    def variance(self, X: torch.Tensor, Y: torch.Tensor, field: float | None = None) -> dict:
+    def variance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], field: float | None = None) -> dict:
         """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
         pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
         generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""

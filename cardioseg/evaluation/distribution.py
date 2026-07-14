@@ -26,6 +26,8 @@ from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
 from core.data.static import splits
+from core.data.static.mri.base import Dataset
+from core.data.static.mri.registry import SEG_DATASETS
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate
@@ -113,7 +115,7 @@ class Distribution:
                 continue
             m = Evaluate.surface_metrics(sd)
             ax.plot(xs, gaussian_kde(sd)(xs), color=color, lw=2,
-                    label=f"{name}  ASSD {m['assd']:.1f} · HD95 {m['hd95']:.1f} mm")
+                    label=f"{name}  ASSD {m.assd:.1f} · HD95 {m.hd95:.1f} mm")
         ax.set_xlabel("boundary distance (mm)")
         ax.set_ylabel("density")
         ax.set_title(f"Per-class boundary-distance distribution{label}")
@@ -129,7 +131,7 @@ class Distribution:
         gt = np.asarray(ef_gt, dtype=float)
         pred = np.asarray(ef_pred, dtype=float)
         stats = Measure.ef_statistics(gt, pred)
-        bias, (lo, hi) = stats["bias"], stats["loa"]
+        bias, (lo, hi) = stats.bias, stats.loa
         raw_diff = pred - gt
         ok = ~np.isnan(raw_diff)
         n_collapsed = int((~ok).sum())
@@ -202,7 +204,7 @@ class Distribution:
         for grp, rs in g.items():
             d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
             s = Measure.ef_statistics([r["ef_gt"] for r in rs], [r["ef_pred"] for r in rs])
-            mae, bias, gt_ef = s["mae"], s["bias"], s["mean_gt"]
+            mae, bias, gt_ef = s.mae, s.bias, s.mean_gt
             mean_d = float(np.mean(list(d.values())))
             flag = "  (small n)" if len(rs) < SMALL_N else ""
             log.info(f"  {grp:12} {len(rs):>4}  {d[1]:.3f} {d[2]:.3f} {d[3]:.3f} {mean_d:.3f}  "
@@ -220,7 +222,7 @@ class Distribution:
             return
         groups = list(g)
         mean_dice = [np.mean([r["dice"][c] for r in g[gr] for c in CLASSES if "dice" in r]) for gr in groups]
-        ef_mae = [Measure.ef_statistics([r["ef_gt"] for r in g[gr]], [r["ef_pred"] for r in g[gr]])["mae"]
+        ef_mae = [Measure.ef_statistics([r["ef_gt"] for r in g[gr]], [r["ef_pred"] for r in g[gr]]).mae
                   for gr in groups]
         ns = [len(g[gr]) for gr in groups]
         small = [n < SMALL_N for n in ns]
@@ -250,7 +252,7 @@ class Distribution:
     @staticmethod
     def add_args(ap):
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
-        ap.add_argument("--eval", default="acdc", choices=["acdc", "mnm2", "mnms1", "cmrxmotion", "canon"],
+        ap.add_argument("--eval", default=Dataset.ACDC, choices=[*SEG_DATASETS, "canon"],
                         help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
         ap.add_argument("--holdout", action="store_true", help="use the seed-0 0.2 val split (in-domain runs)")
         ap.add_argument("--seed", type=int, default=0)
@@ -284,8 +286,8 @@ class Distribution:
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size])
             m = Evaluate.surface_metrics(pooled)
-            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m['assd']:.2f}  HD95 {m['hd95']:.2f}  HD {m['hd']:.1f} mm")
-        log.info(f"=== EF Bland-Altman: bias {s['bias']:+.1f}% · 95% LoA [{Distribution.lo_hi(s['bias'], s['sd'])}] · MAE {s['mae']:.1f}%")
+            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m.assd:.2f}  HD95 {m.hd95:.2f}  HD {m.hd:.1f} mm")
+        log.info(f"=== EF Bland-Altman: bias {s.bias:+.1f}% · 95% LoA [{Distribution.lo_hi(s.bias, s.sd)}] · MAE {s.mae:.1f}%")
 
         # --- stratified (only axes with >1 group present) ---
         strata = {}

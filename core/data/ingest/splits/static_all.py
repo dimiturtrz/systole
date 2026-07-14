@@ -15,18 +15,20 @@ import polars as pl
 from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitDef
 from core.data.ingest.testsets import STATIC_MAIN_TEST
+from core.data.static.mri.base import Dataset
+from core.data.static.mri.registry import SEG_DATASETS
 
 V = pl.col
 
 
 class StaticAll:
     name = "static_all"
-    sources = ("acdc", "mnm2", "mnms1", "cmrxmotion", "scd")     # load SCD too (not in the default seg cloud)
+    sources = (*SEG_DATASETS, Dataset.SCD)     # load SCD too (not in the default seg cloud)
     versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
             # == static_main's frozen test (147); lambda defers the global lookup (testset swap)
             test=lambda c: STATIC_MAIN_TEST.source(c),  # noqa: PLW0108
-            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == "acdc")), "ACDC centre-shift"),
+            val=lambda c: StaticSource(c.filter(V("labelled") & (V("dataset") == Dataset.ACDC)), "ACDC centre-shift"),
             # train = labelled complement: Siemens+Philips seg + ALL SCD (RV masked via partial-label)
         ),
     }

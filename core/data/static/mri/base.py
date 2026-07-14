@@ -7,11 +7,13 @@ labels to this via `label_map`, so one model's labels mean the same thing across
 Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm.
 """
 import csv
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, TypedDict, runtime_checkable
 
 import nibabel as nib
 import numpy as np
+from jaxtyping import Integer
 from scipy import ndimage
 
 from core.types import Image, Mask, Spacing, Volume
@@ -22,6 +24,51 @@ LV_MYO = 2   # LV-myocardium; the identify_lv_cavity ring label (canonical home:
 MNM_LABEL_MAP = {0: 0, 1: 3, 2: 2, 3: 1}
 
 _CSV_CACHE: dict[str, dict[str, dict[str, str]]] = {}
+
+
+class Vendor(StrEnum):
+    """Scanner vendor, canonical casing as emitted in acquisition metadata. One source of truth
+    for the four names that were scattered as literals across adapters/splits/reference."""
+    SIEMENS = "Siemens"
+    PHILIPS = "Philips"
+    GE = "GE"
+    CANON = "Canon"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Vendor | None":
+        """Case-insensitive lookup (a CSV/DICOM field may ship 'SIEMENS'/'ge')."""
+        if isinstance(value, str):
+            low = value.strip().lower()
+            return next((m for m in cls if m.value.lower() == low), None)
+        return None
+
+
+class Phase(StrEnum):
+    """Cardiac-cycle phase tag. Members are the canonical uppercase forms; `_missing_` folds the
+    ED/ed/ES/es case drift so Phase('ed') is Phase.ED. StrEnum == its str value, so it stays a
+    drop-in key for the PatientData/Frame dicts keyed by 'ED'/'ES'."""
+    ED = "ED"
+    ES = "ES"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Phase | None":
+        if isinstance(value, str):
+            up = value.strip().upper()
+            return next((m for m in cls if m.value == up), None)
+        return None
+
+
+class Dataset(StrEnum):
+    """Dataset identity — the processed/<name>/ folder, the V('dataset') column value, an adapter's
+    `name`. One source of truth for the names scattered as literals across adapters/splits/testsets/
+    eval/normalization. Homed here (not the registry) so adapters can name themselves Dataset.X without
+    the registry->adapter import cycle; the registry re-exposes it + owns the wired-cohort subset."""
+    ACDC = "acdc"
+    MNM2 = "mnm2"
+    MNMS1 = "mnms1"
+    CMRXMOTION = "cmrxmotion"
+    SCD = "scd"
+    KAGGLE = "kaggle"
 
 
 class Frame(TypedDict):
@@ -36,6 +83,23 @@ class PatientData(TypedDict, total=False):
     spacing: Spacing | None    # (z, y, x) mm
     ED: Frame                  # end-diastole (fullest)
     ES: Frame                  # end-systole (emptiest)
+
+
+class PatientMeta(TypedDict, total=False):
+    """One subject's acquisition + demographics (an adapter's meta()). One declared schema so the key
+    set can't silently drift across the acdc/mnm2/mnms1 builders; total=False — each adapter fills the
+    subset its source ships. `_source` records provenance per field (which came from paper vs a file)."""
+    group: str | None
+    height: float | None
+    weight: float | None
+    age: float | None
+    sex: str | None
+    vendor: Vendor | str | None
+    field_T: float | list[float] | None
+    scanner: str | None
+    centre: str | None
+    country: str | None
+    _source: dict[str, str]
 
 
 class Base:
@@ -89,7 +153,7 @@ class Base:
         frame|None) for that cardiac phase, or None to skip it; the adapter-specific bit is just that
         closure. Loads each frame (4D-aware via `frame`), remaps the mask to canonical, carries spacing."""
         out: PatientData = {"group": group, "spacing": None}
-        for tag in ("ED", "ES"):
+        for tag in Phase:
             r = resolve(tag)
             if r is None:
                 continue
@@ -103,7 +167,7 @@ class Base:
         return out
 
     @staticmethod
-    def apply_label_map(gt: Mask, label_map: dict[int, int]) -> Mask:
+    def apply_label_map(gt: Integer[np.ndarray, "*grid"], label_map: dict[int, int]) -> Integer[np.ndarray, "*grid"]:
         """Remap raw integer labels to the canonical convention. Identity map -> unchanged."""
         if not label_map or all(k == v for k, v in label_map.items()):
             return gt
@@ -114,7 +178,7 @@ class Base:
         return out
 
     @staticmethod
-    def identify_lv_cavity(mask: Mask, myo_label: int = LV_MYO) -> tuple[int | None, dict[int, float]]:
+    def identify_lv_cavity(mask: Integer[np.ndarray, "*grid"], myo_label: int = LV_MYO) -> tuple[int | None, dict[int, float]]:
         """Geometrically identify the LV-cavity label: the non-myo foreground label most enclosed
         by the myocardium ring. Trusts geometry, not a remembered int. mask [D,H,W] or [H,W].
         Returns (lv_label, scores) where score = fraction of a label's shell touching myocardium."""

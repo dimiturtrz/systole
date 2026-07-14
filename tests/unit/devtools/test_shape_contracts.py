@@ -1,8 +1,13 @@
 """Unit tests for the shape-contract coverage gate (bd cardiac-seg-m8xq): a public method with a bare
 array/tensor annotation is flagged; a jaxtyping-shaped one (or a dtype-only reduction) satisfies it."""
+import subprocess
+import sys
 import textwrap
+from pathlib import Path
 
 from devtools.shape_contracts import analyze
+
+_REPO = Path(__file__).resolve().parents[3]
 
 
 def _write(tmp_path, src):
@@ -59,3 +64,16 @@ def test_nonarray_annotations_ignored(tmp_path):
             def a(n: int, name: str, df: pl.DataFrame) -> dict: ...
     """))
     assert rows == []
+
+
+def test_assert_flag_exit_code(tmp_path):
+    """The blocking gate: `--assert` exits 1 when a bare boundary remains, 0 once it's clean."""
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    def _run():
+        return subprocess.run([sys.executable, "-m", "devtools.shape_contracts", str(pkg), "--assert"],  # noqa: S603
+                              cwd=_REPO, capture_output=True).returncode
+    (pkg / "m.py").write_text("class M:\n    @staticmethod\n    def a(mask: np.ndarray): ...\n")
+    assert _run() == 1                                          # bare boundary -> gate fails
+    (pkg / "m.py").write_text("class M:\n    @staticmethod\n    def a(n: int): ...\n")
+    assert _run() == 0                                          # clean -> gate passes

@@ -20,6 +20,7 @@ from pathlib import Path
 import matplotlib as mpl
 import torch
 from captum.attr import Saliency
+from jaxtyping import Float, Integer
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -48,7 +49,7 @@ class Attribution:
         self.model, self.device, self.n_classes = model, device, n_classes
 
     @staticmethod
-    def class_confusion(pred: torch.Tensor, gt: torch.Tensor, n_classes: int) -> torch.Tensor:
+    def class_confusion(pred: Integer[torch.Tensor, "*grid"], gt: Integer[torch.Tensor, "*grid"], n_classes: int) -> Float[torch.Tensor, "*n *n"]:
         """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
         absent GT classes are left zero. Pure (no model) -> unit-testable."""
         confusion = torch.zeros(n_classes, n_classes)
@@ -69,7 +70,7 @@ class Attribution:
             return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
                               for i in range(0, X.shape[0], batch)])
 
-    def attribute(self, X: torch.Tensor, Y: torch.Tensor, out_dir: str | Path) -> dict:
+    def attribute(self, X: Float[torch.Tensor, "*batch *c *h *w"], Y: Integer[torch.Tensor, "*batch *h *w"], out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out_dir_path = Path(out_dir)

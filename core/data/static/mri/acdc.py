@@ -11,19 +11,22 @@ from pathlib import Path
 from core.config import Config
 from core.data.static.mri.base import (
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
+    PatientMeta,
+    Vendor,
 )
 
 # Data lives outside the repo at <data>/raw/acdc/ (paths.yaml `data`; CARDIAC_DATA_ROOT overrides).
-DATA_ROOT = str(Path(Config.data_root("raw")) / "acdc")
+DATA_ROOT = str(Path(Config.data_root("raw")) / Dataset.ACDC)
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 
 class AcdcAdapter(DatasetAdapter):
     """ACDC: single-centre Siemens (Dijon), the canonical-label held-out test set. Owns its patient
     discovery + Info.cfg parsing + frame-path resolution (folded in as staticmethods)."""
-    name = "acdc"
+    name = Dataset.ACDC
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):
@@ -74,14 +77,14 @@ class AcdcAdapter(DatasetAdapter):
 
         return Base.load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
-    def meta(self, case: Path) -> dict:
+    def meta(self, case: Path) -> PatientMeta:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
         cfg = self.parse_info_cfg(case)
         return {
             "group": cfg.get("Group"),
             "height": Base.to_float(cfg.get("Height")), "weight": Base.to_float(cfg.get("Weight")),
             "age": None, "sex": None,
-            "vendor": "Siemens", "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
+            "vendor": Vendor.SIEMENS, "field_T": [1.5, 3.0],   # Bernard 2018 (Aera 1.5T / Trio 3T)
             "scanner": "Siemens Aera/Trio",                # two units, not recorded per-subject
             "centre": "Dijon", "country": "France",        # CHU Dijon (single centre)
             "_source": {"vendor": "paper", "field_T": "paper", "country": "paper", "rest": "Info.cfg"},

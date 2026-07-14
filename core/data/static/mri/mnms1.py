@@ -14,8 +14,10 @@ from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
     Base,
+    Dataset,
     DatasetAdapter,
     PatientData,
+    PatientMeta,
 )
 
 LABEL_MAP = MNM_LABEL_MAP   # same M&Ms flip as M&M-2
@@ -38,7 +40,7 @@ class Mnms1Adapter(DatasetAdapter):
     """M&Ms-1: 6-centre / 4-vendor (incl. Canon); richest demographics (age/sex/BSA). Owns its M&Ms-1
     marker detection, root resolution, CSV keying, SA path resolution, frame-index parsing, and meta
     assembly (the free helpers folded in as staticmethods)."""
-    name = "mnms1"
+    name = Dataset.MNMS1
     label_map = LABEL_MAP
 
     def __init__(self, root: str | Path | None = None):
@@ -115,7 +117,7 @@ class Mnms1Adapter(DatasetAdapter):
         return int(float(idx))
 
     @staticmethod
-    def meta_from_row(row: dict) -> dict:
+    def meta_from_row(row: dict) -> PatientMeta:
         """PURE M&Ms-1 meta from one CSV row: centre code -> (readable site, country) via the paper map,
         vendor from either spelling, demographics float-parsed. Unknown centre -> (raw code, None country)."""
         name, country = CENTRES.get(str(row.get("Centre")).strip(), (row.get("Centre"), None))

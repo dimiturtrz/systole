@@ -18,6 +18,7 @@ import torch
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from core.config import FLAGSHIP_REF
+from core.data.static.mri.base import Dataset
 from core.data.static.store.build import Build as store
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
@@ -94,5 +95,5 @@ class ExportOnnx:
 
     @staticmethod
     def run(args):
-        verify = args.verify if args.verify else store.load(["acdc"]).get_column("path")[0]
+        verify = args.verify if args.verify else store.load([Dataset.ACDC]).get_column("path")[0]
         ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)

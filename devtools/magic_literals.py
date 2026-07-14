@@ -1,8 +1,10 @@
 """Magic-literal detector (bd cardiac-seg-wir7): the untapped context PLR2004 misses.
 
-PLR2004 (enforced) flags a magic value only in a COMPARISON (`x == "acdc"`). But the same bare literal as
-a dict key (`d["acdc"]`), an argument (`load("acdc")`), an assignment, or a return value is just as magic
-and is ungated. Two frequency-based smells surface here:
+PLR2004 flags a magic value only in a COMPARISON (`x == "acdc"`), and by default it even ALLOWS strings
+(`allow-magic-value-types` defaults to `["str", "bytes"]`); un-silenced (bd cardiac-seg-1ln7) it owns the
+comparison context. But the same bare literal as a dict key (`d["acdc"]`), an argument (`load("acdc")`),
+an assignment, or a return value is ungated, and ruff never aggregates across files. This detector owns
+that gap — the non-comparison, cross-file-frequency signal — and defers comparisons to ruff. Two smells:
 
   1. **recurring string literal** — a short, identifier-shaped string that appears >= THRESHOLD times is
      domain vocabulary (a vendor / phase / dataset / task tag) masquerading as a literal. It belongs in a
@@ -12,10 +14,15 @@ and is ungated. Two frequency-based smells surface here:
      is built in >= 2 places, is an implicit record schema. Nothing enforces every construction site uses
      the same keys, so a typo/missing key drifts silently -> it wants a dataclass / TypedDict.
 
-Advisory only: frequency is a heuristic (some repeats are legitimately dicts/strings — polars rows, JSON,
-prose is already filtered out). A regression radar, never a blocker.
+Frequency is a heuristic (some repeats are legitimately dicts/strings — polars column names, matplotlib/
+torch API vocab, path segments, nan; prose/framework literals are already filtered out). Because that
+legitimate floor is real and NOT enum-able, the gate blocks as a COUNT RATCHET (`--max-strings` /
+`--max-key-sets`), not at zero and without a per-token whitelist: the current floor is frozen as a
+ceiling, and a NEW recurring literal pushes the count over and fails the merge. Migrate it to an enum, or
+raise the ceiling in the same commit with a reason. Run without the ceilings for the plain advisory report.
 
-    python -m devtools.magic_literals core cardioseg
+    python -m devtools.magic_literals core cardioseg                       # report
+    python -m devtools.magic_literals core cardioseg --max-strings 48 --max-key-sets 11   # ratchet (CI)
 """
 from __future__ import annotations
 
@@ -45,14 +52,18 @@ def _is_token(value: object) -> bool:
 
 
 def _string_literals(tree: ast.AST) -> list[str]:
-    """Identifier-shaped string constants in a VALUE position — dict KEYS are excluded (a repeated key is
-    a schema FIELD name, caught by the key-set smell; a repeated value/arg is an ENUM candidate). Docstrings
-    aren't tokens, so they drop out too."""
-    field_ids = {id(k) for n in ast.walk(tree) if isinstance(n, ast.Dict) for k in n.keys if k is not None}
-    field_ids |= {id(n.slice) for n in ast.walk(tree)              # `d["vendor"]` subscript = a field ref,
-                  if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)}  # not a value token
+    """Identifier-shaped string constants in a VALUE position, EXCLUDING three contexts owned elsewhere:
+      - dict KEYS + subscript indices (`d["vendor"]`) — schema FIELD refs, caught by the key-set smell;
+      - COMPARISON operands (`x == "GE"`) — ruff PLR2004 owns those (with allow-magic-value-types=[], bd
+        cardiac-seg-1ln7), so this detector doesn't double-flag them.
+    What's left is the value/arg-position recurrence ruff can't see across files. Docstrings aren't tokens."""
+    excluded = {id(k) for n in ast.walk(tree) if isinstance(n, ast.Dict) for k in n.keys if k is not None}
+    excluded |= {id(n.slice) for n in ast.walk(tree)               # `d["vendor"]` subscript = a field ref
+                 if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)}
+    excluded |= {id(operand) for n in ast.walk(tree) if isinstance(n, ast.Compare)  # x == "GE" -> ruff PLR2004
+                 for operand in (n.left, *n.comparators) if isinstance(operand, ast.Constant)}
     return [n.value for n in ast.walk(tree)
-            if isinstance(n, ast.Constant) and _is_token(n.value) and id(n) not in field_ids]
+            if isinstance(n, ast.Constant) and _is_token(n.value) and id(n) not in excluded]
 
 
 def _key_sets(tree: ast.AST) -> list[tuple[frozenset[str], int]]:
@@ -108,9 +119,27 @@ def main():
                                  description="recurring string literals + repeated dict key-sets")
     ap.add_argument("packages", nargs="*", default=["core", "cardioseg"],
                     help="package dirs to scan (default: core cardioseg)")
+    ap.add_argument("--max-strings", type=int, default=None,
+                    help="regression ratchet: exit 1 if the recurring-string count exceeds this ceiling")
+    ap.add_argument("--max-key-sets", type=int, default=None,
+                    help="regression ratchet: exit 1 if the repeated-key-set count exceeds this ceiling")
     args = ap.parse_args()
     Obs.setup()
-    log.info("%s", report(scan_strings(args.packages), scan_key_sets(args.packages)))
+    strings, key_sets = scan_strings(args.packages), scan_key_sets(args.packages)
+    log.info("%s", report(strings, key_sets))
+    # Ceilings freeze the legitimate floor (polars column names, matplotlib/torch API vocab, path
+    # segments, nan) that isn't enum-able WITHOUT a per-token whitelist: any NEW recurring literal
+    # pushes the count over the ceiling and fails the merge. Re-migrate it to an enum, or raise the
+    # ceiling in the SAME commit with a reason (a conscious acknowledgement, not a silent silence).
+    over = []
+    if args.max_strings is not None and len(strings) > args.max_strings:
+        over.append(f"strings {len(strings)} > {args.max_strings}")
+    if args.max_key_sets is not None and len(key_sets) > args.max_key_sets:
+        over.append(f"key-sets {len(key_sets)} > {args.max_key_sets}")
+    if over:
+        log.error("magic-literal ratchet exceeded (%s) — migrate the new literal or raise the ceiling with a reason",
+                  "; ".join(over))
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

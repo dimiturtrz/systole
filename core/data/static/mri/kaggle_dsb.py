@@ -19,6 +19,7 @@ from pathlib import Path
 import polars as pl
 
 from core.config import Config
+from core.data.static.mri.base import Dataset
 from core.data.static.mri.dicom import Dicom
 from core.data.static.store import MetaBuilder
 
@@ -115,9 +116,9 @@ class KaggleDsbAdapter:
         read on demand (load_sax). This meta.csv makes Kaggle's location/vendor/acquisition part of the data
         cloud (fit_acquisition_reference reads the tr_ms column, bSSFP-filtered)."""
         ef = KaggleDsbAdapter.kaggle_ef(split, root)
-        rows = [{"subject_id": c.name, "dataset": "kaggle", **KaggleDsbAdapter.kaggle_meta(c, ef)}
+        rows = [{"subject_id": c.name, "dataset": Dataset.KAGGLE, **KaggleDsbAdapter.kaggle_meta(c, ef)}
                 for c in KaggleDsbAdapter.kaggle_cases(split, root)]
-        out = Path(Config.data_root("processed")) / "kaggle" / split
+        out = Path(Config.data_root("processed")) / Dataset.KAGGLE / split
         out.mkdir(parents=True, exist_ok=True)
         pl.DataFrame(rows, strict=False).write_csv(out / "meta.csv")
         return out / "meta.csv"
