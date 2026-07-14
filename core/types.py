@@ -17,10 +17,15 @@ shape as its image. An Image is float intensities of the same shape.
 """
 import numpy as np
 
+# Numpy-tolerant scalar aliases (bd cardiac-seg-dnx6): a runtime-checked (jaxtyping/beartype) boundary
+# often receives a numpy scalar (np.float32 off a stored header, np.int64 from a reduction), which is NOT
+# a python float/int subclass — so a param that can take one is annotated `Real`/`Integral`, not bare
+# float/int. (np.float64 IS a float subclass and needs no help; these cover np.float32 / np.int*.)
+Real = float | np.floating
+Integral = int | np.integer
+
 # Geometry / units
-# float | np.floating: spacing reaches the measure/inference boundary as np.float32 straight from the
-# store's header, so the runtime-checked (jaxtyping/beartype, bd zwno) form must admit numpy scalars.
-Spacing = tuple[float | np.floating, float | np.floating, float | np.floating]  # (z, y, x) mm, matches [D, H, W]
+Spacing = tuple[Real, Real, Real]         # (z, y, x) mm, matches [D, H, W]; numpy-scalar-tolerant
 
 # Arrays (shape documented in the alias name; not runtime-enforced)
 Volume = np.ndarray                       # [D, H, W]   image or mask, 3D
