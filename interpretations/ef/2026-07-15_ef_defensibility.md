@@ -62,6 +62,43 @@ deferred this session for efficiency.
   arms sit on different splits/budgets (each is a matched *internal* A/B, not one clean ladder — don't
   read the absolute numbers across sections as a single sequence).
 
+## 4. The number with a CI — `qhdm` (defensibility)
+A point EF MAE is not defensible; a reviewer can't tell a solid number from a lucky draw of nine
+patients. So every reported EF MAE/bias carries a **percentile bootstrap 95% CI** (resample the held-out
+EF *pairs* with replacement, `Measure.bootstrap_ef_ci`, seed-pinned) — the honest error bar on a single
+split, no retrain. k-fold retrain would add *training* variance too, but the binding uncertainty here is
+the **thin test split**, which the bootstrap exposes directly and cheaply.
+
+Calibrated flagship, 95% CI on MAE and bias:
+
+| axis | n | MAE (cal) | MAE 95% CI | bias (cal) | bias 95% CI |
+|------|:--:|:--:|:--:|:--:|:--:|
+| val (ACDC) | 150 | 5.4 | [4.5, 6.4] | −0.0 | [−1.3, 1.2] |
+| Canon | 9 | 5.4 | **[2.2, 9.7]** | −2.9 | [−8.0, 1.7] |
+| GE | 69 | 7.4 | [6.1, 8.9] | −3.2 | **[−5.3, −1.1]** |
+
+What the CIs actually say — three defensible statements the point estimates could not make:
+- **Calibration removes the in-sample bias for real:** val bias CI [−1.3, 1.2] straddles 0. On the fit
+  centre the correction is genuine, not a rounding artefact.
+- **The residual OOD bias is real, not noise — on the powered split:** GE bias CI [−5.3, −1.1] **excludes
+  0**. Post-hoc calibration is domain-shift-limited (it under-corrects the larger unseen-vendor shift),
+  and at n=69 that residual is statistically resolved, not a guess.
+- **Canon (n=9) is underpowered — say so, don't over-claim:** MAE CI [2.2, 9.7] is enormous and the bias
+  CI straddles 0. At nine patients we cannot resolve our own EF error to better than a factor of ~4.
+
+### The honest gap vs nnU-Net, with CIs
+nnU-Net (same split): Canon EF MAE 2.6, GE 4.3. Ours calibrated: Canon 5.4, GE 7.4.
+- **GE (n=69, powered):** nnU-Net's 4.3 sits **below** our CI [6.1, 8.9] → the gap is real and
+  significant. We are genuinely behind on EF here — the model-class epistemic gap (a 1.6 M-param 2D U-Net
+  vs a 92 M nnU-Net), traded for a 57× smaller deployable ONNX model. Stated, not hidden.
+- **Canon (n=9, underpowered):** nnU-Net's 2.6 falls **inside** our CI [2.2, 9.7] → at this n we *cannot*
+  claim we are worse than nnU-Net on Canon. The honest read is "indistinguishable at n=9", not a number.
+
+This is the Gate-2 defensibility bar: a number with a CI, the bias/LoA reported not buried, and a gap vs
+SOTA that is quantified and owned. The CI is what converts "EF MAE ~11%" from a boast-or-apology into a
+claim with stated power.
+
 ## Reproduce
-- Calibration: `python -m cardioseg.evaluation ef_calibrate` → `plots/ef_calibration.json`.
+- Calibration + CI: `python -m cardioseg.evaluation ef_calibrate` → `plots/ef_calibration.json`
+  (per-axis MAE/bias, uncalibrated vs calibrated, each with a bootstrap 95% CI).
 - Source-loss A/B: `python -m cardioseg.training.train --split static_main --ef-lambda 0.02 [--ef-kaggle] --quick`.

@@ -30,6 +30,11 @@ from .validate import EvalCfg, Evaluator
 log = logging.getLogger("cardioseg.ef_calibrate")
 
 
+def _round2(pair) -> list[float]:
+    """Round a [lo, hi] CI bracket to 1 dp for the report."""
+    return [round(pair[0], 1), round(pair[1], 1)]
+
+
 class EfCalibrate:
     """Linear EF-bias calibration: fit slope+intercept on VAL EF pairs, report Bland–Altman agreement
     (MAE/bias/LoA) uncalibrated vs calibrated on val + each test axis. Fit lives on VAL only."""
@@ -43,14 +48,20 @@ class EfCalibrate:
 
     @staticmethod
     def axis_report(cal: EfCalibration, ef_rows) -> dict:
-        """Agreement stats before/after applying `cal` to one axis' EF pairs. Pure — the testable core."""
+        """Agreement stats before/after applying `cal` to one axis' EF pairs, each with a bootstrap 95% CI
+        on MAE + bias (the defensible error bar a single held-out split otherwise lacks). Pure — the
+        testable core. Lists are [uncalibrated, calibrated]; `*_ci` entries are [[lo, hi], [lo, hi]]."""
         gt, pred = EfCalibrate._ef_pairs(ef_rows)
         uncal = Measure.ef_statistics(gt, pred)
         recal = Measure.ef_statistics(gt, cal.apply(pred))
+        ci_u = Measure.bootstrap_ef_ci(gt, pred)
+        ci_c = Measure.bootstrap_ef_ci(gt, cal.apply(pred))
         return {
             "n": uncal.n,
             "mae": [round(uncal.mae, 1), round(recal.mae, 1)],
+            "mae_ci": [_round2(ci_u.mae_ci), _round2(ci_c.mae_ci)],
             "bias": [round(uncal.bias, 1), round(recal.bias, 1)],
+            "bias_ci": [_round2(ci_u.bias_ci), _round2(ci_c.bias_ci)],
             "loa": [[round(uncal.loa[0], 1), round(uncal.loa[1], 1)],
                     [round(recal.loa[0], 1), round(recal.loa[1], 1)]],
         }
@@ -89,9 +100,9 @@ class EfCalibrate:
                 continue
             ax = EfCalibrate.axis_report(cal, ef_rows)
             report["axes"][name] = ax
-            log.info(f"  {name:8} (n={ax['n']:3})  MAE {ax['mae'][0]:4.1f}->{ax['mae'][1]:4.1f}  "
-                     f"bias {ax['bias'][0]:+5.1f}->{ax['bias'][1]:+5.1f}  "
-                     f"LoA {ax['loa'][0]}->{ax['loa'][1]}")
+            log.info(f"  {name:8} (n={ax['n']:3})  MAE {ax['mae'][0]:4.1f}->{ax['mae'][1]:4.1f} "
+                     f"95%CI {ax['mae_ci'][1]}  bias {ax['bias'][0]:+5.1f}->{ax['bias'][1]:+5.1f} "
+                     f"95%CI {ax['bias_ci'][1]}  LoA {ax['loa'][0]}->{ax['loa'][1]}")
         (run / "plots").mkdir(parents=True, exist_ok=True)
         (run / "plots" / "ef_calibration.json").write_text(json.dumps(report, indent=2))
         log.info(f"-> {run}/plots/ef_calibration.json")

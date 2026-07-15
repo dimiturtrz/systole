@@ -33,7 +33,13 @@ Status: ✅ done · 🔄 doing · ⬜ planned.
    ~1.5–2pp EF MAE Dice-free and stack with calibration — see
    `interpretations/ef/2026-07-15_ef_defensibility.md`.
 6. ⬜ Stronger seg + SOTA benchmark — nnU-Net done; benchmark CardioSAM cross-vendor (`bd …-0h7`).
-7. ⬜ Eval rigor — 5-fold CV (`bd …-4ev`); UQ / calibration flags (`bd …-iq7`).
+7. 🔄 Eval rigor — **EF now carries a bootstrap 95% CI** (`qhdm`): every reported MAE/bias has a
+   percentile-bootstrap error bar (`Measure.bootstrap_ef_ci`, in `ef_calibrate`). The CIs make the story
+   defensible — GE bias CI [−5.3, −1.1] excludes 0 (residual OOD bias real), Canon MAE CI [2.2, 9.7]
+   exposes n=9 as underpowered (nnU-Net's 2.6 falls *inside* it → "indistinguishable at n=9", not worse);
+   GE gap vs nnU-Net (4.3 below our [6.1, 8.9]) is real + owned. See
+   `interpretations/ef/2026-07-15_ef_defensibility.md` §4. Still open: 5-fold retrain CV (`bd …-4ev`,
+   adds training variance); UQ / calibration flags (`bd …-iq7`).
 
 ## Synthesis thread — status
 Design in [`PLAN.md`](PLAN.md) / [`GENERATION.md`](../core/data/dynamic/GENERATION.md). Forward engine
@@ -68,7 +74,11 @@ Design in [`PLAN.md`](PLAN.md) / [`GENERATION.md`](../core/data/dynamic/GENERATI
 
 ## Gates
 - **Gate 1 — MRI presentable** ✅ (done + exceeded: domain generalization, multi-vendor).
-- **Gate 2 — EF you could defend** 🔄 — close cross-dataset EF, add eval rigor, honest gap writeup.
+- **Gate 2 — EF you could defend** ✅ — the three criteria are met: cross-dataset EF closed
+  (calibration transfers OOD), eval rigor added (bootstrap 95% CI on every EF MAE/bias), honest gap
+  writeup done (`interpretations/ef/2026-07-15_ef_defensibility.md`). Optional deepening remains (5-fold
+  retrain CV, UQ flags — `bd …-4ev`/`…-iq7`), but the defensibility bar (a number with a CI + owned gap)
+  is cleared.
 - **Gate 3 — CT lane** ⬜ (MM-WHS, reuse pipeline).
 - **Gate 4 — echo lane** ⬜ (CAMUS, Simpson's biplane).
 
