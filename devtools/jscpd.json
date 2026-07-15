@@ -1,9 +1,0 @@
-{
-  "//": "Duplication detector (bd cardiac-seg-tte0) — the DRY axis coupling tools can't see. Repo ~0.5%% today vs the 1%% ceiling = REGRESSION GUARD. threshold = max %% dup before nonzero exit. PATHS are passed on the CLI (jscpd resolves a config `path` relative to the config file, which breaks when the config lives under devtools/) — run: `jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json`. ENFORCED in CI (bd cardiac-seg-krmz): graduated from advisory once the Node step proved stable.",
-  "threshold": 1,
-  "minTokens": 50,
-  "gitignore": true,
-  "ignore": ["**/node_modules/**", "**/dist/**", "**/__pycache__/**", "**/.staging/**", "baselines/**", "mri-sim/**"],
-  "reporters": ["console"],
-  "absolute": false
-}

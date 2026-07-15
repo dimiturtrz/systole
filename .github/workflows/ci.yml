@@ -24,11 +24,11 @@ jobs:
           enable-cache: true
       # ENFORCED (blocks the merge): the full house select over shipped source. Clean on a fresh gen;
       # catches REGRESSION (new unused import / undefined name / unsorted imports / magic number / ...).
-      # An explicit --select BYPASSES pyproject [tool.ruff.lint] ignore, so the ml F722 waiver (jaxtyping
-      # `Float[Tensor, "b c h w"]` dim strings misread as bad forward refs) must be repeated on the CLI —
-      # else a fresh ml gen with any jaxtyping annotation red-CIs on its own shipped config (bd skr GAP1).
+      # An explicit --select BYPASSES pyproject [tool.ruff.lint] ignore, so the ml jaxtyping waiver must be
+      # repeated on the CLI — F722 (multi-token dim strings "b c h w") + F821 (single-axis "n" = an undefined
+      # forward-ref). Else a fresh ml gen with any jaxtyping annotation red-CIs on its own config (skr/kqk).
       - name: Lint — enforced (shipped source, full select)
-        run: uvx ruff@0.15.13 check core cardioseg --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722
+        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722,F821
       # ADVISORY (never blocks): full curated config over the whole tree, surfaces any pending families +
       # the advisory-only codes (E501/SLF001 — cosmetic / house-gate-conflicting, bd 4c2/8ex): reported,
       # never a merge gate.
@@ -55,26 +55,20 @@ jobs:
       
       # Module shape — ast-grep: the SYNTACTIC axis ruff has no plugin API for (in-a-class house rule +
       # no import-time side effects). Rules are data under devtools/sg-rules/*.yml, severity=error (BLOCKS).
+      # config lives in the INSTALLED devtools package (no vendored devtools/ dir) — `python -m
+      # devtools.config` prints the packaged path (`uv run` bootstraps the env with the devtools extra).
       - name: "Module shape — enforced (ast-grep)"
-        run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core cardioseg
+        run: uvx --from ast-grep-cli ast-grep scan -c "$(uv run -q --extra devtools python -m devtools.config sgconfig)" core cardioseg
       # Duplication — the DRY axis (jscpd) the coupling tools can't see. Threshold in devtools/jscpd.json.
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - name: Duplication — enforced (jscpd, DRY axis; blocks over threshold)
-        run: npx --yes jscpd core cardioseg --config devtools/jscpd.json
+        run: npx --yes jscpd core cardioseg cardioview/web/src --config "$(uv run -q --extra devtools python -m devtools.config jscpd)"
       # >>> LOCAL-SLOT: ci-lint-steps — repo-specific lint/shape steps that ride ON TOP of the base gates
       # (a viewer-tree extra lint, an un-silenced advisory family, a repo-only static gate). The base gates
       # above are template-owned + regenerated; steps added in this region survive copier update. Empty by
       # default — mechanism identical across repos, only the CONTENTS are a per-repo FACT (bd skr GAP3).
-      # Wider hygiene SCOPE (per-repo FACT, bd cardiac-seg-9mu): base enforced-lint + jscpd scan `packages`
-      # (core cardioseg); cardiac also lints its viewer python + tests and dedup-scans the viewer TS source.
-      # Same RULES (ruff reads pyproject select/ignore/per-file-ignores; jscpd same config), wider PATHS —
-      # carried here since v1.0 computes base scope from `packages` (scaffold-fsl tracks folding back to base).
-      - name: Lint — enforced (viewer python + tests; pyproject config = same rules, wider scope)
-        run: uvx ruff@0.15.13 check cardioview tests
-      - name: Duplication — enforced (jscpd incl. viewer TS source; wider scope)
-        run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
       # Magic STRINGS in COMPARISONS — advisory (bd cardiac-seg-1ln7): PLR2004 defaults to allow
       # ["str","bytes"], silencing string magic values in comparisons; re-run with the allow-list emptied
       # to surface them. The cross-file magic_literals ratchet already blocks NEW recurring literals.
@@ -90,7 +84,7 @@ jobs:
     # NAME is a per-repo FACT (data_env_var, bd skr GAP3a) — a repo whose adapters read a different name
     # overrides it in .copier-answers.yml so tests SKIP here instead of erroring on a missing env.
     env:
-      CARDIOSEG_DATA: /tmp/nodata
+      CARDIAC_DATA: /tmp/nodata
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -114,27 +108,27 @@ jobs:
       # import cycle / god-file) as a GATE on the grimp+networkx import graph, the axis import-linter's
       # categorical contracts can't express. Thresholds in [tool.structure]. Runs here for the synced env.
       - name: Architecture fitness — enforced (devtools/graph.py --assert)
-        run: uv run python -m devtools.graph --assert core cardioseg
+        run: uv run --extra devtools python -m devtools.graph --assert core cardioseg
       # Magic literals — ENFORCED ratchet: the recurring-string / repeated-key-set count is frozen as a
       # ceiling in [tool.magic_literals]; a NEW magic literal pushes it over and blocks. Mechanism is the
       # base gate; the ceiling NUMBERS are a per-repo FACT (fresh repo = 0/0). The non-comparison axis
       # ruff PLR2004 can't see.
       - name: Magic literals — enforced (ratchet over [tool.magic_literals] ceiling)
-        run: uv run python -m devtools.magic_literals core cardioseg
+        run: uv run --extra devtools python -m devtools.magic_literals core cardioseg
       # Shape contracts — ENFORCED (GRADUATED advisory->blocking, bd vip.4): every public array/tensor
       # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor. A fresh gen has 0 boundaries
       # (passes); from the first typed boundary on, a bare one fails the merge — the ratchet at work. Aliases
       # in [tool.shape_contracts]. (Was advisory; graduated once cardiac proved a real ml tree stays clean.)
       - name: Shape contracts — enforced (jaxtyping boundaries; devtools/shape_contracts.py --assert)
-        run: uv run python -m devtools.shape_contracts core cardioseg --assert
+        run: uv run --extra devtools python -m devtools.shape_contracts core cardioseg --assert
       # Class-shape smells — ADVISORY explorers (never block): LCOM4 cohesion, Fowler data-clumps, and
       # namespace-classes with latent shared state. Heuristics ranking refactor candidates — reviewer signal.
       - name: Class-shape smells — advisory (LCOM / data-clumps / namespace-state)
         continue-on-error: true
         run: |
-          uv run python -m devtools.state_candidates core cardioseg
-          uv run python -m devtools.lcom core cardioseg
-          uv run python -m devtools.data_clumps core cardioseg
+          uv run --extra devtools python -m devtools.state_candidates core cardioseg
+          uv run --extra devtools python -m devtools.lcom core cardioseg
+          uv run --extra devtools python -m devtools.data_clumps core cardioseg
       # >>> LOCAL-SLOT: ci-test-steps — repo-specific test/coverage/gate steps on top of the base (e.g. a
       # separate viewer-coverage floor calibrated to library logic, or a repo-only enforced check). Survives
       # copier update; empty by default (bd skr GAP3). (shape_contracts --assert graduated to a BASE ml gate

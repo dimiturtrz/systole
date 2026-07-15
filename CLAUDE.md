@@ -144,14 +144,16 @@ next (advisory).
 ## Scaffolding
 
 Guardrails are provisioned by the in-house **sdlc-scaffold** copier template — `.copier-answers.yml`
-pins the version (`_commit`). The gate config, `devtools/` engines, and the runner wiring are
-**template-owned**: don't hand-edit them to pass a gate — fix upstream in the scaffold and
-`uvx copier update`, or edit only within the `# >>> LOCAL-SLOT` regions of `pyproject.toml`. `copier
-update` pulls scaffold improvements as reviewable steps. cardiac-seg is the ORIGIN repo (where
-`magic_literals` + `shape_contracts` were born + promoted up), so it currently runs a **superset** of the
-scaffold base — the extra ruff codes, the jaxtyping shape gate, the magic-literal count ratchet — ahead
-of the base pending upstream (bd cardiac-seg-zjaf; scaffold vip.1/vip.2). Those converge into the base on
-a later `copier update`; until then they are the repo's own rules, not a dodge.
+pins the version (`_commit`). The gate config + runner wiring are **template-owned**, and the analysis
+**engines are an installed package** — `sdlc-devtools`, pinned by scaffold tag in the `devtools` extra
+(`git+…/sdlc-scaffold.git@<tag>#subdirectory=sdlc-devtools`), NOT vendored source under `devtools/`. So
+`python -m devtools.graph` (and `magic_literals`/`shape_contracts`/…) run from the install; the ast-grep
++ jscpd configs ship IN the package, located via `python -m devtools.config sgconfig|jscpd`. An engine
+update is a one-line pin bump on `copier update` — no devtools source diff in the repo's PRs. Don't
+hand-edit template-owned files to pass a gate — fix upstream in the scaffold and `uvx copier update`, or
+edit only within the `# >>> LOCAL-SLOT` regions of `pyproject.toml`. cardiac-seg is the ORIGIN repo (where
+`magic_literals` + `shape_contracts` were born + promoted up); it has since **converged onto the scaffold
+base** — those rules are the base's now, carried as shared gates, not ahead-of-base local mods.
 
 ## Conventions & Patterns
 
