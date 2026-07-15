@@ -30,11 +30,6 @@ from .validate import EvalCfg, Evaluator
 log = logging.getLogger("cardioseg.ef_calibrate")
 
 
-def _round2(pair) -> list[float]:
-    """Round a [lo, hi] CI bracket to 1 dp for the report."""
-    return [round(pair[0], 1), round(pair[1], 1)]
-
-
 class EfCalibrate:
     """Linear EF-bias calibration: fit slope+intercept on VAL EF pairs, report Bland–Altman agreement
     (MAE/bias/LoA) uncalibrated vs calibrated on val + each test axis. Fit lives on VAL only."""
@@ -45,6 +40,11 @@ class EfCalibrate:
         gt = np.array([r["ef_gt"] for r in ef_rows], dtype=float)
         pred = np.array([r["ef_pred"] for r in ef_rows], dtype=float)
         return gt, pred
+
+    @staticmethod
+    def _round2(pair) -> list[float]:
+        """Round a [lo, hi] CI bracket to 1 dp for the report."""
+        return [round(pair[0], 1), round(pair[1], 1)]
 
     @staticmethod
     def axis_report(cal: EfCalibration, ef_rows) -> dict:
@@ -59,9 +59,9 @@ class EfCalibrate:
         return {
             "n": uncal.n,
             "mae": [round(uncal.mae, 1), round(recal.mae, 1)],
-            "mae_ci": [_round2(ci_u.mae_ci), _round2(ci_c.mae_ci)],
+            "mae_ci": [EfCalibrate._round2(ci_u.mae_ci), EfCalibrate._round2(ci_c.mae_ci)],
             "bias": [round(uncal.bias, 1), round(recal.bias, 1)],
-            "bias_ci": [_round2(ci_u.bias_ci), _round2(ci_c.bias_ci)],
+            "bias_ci": [EfCalibrate._round2(ci_u.bias_ci), EfCalibrate._round2(ci_c.bias_ci)],
             "loa": [[round(uncal.loa[0], 1), round(uncal.loa[1], 1)],
                     [round(recal.loa[0], 1), round(recal.loa[1], 1)]],
         }
