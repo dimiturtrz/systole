@@ -268,6 +268,13 @@ Tooling and quality gates are provisioned by an in-house copier template (sdlc-s
 `uvx copier update`, which pins the template version in `.copier-answers.yml`. The gate theory — the
 test pyramid, the static-analysis axes — has its one home in that template's docs, not duplicated here.
 
+The structural-guardrail analyzers are an installed package (`sdlc-devtools`, pinned in the `devtools`
+extra), not vendored source — so an engine update is a one-line pin bump, no source diff in PRs. They
+import as `devtools`, so gates run as `uv run --extra devtools python -m devtools.<graph|magic_literals|
+shape_contracts|lcom> <packages>`; the ast-grep shape rules and jscpd config ship inside the package and
+are located with `python -m devtools.config sgconfig|jscpd`. The `[tool.structure]` / `[tool.magic_literals]`
+/ `[tool.shape_contracts]` blocks in `pyproject.toml` tune them.
+
 ## References
 - **ACDC** — Bernard et al., *Deep Learning Techniques for Automatic MRI Cardiac Multi-structures
   Segmentation and Diagnosis: Is the Problem Solved?*, IEEE TMI 2018.
