@@ -17,6 +17,8 @@ from core.types import Spacing, shapecheck
 
 _MIN_FIT_PAIRS = 2  # a line needs >=2 distinct points; below this a calibration fit is undefined
 LOA_Z = 1.96  # z-multiplier for 95% limits of agreement (Bland–Altman)
+_N_BOOT = 2000  # bootstrap resamples for the EF-agreement CI (percentile method)
+_CI = 0.95      # coverage of the reported bootstrap interval
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,17 @@ class EfCalibration:
     def apply(self, ef_pred: Float[np.ndarray, "*n"]) -> Float[np.ndarray, "*n"]:
         """Correct predicted EF(s); NaN (undefined EF) passes through unchanged."""
         return self.slope * np.asarray(ef_pred, dtype=float) + self.intercept
+
+
+@dataclass(frozen=True)
+class EfInterval:
+    """Bootstrap EF-agreement point estimate + 95% CI: MAE and bias each with a [lo, hi] over resampled
+    pairs. The CI is the defensible error bar a single held-out split (esp. thin ones) otherwise lacks."""
+    n: int
+    mae: float
+    mae_ci: list[float]
+    bias: float
+    bias_ci: list[float]
 
 
 class Measure:
@@ -87,6 +100,31 @@ class Measure:
         sd = float(diff.std(ddof=1)) if n > 1 else 0.0
         return AgreementStats(n, bias, sd, float(np.abs(diff).mean()),
                               [bias - LOA_Z * sd, bias + LOA_Z * sd], float(g.mean()))
+
+    @staticmethod
+    def bootstrap_ef_ci(ef_gt, ef_pred, *, n_boot: int = _N_BOOT, seed: int = 0,
+                        ci: float = _CI) -> "EfInterval":
+        """Percentile bootstrap 95% CI for EF-agreement MAE + bias over paired EF arrays (percent).
+        Resamples the (gt, pred) PAIRS with replacement n_boot times; each draw's MAE/bias forms the
+        sampling distribution, and the [ci] central percentiles are the interval. This is the honest
+        error bar on a single held-out split (esp. thin ones, e.g. Canon n=9) WITHOUT retraining — a
+        point estimate with no CI is not defensible. NaN pairs (undefined EF) dropped; n<2 -> point==CI."""
+        g = np.asarray(ef_gt, dtype=float)
+        p = np.asarray(ef_pred, dtype=float)
+        ok = ~(np.isnan(g) | np.isnan(p))
+        g, p = g[ok], p[ok]
+        n = int(g.size)
+        pt = Measure.ef_statistics(g, p)
+        if n < _MIN_FIT_PAIRS:
+            return EfInterval(n, pt.mae, [pt.mae, pt.mae], pt.bias, [pt.bias, pt.bias])
+        rng = np.random.default_rng(seed)
+        idx = rng.integers(0, n, size=(n_boot, n))
+        diff = p[idx] - g[idx]
+        maes = np.abs(diff).mean(axis=1)
+        biases = diff.mean(axis=1)
+        lo, hi = 100 * (1 - ci) / 2, 100 * (1 + ci) / 2
+        return EfInterval(n, pt.mae, [float(np.percentile(maes, lo)), float(np.percentile(maes, hi))],
+                          pt.bias, [float(np.percentile(biases, lo)), float(np.percentile(biases, hi))])
 
     @staticmethod
     def fit_ef_calibration(ef_gt, ef_pred) -> EfCalibration:

@@ -4,7 +4,7 @@ here we pin the statistics helper (sample-count classes + NaN handling) and the 
 """
 import numpy as np
 
-from core.measure import LOA_Z, EfCalibration, Measure
+from core.measure import LOA_Z, EfCalibration, EfInterval, Measure
 
 
 def test_ef_statistics_empty_is_all_nan():
@@ -73,6 +73,41 @@ def test_ef_calibration_apply_passes_nan_through():
     """apply is a plain affine map; a NaN EF (undefined) stays NaN, never a fabricated corrected value."""
     out = EfCalibration(1.25, 5.0).apply(np.array([40.0, np.nan]))
     assert out[0] == 55.0 and np.isnan(out[1])
+
+
+def test_bootstrap_ef_ci_brackets_the_point_estimate():
+    """Coverage class: the point MAE/bias sit inside their own bootstrap CI, and the CI is a real interval."""
+    rng = np.random.default_rng(1)
+    gt = rng.uniform(20, 70, size=60)
+    pred = gt - 5.0 + rng.normal(0, 3, size=60)
+    it = Measure.bootstrap_ef_ci(gt, pred, seed=0)
+    assert isinstance(it, EfInterval) and it.n == 60
+    assert it.mae_ci[0] <= it.mae <= it.mae_ci[1]
+    assert it.bias_ci[0] <= it.bias <= it.bias_ci[1]
+    assert it.mae_ci[0] < it.mae_ci[1] and it.bias_ci[0] < it.bias_ci[1]
+
+
+def test_bootstrap_ef_ci_zero_error_is_degenerate_interval():
+    """No-error class: pred==gt -> MAE 0, bias 0, and every resample agrees -> CI collapses to [0, 0]."""
+    gt = np.array([30.0, 45.0, 60.0, 70.0])
+    it = Measure.bootstrap_ef_ci(gt, gt, seed=0)
+    assert it.mae == 0.0 and it.mae_ci == [0.0, 0.0]
+    assert it.bias == 0.0 and it.bias_ci == [0.0, 0.0]
+
+
+def test_bootstrap_ef_ci_single_pair_ci_is_the_point():
+    """Boundary class: n<2 has no sampling variability -> CI equals the point estimate (no fabricated width)."""
+    it = Measure.bootstrap_ef_ci([50.0], [56.0], seed=0)
+    assert it.n == 1 and it.mae == 6.0 and it.mae_ci == [6.0, 6.0] and it.bias_ci == [6.0, 6.0]
+
+
+def test_bootstrap_ef_ci_is_deterministic_under_seed():
+    """Reproducibility: a fixed seed pins the resampling -> identical CI across runs (a reportable number)."""
+    gt = np.array([30.0, 45.0, 55.0, 62.0, 70.0])
+    pred = gt - 6.0
+    a = Measure.bootstrap_ef_ci(gt, pred, seed=7)
+    b = Measure.bootstrap_ef_ci(gt, pred, seed=7)
+    assert a == b
 
 
 def test_expected_volume_ml_is_prob_mass_times_voxel():
