@@ -5,6 +5,7 @@ import math
 import torch
 
 from core.data.analysis.synth_fidelity import SynthFidelity
+from core.data.dynamic.synth import FlatBgCfg, SynthCfg
 
 
 def test_w1_zero_for_identical():
@@ -41,3 +42,14 @@ def test_dprime_affine_invariant():
 def test_dprime_tiny_sample_is_nan():
     v = SynthFidelity.dprime(torch.randn(10), torch.randn(3000))              # < 50 pts -> unstable -> NaN
     assert math.isnan(v)
+
+
+def test_paint_ignores_deform_so_anatomy_stays_on_the_mask():
+    """_paint must force deform OFF: a fidelity comparison measures synth intensity at the REAL mask, so
+    the painted heart has to stay aligned to it. deform>0 warps the anatomy off the mask -> the thin myo
+    ring samples adjacent blood+bg -> spurious per-class spread that inverts the d' verdict (bd f4hk)."""
+    mask = torch.zeros(2, 32, 32, dtype=torch.long)
+    mask[:, 10:22, 10:22] = 2; mask[:, 14:18, 14:18] = 3                      # a myo block around a cavity
+    torch.manual_seed(1); warped = SynthFidelity._paint(mask, SynthCfg(synth_p=1.0, deform=0.5, bg=FlatBgCfg()), 4)
+    torch.manual_seed(1); flat = SynthFidelity._paint(mask, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), 4)
+    assert torch.allclose(warped, flat)                                       # deform had no effect -> forced off

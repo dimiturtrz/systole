@@ -149,14 +149,15 @@ Each source covers a different region; the union covers more than any one.
 
 ```bash
 # SSM (Rodero) anatomy — healthy pool, then the DCM/HCM/RV pathology pool
-python -m core.data.dynamic.anatomy convert-binary --mesh-dir <data>/volumetric/meshes/raw
-python -m core.data.dynamic.anatomy build-pool --mesh-dir <data>/volumetric/meshes/raw --out <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz
-python -m core.data.dynamic.anatomy build-pathology-pool --pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --out <data>/volumetric/meshes/processed/rodero_anatomy/pool_pathology.npz
+# (offline builders dispatch through `python -m core.data <group> <subcmd>`; bd ox6p)
+python -m core.data build-pool convert-binary --mesh-dir <data>/volumetric/meshes/raw
+python -m core.data build-pool build-pool --mesh-dir <data>/volumetric/meshes/raw --out <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz
+python -m core.data build-pool build-pathology-pool --pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --out <data>/volumetric/meshes/processed/rodero_anatomy/pool_pathology.npz
 # MRXCAT — fetch the external tool (pinned), then heart-only / whole-FOV / SSM×MRXCAT pools
-python -m core.data.dynamic.mrxcat fetch
-python -m core.data.dynamic.mrxcat build-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/pool.npz
-python -m core.data.dynamic.mrxcat build-fov-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/fov_pool.npz
-python -m core.data.dynamic.mrxcat build-ssm-fov-pool --rodero-pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/ssm_fov_pool.npz
+python -m core.data mrxcat fetch
+python -m core.data mrxcat build-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/pool.npz
+python -m core.data mrxcat build-fov-pool --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/fov_pool.npz
+python -m core.data mrxcat build-ssm-fov-pool --rodero-pool <data>/volumetric/meshes/processed/rodero_anatomy/pool.npz --vti-dir external/mrxcat2/<vti> --out <data>/mrxcat/processed/ssm_fov_pool.npz
 ```
 
 **Composition is cheap** (union of label pools → the painter is shared): `CompositeGenerator` concatenates

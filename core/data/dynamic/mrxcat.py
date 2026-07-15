@@ -109,7 +109,7 @@ class Mrxcat:
         g = pv.read(str(path))
         nx, ny, nz = g.dimensions
         lab = np.asarray(g.point_data["labels"]).reshape((nx, ny, nz), order="F")
-        return np.moveaxis(lab, 2, 0)                  # → [nz, ny, nx]
+        return np.moveaxis(lab, 2, 0).astype(np.int32)     # → [nz, ny, nx]; vti stores codes as float64
 
     @staticmethod
     @shapecheck

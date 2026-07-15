@@ -26,7 +26,7 @@ from typing import Annotated, Literal
 
 import torch
 import torch.nn.functional as F
-from jaxtyping import Float, Int, Integer
+from jaxtyping import Float, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
@@ -431,7 +431,7 @@ class SynthPainter:
 
     @staticmethod
     @shapecheck
-    def synthesize_from_labels(mask: Int[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
+    def synthesize_from_labels(mask: Integer[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
                                real_img: Float[torch.Tensor, "*b 1 h w"] | None = None, *, return_meta: bool = False):
         # complexity noqa above: a linear bSSFP pipeline of optional physical effects (mu/sg/oh threaded), not
         # control-flow complexity — splitting would fragment one signal model into ~8-tensor helpers. Kept whole.

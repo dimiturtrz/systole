@@ -159,6 +159,6 @@ base** — those rules are the base's now, carried as shared gates, not ahead-of
 
 - **Tasks → `bd` (beads) only** (see above). **Data lives out of repo** under `<data>/raw/` (gitignored).
 - **External git-repo deps live gitignored under `external/`** — checked out, never vendored (don't commit third-party code). Commit the URL + pinned commit (in a doc + the fetch step that lives with the consuming lane, not a top-level `scripts/`) so the checkout is reproducible. Only their gated/large DATA stays out; the *how-to-fetch* is committed. (e.g. `external/mrxcat2` ← public ETH MRXCAT2.0, pinned; see `core/data/dynamic/GENERATION.md`.)
-- **No notebooks (`.ipynb`)** — reproducible committed CLI / `python -m` entrypoints + git history, never a notebook (non-reproducible, unreviewable). A one-off run becomes a committed command (e.g. the pool build → `python -m core.data.dynamic.anatomy build-pool`, bd 8pfl), not a REPL session or `.ipynb`.
+- **No notebooks (`.ipynb`)** — reproducible committed CLI / `python -m` entrypoints + git history, never a notebook (non-reproducible, unreviewable). A one-off run becomes a committed command (e.g. the pool build → `python -m core.data build-pool build-pool`, bd 8pfl; offline builders dispatch through `python -m core.data <group> <subcmd>`, bd ox6p), not a REPL session or `.ipynb`.
 - Env quirks: `conda run` swallows stdout + rejects multiline `-c` (write script files); `/tmp` doesn't survive
   Windows-python round-trip (use repo-relative paths). CRLF→LF + beads "auto-export git add failed" warnings are benign.

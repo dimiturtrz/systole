@@ -41,8 +41,8 @@ class Render:
         X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, "cpu")
         all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[all_class_slices], Y[all_class_slices]
-        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=FlatBgCfg()), n)
-        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, bg=PartitionBgCfg()), n, real_img=X)
+        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), n)
+        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, deform=0.0, bg=PartitionBgCfg()), n, real_img=X)
 
         rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", synth_flat[:, 0]), ("synth partition", synth_partition[:, 0])]
         fig, ax = plt.subplots(len(rows), len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * len(rows)), squeeze=False)
