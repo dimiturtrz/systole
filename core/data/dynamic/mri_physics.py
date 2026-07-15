@@ -72,12 +72,14 @@ _BG_LADDER = (Tissue.LUNG, Tissue.LIVER, Tissue.MUSCLE, Tissue.FAT)
 # Whole-FOV torso COMPOSITION (tissue, area-fraction), dark->bright. The per-image z-score references the
 # WHOLE-FOV intensity histogram, so the bg's AREA FRACTIONS (not just its levels) set where the heart
 # classes land after normalization. Equal-tier procedural bg over-weights bright tissue -> image mean too
-# high -> myocardium drifts too dark (l45x: procedural myo location gap 0.23 vs flat 0.07). Fractions are
-# the bg-tissue (non-heart) areas of the XCAT/MRXCAT FOV phantom (214-slice pool: air 27.4 lung 12.1
-# liver 4.5 muscle 49.7 %, ~no fat), renormalized. Physical torso prior (phantom anatomy + literature
-# bSSFP) — leak-free, NOT fit to real MRI.
+# high -> myocardium drifts too dark (l45x: procedural myo location gap 0.23 vs flat 0.07).
+# NOT a magic literal — these are the OUTPUT of a committed deriver, a MEASUREMENT of the XCAT/MRXCAT torso
+# anatomy (heart classes excluded, renormalized), reproduce with:
+#   python -m core.data mrxcat torso-fractions --pool <whole-FOV pool from build-fov-pool>
+# (= `Mrxcat.torso_fractions`). Physical torso prior (phantom anatomy + literature bSSFP) — leak-free,
+# NOT fit to real MRI. Re-run the deriver if the phantom pool changes.
 TORSO_BG: tuple[tuple[Tissue, float], ...] = (
-    (Tissue.AIR, 0.292), (Tissue.LUNG, 0.129), (Tissue.LIVER, 0.048), (Tissue.MUSCLE, 0.531))
+    (Tissue.AIR, 0.293), (Tissue.LUNG, 0.129), (Tissue.LIVER, 0.048), (Tissue.MUSCLE, 0.53))
 
 
 # --- cine bSSFP acquisition, DERIVED from physics (not tabulated paper mid-bands) ---
