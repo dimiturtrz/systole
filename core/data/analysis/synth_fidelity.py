@@ -93,11 +93,23 @@ class SynthFidelity:
         return dprimes
 
     @staticmethod
+    def _paint(mask: Integer[torch.Tensor, "..."], cfg, n_classes: int,
+               real_img: Float[torch.Tensor, "..."] | None = None) -> Float[torch.Tensor, "*b 1 h w"]:
+        """Paint synth for an APPEARANCE comparison — deform forced OFF so the heart stays aligned to the
+        measurement mask / real image. With deform on, the warped anatomy slips off the mask and the thin
+        myo ring samples adjacent blood+bg — a spurious per-class spread that swamps the real gap and even
+        inverts the d' verdict (myo shape W1 0.73->0.14, myo|cav d' 0.24x->1.69x at deform 0.15->0; bd f4hk).
+        deform is a TRAINING diversity knob, never a fidelity one."""
+        aligned = cfg.model_copy(update={"deform": 0.0}) if cfg.deform else cfg
+        img, _ = SynthPainter.synthesize_from_labels(mask, aligned, n_classes, real_img=real_img)
+        return img
+
+    @staticmethod
     def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg, n_classes: int, device: str) -> dict:
         """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
         and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
         synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
-        Xs, _ = SynthPainter.synthesize_from_labels(Y.to(device), cfg, n_classes, real_img=X.to(device))
+        Xs = SynthFidelity._paint(Y.to(device), cfg, n_classes, real_img=X.to(device))
         Xr, Xs = X[:, 0].to(device), Xs[:, 0]
         labels = Y.to(device)
         def per_slice(x1c):
@@ -161,7 +173,7 @@ class SynthFidelity:
         """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
         SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
         (z-units) + the mean and worst class — the break localized."""
-        Xs, _ = SynthPainter.synthesize_from_labels(Y.to(self.device), self.cfg, self.n_classes, real_img=X.to(self.device))
+        Xs = SynthFidelity._paint(Y.to(self.device), self.cfg, self.n_classes, real_img=X.to(self.device))
         real_intensities, synth_intensities = X[:, 0].reshape(-1).cpu(), Xs[:, 0].reshape(-1).cpu()
         labels = Y.reshape(-1).cpu()
         # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
@@ -192,7 +204,7 @@ class SynthFidelity:
         if field is not None:
             base.fields = (field,)
         def synth_spread(c):
-            Xs, _ = SynthPainter.synthesize_from_labels(Y_device, c, self.n_classes, real_img=X.to(self.device))
+            Xs = SynthFidelity._paint(Y_device, c, self.n_classes, real_img=X.to(self.device))
             return self._spread(Xs[:, 0], Y_device, self.n_classes)
         result = {"field": field or "sweep",
                "real_target": self._spread(X_device, Y_device, self.n_classes),
