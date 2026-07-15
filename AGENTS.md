@@ -39,12 +39,16 @@ cp -rf source dest          # NOT: cp -r source dest
 ## Scaffolding
 
 Guardrails are provisioned by the in-house **sdlc-scaffold** copier template — `.copier-answers.yml`
-pins the version. The gate config, `devtools/` engines, and the runner wiring are **template-owned**:
-don't hand-edit them to pass a gate — fix upstream in the scaffold and `uvx copier update`, or edit only
-within the `# >>> LOCAL-SLOT` regions of `pyproject.toml`. cardiac-seg is the ORIGIN repo, so it runs a
-**superset** of the scaffold base (extra ruff codes, the jaxtyping shape gate, the magic-literal ratchet)
-ahead of the base pending upstream (bd cardiac-seg-zjaf; scaffold vip.1/vip.2) — the repo's own rules,
-not a dodge.
+pins the version. The gate config + runner wiring are **template-owned**, and the analysis **engines are
+an installed package** — `sdlc-devtools`, pinned by scaffold tag in the `devtools` extra, NOT vendored
+under `devtools/`. `python -m devtools.graph` (and `magic_literals`/`shape_contracts`/…) run from the
+install; ast-grep + jscpd configs ship IN the package — locate them with `python -m devtools.config
+sgconfig|jscpd` (e.g. `ast-grep scan -c "$(uv run python -m devtools.config sgconfig)" core cardioseg`,
+`jscpd … --config "$(uv run python -m devtools.config jscpd)"`). An engine update is a one-line pin bump
+on `copier update` — no devtools source diff in PRs. Don't hand-edit template-owned files to pass a gate —
+fix upstream and `uvx copier update`, or edit only within the `# >>> LOCAL-SLOT` regions of
+`pyproject.toml`. cardiac-seg is the ORIGIN repo (`magic_literals` + `shape_contracts` born here); it has
+since **converged onto the scaffold base** — those are shared base gates now, not ahead-of-base mods.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:3216161c -->
 ## Beads Issue Tracker

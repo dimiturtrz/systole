@@ -42,7 +42,9 @@ repos:
 
       - id: astgrep-gate
         name: ast-grep — module shape
-        entry: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core cardioseg
+        # config lives in the INSTALLED devtools package (no vendored devtools/ dir) — locate it via
+        # `python -m devtools.config`; bash -c so the `$(…)` substitution runs (CI/dev shells are POSIX).
+        entry: bash -c 'uvx --from ast-grep-cli ast-grep scan -c "$(uv run -q --extra devtools python -m devtools.config sgconfig)" core cardioseg'
         language: system
         pass_filenames: false
         always_run: true
@@ -52,31 +54,31 @@ repos:
       # without ever blocking — advisory by construction, not by continue-on-error.
       - id: state-candidates
         name: class-shape — namespace-state (advisory)
-        entry: uv run python -m devtools.state_candidates core cardioseg
+        entry: uv run --extra devtools python -m devtools.state_candidates core cardioseg
         language: system
         pass_filenames: false
         always_run: true
       - id: lcom
         name: class-shape — LCOM4 cohesion (advisory)
-        entry: uv run python -m devtools.lcom core cardioseg
+        entry: uv run --extra devtools python -m devtools.lcom core cardioseg
         language: system
         pass_filenames: false
         always_run: true
       - id: data-clumps
         name: class-shape — data clumps (advisory)
-        entry: uv run python -m devtools.data_clumps core cardioseg
+        entry: uv run --extra devtools python -m devtools.data_clumps core cardioseg
         language: system
         pass_filenames: false
         always_run: true
       - id: magic-literals
         name: magic-literals — enforced ratchet ([tool.magic_literals] ceiling)
-        entry: uv run python -m devtools.magic_literals core cardioseg
+        entry: uv run --extra devtools python -m devtools.magic_literals core cardioseg
         language: system
         pass_filenames: false
         always_run: true
       - id: shape-contracts
         name: shape-contracts — enforced (array/tensor boundaries need a jaxtyping shape; vip.4)
-        entry: uv run python -m devtools.shape_contracts core cardioseg --assert
+        entry: uv run --extra devtools python -m devtools.shape_contracts core cardioseg --assert
         language: system
         pass_filenames: false
         always_run: true

@@ -51,6 +51,21 @@ def lint(session: nox.Session) -> None:
     session.run(
         "uv", "run", "--extra", "devtools", "python", "-m", "devtools.graph", "--assert", *LAYERS, external=True
     )
+    # ast-grep + jscpd read their config from the INSTALLED devtools package (no vendored devtools/ dir);
+    # `python -m devtools.config` prints the packaged config path for the external CLI to consume.
+    _sgconfig = session.run(
+        "uv",
+        "run",
+        "-q",  # silence uv's VIRTUAL_ENV-mismatch notice so only the config path is captured
+        "--extra",
+        "devtools",
+        "python",
+        "-m",
+        "devtools.config",
+        "sgconfig",
+        external=True,
+        silent=True,
+    ).strip()
     session.run(
         "uvx",
         "--from",
@@ -58,31 +73,55 @@ def lint(session: nox.Session) -> None:
         "ast-grep",
         "scan",
         "-c",
-        "devtools/sgconfig.yml",
+        _sgconfig,
         *LAYERS,
         external=True,
     )
     # DRY gate — ENFORCED (blocks over the jscpd.json threshold), matching the cardiac/mindscape majority.
+    _jscpd_cfg = session.run(
+        "uv",
+        "run",
+        "-q",  # silence uv's VIRTUAL_ENV-mismatch notice so only the config path is captured
+        "--extra",
+        "devtools",
+        "python",
+        "-m",
+        "devtools.config",
+        "jscpd",
+        external=True,
+        silent=True,
+    ).strip()
     session.run(
         "npx",
         "--yes",
         "jscpd",
         *JSCPD_LAYERS,
         "--config",
-        "devtools/jscpd.json",
+        _jscpd_cfg,
         external=True,
     )
     # Advisory class-shape explorers — print a ranked report, always exit 0 (never block).
     for _tool in ("state_candidates", "lcom", "data_clumps"):
-        session.run("uv", "run", "python", "-m", f"devtools.{_tool}", *LAYERS, external=True)
+        session.run("uv", "run", "--extra", "devtools", "python", "-m", f"devtools.{_tool}", *LAYERS, external=True)
     # ENFORCED shape-contract gate (GRADUATED advisory->blocking, bd vip.4) — every public array/tensor
     # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor (aliases in [tool.shape_contracts]).
     # A fresh gen has 0 boundaries (passes); a bare boundary then fails. No success_codes swallow — it blocks.
-    session.run("uv", "run", "python", "-m", "devtools.shape_contracts", *LAYERS, "--assert", external=True)
+    session.run(
+        "uv",
+        "run",
+        "--extra",
+        "devtools",
+        "python",
+        "-m",
+        "devtools.shape_contracts",
+        *LAYERS,
+        "--assert",
+        external=True,
+    )
     # ENFORCED magic-literal ratchet — recurring string vocab + repeated dict schemas (StrEnum/record
     # candidates), the non-comparison axis ruff PLR2004 can't see. Blocks over the [tool.magic_literals]
     # ceiling (a per-repo FACT; fresh repo = 0/0). Migrate a new literal or raise the ceiling with a reason.
-    session.run("uv", "run", "python", "-m", "devtools.magic_literals", *LAYERS, external=True)
+    session.run("uv", "run", "--extra", "devtools", "python", "-m", "devtools.magic_literals", *LAYERS, external=True)
 
 
 @nox.session(venv_backend="none")

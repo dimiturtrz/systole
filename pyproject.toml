@@ -32,14 +32,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
-devtools = ["grimp", "networkx"]   # import-graph architecture diagnostic (devtools/graph.py, bd au0o)
+# The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
+# update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
+# `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
+# located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
 # The code branches on availability (single capability gate), scipy/CPU fallback on Windows. Install
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
-all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov"]
+all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov",
+       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
