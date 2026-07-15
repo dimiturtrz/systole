@@ -53,10 +53,24 @@ the target); LV-cav rises moderately.
 - **Verdict on Dice** belongs to nk70.2: turn on trabecular-PV (blood) + pv_sigma (myo, uw5p) + lower noise
   to physical SNR, in one arm; check the physical texture replaces the noise augmentation and Dice holds.
 
+## Dice verdict — physically correct, but not a lever
+
+Tested at working noise=0.05 (trabec as a mean fix, on top of the 0.613 config):
+
+| zero-real | baseline | + trabec |
+|---|---|---|
+| VAL | 0.676 | 0.636 |
+| TEST | 0.613 | **0.563** |
+
+Trabecular-PV **hurts** (−0.05 test, single-seed/marginal but not a win) despite correctly lowering blood
+mean toward real. Same as the broader pattern: appearance-fidelity that moves the metrics toward real does
+not move zero-real Dice. The mechanism is kept as validated **fidelity infrastructure** (default off,
+gate-clean); the flow-dephasing half is **not pursued** — mean correctness isn't the ceiling.
+
 ## Honesty
 
-Diagnostics only (no training). The bg footgun means every fidelity number this session that wasn't from a
-training arm was on PartitionBg and must be re-read at procedural — the nk70.1 kill (a `synth_main` training
-arm, correct bg) stands; the uw5p pv direction (paint-driven) stands; absolute per-slice numbers were
-PartitionBg. Trabecular-PV's blood-mean direction is validated at the correct bg; its Dice payoff is
-unproven pending the combined gate.
+The bg footgun means every non-training fidelity number this session was on PartitionBg and must be re-read
+at procedural. Trabecular-PV's blood-mean direction is validated at the correct bg — but the Dice arm says
+appearance-mean correctness does not beat the ~0.61 ceiling. This closes fi33 and, with the nk70.1 spread
+refutation, the appearance-correctness epic: 0.613 ≈ the color ceiling; the residual is shape + domain. See
+`nk70` epic verdict.

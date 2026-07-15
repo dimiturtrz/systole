@@ -81,10 +81,25 @@ replacement. The regression is the QUESTION answered, not a verdict on the physi
   becomes structural-texture-first, tightly coupled to uw5p/fi33 — not a hand-off. Only once physical texture
   reproduces the real within-class spread (and holds Dice) does the SNR-param thermal correction ship.
 
+## The follow-up that killed the whole thesis
+
+The re-scope said: supply the structural texture physically (pv + trabec), *then* lower noise. Built both
+(uw5p `pv_sigma`, fi33 trabecular-PV) and ran the combined arm — physical texture + noise lowered:
+
+| zero-real TEST | baseline | noise↓ only | noise↓ + pv + trabec + kspace |
+|---|---|---|---|
+| mean | 0.613 | 0.385 | **0.314** |
+
+Physical texture **does not recover** the collapse. So noise=0.05's role is **not** the structural
+within-class texture (which pv/trabec reproduce in the per-slice σ statistic) — it is **high-frequency
+pixel-level augmentation** (robustness to real texture) that structured PV/trabeculae do not provide.
+**The within-class-sd / d′ correctness target is refuted as a Dice lever**: the noise-driven over-spread IS
+load-bearing augmentation, and you cannot lower it toward real's σ without losing generalisation, physical
+replacement or not.
+
 ## Honesty
 
-d′ is a readout, never the target. The correctness refactor was **built, measured, and killed** on its
-zero-real Dice regression — the SNR value (literature, wide: S6-extrapolated ~35 vs S1/S5-scaled ~64) is not
-the issue; *any* physical SNR removes the augmentation. The durable finding: within-class heart texture is
-structural and load-bearing for generalisation; it must be supplied physically before the mislabelled noise
-knob can be corrected. Single-seed, but −0.23 ≫ noise (±0.02) and consistent across val+test.
+d′ is a readout, never the target — and here it turned out not to be a Dice lever at all. Two training arms
+(noise↓ −0.23, noise↓+texture −0.30) settle it, single-seed but ≫ the ±0.02 noise floor and consistent
+across val+test. What survives from this thread: **level/mean** correctness (composition, which fixed a big
+myo miss and did help), not **spread** correctness. See `nk70` epic verdict.
