@@ -30,6 +30,7 @@ from jaxtyping import Float, Integer
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import _VALIDATE
+from core.data.static.labels import MYO, RV
 from core.data.static.mri.base import Vendor
 from core.types import shapecheck
 
@@ -199,6 +200,12 @@ class SynthCfg(BaseModel):
     flow: float = Field(0.0, ge=0)                 # blood-pool signal variation (flow/inflow): extra
     #                                                texture on blood classes so cav/RV aren't flat-bright
     #                                                (real cine blood spreads from flow) — fidelity lever
+    trabec_lv: float = Field(0.0, ge=0, le=1)      # LV blood-pool fraction as papillary+trabecular myo
+    #                                                (cited ~0.12, JCMR; deep-dive papillary_trabecular).
+    trabec_rv: float = Field(0.0, ge=0, le=1)      # RV (more trabeculated, no clean cavity-% cite -> ~2x LV
+    #                                                estimate). myo-PV lowers blood mean + adds within-class
+    #                                                blood texture (fi33). OFF by default -> lands at the
+    #                                                nk70.2 gate with noise lowered
     blood_scale: float = Field(1.0, ge=0)          # LEGACY empirical blood-pool MEAN scale (the fidelity-
     #                                                found 1.6 that first localized the gap). Superseded by
     #                                                `inflow` (physical); kept for comparison. 1.0 = off.
@@ -391,6 +398,7 @@ class MatchedAcq(Acquisition):
 
 
 _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the conv
+_MIN_TRABEC_GRID = 8     # floor on the coarse trabecular-field grid
 
 
 class SynthPainter:
@@ -506,6 +514,18 @@ class SynthPainter:
             df = cfg.b0_hz * F.interpolate(low, size=mask.shape[-2:], mode="bilinear", align_corners=False)
             phi = 2 * math.pi * df * (tr[:, :, None, None] / 1000.0)             # off-resonance per TR (rad)
             mu_map = mu_map * MriPhysics.banding(t2m, tr[:, :, None, None], phi)
+        # --- papillary/trabecular partial volume: papillary muscles + trabeculae are myo-signal structures
+        #     inside the blood pools. A cited blood-pool volume fraction (RV >> LV) mixes toward myo -> both
+        #     lowers blood MEAN (real +1.66 < steady +2.04) and adds within-class blood TEXTURE (interior
+        #     heterogeneity pv can't reach). Spatially-correlated at a physical trabecular scale. ---
+        if cfg.trabec_lv > 0 or cfg.trabec_rv > 0:
+            myo_sig = mu[:, MYO].view(b, 1, 1, 1) if MYO < n_paint else mu_map
+            tgrid = max(_MIN_TRABEC_GRID, mask.shape[-1] // 2)                   # ~3mm trabecular scale @1.5mm grid
+            tfield = F.interpolate(torch.rand(b, 1, tgrid, tgrid, device=dev),
+                                   size=mask.shape[-2:], mode="bilinear", align_corners=False)
+            for c in MriPhysics.blood_classes(n_classes):
+                trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
+                mu_map = mu_map * (1 - trab) + myo_sig * trab
         sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
         # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
         # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
