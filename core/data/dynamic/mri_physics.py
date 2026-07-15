@@ -259,7 +259,7 @@ class MriPhysics:
         return MriPhysics.named_tissue_params(names, field, device)
 
     @staticmethod
-    def torso_thresholds(device) -> Float[torch.Tensor, "k"]:
+    def torso_thresholds(device) -> Float[torch.Tensor, "*k"]:
         """Interior cumulative-area thresholds (K-1) for bucketizing a uniform [0,1) field into the
         TORSO_BG tissues at their physical area fractions (so the whole-FOV histogram is torso-like)."""
         return torch.cumsum(torch.tensor([f for _, f in TORSO_BG], device=device), 0)[:-1]
