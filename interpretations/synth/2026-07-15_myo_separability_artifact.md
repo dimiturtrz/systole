@@ -55,6 +55,25 @@ dark toward background. The real lever for generation fidelity is tissue **mean 
 - Also fixed an unrelated crash the diagnostic hit first: `synthesize_from_labels` typed `mask: Int`
   (signed) but `load_to_gpu` returns uint8 masks → widened to `Integer`.
 
+## Why myo is "too dark": whole-FOV composition, not a tissue-param defect
+
+Myo location gap scales with background richness (distance mode, myo location by `bg.mode`):
+
+| bg mode | myo location | RV | cav |
+|---|---|---|---|
+| flat (dark) | **0.067** (myo mean ≈ real) | 2.09 | 2.13 |
+| procedural | 0.231 | 0.69 | 0.63 |
+| partition (default) | 0.417 | 0.51 | 0.41 |
+
+With a dark flat bg, synth myo's mean is spot-on (0.067) — so **the myo bSSFP signal is right**; it is the
+**scene around it** that is wrong. As the bg fills the FOV with brighter tissue (procedural blobs → real-
+intensity partition tiers), the per-image **z-score mean rises and myo drifts below it** (real myo sits at
++0.24, above its scene mean; synth-partition myo lands at −0.52). Flat bg fixes myo but blows up blood
+(location 2.1) — no single knob wins. The defect is that synth's whole-FOV intensity **distribution**
+doesn't match real's, so per-image z-score normalizes every class to the wrong relative level. This is a
+**composition/normalization** problem (→ whole-FOV phantom, hpy/FovBg), and it means the tool's per-class
+**location** numbers are normalization-coupled — NOT read them as tissue-param errors.
+
 ## Consequences / open
 
 - **04bh is retracted**, **f4hk's premise is invalid.** The "structured myo texture" direction is not
