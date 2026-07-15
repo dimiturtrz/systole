@@ -74,6 +74,32 @@ doesn't match real's, so per-image z-score normalizes every class to the wrong r
 **composition/normalization** problem (→ whole-FOV phantom, hpy/FovBg), and it means the tool's per-class
 **location** numbers are normalization-coupled — NOT read them as tissue-param errors.
 
+## Whole-FOV composition fixes the myo level (hpy validation)
+
+Built a whole-FOV MRXCAT pool (`python -m core.data mrxcat build-fov-pool`, 214 slices, 8-class) and
+painted it via `FovBg` (deform off). Per-class z-mean:
+
+| class | FovBg (whole-FOV) | partition bg | real |
+|---|---|---|---|
+| LV-myo | **+0.12** | −0.52 | +0.24 |
+| LV-cav | +3.52 | — | +2.23 |
+| RV | +3.36 | — | +1.64 |
+
+A realistic whole-FOV torso lands myo at **+0.12**, next to real +0.24 — vs partition's −0.52. So the
+"myo too dark" defect is confirmed to be **whole-FOV composition / z-score**, and MRXCAT/FovBg whole-FOV
+painting is the lever (hpy). Residual: FovBg blood is over-bright (RV/cav ≈ +3.4) and still over-separated
+(myo\|cav per-slice d′ 4.58 vs real 2.65) — partly MRXCAT's FOV ≠ ACDC (unpaired), partly synth blood too
+clean. Corroboration: MRXCAT paints myo *uniform* by construction (`fixLVTexture` meanLV), consistent with
+the corrected finding that synth myo shape already matches real (it is genuinely near-uniform, not a
+texture defect). Cross-check for **ex1**: re-running `by_vendor` with the fixed tool flipped the vendor
+blood-location ranking entirely (GE worst→best, Siemens best→worst) and showed per-class location errors
+**anti-correlate per vendor** — the z-score-composition signature, not tissue-level vendor defects; a
+per-vendor `blood_scale` would fit a normalization artifact.
+
+Build-CLI regression fixed en route: `load_vti_labels` returned float64 (shapecheck rejected → the
+documented `build-fov-pool` crashed) → cast to int32; GENERATION.md CLI paths were stale
+(`python -m core.data.dynamic.<module>` → `python -m core.data <group> <subcmd>`, silently no-op'd).
+
 ## Consequences / open
 
 - **04bh is retracted**, **f4hk's premise is invalid.** The "structured myo texture" direction is not
