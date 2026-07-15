@@ -34,7 +34,7 @@ from core.data.static.mri.base import Vendor
 from core.types import shapecheck
 
 from .augment import Augmentor
-from .mri_physics import TR_RANGE_MS, MriPhysics
+from .mri_physics import TORSO_BG, TR_RANGE_MS, MriPhysics
 from .mrxcat import FOV_TISSUE
 
 
@@ -98,13 +98,12 @@ class FlatBgCfg(BackgroundCfg):
 
 
 class ProceduralBgCfg(BackgroundCfg):
-    """Random-field organ blobs bucketized into bg tissue tiers (zero-real whole-FOV)."""
+    """Random-field organ blobs bucketized into the physical TORSO_BG tissues (zero-real whole-FOV)."""
     mode: Literal["procedural"] = "procedural"
-    bg_tiers: int = Field(6, ge=2)                  # distinct bg tissue tiers (params interpolated)
     bg_blobs: int = Field(6, ge=2)                  # coarse random-field grid (smaller = bigger organ blobs)
 
     def build(self):
-        return ProceduralBg(self.bg_tiers, self.bg_blobs)
+        return ProceduralBg(self.bg_blobs)
 
 
 class PartitionBgCfg(BackgroundCfg):
@@ -167,7 +166,9 @@ class SynthCfg(BaseModel):
             bg: dict = {"mode": v.pop("bg_mode")}
             for k in ("bg_tiers", "bg_blobs"):
                 if k in v:
-                    bg[k] = v.pop(k)
+                    val = v.pop(k)
+                    if not (k == "bg_tiers" and bg["mode"] == "procedural"):   # procedural dropped bg_tiers (fixed torso composition)
+                        bg[k] = val
             v["bg"] = bg
         return v
     synth_p: float = Field(0.5, ge=0, le=1)         # fraction of in-batch samples replaced by synth.
@@ -201,13 +202,15 @@ class SynthCfg(BaseModel):
     blood_scale: float = Field(1.0, ge=0)          # LEGACY empirical blood-pool MEAN scale (the fidelity-
     #                                                found 1.6 that first localized the gap). Superseded by
     #                                                `inflow` (physical); kept for comparison. 1.0 = off.
-    inflow: bool = True                            # entry-slice INFLOW enhancement (PHYSICAL, no magic
-    #                                                fraction): per sample f_fresh = min(1, v*TR/thk) from
-    #                                                blood velocity v + slice thickness thk + the derived TR,
-    #                                                then blend blood toward fresh PD*sin(flip) (unsaturated
-    #                                                spins entering the slice) -> the physical reason cine
-    #                                                blood > bSSFP steady-state. Replaces blood_scale/the 0.15
-    #                                                scalar; f emerges from physiology (mean~0.15, distributed).
+    inflow: bool = False                           # entry-slice INFLOW enhancement: f_fresh=min(1,v*TR/thk),
+    #                                                blend blood toward fresh PD*sin(flip). GAIN-ONLY: it
+    #                                                models fresh-spin brightening but NOT the compensating
+    #                                                flow-dephasing loss + papillary/trabecular PV, so ON it
+    #                                                over-brightens in a correct scene (blood +3.9z vs real
+    #                                                +1.6). Measured real blood (+1.66) sits BELOW steady-state
+    #                                                (+2.04) -> net loss slightly wins; OFF is closer to real.
+    #                                                DEFAULT off pending a dephasing-loss term (bd). Zero-real
+    #                                                Dice 0.554->0.613 turning it off w/ torso-composition bg.
     blood_v_cms: tuple[float, float] = (5.0, 90.0) # through-plane blood velocity (cm/s), PHYSIOLOGICAL:
     #                                                mid-cavity ~5-30, basal/valve-plane E-wave ~80-90
     #                                                (PMC9843884). The physical input to inflow, sampled per
@@ -275,18 +278,23 @@ class _TierBg(Background):
 
 
 class ProceduralBg(_TierBg):
-    """ZERO-REAL: a coarse random field (blobs x blobs) upsampled to smooth organ-like blobs,
-    bucketized into K tiers -> SynthSeg-style random-shape context (no real image needed)."""
-    def __init__(self, k_tiers: int, blobs: int):
-        super().__init__(k_tiers)
+    """ZERO-REAL whole-FOV: a coarse random field (blobs x blobs) upsampled to smooth organ-like blobs,
+    bucketized into the TORSO_BG tissues at their PHYSICAL area fractions (dark air -> muscle) and painted
+    by literature bSSFP. Random SHAPES (zero-real diversity) but a torso-correct intensity HISTOGRAM, so
+    the per-image z-score lands the heart classes at real levels (fixes the myo-too-dark mean-gap that the
+    old equal-tier ladder caused: it over-weighted bright tissue -> image mean too high)."""
+    def __init__(self, blobs: int):
+        super().__init__(len(TORSO_BG))
         self.blobs = blobs
 
     def _field(self, mask, dev, real_img=None):
         b = mask.shape[0]
         coarse = torch.rand(b, 1, self.blobs, self.blobs, device=dev)
         fb = F.interpolate(coarse, size=mask.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
-        thr = torch.linspace(0.0, 1.0, self.k_tiers + 1, device=dev)[1:-1]  # K-1 interior thresholds
-        return torch.bucketize(fb.contiguous(), thr)
+        return torch.bucketize(fb.contiguous(), MriPhysics.torso_thresholds(dev))  # physical area fractions
+
+    def paint_params(self, n_classes, n_paint, field, dev):
+        return MriPhysics.torso_paint_params(n_classes, field, dev)               # named torso tissues
 
 
 class PartitionBg(_TierBg):
