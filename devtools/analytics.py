@@ -63,65 +63,71 @@ class AreaStat:
         return sum(f.branches for f in self.files)
 
 
-def _code_lines(source: str) -> int:
-    """Non-blank lines that aren't a pure comment (a crude but stable LOC — string-literal bodies count,
-    which is fine: docstrings are code you maintain)."""
-    return sum(1 for ln in source.splitlines() if ln.strip() and not ln.strip().startswith("#"))
+class Analytics:
+    """Per-area code-size + complexity explorer over a repo's declared areas."""
 
+    def __init__(self, repo: Path, areas: list[str]) -> None:
+        self.repo = repo
+        self.areas = areas
 
-def analyze_file(path: Path) -> FileStat:
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    defs = sum(isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef) for n in ast.walk(tree))
-    branches = sum(isinstance(n, _BRANCH_NODES) for n in ast.walk(tree))
-    return FileStat(path, _code_lines(source), defs, branches)
+    @staticmethod
+    def _code_lines(source: str) -> int:
+        """Non-blank lines that aren't a pure comment (a crude but stable LOC — string-literal bodies count,
+        which is fine: docstrings are code you maintain)."""
+        return sum(1 for ln in source.splitlines() if ln.strip() and not ln.strip().startswith("#"))
 
+    @staticmethod
+    def analyze_file(path: Path) -> FileStat:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        defs = sum(isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef) for n in ast.walk(tree))
+        branches = sum(isinstance(n, _BRANCH_NODES) for n in ast.walk(tree))
+        return FileStat(path, Analytics._code_lines(source), defs, branches)
 
-def analyze(repo: Path, areas: list[str]) -> list[AreaStat]:
-    stats = []
-    for area in areas:
-        root = repo / area
-        if not root.is_dir():
-            continue
-        area_stat = AreaStat(area)
-        for py in sorted(root.rglob("*.py")):
-            if "__pycache__" in py.parts:
+    def analyze(self) -> list[AreaStat]:
+        stats = []
+        for area in self.areas:
+            root = self.repo / area
+            if not root.is_dir():
                 continue
-            area_stat.files.append(analyze_file(py))
-        stats.append(area_stat)
-    return stats
+            area_stat = AreaStat(area)
+            for py in sorted(root.rglob("*.py")):
+                if "__pycache__" in py.parts:
+                    continue
+                area_stat.files.append(self.analyze_file(py))
+            stats.append(area_stat)
+        return stats
 
+    def _test_lines(self) -> int:
+        return sum(
+            self._code_lines(p.read_text(encoding="utf-8"))
+            for p in (self.repo / "tests").rglob("*.py")
+            if "__pycache__" not in p.parts
+        )
 
-def _test_lines(repo: Path) -> int:
-    return sum(
-        _code_lines(p.read_text(encoding="utf-8"))
-        for p in (repo / "tests").rglob("*.py")
-        if "__pycache__" not in p.parts
-    )
+    def report(self, *, top_n: int = 10, flag_over: int | None = None) -> None:
+        stats = self.analyze()
+        log.info(f"{'area':<12}{'files':>7}{'code':>8}{'defs':>7}{'branch':>8}{'br/def':>8}")
+        src_lines = 0
+        for a in stats:
+            bpd = a.branches / a.defs if a.defs else 0.0
+            log.info(f"{a.name:<12}{len(a.files):>7}{a.code_lines:>8}{a.defs:>7}{a.branches:>8}{bpd:>8.2f}")
+            src_lines += a.code_lines
 
+        tests = self._test_lines()
+        ratio = tests / src_lines if src_lines else 0.0
+        log.info(f"\nsrc {src_lines} : test {tests}  (ratio {ratio:.2f} test lines per src line)")
 
-def report(stats: list[AreaStat], repo: Path, *, top_n: int = 10, flag_over: int | None = None) -> None:
-    log.info(f"{'area':<12}{'files':>7}{'code':>8}{'defs':>7}{'branch':>8}{'br/def':>8}")
-    src_lines = 0
-    for a in stats:
-        bpd = a.branches / a.defs if a.defs else 0.0
-        log.info(f"{a.name:<12}{len(a.files):>7}{a.code_lines:>8}{a.defs:>7}{a.branches:>8}{bpd:>8.2f}")
-        src_lines += a.code_lines
+        files = sorted((f for a in stats for f in a.files), key=lambda f: f.code_lines, reverse=True)
+        log.info(f"\ntop {top_n} largest (code lines):")
+        for f in files[:top_n]:
+            log.info(f"  {f.code_lines:>5}  {f.branches:>4}br {f.defs:>3}def  {f.path.relative_to(self.repo)}")
 
-    tests = _test_lines(repo)
-    ratio = tests / src_lines if src_lines else 0.0
-    log.info(f"\nsrc {src_lines} : test {tests}  (ratio {ratio:.2f} test lines per src line)")
-
-    files = sorted((f for a in stats for f in a.files), key=lambda f: f.code_lines, reverse=True)
-    log.info(f"\ntop {top_n} largest (code lines):")
-    for f in files[:top_n]:
-        log.info(f"  {f.code_lines:>5}  {f.branches:>4}br {f.defs:>3}def  {f.path.relative_to(repo)}")
-
-    if flag_over is not None:
-        over = [f for f in files if f.code_lines > flag_over]
-        log.info(f"\n{len(over)} file(s) over {flag_over} code lines:")
-        for f in over:
-            log.info(f"  {f.code_lines:>5}  {f.path.relative_to(repo)}")
+        if flag_over is not None:
+            over = [f for f in files if f.code_lines > flag_over]
+            log.info(f"\n{len(over)} file(s) over {flag_over} code lines:")
+            for f in over:
+                log.info(f"  {f.code_lines:>5}  {f.path.relative_to(self.repo)}")
 
 
 def main() -> None:
@@ -132,7 +138,7 @@ def main() -> None:
     ap.add_argument("--flag-over", type=int, default=None, help="list files above this code-line budget")
     args = ap.parse_args()
     repo = Path(__file__).resolve().parent.parent  # devtools/analytics.py -> repo root
-    report(analyze(repo, args.areas), repo, top_n=args.top_n, flag_over=args.flag_over)
+    Analytics(repo, args.areas).report(top_n=args.top_n, flag_over=args.flag_over)
 
 
 if __name__ == "__main__":

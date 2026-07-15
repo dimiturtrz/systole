@@ -24,11 +24,11 @@ jobs:
           enable-cache: true
       # ENFORCED (blocks the merge): the full house select over shipped source. Clean on a fresh gen;
       # catches REGRESSION (new unused import / undefined name / unsorted imports / magic number / ...).
-      # An explicit --select BYPASSES pyproject [tool.ruff.lint] ignore, so the ml F722 waiver (jaxtyping
-      # `Float[Tensor, "b c h w"]` dim strings misread as bad forward refs) must be repeated on the CLI —
-      # else a fresh ml gen with any jaxtyping annotation red-CIs on its own shipped config (bd skr GAP1).
+      # An explicit --select BYPASSES pyproject [tool.ruff.lint] ignore, so the ml jaxtyping waiver must be
+      # repeated on the CLI — F722 (multi-token dim strings "b c h w") + F821 (single-axis "n" = an undefined
+      # forward-ref). Else a fresh ml gen with any jaxtyping annotation red-CIs on its own config (skr/kqk).
       - name: Lint — enforced (shipped source, full select)
-        run: uvx ruff@0.15.13 check core cardioseg --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722
+        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722,F821
       # ADVISORY (never blocks): full curated config over the whole tree, surfaces any pending families +
       # the advisory-only codes (E501/SLF001 — cosmetic / house-gate-conflicting, bd 4c2/8ex): reported,
       # never a merge gate.
@@ -62,19 +62,11 @@ jobs:
         with:
           node-version: "20"
       - name: Duplication — enforced (jscpd, DRY axis; blocks over threshold)
-        run: npx --yes jscpd core cardioseg --config devtools/jscpd.json
+        run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
       # >>> LOCAL-SLOT: ci-lint-steps — repo-specific lint/shape steps that ride ON TOP of the base gates
       # (a viewer-tree extra lint, an un-silenced advisory family, a repo-only static gate). The base gates
       # above are template-owned + regenerated; steps added in this region survive copier update. Empty by
       # default — mechanism identical across repos, only the CONTENTS are a per-repo FACT (bd skr GAP3).
-      # Wider hygiene SCOPE (per-repo FACT, bd cardiac-seg-9mu): base enforced-lint + jscpd scan `packages`
-      # (core cardioseg); cardiac also lints its viewer python + tests and dedup-scans the viewer TS source.
-      # Same RULES (ruff reads pyproject select/ignore/per-file-ignores; jscpd same config), wider PATHS —
-      # carried here since v1.0 computes base scope from `packages` (scaffold-fsl tracks folding back to base).
-      - name: Lint — enforced (viewer python + tests; pyproject config = same rules, wider scope)
-        run: uvx ruff@0.15.13 check cardioview tests
-      - name: Duplication — enforced (jscpd incl. viewer TS source; wider scope)
-        run: npx --yes jscpd core cardioseg cardioview/web/src --config devtools/jscpd.json
       # Magic STRINGS in COMPARISONS — advisory (bd cardiac-seg-1ln7): PLR2004 defaults to allow
       # ["str","bytes"], silencing string magic values in comparisons; re-run with the allow-list emptied
       # to surface them. The cross-file magic_literals ratchet already blocks NEW recurring literals.
@@ -90,7 +82,7 @@ jobs:
     # NAME is a per-repo FACT (data_env_var, bd skr GAP3a) — a repo whose adapters read a different name
     # overrides it in .copier-answers.yml so tests SKIP here instead of erroring on a missing env.
     env:
-      CARDIOSEG_DATA: /tmp/nodata
+      CARDIAC_DATA: /tmp/nodata
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

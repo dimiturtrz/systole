@@ -18,7 +18,8 @@ import argparse
 import ast
 import logging
 from itertools import combinations
-from pathlib import Path
+
+from devtools._common import Trees
 
 log = logging.getLogger("devtools.data_clumps")
 
@@ -29,65 +30,69 @@ _MIN_PARAMS = 3  # only signatures with >= this many params can seed a clump
 _MAX_CLUMP = 6  # cap enumerated subset size (bounds the candidate blow-up; real clumps are small)
 
 
-def _params(fn: ast.FunctionDef) -> set[str]:
-    """Positional + keyword-only param names of a function, minus self/cls."""
-    a = fn.args
-    return {p.arg for p in (*a.posonlyargs, *a.args, *a.kwonlyargs) if p.arg not in _SELF}
+class DataClumps:
+    """Frequent-param-set (data-clump) detection over the scanned packages' function signatures."""
 
+    def __init__(self, packages: list[str]) -> None:
+        self.packages = packages
 
-def _functions(packages: list[str]) -> list[tuple[set[str], str]]:
-    """(param-set, file) for every def with >= _MIN_PARAMS params across the packages."""
-    out = []
-    for pkg in packages:
-        for path in sorted(Path(pkg).rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+    @staticmethod
+    def _params(fn: ast.FunctionDef) -> set[str]:
+        """Positional + keyword-only param names of a function, minus self/cls."""
+        a = fn.args
+        return {p.arg for p in (*a.posonlyargs, *a.args, *a.kwonlyargs) if p.arg not in _SELF}
+
+    def _functions(self) -> list[tuple[set[str], str]]:
+        """(param-set, file) for every def with >= _MIN_PARAMS params across the packages."""
+        out = []
+        for path, tree in Trees(self.packages).walk():
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    ps = _params(node)
+                    ps = self._params(node)
                     if len(ps) >= _MIN_PARAMS:
                         out.append((ps, str(path)))
-    return out
+        return out
 
+    @staticmethod
+    def _candidates(funcs: list[tuple[set[str], str]], min_clump: int) -> set[frozenset[str]]:
+        """Every param subset (size min_clump.._MAX_CLUMP) drawn from some signature — the clumps to score."""
+        cand: set[frozenset[str]] = set()
+        for ps, _ in funcs:
+            items = sorted(ps)
+            for k in range(min_clump, min(len(items), _MAX_CLUMP) + 1):
+                cand.update(frozenset(c) for c in combinations(items, k))
+        return cand
 
-def _candidates(funcs: list[tuple[set[str], str]], min_clump: int) -> set[frozenset[str]]:
-    """Every param subset (size min_clump.._MAX_CLUMP) drawn from some signature — the clumps to score."""
-    cand: set[frozenset[str]] = set()
-    for ps, _ in funcs:
-        items = sorted(ps)
-        for k in range(min_clump, min(len(items), _MAX_CLUMP) + 1):
-            cand.update(frozenset(c) for c in combinations(items, k))
-    return cand
+    @staticmethod
+    def _support(clump: frozenset[str], funcs: list[tuple[set[str], str]]) -> list[str]:
+        """Files of the functions whose params carry the WHOLE clump."""
+        return [f for ps, f in funcs if clump <= ps]
 
+    def clumps(
+        self, min_support: int = _MIN_SUPPORT, min_clump: int = _MIN_CLUMP
+    ) -> list[tuple[int, tuple[str, ...], int, list[str]]]:
+        """Ranked (support, params, size, example_files) MAXIMAL data clumps, highest support first. `support`
+        = functions carrying ALL the clump's params; a clump is dropped if a larger clump with >= its support
+        exists (so the whole travelling tuple shows, not its subsets)."""
+        funcs = self._functions()
+        frequent = [(len(self._support(cl, funcs)), cl) for cl in self._candidates(funcs, min_clump)]
+        frequent = sorted(((s, cl) for s, cl in frequent if s >= min_support), key=lambda r: (-r[0], -len(r[1])))
+        kept: list[tuple[int, frozenset[str]]] = []
+        for support, cl in frequent:
+            if not any(cl < c2 and s2 >= support for s2, c2 in kept):  # keep only maximal-at-this-support
+                kept.append((support, cl))
+        return sorted(
+            ((s, tuple(sorted(cl)), len(cl), sorted(set(self._support(cl, funcs)))[:3]) for s, cl in kept),
+            reverse=True,
+        )
 
-def _support(clump: frozenset[str], funcs: list[tuple[set[str], str]]) -> list[str]:
-    """Files of the functions whose params carry the WHOLE clump."""
-    return [f for ps, f in funcs if clump <= ps]
-
-
-def clumps(
-    packages: list[str], min_support: int = _MIN_SUPPORT, min_clump: int = _MIN_CLUMP
-) -> list[tuple[int, tuple[str, ...], int, list[str]]]:
-    """Ranked (support, params, size, example_files) MAXIMAL data clumps, highest support first. `support`
-    = functions carrying ALL the clump's params; a clump is dropped if a larger clump with >= its support
-    exists (so the whole travelling tuple shows, not its subsets)."""
-    funcs = _functions(packages)
-    frequent = [(len(_support(cl, funcs)), cl) for cl in _candidates(funcs, min_clump)]
-    frequent = sorted(((s, cl) for s, cl in frequent if s >= min_support), key=lambda r: (-r[0], -len(r[1])))
-    kept: list[tuple[int, frozenset[str]]] = []
-    for support, cl in frequent:
-        if not any(cl < c2 and s2 >= support for s2, c2 in kept):  # keep only maximal-at-this-support
-            kept.append((support, cl))
-    return sorted(
-        ((s, tuple(sorted(cl)), len(cl), sorted(set(_support(cl, funcs)))[:3]) for s, cl in kept), reverse=True
-    )
-
-
-def report(rows: list[tuple[int, tuple[str, ...], int, list[str]]]) -> str:
-    """Ranked table: support (functions carrying the whole tuple), size, the params, example files."""
-    lines = [f"{'supp':>4} {'size':>4}  {'clump (params that travel together)':45} examples"]
-    for support, params, size, files in rows:
-        lines.append(f"{support:>4} {size:>4}  {', '.join(params):45} {', '.join(files)}")
-    return "\n".join(lines)
+    @staticmethod
+    def report(rows: list[tuple[int, tuple[str, ...], int, list[str]]]) -> str:
+        """Ranked table: support (functions carrying the whole tuple), size, the params, example files."""
+        lines = [f"{'supp':>4} {'size':>4}  {'clump (params that travel together)':45} examples"]
+        for support, params, size, files in rows:
+            lines.append(f"{support:>4} {size:>4}  {', '.join(params):45} {', '.join(files)}")
+        return "\n".join(lines)
 
 
 def main():
@@ -102,8 +107,8 @@ def main():
     ap.add_argument("--min-clump", type=int, default=_MIN_CLUMP, help="a clump must bundle >= this many params")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    rows = clumps(args.packages, args.min_support, args.min_clump)
-    log.info("%d data clumps\n%s", len(rows), report(rows))
+    rows = DataClumps(args.packages).clumps(args.min_support, args.min_clump)
+    log.info("%d data clumps\n%s", len(rows), DataClumps.report(rows))
 
 
 if __name__ == "__main__":

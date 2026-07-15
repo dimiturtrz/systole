@@ -23,8 +23,8 @@ from __future__ import annotations
 import argparse
 import ast
 import logging
-import tomllib
-from pathlib import Path
+
+from devtools._common import Pyproject, Trees
 
 log = logging.getLogger("devtools.shape_contracts")
 
@@ -35,92 +35,95 @@ _JAXTYPING = {"Float", "Int", "Integer", "UInt", "UInt8", "Bool", "Shaped", "Num
 _EXEMPT = {"add_args", "run"}  # CLI dispatcher handlers (framework signature, args is a Namespace)
 
 
-def array_names(pyproject: str = "pyproject.toml") -> set[str]:
-    """The array-type names to flag: the builtin `ndarray`/`Tensor` plus the repo's `array_aliases` slot."""
-    p = Path(pyproject)
-    if not p.exists():
-        return set(_ARRAY_NAMES)
-    aliases = (
-        tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("shape_contracts", {}).get("array_aliases", [])
-    )
-    return _ARRAY_NAMES | set(aliases)
+class ShapeContracts:
+    """Flag public array/tensor boundaries lacking a jaxtyping shape across the scanned packages."""
 
+    def __init__(self, packages: list[str]) -> None:
+        self.packages = packages
 
-def _is_array_anno(node: ast.expr | None, names: set[str]) -> bool:
-    """True if the annotation names a bare array type (np.ndarray / Tensor / an array alias) — the thing
-    that must instead carry a jaxtyping shape. Looks through `X | None` unions."""
-    if node is None:
+    @staticmethod
+    def array_names(pyproject: str = "pyproject.toml") -> set[str]:
+        """The array-type names to flag: the builtin `ndarray`/`Tensor` plus the repo's `array_aliases` slot."""
+        aliases = Pyproject.tool_section("shape_contracts", pyproject).get("array_aliases", [])
+        return _ARRAY_NAMES | set(aliases)
+
+    @staticmethod
+    def _is_array_anno(node: ast.expr | None, names: set[str]) -> bool:
+        """True if the annotation names a bare array type (np.ndarray / Tensor / an array alias) — the thing
+        that must instead carry a jaxtyping shape. Looks through `X | None` unions."""
+        if node is None:
+            return False
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):  # T | None
+            return ShapeContracts._is_array_anno(node.left, names) or ShapeContracts._is_array_anno(node.right, names)
+        if isinstance(node, ast.Attribute):  # np.ndarray / torch.Tensor
+            return node.attr in names
+        if isinstance(node, ast.Name):  # Tensor / Volume / Mask …
+            return node.id in names
         return False
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):  # T | None
-        return _is_array_anno(node.left, names) or _is_array_anno(node.right, names)
-    if isinstance(node, ast.Attribute):  # np.ndarray / torch.Tensor
-        return node.attr in names
-    if isinstance(node, ast.Name):  # Tensor / Volume / Mask …
-        return node.id in names
-    return False
 
-
-def _is_jaxtyping_anno(node: ast.expr | None) -> bool:
-    """True if the annotation is a jaxtyping subscript (`Float[array, "…"]`) — a satisfied shape contract.
-    Looks through `X | None` unions so an optional shaped tensor still counts."""
-    if node is None:
+    @staticmethod
+    def _is_jaxtyping_anno(node: ast.expr | None) -> bool:
+        """True if the annotation is a jaxtyping subscript (`Float[array, "…"]`) — a satisfied shape contract.
+        Looks through `X | None` unions so an optional shaped tensor still counts."""
+        if node is None:
+            return False
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return ShapeContracts._is_jaxtyping_anno(node.left) or ShapeContracts._is_jaxtyping_anno(node.right)
+        if isinstance(node, ast.Subscript):
+            head = node.value
+            return isinstance(head, ast.Name) and head.id in _JAXTYPING
         return False
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        return _is_jaxtyping_anno(node.left) or _is_jaxtyping_anno(node.right)
-    if isinstance(node, ast.Subscript):
-        head = node.value
-        return isinstance(head, ast.Name) and head.id in _JAXTYPING
-    return False
 
+    @staticmethod
+    def _annotations(fn: ast.FunctionDef) -> list[tuple[str, ast.expr | None]]:
+        """(label, annotation) for every parameter + the return of a function."""
+        a = fn.args
+        params = [*a.posonlyargs, *a.args, *a.kwonlyargs]
+        out: list[tuple[str, ast.expr | None]] = [(p.arg, p.annotation) for p in params]
+        out.append(("->return", fn.returns))
+        return out
 
-def _annotations(fn: ast.FunctionDef) -> list[tuple[str, ast.expr | None]]:
-    """(label, annotation) for every parameter + the return of a function."""
-    a = fn.args
-    params = [*a.posonlyargs, *a.args, *a.kwonlyargs]
-    out: list[tuple[str, ast.expr | None]] = [(p.arg, p.annotation) for p in params]
-    out.append(("->return", fn.returns))
-    return out
+    @staticmethod
+    def _bare_array_slots(fn: ast.FunctionDef, names: set[str]) -> list[str]:
+        """Param/return labels whose annotation is a bare array type without a jaxtyping shape."""
+        return [
+            label
+            for label, anno in ShapeContracts._annotations(fn)
+            if ShapeContracts._is_array_anno(anno, names) and not ShapeContracts._is_jaxtyping_anno(anno)
+        ]
 
+    @staticmethod
+    def _public(fn: ast.FunctionDef) -> bool:
+        return not fn.name.startswith("_") and fn.name not in _EXEMPT
 
-def _bare_array_slots(fn: ast.FunctionDef, names: set[str]) -> list[str]:
-    """Param/return labels whose annotation is a bare array type without a jaxtyping shape."""
-    return [label for label, anno in _annotations(fn) if _is_array_anno(anno, names) and not _is_jaxtyping_anno(anno)]
+    @staticmethod
+    def _analyze(tree: ast.Module, names: set[str]) -> list[tuple[int, str, list[str]]]:
+        """(lineno, qualname, bare-slots) for every public method in a tree with a bare-array boundary."""
+        out = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for m in node.body:
+                    if isinstance(m, ast.FunctionDef) and ShapeContracts._public(m):
+                        slots = ShapeContracts._bare_array_slots(m, names)
+                        if slots:
+                            out.append((m.lineno, f"{node.name}.{m.name}", slots))
+        return out
 
+    def scan(self, names: set[str] | None = None) -> list[tuple[str, int, str, list[str]]]:
+        """(file, lineno, qualname, slots) for every bare-array boundary across the packages."""
+        if names is None:
+            names = self.array_names()
+        rows = []
+        for path, tree in Trees(self.packages).walk():
+            rows.extend((str(path), ln, name, slots) for ln, name, slots in self._analyze(tree, names))
+        return rows
 
-def _public(fn: ast.FunctionDef) -> bool:
-    return not fn.name.startswith("_") and fn.name not in _EXEMPT
-
-
-def analyze(path: Path, names: set[str]) -> list[tuple[int, str, list[str]]]:
-    """(lineno, qualname, bare-slots) for every public method in a file with a bare-array boundary."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    out = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            for m in node.body:
-                if isinstance(m, ast.FunctionDef) and _public(m):
-                    slots = _bare_array_slots(m, names)
-                    if slots:
-                        out.append((m.lineno, f"{node.name}.{m.name}", slots))
-    return out
-
-
-def scan(packages: list[str], names: set[str] | None = None) -> list[tuple[str, int, str, list[str]]]:
-    """(file, lineno, qualname, slots) for every bare-array boundary across the packages."""
-    if names is None:
-        names = array_names()
-    rows = []
-    for pkg in packages:
-        for path in sorted(Path(pkg).rglob("*.py")):
-            rows.extend((str(path), ln, name, slots) for ln, name, slots in analyze(path, names))
-    return rows
-
-
-def report(rows: list[tuple[str, int, str, list[str]]]) -> str:
-    lines = [f"{len(rows)} bare-array boundaries (array-typed param/return without a jaxtyping shape):"]
-    for path, ln, name, slots in rows:
-        lines.append(f"  {path}:{ln}  {name}  [{', '.join(slots)}]")
-    return "\n".join(lines)
+    @staticmethod
+    def report(rows: list[tuple[str, int, str, list[str]]]) -> str:
+        lines = [f"{len(rows)} bare-array boundaries (array-typed param/return without a jaxtyping shape):"]
+        for path, ln, name, slots in rows:
+            lines.append(f"  {path}:{ln}  {name}  [{', '.join(slots)}]")
+        return "\n".join(lines)
 
 
 def main():
@@ -141,8 +144,8 @@ def main():
     )
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    rows = scan(args.packages)
-    log.info("%s", report(rows))
+    rows = ShapeContracts(args.packages).scan()
+    log.info("%s", ShapeContracts.report(rows))
     if args.assert_clean and rows:
         raise SystemExit(1)
 

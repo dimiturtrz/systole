@@ -5,25 +5,24 @@ shell needs no mirror test) reads it so the gate agrees with the coverage gate o
 from __future__ import annotations
 
 import re
-import tomllib
-from pathlib import Path
+
+from devtools._common import Pyproject
 
 
-def coverage_omit(pyproject: str = "pyproject.toml") -> list[str]:
-    """The `[tool.coverage.run] omit` globs from pyproject (empty if the file/section is absent)."""
-    p = Path(pyproject)
-    if not p.exists():
-        return []
-    return (
-        tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("coverage", {}).get("run", {}).get("omit", [])
-    )
+class Omit:
+    """The coverage-omit globs + glob matching — one home for 'what counts as a non-logic shell'."""
 
+    @staticmethod
+    def coverage_omit(pyproject: str = "pyproject.toml") -> list[str]:
+        """The `[tool.coverage.run] omit` globs from pyproject (empty if the file/section is absent)."""
+        return Pyproject.tool_section("coverage", pyproject).get("run", {}).get("omit", [])
 
-def matches_omit(path: str, patterns: list[str]) -> bool:
-    """True if `path` matches any coverage-omit glob (`*` = one segment, `**` = across segments)."""
-    path = path.replace("\\", "/")
-    for pat in patterns:
-        rx = "^" + re.escape(pat.replace("\\", "/")).replace(r"\*\*", ".*").replace(r"\*", "[^/]*") + "$"
-        if re.match(rx, path):
-            return True
-    return False
+    @staticmethod
+    def matches_omit(path: str, patterns: list[str]) -> bool:
+        """True if `path` matches any coverage-omit glob (`*` = one segment, `**` = across segments)."""
+        path = path.replace("\\", "/")
+        for pat in patterns:
+            rx = "^" + re.escape(pat.replace("\\", "/")).replace(r"\*\*", ".*").replace(r"\*", "[^/]*") + "$"
+            if re.match(rx, path):
+                return True
+        return False
