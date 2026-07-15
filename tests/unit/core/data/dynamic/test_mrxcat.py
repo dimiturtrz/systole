@@ -7,6 +7,7 @@ import pyvista as pv
 import torch
 
 from core.data.dynamic.anatomy import PoolBuildCfg
+from core.data.dynamic.mri_physics import Tissue
 from core.data.dynamic.mrxcat import Mrxcat
 from core.data.dynamic.synth import MrxcatBgCfg, SynthCfg, SynthPainter
 
@@ -65,6 +66,15 @@ def test_tissue_map_keeps_heart_and_surrounding_organs():
     got = Mrxcat.to_tissue_map(raw)
     assert got.tolist() == [[2, 3, 1], [4, 5, 7], [6, 6, 0], [0, 0, 0]]
     assert got.dtype == np.uint8
+
+
+def test_torso_fractions_excludes_heart_and_renormalizes(tmp_path):
+    # bg tissues air(0)=40 lung(4)=20 liver(5)=10 muscle(6)=30 -> 100 bg; heart 1/2/3 excluded from the norm
+    slices = np.array([0] * 40 + [4] * 20 + [5] * 10 + [6] * 30 + [1] * 7 + [2] * 7 + [3] * 7, np.uint8)[None]
+    pool = tmp_path / "fov.npz"
+    np.savez(pool, slices=slices)
+    got = Mrxcat.torso_fractions(pool)
+    assert got == [(Tissue.AIR, 0.4), (Tissue.LUNG, 0.2), (Tissue.LIVER, 0.1), (Tissue.MUSCLE, 0.3)]
 
 
 def test_place_heart_in_fov_swaps_anatomy():

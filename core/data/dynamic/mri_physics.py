@@ -31,6 +31,7 @@ class Tissue(StrEnum):
     LUNG = "lung"
     LIVER = "liver"
     MUSCLE = "muscle"
+    AIR = "air"
 
 
 # tissue -> field (Tesla) -> (T1 ms, T2 ms, PD). Two fields = the cross-vendor relaxation axis.
@@ -41,6 +42,7 @@ TISSUE: dict[str, dict[float, tuple[float, float, float]]] = {
     "lung":       {1.5: (1300.0,  50.0, 0.15), 3.0: (1550.0,  45.0, 0.15)},  # low PD (air) -> dark
     "liver":      {1.5: (580.0,   45.0, 0.70), 3.0: (810.0,   34.0, 0.70)},
     "muscle":     {1.5: (1010.0,  35.0, 0.75), 3.0: (1420.0,  32.0, 0.75)},
+    "air":        {1.5: (1000.0,  20.0, 0.02), 3.0: (1200.0,  15.0, 0.02)},  # outside-body/lung air: PD~0 -> dark
 }
 _FIELD_1P5T = 1.5                            # tesla; the low-field column (else use the 3T flip value)
 
@@ -55,6 +57,7 @@ TISSUE_RANGE: dict[str, dict[float, tuple[tuple[float, float], tuple[float, floa
     "lung":       {1.5: (( 800.0, 1300.0), ( 40.0,  50.0)), 3.0: ((1000.0, 1400.0), ( 30.0,  50.0))},
     "liver":      {1.5: (( 500.0,  650.0), ( 40.0, 102.0)), 3.0: (( 700.0,  900.0), ( 30.0,  50.0))},
     "muscle":     {1.5: (( 870.0, 1100.0), ( 35.0,  50.0)), 3.0: ((1300.0, 1450.0), ( 30.0,  50.0))},
+    "air":        {1.5: (( 800.0, 1400.0), ( 10.0,  30.0)), 3.0: ((1000.0, 1400.0), ( 10.0,  25.0))},  # nominal (PD~0)
 }
 
 # canonical heart label -> tissue: 1=RV cavity (blood), 2=myocardium, 3=LV cavity (blood); 0=bg fallback.
@@ -65,6 +68,18 @@ _HEART = {1: Tissue.BLOOD, 2: Tissue.MYOCARDIUM, 3: Tissue.BLOOD}
 # the pure-synth gap is NOT background. It's blood-pool over-brightness (LV-cav W1 0.93, ~all location
 # 0.91, shape 0.05). See bd 276 / ap6 notes. (measured 2026-07-01)
 _BG_LADDER = (Tissue.LUNG, Tissue.LIVER, Tissue.MUSCLE, Tissue.FAT)
+
+# Whole-FOV torso COMPOSITION (tissue, area-fraction), dark->bright. The per-image z-score references the
+# WHOLE-FOV intensity histogram, so the bg's AREA FRACTIONS (not just its levels) set where the heart
+# classes land after normalization. Equal-tier procedural bg over-weights bright tissue -> image mean too
+# high -> myocardium drifts too dark (l45x: procedural myo location gap 0.23 vs flat 0.07).
+# NOT a magic literal — these are the OUTPUT of a committed deriver, a MEASUREMENT of the XCAT/MRXCAT torso
+# anatomy (heart classes excluded, renormalized), reproduce with:
+#   python -m core.data mrxcat torso-fractions --pool <whole-FOV pool from build-fov-pool>
+# (= `Mrxcat.torso_fractions`). Physical torso prior (phantom anatomy + literature bSSFP) — leak-free,
+# NOT fit to real MRI. Re-run the deriver if the phantom pool changes.
+TORSO_BG: tuple[tuple[Tissue, float], ...] = (
+    (Tissue.AIR, 0.293), (Tissue.LUNG, 0.129), (Tissue.LIVER, 0.048), (Tissue.MUSCLE, 0.53))
 
 
 # --- cine bSSFP acquisition, DERIVED from physics (not tabulated paper mid-bands) ---
@@ -236,6 +251,20 @@ class MriPhysics:
         t2 = torch.tensor([r[1] for r in rows], device=device)
         pd = torch.tensor([r[2] for r in rows], device=device)
         return t1, t2, pd
+
+    @staticmethod
+    def torso_paint_params(n_classes: int, field: float, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """(T1,T2,PD) for [heart classes 0..n_classes-1] + [TORSO_BG tissues] — the physical whole-FOV
+        composition for the zero-real procedural bg (named torso tissues at literature bSSFP, not the
+        dark->bright ladder interpolation). Index order lines up with extend()'s n_classes+tier relabel."""
+        names = [_HEART.get(c, Tissue.MUSCLE) for c in range(n_classes)] + [t for t, _ in TORSO_BG]
+        return MriPhysics.named_tissue_params(names, field, device)
+
+    @staticmethod
+    def torso_thresholds(device) -> Float[torch.Tensor, "*k"]:
+        """Interior cumulative-area thresholds (K-1) for bucketizing a uniform [0,1) field into the
+        TORSO_BG tissues at their physical area fractions (so the whole-FOV histogram is torso-like)."""
+        return torch.cumsum(torch.tensor([f for _, f in TORSO_BG], device=device), 0)[:-1]
 
     @staticmethod
     def tissue_params(n_classes: int, n_bg_tiers: int, field: float,

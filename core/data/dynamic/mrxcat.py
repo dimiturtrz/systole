@@ -67,6 +67,10 @@ _XCAT_TO_FOV = {1: 2, 5: 3, 6: 1,                       # heart: LV-wall→myo, 
                 50: 7, 99: 7,                            # fat
                 7: 6, 8: 6}                               # other blood → soft tissue (not a bright cavity)
 _BONE = {31, 32, 33, 34, 35, 51}                          # cortical bone → dark → bg tier
+# FOV pool class → TORSO tissue for the whole-FOV COMPOSITION deriver (heart 1/2/3 excluded). Splits
+# bg/air (0, dark PD~0) from lung (4) — unlike FOV_TISSUE which lumps both as lung — so the procedural
+# bg carries the real ~30% dark air fraction. Ordered dark→bright for `torso_fractions`.
+_FOV_TO_TORSO = {0: Tissue.AIR, 4: Tissue.LUNG, 5: Tissue.LIVER, 6: Tissue.MUSCLE, 7: Tissue.FAT}
 
 
 _MRXCAT_REPO = "https://gitlab.ethz.ch/ibt-cmr-public/mrxcat-2.0.git"
@@ -288,6 +292,22 @@ class Mrxcat:
         log.info(f"wrote ssm-fov pool {out_path}  shape {shape}")
 
     @staticmethod
+    def torso_fractions(pool_path: str | Path) -> list[tuple[Tissue, float]]:
+        """Whole-FOV bg-tissue area fractions of the phantom pool (heart classes 1/2/3 excluded,
+        renormalized), dark→bright. The reproducible SOURCE of `mri_physics.TORSO_BG` — a measurement of
+        the XCAT/MRXCAT torso anatomy, not a fitted number; re-run when the phantom pool changes."""
+        slices = np.load(pool_path)["slices"]
+        counts = {tissue: int((slices == cls).sum()) for cls, tissue in _FOV_TO_TORSO.items()}
+        total = sum(counts.values())
+        return [(tissue, round(counts[tissue] / total, 3)) for tissue in _FOV_TO_TORSO.values() if counts[tissue]]
+
+    @staticmethod
+    def _cmd_torso_fractions(args) -> None:  # pragma: no cover
+        """Print TORSO_BG = phantom bg-tissue area fractions (reproduces mri_physics.TORSO_BG)."""
+        fractions = Mrxcat.torso_fractions(args.pool)
+        log.info("TORSO_BG = (%s)", ", ".join(f"(Tissue.{t.name}, {f})" for t, f in fractions))
+
+    @staticmethod
     def add_args(ap):
         sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -313,8 +333,12 @@ class Mrxcat:
         bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
         bs.add_argument("--scale", type=float, default=3.0)
 
+        tf = sub.add_parser("torso-fractions", help="fov pool -> TORSO_BG bg-tissue area fractions (reproduces mri_physics.TORSO_BG)")
+        tf.add_argument("--pool", required=True, help="whole-FOV pool npz (from build-fov-pool)")
+
     @classmethod
     def run(cls, args):  # pragma: no cover
         {"probe": cls._cmd_probe, "fetch": cls._cmd_fetch, "build-pool": cls._cmd_build_pool,
          "build-fov-pool": cls._cmd_build_fov_pool,
-         "build-ssm-fov-pool": cls._cmd_build_ssm_fov_pool}[args.cmd](args)
+         "build-ssm-fov-pool": cls._cmd_build_ssm_fov_pool,
+         "torso-fractions": cls._cmd_torso_fractions}[args.cmd](args)

@@ -258,9 +258,11 @@ class SynthFidelity:
                         "not a tuning target)")
         ap.add_argument("--max-slices", type=int, default=2500, help="cap on pooled real slices (σ/W1 are "
                         "sample-size-agnostic; bounds VRAM)")
+        ap.add_argument("--seed", type=int, default=0, help="paint seed -> reproducible d'/W1 readout")
 
     @staticmethod
     def run(args):  # pragma: no cover
+        torch.manual_seed(args.seed)   # deterministic paint -> config deltas are the signal, not run-noise
         cfg = TrainCfg()
         Hparams.apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])
         cfg.generator.synth.synth_p = 1.0

@@ -185,8 +185,8 @@ caps per-source residency.
 | shape — learned | — | — | ⛔ (`vpn5`) |
 | color — tissue | T1/T2/PD table | `mri_physics.py`: `TISSUE`, `tissue_params`, `_HEART`, `blood_classes` | ✅ |
 | color — acquisition | field/TR/flip strategy | `synth.py`: `Acquisition` ABC → `LegacyAcq`/`RandomizedAcq`/`MatchedAcq`, `make_acquisition` | ✅ |
-| color — per-vendor | vendor→its acq | `mri_physics.acquisition_for` exists but not wired into paint | 🟡 (`ex1`) |
-| paint mechanism | bSSFP signal | `synth.py`: `synthesize_from_labels` (`bssfp_signal`, inflow, `banding`) | ✅ |
+| color — per-vendor | vendor→its acq | `mri_physics.acquisition_for` exists but not wired into paint | ⛔ closed (`ex1`: per-vendor blood gap was a z-score artifact, not a real defect) |
+| paint mechanism | bSSFP signal | `synth.py`: `synthesize_from_labels` (`bssfp_signal`, inflow, `banding`) | ✅ (inflow parked-off — see Effects ledger) |
 | background factor | whole-FOV fill | `synth.py`: `Background` ABC → `Flat`/`Procedural`/`Partition`/`HybridBg`, `make_background` | ✅ |
 | nuisance — geometry | pan/rot/scale/flip | `augment.py`: `augment_batch` (translate opt-in, default 0) | ✅ (pan opt-in) |
 | nuisance — corruption | pv/bias/blur/kspace/noise | `synth.py` corruption chain | ✅ |
@@ -215,10 +215,44 @@ caps per-source residency.
 **Reading it:** the whole **forward SAMPLE path is built** (parametric shape+color, all four bg strategies,
 acquisition strategies, corruption chain, composite union), plus **FIX** (repaint + excised real-bg), both
 coverage metrics (**color** + **shape**), and the **FIT** loop (`inverse.py`). What's left is not
-mechanism but *fidelity + identifiability*: the composite showed coverage is saturated yet Dice-flat, so
-the open levers are a **learned shape prior** (`vpn5`) and texture fidelity for the forward path, and
-**multi-acquisition input** (`5ev5`) to make the twin identifiable — with framing (`x8ne`) and per-vendor
-color (`ex1`) as smaller fills.
+mechanism but *fidelity + identifiability*. The open levers are **color-appearance correctness** (epic:
+blood mean + within-class spread `fi33`, resolution `uw5p` — after the composition+inflow fixes took
+zero-real Dice 0.554→0.613), a **learned shape prior** (`vpn5`, the ~0.12 shape-generation residual), and
+**multi-acquisition input** (`5ev5`) to make the twin identifiable — with framing (`x8ne`) a smaller fill.
+See the **Effects ledger** below for per-knob on/off status + why.
+
+## Effects ledger — every knob, its default, and WHY (tried / parked / in)
+
+Every physical effect stays **modeled and in the code** (a `SynthCfg` field), toggleable — nothing tried
+is deleted. This table is the single record of what's on, what's parked-off and why, so a parked effect
+(e.g. `inflow`) isn't silently lost. Rule: an effect that's physically real but currently off stays IN as
+opt-in + a reason here (owner: *a physically-valid method that regresses means the test lacks that axis —
+keep it, document it, don't discard*). Evidence links are the interpretation docs, not duplicated here.
+
+| effect (`SynthCfg`) | default | status | why on/off |
+|---|---|---|---|
+| bg composition (`bg=procedural`) | torso area-fractions | **in** | physical XCAT torso composition + `Tissue.AIR`; lands bg+myo on real (`2026-07-15_correct_synth_composition_dent.md`) |
+| tissue table (`TISSUE`, bSSFP) | on | **in** | literature T1/T2/PD (Stanisz/Bojorquez) |
+| acquisition sweep (TR/flip/field) | on | **in** | cross-vendor contrast breadth |
+| `bias_strength` | 0.3 | **in** | B1/coil bias field (N4 dual) |
+| `blur` | (0,1) | **in** | resolution jitter |
+| `noise` | 0.05 | **in** | Rician magnitude noise |
+| `texture` | 0.05 | **in** | within-class grain |
+| `jitter` | 0.4 | **in** | residual per-class breadth |
+| `deform` | 0.15 | **in** (train only) | anatomy-warp diversity; **forced OFF in the fidelity tool** — warping misaligns the measurement mask → artifact (`2026-07-15_myo_separability_artifact.md`, `f4hk`) |
+| `inflow` | **off** | **parked** | gain-only (fresh-spin brightening, no flow-dephasing loss / papillary PV) → over-brightens blood in a correct scene (+3.9z vs real +1.6). Real blood sits below steady-state → OFF is closer. Complete it → `fi33` |
+| `pv_sigma` | **off** | **planned-on** | partial-volume blur; turn on at *physical* magnitude (`uw5p`), NOT the over-blur hack (rejected — augmentation masking a defect, `2026-07-15_dprime_dice_proxy_verdict.md`) |
+| `kspace` | **off** | **planned-on** | finite k-space PSF (real ≈2mm res); physical resolution correctness → `uw5p` |
+| `b0_hz` | **off** | **parked** | bSSFP off-resonance banding; not needed at current fidelity |
+| `flow` | **off** | **parked** | extra blood-pool spread; superseded by the cavity-appearance work (`fi33`) |
+| `tissue_spread` | **off** | **parked** | per-sample physical T1/T2 redraw; redundant with the acquisition sweep at current breadth |
+| `blood_scale` | 1.0 (off) | **superseded / forbidden** | LEGACY empirical blood mean scale — a knob **fit to our data = soft leak** (`selection-on-test`). Kept only for comparison; never the fix (physics, not fitting) |
+
+**Parked approaches (method-level, not knobs)** — findings that closed a direction, kept documented:
+- *within-slice myo texture* (`f4hk`) — **retracted**, was a `deform` measurement artifact; synth myo shape already matches real.
+- *shape coverage via composite union* — Dice-neutral (coverage ≠ Dice); kept for the pathology tail, not a ceiling lever.
+- *over-blur for Dice* (kspace0.4/pv1.5) — **rejected**: +0.03 but un-physical (coarser than real acquisition) = augmentation masking a defect, not fidelity.
+- *learned bg generator* (`ap6`, now P4) — superseded by the physics torso composition; also kills painter invertibility (→ kills the `ncph` twin), so last-resort only.
 
 ## Identifiability of the FIT operator (`ncph`/`ixea`)
 
