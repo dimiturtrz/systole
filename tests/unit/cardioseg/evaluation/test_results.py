@@ -53,6 +53,22 @@ def test_axis_dict_ef_fields_rounded_1dp():
     assert out["ef_loa"] == [-12.1, 5.8]
 
 
+# --- calibration companions: cal_stats adds disclosed ef_*_cal alongside raw, never replacing ---
+def test_axis_dict_no_cal_stats_omits_cal_fields():
+    """Absent cal_stats (default): only the raw EF fields — the uncalibrated axis is unchanged."""
+    out = Results.axis_dict(2, _dists(), _dice(), _stats())
+    assert not any(k.endswith("_cal") for k in out)
+
+
+def test_axis_dict_cal_stats_adds_disclosed_companions():
+    """cal_stats present: ef_*_cal appear beside the raw ef_* (both kept), each rounded to its precision."""
+    out = Results.axis_dict(2, _dists(), _dice(), _stats(mae=9.9, bias=-9.8, loa=(-24.3, 4.7)),
+                            cal_stats=_stats(mae=5.44, bias=-2.91, loa=(-18.5, 12.66)))
+    assert out["ef_mae"] == 9.9 and out["ef_bias"] == -9.8          # raw preserved
+    assert out["ef_mae_cal"] == 5.4 and out["ef_bias_cal"] == -2.9  # calibrated companion, 1dp
+    assert out["ef_loa_cal"] == [-18.5, 12.7]
+
+
 # --- boundary-metric boundary: empty pooled dists -> NaN hd95/assd (no crash) ---
 def test_axis_dict_empty_dists_gives_nan_surface():
     """Empty class: a class with only empty boundary arrays -> hd95/assd NaN, dice still computed."""

@@ -5,7 +5,7 @@ lives in ONE place and the markdown can't drift. Each renderable table sits betw
     ...auto-generated, do not hand-edit...
     <!-- /results:compare -->
 
-Run after regenerating RESULTS.json (cardioseg.evaluation.results):  python -m cardioseg.evaluation.sync_numbers
+Run after regenerating RESULTS.json (cardioseg.evaluation results):  python -m cardioseg.evaluation sync_numbers
 Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep those few; the tables
 (where the drift happened) are now generated.
 """
@@ -68,13 +68,25 @@ class SyncNumbers:
         return "\n".join(rows)
 
     @staticmethod
+    def _cal(ax: dict) -> str:
+        """The disclosed calibrated-EF cell for one axis: `raw → cal`, or `—` before RESULTS.json carries it."""
+        return f"{ax['ef_mae']} → **{ax['ef_mae_cal']}**%" if "ef_mae_cal" in ax else "—"
+
+    @staticmethod
     def axis() -> str:
-        return "\n".join([
-            "| held-out axis | role | n | mean Dice | EF MAE |", "|---|---|---|---|---|",
-            f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% |",
-            f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% |",
-            f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% |",
-        ])
+        cal = R.get("ef_calibration")
+        rows = [
+            "| held-out axis | role | n | mean Dice | EF MAE | EF MAE (cal)† |", "|---|---|---|---|---|---|",
+            f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% | {SyncNumbers._cal(_A)} |",
+            f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% | {SyncNumbers._cal(_C)} |",
+            f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% | {SyncNumbers._cal(_G)} |",
+        ]
+        if cal:
+            rows.append(f"\n† post-hoc linear EF correction `ef_corr = {cal['slope']}·ef_pred + {cal['intercept']}`, "
+                        "fit on VAL (ACDC) only, applied to all axes — **disclosed, not substituted** for the "
+                        "reported (raw) EF. Vendor-systematic bias transfers OOD; see "
+                        "`interpretations/ef/2026-07-15_ef_defensibility.md`.")
+        return "\n".join(rows)
 
     @staticmethod
     def cardcompare() -> str:  # unseen-vendor comparison used in both model cards
