@@ -2,7 +2,9 @@
 
 ## Open Questions
 
-(none pending)
+| Topic | Deep-Dive | TL;DR |
+|-------|-----------|-------|
+| Synthetic-data "cleanliness" as sim2real bottleneck in medical segmentation | `2026-07-15_synth_seg_sim2real_overcleanliness.md` | "Reality gap" is named in robotics/CV but "over-cleanliness" is NOT primary in medical-imaging literature (frames as "domain shift" instead). Curriculum learning (DisCL, style-easy-to-hard) + refinement (SimGAN/CycleGAN/diffusion) exist to add realism, but no validated metric predicts Dice from separability; FID doesn't correlate downstream. SynthSeg domain-randomization works brain-MRI but cardiac equivalent missing. Domain adaptation (self-training on unlabeled real) is the fallback if unlabeled real available. Intensity-overlap measurement (d'=4.5 synth vs 2.65 real) not yet explored as a curriculum signal in published work. |
 
 ## Settled Findings
 
