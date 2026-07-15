@@ -2,7 +2,7 @@
 the nnU-Net baseline, efficiency). `cardioseg/evaluation/sync_numbers.py` renders the doc tables/stats from this,
 so a number lives in a single place and the docs can't drift. Regenerate after any eval:
 
-    python -m cardioseg.evaluation.results --run runs/gen
+    python -m cardioseg.evaluation results --run runs/gen
 
 All flagship numbers pool ED+ES (the honest read). nnU-Net numbers are read from
 baselines/nnunet/results.json (emitted by baselines/nnunet/score.py --out, ED+ES) — single source,
@@ -10,6 +10,7 @@ no hand-copy; refresh by re-running that baseline's score.py.
 """
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import mlflow
@@ -24,7 +25,7 @@ from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
 from core.evaluate import CLASSES, Evaluate, SurfaceMetrics
 from core.hparams import Hparams
-from core.measure import AgreementStats, Measure
+from core.measure import AgreementStats, EfCalibration, Measure
 from core.model import Model
 from core.registry import _DB_URI, Registry
 
@@ -44,17 +45,30 @@ EFFICIENCY = {"ours": {"params": "1.6 M", "flops": "0.8 G"},
 _NAMES = [CLASSES[c][0] for c in CLASSES]  # RV, LV-myo, LV-cav
 
 
+@dataclass(frozen=True)
+class _Collected:
+    """One axis' GPU-collected pieces, held raw so the VAL calibration can be fit before assembly."""
+    n: int
+    dists: dict
+    dice_acc: dict
+    ef_gt: np.ndarray
+    ef_pred: np.ndarray
+    strata: dict | None
+
+
 class Results:
     """Emits the canonical RESULTS.json axes: pure axis-record assembly (`axis_dict`) + the GPU-shell
     `_axis`/`build` that feed it. Grouped so the published-JSON shape lives with the eval that fills it."""
 
     @staticmethod
-    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: AgreementStats) -> dict:
+    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: AgreementStats,
+                  cal_stats: AgreementStats | None = None) -> dict:
         """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
         stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
-        EF MAE/bias/LoA). No model, no store — extracted from `_axis` so the exact JSON shape + rounding
-        (the thing the docs read) is testable off synthetic pooled arrays; `_axis` supplies these from the
-        GPU `collect` (the shell) and appends `strata` after."""
+        EF MAE/bias/LoA). No model, no store — extracted from `_collect` so the exact JSON shape + rounding
+        (the thing the docs read) is testable off synthetic pooled arrays; `build` supplies these from the
+        GPU `collect` (the shell) and appends `strata` after. `cal_stats` (EF stats after the VAL-fit linear
+        correction) adds the disclosed `ef_*_cal` companions alongside the raw EF — never replaces them."""
         dice, hd95, assd = {}, {}, {}
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
@@ -63,37 +77,63 @@ class Results:
             dice[name] = round(float(np.mean(dice_acc[cl])), 3)
             hd95[name] = round(float(surf.hd95), 1)
             assd[name] = round(float(surf.assd), 2)
-        return {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
-                "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats.mae, 1),
-                "ef_bias": round(ef_stats.bias, 1),
-                "ef_loa": [round(ef_stats.loa[0], 1), round(ef_stats.loa[1], 1)]}
+        out = {"n": n_rows, "dice": {**dice, "mean": round(float(np.mean(list(dice.values()))), 3)},
+               "hd95": hd95, "assd": assd, "ef_mae": round(ef_stats.mae, 1),
+               "ef_bias": round(ef_stats.bias, 1),
+               "ef_loa": [round(ef_stats.loa[0], 1), round(ef_stats.loa[1], 1)]}
+        if cal_stats is not None:
+            out |= {"ef_mae_cal": round(cal_stats.mae, 1), "ef_bias_cal": round(cal_stats.bias, 1),
+                    "ef_loa_cal": [round(cal_stats.loa[0], 1), round(cal_stats.loa[1], 1)]}
+        return out
 
     @staticmethod
-    def _axis(run: Path, device: str, df, *, with_strata: bool) -> dict:  # pragma: no cover  (collect = GPU inference over the val/test frame)
+    def _collect(run: Path, device: str, df, *, with_strata: bool) -> "_Collected":  # pragma: no cover  (collect = GPU inference over the val/test frame)
+        """GPU shell for one axis: pooled boundary dists + per-class dice + EF pairs (+ pathology strata).
+        Returns raw pieces so `build` can fit the calibration on VAL before assembling any axis."""
         rows = Distribution.collect(run, device, df.iter_rows(named=True))
         dists, dice_acc, ef_gt, ef_pred = Distribution.pooled(rows)
-        out = Results.axis_dict(len(rows), dists, dice_acc, Measure.ef_statistics(ef_gt, ef_pred))
-        if with_strata:
-            out["strata"] = Distribution.strata_table(rows, "pathology")
+        strata = Distribution.strata_table(rows, "pathology") if with_strata else None
+        return _Collected(len(rows), dists, dice_acc, np.asarray(ef_gt), np.asarray(ef_pred), strata)
+
+    @staticmethod
+    def _axis(c: "_Collected", cal: EfCalibration) -> dict:
+        """Assemble one axis dict from collected pieces + the VAL-fit calibration (raw EF stats plus the
+        disclosed calibrated companions). Pure over `_Collected` — the GPU cost lives in `_collect`."""
+        ef = Measure.ef_statistics(c.ef_gt, c.ef_pred)
+        cal_stats = Measure.ef_statistics(c.ef_gt, cal.apply(c.ef_pred))
+        out = Results.axis_dict(c.n, c.dists, c.dice_acc, ef, cal_stats)
+        if c.strata is not None:
+            out["strata"] = c.strata
         return out
 
     @staticmethod
     def build(run: Path) -> dict:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
         """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
         TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
-        the run actually held out."""
+        the run actually held out. EF calibration is fit on VAL only (leak rule) and applied to every axis;
+        each axis reports raw EF plus a disclosed `ef_*_cal` companion — the reported EF stays uncalibrated,
+        the correction is surfaced, not silently applied."""
         device = Model.resolve_device()
         d = Hparams.from_json(run / "config.json").generator.data
         meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
         _, val, test = splits.Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, 0,
                                          val_datasets=d.val_datasets, val_vendors=d.val_vendors)
-        flagship = {"acdc": Results._axis(run, device, val, with_strata=True)}   # val = ACDC, with strata
+        collected = {"acdc": Results._collect(run, device, val, with_strata=True)}   # val = ACDC, with strata
         for v in d.test_vendors:                                         # test = unseen vendors, each its own axis
-            flagship[v.lower()] = Results._axis(run, device, test.filter(pl.col("vendor") == v), with_strata=False)
+            collected[v.lower()] = Results._collect(run, device, test.filter(pl.col("vendor") == v), with_strata=False)
+        vc = collected["acdc"]
+        cal = Measure.fit_ef_calibration(vc.ef_gt, vc.ef_pred)           # fit on VAL only (leak-safe)
+        flagship = {k: Results._axis(c, cal) for k, c in collected.items()}
         return {
             "_note": "Canonical published numbers — generated by cardioseg.evaluation.results; do not hand-edit.",
             "run": run.name,
             "split": {"val": "acdc (held-out centre)", "test": "+".join(d.test_vendors) + " (unseen vendors)"},
+            "ef_calibration": {
+                "slope": round(float(cal.slope), 4), "intercept": round(float(cal.intercept), 4),
+                "note": "ef_*_cal = post-hoc linear EF correction ef_corr=slope*ef_pred+intercept, fit on VAL "
+                        "(acdc) only, applied to all axes. Reported EF stays the raw ef_*; calibration is "
+                        "disclosed alongside, not substituted. See interpretations/ef/2026-07-15_ef_defensibility.md.",
+            },
             "flagship": flagship,
             "nnunet": NNUNET,        # NOTE: still on the OLD split (ACDC-as-test) until re-run — provisional
             "efficiency": EFFICIENCY,

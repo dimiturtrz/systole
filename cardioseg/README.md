@@ -139,11 +139,13 @@ including it is the honest read. **EF vs GT: MAE 7.1%** (bias −6.4%, 95% LoA [
 challenge splits aren't inherited):
 
 <!-- results:axis -->
-| held-out axis | role | n | mean Dice | EF MAE |
-|---|---|---|---|---|
-| **ACDC** — centre / protocol shift | val | 150 | 0.87 | 7.1% |
-| **Canon** — unseen vendor | test | 9 | 0.84 | 9.9% |
-| **GE** — unseen vendor | test | 69 | 0.83 | 11.0% |
+| held-out axis | role | n | mean Dice | EF MAE | EF MAE (cal)† |
+|---|---|---|---|---|---|
+| **ACDC** — centre / protocol shift | val | 150 | 0.87 | 7.1% | 7.1 → **5.4**% |
+| **Canon** — unseen vendor | test | 9 | 0.84 | 9.9% | 9.9 → **5.4**% |
+| **GE** — unseen vendor | test | 69 | 0.83 | 11.0% | 11.0 → **7.4**% |
+
+† post-hoc linear EF correction `ef_corr = 1.1035·ef_pred + 2.0962`, fit on VAL (ACDC) only, applied to all axes — **disclosed, not substituted** for the reported (raw) EF. Vendor-systematic bias transfers OOD; see `interpretations/ef/2026-07-15_ef_defensibility.md`.
 <!-- /results:axis -->
 
 Canon **n=9** (M&Ms-1 withholds GT for most of Testing: 320 on disk, 213 labelled, Canon 50 → 9

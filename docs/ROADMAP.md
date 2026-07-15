@@ -24,7 +24,14 @@ Status: ✅ done · 🔄 doing · ⬜ planned.
    epistemic**, not the floor; we trade it for a 57× smaller deployable ONNX model.
 4. ⬜ Cross-scanner harmonization — **deprioritized by evidence** (in-domain vendors already level;
    `bd cardiac-seg-qfz`).
-5. ⬜ Bias calibration (held-out linear EF correction).
+5. ✅ Bias calibration (held-out linear EF correction) — fit `ef_corr = 1.10·ef_pred + 2.1` on VAL,
+   apply once to TEST (`python -m cardioseg.evaluation ef_calibrate`). Removes the systematic EF bias:
+   val MAE 7.1→5.4 / bias −6.4→0.0; unseen-vendor **transfers** — Canon 9.9→5.4 / GE 11.0→7.4 MAE,
+   bias −10→−3. The bias is vendor-systematic, so one linear fit carries OOD (residual −3pp = the
+   correction under-shoots the larger OOD shift; post-hoc calibration stays domain-shift-limited).
+   Source-level levers (differentiable vol-consistency loss, Kaggle EF-only weak supervision) each buy
+   ~1.5–2pp EF MAE Dice-free and stack with calibration — see
+   `interpretations/ef/2026-07-15_ef_defensibility.md`.
 6. ⬜ Stronger seg + SOTA benchmark — nnU-Net done; benchmark CardioSAM cross-vendor (`bd …-0h7`).
 7. ⬜ Eval rigor — 5-fold CV (`bd …-4ev`); UQ / calibration flags (`bd …-iq7`).
 

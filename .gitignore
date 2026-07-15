@@ -16,8 +16,8 @@ __pycache__/
 *.pth
 .venv/
 runs/
-# stray training logs written beside runs/ (never in the repo)
-runs_*.log
+# stray logs (training runs, debug dumps) — never in the repo
+*.log
 logs/
 # Claude Code transient session lock (scheduled-wakeup state, not repo content)
 .claude/scheduled_tasks.lock
