@@ -87,6 +87,7 @@ class TrainCfg(BaseModel):
     batch: int = Field(64, ge=1)
     lr: float = Field(1e-3, gt=0)
     patience: int = Field(20, ge=1)
+    es_min_delta: float = Field(0.0, ge=0)         # early-stop: min val-gain to count as improvement (0 = any)
     workers: int = Field(6, ge=0)                  # store consolidation only (DataLoader is workers=0)
     seed: int = Field(0, ge=0)
     n_patients: int = Field(0, ge=0)               # debug cap (0 = all)
