@@ -8,6 +8,8 @@ dependencies = [
     "numpy",
     "scipy",
     "scikit-image",
+    "Pillow",                        # PIL.Image (data/dynamic/{anatomy,inverse})
+    "scikit-learn",                  # roc_auc/avg_precision (evaluation/uncertainty)
     "nibabel",
     "matplotlib",
     "tqdm",
@@ -36,7 +38,7 @@ dev = ["pytest", "pytest-cov"]
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.8.0#subdirectory=sdlc-devtools"]
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
@@ -44,7 +46,7 @@ mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
 all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov",
-       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
+       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.8.0#subdirectory=sdlc-devtools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -54,10 +56,9 @@ pythonpath = ["."]          # repo root importable -> top-level devtools/ (dev t
 # needs unique basenames + __init__ packages, which a mirror breaks).
 addopts = "--import-mode=importlib"
 
-# Architecture fitness thresholds (devtools/graph.py --assert, bd cardiac-seg-g0b2) — the METRIC arch
-# axis import-linter's categorical contracts can't express. BLOCKING rules start clean and ratchet:
-# god-module (fan-in AND fan-out both > bottleneck_degree), file > file_max, any import cycle. ADVISORY
-# (never blocks): betweenness > betweenness_max (noisy).
+# Architecture fitness thresholds (devtools/graph.py --assert) — the METRIC arch axis import-linter's
+# categorical contracts can't express. BLOCKING: god-module (fan-in AND fan-out > bottleneck_degree),
+# file > file_max, any import cycle. ADVISORY: betweenness > betweenness_max (noisy).
 [tool.structure]
 # >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these.
 bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
@@ -71,16 +72,25 @@ main_sequence_max = 0.0     # advisory Martin main-sequence distance |A+I-1| cei
 test_layout = "mirror"      # every logic module needs tests/unit/<pkg>/<path>/test_<name>.py (0/79 unmirrored)
 # <<< LOCAL-SLOT: arch-thresholds
 
-# magic-literals ENFORCED ratchet (devtools/magic_literals.py) — the recurring-string / repeated-key-set
-# floor is frozen as a ceiling; a NEW magic literal pushes the count over and fails the merge (migrate it
-# to a StrEnum/constant, or raise the ceiling in the same commit with a reason). MECHANISM = base gate
-# (all repos run it enforced); NUMBERS = per-repo FACT (cardiac's legit non-enum-able floor: polars
-# column names, matplotlib/torch API vocab, path segments, nan). bd cardiac-seg-wir7/1ln7.
-[tool.magic_literals]
-# >>> LOCAL-SLOT: magic-ceilings — this repo's frozen literal floor (raise only with a documented reason)
-max_strings = 48
-max_key_sets = 11
-# <<< LOCAL-SLOT: magic-ceilings
+# Dependency hygiene (deptry, ENFORCED): imported-but-undeclared (DEP001) / declared-but-unused (DEP002) /
+# transitive (DEP003) imports. noxfile.py imports the `nox` runner (invoked via uvx, deliberately not a
+# project dep) so it's excluded from the scan.
+[tool.deptry]
+# cardioview = a separate viewer lane (script-style sibling imports, own dep story); core+cardioseg are the
+# packaged guardrail targets deptry validates. noxfile imports the uvx-invoked nox runner (not a project dep).
+extend_exclude = ["noxfile.py", "cardioview"]
+
+# deptry does not scan tests/ (its default exclude), so DEP002 (declared-but-unused) fires for anything
+# only exercised by the test suite or by tooling. PERMANENT ignores (never imported in scanned source by
+# design): the test-runner deps `pytest`/`pytest-cov`, and `sdlc-devtools` (the analyzers, invoked as a CLI
+# `python -m devtools.*`). STARTERS: the runtime deps the scaffold ships for you to build on
+# (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
+[tool.deptry.per_rule_ignores]
+# >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
+# DEP002 = declared-but-not-directly-imported, all legit: test/tooling runners; onnx (pulled by onnxruntime.quantization at runtime); psutil/pynvml (lazy-imported in tracking.py); the optional extras (nnunet baselines quarantine / opencv mrxcat offline tooling / cupy+cucim gpu linux-only).
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "onnx", "psutil", "pynvml",
+          "nnunetv2", "opencv-python-headless", "cupy-cuda13x", "cucim-cu13"]
+# <<< LOCAL-SLOT: deptry-unused
 
 # Ruff: format + lint. Curated rule set (decided rule-by-rule, not `select = ["ALL"]`) — the goal is
 # catching drift (magic constants, sprawling ifs, dead code, lazy imports), NOT enforcing a house

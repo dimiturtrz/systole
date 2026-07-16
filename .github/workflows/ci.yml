@@ -109,26 +109,34 @@ jobs:
       # categorical contracts can't express. Thresholds in [tool.structure]. Runs here for the synced env.
       - name: Architecture fitness — enforced (devtools/graph.py --assert)
         run: uv run --extra devtools python -m devtools.graph --assert core cardioseg
-      # Magic literals — ENFORCED ratchet: the recurring-string / repeated-key-set count is frozen as a
-      # ceiling in [tool.magic_literals]; a NEW magic literal pushes it over and blocks. Mechanism is the
-      # base gate; the ceiling NUMBERS are a per-repo FACT (fresh repo = 0/0). The non-comparison axis
-      # ruff PLR2004 can't see.
-      - name: Magic literals — enforced (ratchet over [tool.magic_literals] ceiling)
-        run: uv run --extra devtools python -m devtools.magic_literals core cardioseg
+      # Dependency hygiene — deptry: imported-but-undeclared (DEP001) + declared-but-unused (DEP002) +
+      # transitive (DEP003). Runs in the synced env (`--with` adds deptry) so it reads installed dist
+      # metadata. Config (excludes + per-rule ignores) in [tool.deptry]. Blocks the merge.
+      - name: Dependency hygiene — enforced (deptry)
+        run: uv run --with deptry==0.25.1 deptry .
       # Shape contracts — ENFORCED (GRADUATED advisory->blocking, bd vip.4): every public array/tensor
       # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor. A fresh gen has 0 boundaries
       # (passes); from the first typed boundary on, a bare one fails the merge — the ratchet at work. Aliases
       # in [tool.shape_contracts]. (Was advisory; graduated once cardiac proved a real ml tree stays clean.)
       - name: Shape contracts — enforced (jaxtyping boundaries; devtools/shape_contracts.py --assert)
         run: uv run --extra devtools python -m devtools.shape_contracts core cardioseg --assert
-      # Class-shape smells — ADVISORY explorers (never block): LCOM4 cohesion, Fowler data-clumps, and
-      # namespace-classes with latent shared state. Heuristics ranking refactor candidates — reviewer signal.
-      - name: Class-shape smells — advisory (LCOM / data-clumps / namespace-state)
+      # ADVISORY explorers (never block): LCOM4 cohesion, Fowler data-clumps, namespace-state, recurring
+      # magic literals (StrEnum/dataclass candidates — the non-comparison axis ruff PLR2004 can't see), and
+      # radon cyclomatic complexity (ruff C901 is the FIXED gate; this just ranks). Reviewer signal only.
+      - name: Class-shape + literal + complexity smells — advisory
         continue-on-error: true
         run: |
           uv run --extra devtools python -m devtools.state_candidates core cardioseg
           uv run --extra devtools python -m devtools.lcom core cardioseg
           uv run --extra devtools python -m devtools.data_clumps core cardioseg
+          uv run --extra devtools python -m devtools.magic_literals core cardioseg
+          uv run --extra devtools python -m devtools.complexity core cardioseg
+      # ADVISORY (never blocks): flag a stale docs/architecture/graph.json — the committed graph drifted from
+      # the real import graph. Regenerate locally with `nox -s archmap` and commit. Doc-gen, not enforcement
+      # (import-linter is the directional gate); graduates to a gate per the creep-to-gate program.
+      - name: Architecture graph — advisory (archmap --check, stale graph.json)
+        continue-on-error: true
+        run: uv run --extra devtools python -m devtools.archmap core cardioseg --check || echo "::warning::docs/architecture/graph.json is stale — run 'nox -s archmap' and commit"
       # >>> LOCAL-SLOT: ci-test-steps — repo-specific test/coverage/gate steps on top of the base (e.g. a
       # separate viewer-coverage floor calibrated to library logic, or a repo-only enforced check). Survives
       # copier update; empty by default (bd skr GAP3). (shape_contracts --assert graduated to a BASE ml gate

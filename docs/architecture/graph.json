@@ -1,0 +1,2564 @@
+{
+  "edges": [
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.calibrate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.distribution",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.ef_calibrate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.ensemble",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.matrix",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.modelcard",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.overlay",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.soft_eval",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.sync_numbers",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.evaluation.uncertainty",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "cardioseg.preprocessing.normalization.persist",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.__main__",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "cardioseg.evaluation.uncertainty",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "cardioseg.evaluation.validate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "cardioseg.tracking",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.data.ingest.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.calibrate",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.evaluate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.distribution",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "cardioseg.evaluation.validate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "cardioseg.tracking",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.data.ingest.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ef_calibrate",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "cardioseg.evaluation.uncertainty",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "cardioseg.tracking",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.ensemble",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "cardioseg.evaluation.validate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.matrix",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.modelcard",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.modelcard",
+      "target": "core.data.static.reference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.modelcard",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.overlay",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "cardioseg.evaluation.distribution",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.evaluate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.results",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "cardioseg.evaluation.uncertainty",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.soft_eval",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.sync_numbers",
+      "target": "core.data.static.mri.pathology",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "cardioseg.tracking",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.uncertainty",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.evaluate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.inference",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.evaluation.validate",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "cardioseg.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "cardioseg.training.train",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.data.analysis.render",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.data.ingest.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.export_onnx",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.pipeline",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.preprocessing.normalization.persist",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.preprocessing.normalization.persist",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "cardioseg.training.volumes",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.data.static.mri.kaggle_dsb",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.ef_lane",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "cardioseg.evaluation.modelcard",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "cardioseg.evaluation.validate",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "cardioseg.tracking",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "cardioseg.training.ef_lane",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.analysis.attribution",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.dynamic.generator",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.ingest.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.export_onnx",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.losses",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.train",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "cardioseg.training.volumes",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.config",
+      "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.dynamic.inverse",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.dynamic.mrxcat",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.static.mri.kaggle_dsb",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.static.reference_build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.__main__",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.attribution",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.eda",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.render",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.shape_coverage",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.sim2real",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.static_compare",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.data.analysis.synth_fidelity",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.__main__",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.attribution",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.eda",
+      "target": "core.data.static.mri.acdc",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.eda",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.render",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.shape_coverage",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.dynamic.mri_physics",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.sim2real",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.static_compare",
+      "target": "core.data.analysis.shape_coverage",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.static_compare",
+      "target": "core.data.analysis.synth_fidelity",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.static_compare",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.data.static.splits",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "core.data.analysis.synth_fidelity",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.anatomy",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.anatomy",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.anatomy",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.anatomy",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.augment",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.augment",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.dataset",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.dataset",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.dataset",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.dataset",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.dataset",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.data.dynamic.augment",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.data.dynamic.pipeline",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.generator",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.inverse",
+      "target": "core.data.dynamic.mri_physics",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.data.dynamic.mri_physics",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.mrxcat",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.pipeline",
+      "target": "core.data.dynamic.augment",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.pipeline",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.source",
+      "target": "core.data.dynamic.anatomy",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.source",
+      "target": "core.data.dynamic.generator",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.source",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.source",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.data.dynamic.augment",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.data.dynamic.mri_physics",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.data.dynamic.mrxcat",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.dynamic.synth",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.source",
+      "target": "core.data.dynamic.dataset",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.source",
+      "target": "core.data.dynamic.generator",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.source",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.source",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.split",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.splits.parametric",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.splits.static_all",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.splits.static_main",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.splits.synth_composite",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits",
+      "target": "core.data.ingest.splits.synth_main",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.parametric",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.parametric",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.parametric",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.parametric",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_all",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_all",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_all",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_all",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_all",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_main",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_main",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_main",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.static_main",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.dynamic.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.ingest.splits.synth_main",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_composite",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.dynamic.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.ingest.split",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.ingest.testsets",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.splits.synth_main",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.testsets",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.testsets",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.testsets",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.ingest.testsets",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.acdc",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.acdc",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.base",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.cmrxmotion",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.cmrxmotion",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.dicom",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.kaggle_dsb",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.kaggle_dsb",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.kaggle_dsb",
+      "target": "core.data.static.mri.dicom",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.kaggle_dsb",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.mnm2",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.mnm2",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.mnms1",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.mnms1",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.acdc",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.cmrxmotion",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.mnm2",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.mnms1",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.registry",
+      "target": "core.data.static.mri.scd",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.scd",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.scd",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.mri.scd",
+      "target": "core.data.static.mri.dicom",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.dynamic.mri_physics",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.static.reference",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.reference_build",
+      "target": "core.measure",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.splits",
+      "target": "core.data.ingest.source",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.splits",
+      "target": "core.data.ingest.splits",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.splits",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.data.static.geo",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.data.static.store.normalize",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.build",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.data.static.reference",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.data.static.store.query",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.preprocessing.nyul",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.normalize",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.data.static.mri.pathology",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.data.static.mri.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.data.static.reference",
+      "weight": 1
+    },
+    {
+      "source": "core.data.static.store.query",
+      "target": "core.preprocessing.n4",
+      "weight": 1
+    },
+    {
+      "source": "core.evaluate",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.evaluate",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.export",
+      "target": "core.export_onnx",
+      "weight": 1
+    },
+    {
+      "source": "core.export",
+      "target": "core.mesh",
+      "weight": 1
+    },
+    {
+      "source": "core.export",
+      "target": "core.obs",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.data.static.store.build",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.export_onnx",
+      "target": "core.run",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.data.dynamic.augment",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.data.dynamic.generator",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.data.dynamic.synth",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.data.static.store",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.losses",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.model",
+      "weight": 1
+    },
+    {
+      "source": "core.hparams",
+      "target": "core.preprocessing.n4",
+      "weight": 1
+    },
+    {
+      "source": "core.inference",
+      "target": "core.preprocessing.preprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.inference",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.losses",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.measure",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.measure",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.mesh",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.mesh",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.mesh",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.mesh",
+      "target": "core.postprocess",
+      "weight": 1
+    },
+    {
+      "source": "core.mesh",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.model",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.postprocess",
+      "target": "core.data.static.labels",
+      "weight": 1
+    },
+    {
+      "source": "core.postprocess",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.n4",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.n4",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.nyul",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.preprocess",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.preprocess",
+      "target": "core.data.static.mri.base",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.preprocess",
+      "target": "core.preprocessing.n4",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.preprocess",
+      "target": "core.preprocessing.nyul",
+      "weight": 1
+    },
+    {
+      "source": "core.preprocessing.preprocess",
+      "target": "core.types",
+      "weight": 1
+    },
+    {
+      "source": "core.run",
+      "target": "core.hparams",
+      "weight": 1
+    },
+    {
+      "source": "core.run",
+      "target": "core.model",
+      "weight": 1
+    }
+  ],
+  "nodes": [
+    {
+      "descendants": 23,
+      "id": "cardioseg",
+      "label": "cardioseg",
+      "parent": null
+    },
+    {
+      "descendants": 13,
+      "id": "cardioseg.evaluation",
+      "label": "evaluation",
+      "parent": "cardioseg"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.__main__",
+      "label": "__main__",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.calibrate",
+      "label": "calibrate",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.distribution",
+      "label": "distribution",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.ef_calibrate",
+      "label": "ef_calibrate",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.ensemble",
+      "label": "ensemble",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.matrix",
+      "label": "matrix",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.modelcard",
+      "label": "modelcard",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.overlay",
+      "label": "overlay",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.results",
+      "label": "results",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.soft_eval",
+      "label": "soft_eval",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.sync_numbers",
+      "label": "sync_numbers",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.uncertainty",
+      "label": "uncertainty",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.evaluation.validate",
+      "label": "validate",
+      "parent": "cardioseg.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.pipeline",
+      "label": "pipeline",
+      "parent": "cardioseg"
+    },
+    {
+      "descendants": 2,
+      "id": "cardioseg.preprocessing",
+      "label": "preprocessing",
+      "parent": "cardioseg"
+    },
+    {
+      "descendants": 1,
+      "id": "cardioseg.preprocessing.normalization",
+      "label": "normalization",
+      "parent": "cardioseg.preprocessing"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.preprocessing.normalization.persist",
+      "label": "persist",
+      "parent": "cardioseg.preprocessing.normalization"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.tracking",
+      "label": "tracking",
+      "parent": "cardioseg"
+    },
+    {
+      "descendants": 3,
+      "id": "cardioseg.training",
+      "label": "training",
+      "parent": "cardioseg"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.training.ef_lane",
+      "label": "ef_lane",
+      "parent": "cardioseg.training"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.training.train",
+      "label": "train",
+      "parent": "cardioseg.training"
+    },
+    {
+      "descendants": 0,
+      "id": "cardioseg.training.volumes",
+      "label": "volumes",
+      "parent": "cardioseg.training"
+    },
+    {
+      "descendants": 73,
+      "id": "core",
+      "label": "core",
+      "parent": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.config",
+      "label": "config",
+      "parent": "core"
+    },
+    {
+      "descendants": 52,
+      "id": "core.data",
+      "label": "data",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.__main__",
+      "label": "__main__",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 8,
+      "id": "core.data.analysis",
+      "label": "analysis",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.__main__",
+      "label": "__main__",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.attribution",
+      "label": "attribution",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.eda",
+      "label": "eda",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.render",
+      "label": "render",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.shape_coverage",
+      "label": "shape_coverage",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.sim2real",
+      "label": "sim2real",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.static_compare",
+      "label": "static_compare",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.analysis.synth_fidelity",
+      "label": "synth_fidelity",
+      "parent": "core.data.analysis"
+    },
+    {
+      "descendants": 10,
+      "id": "core.data.dynamic",
+      "label": "dynamic",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.anatomy",
+      "label": "anatomy",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.augment",
+      "label": "augment",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.dataset",
+      "label": "dataset",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.generator",
+      "label": "generator",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.inverse",
+      "label": "inverse",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.mri_physics",
+      "label": "mri_physics",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.mrxcat",
+      "label": "mrxcat",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.pipeline",
+      "label": "pipeline",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.source",
+      "label": "source",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.dynamic.synth",
+      "label": "synth",
+      "parent": "core.data.dynamic"
+    },
+    {
+      "descendants": 9,
+      "id": "core.data.ingest",
+      "label": "ingest",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.source",
+      "label": "source",
+      "parent": "core.data.ingest"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.split",
+      "label": "split",
+      "parent": "core.data.ingest"
+    },
+    {
+      "descendants": 5,
+      "id": "core.data.ingest.splits",
+      "label": "splits",
+      "parent": "core.data.ingest"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.splits.parametric",
+      "label": "parametric",
+      "parent": "core.data.ingest.splits"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.splits.static_all",
+      "label": "static_all",
+      "parent": "core.data.ingest.splits"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.splits.static_main",
+      "label": "static_main",
+      "parent": "core.data.ingest.splits"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.splits.synth_composite",
+      "label": "synth_composite",
+      "parent": "core.data.ingest.splits"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.splits.synth_main",
+      "label": "synth_main",
+      "parent": "core.data.ingest.splits"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.ingest.testsets",
+      "label": "testsets",
+      "parent": "core.data.ingest"
+    },
+    {
+      "descendants": 20,
+      "id": "core.data.static",
+      "label": "static",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.geo",
+      "label": "geo",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.labels",
+      "label": "labels",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 10,
+      "id": "core.data.static.mri",
+      "label": "mri",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.acdc",
+      "label": "acdc",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.base",
+      "label": "base",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.cmrxmotion",
+      "label": "cmrxmotion",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.dicom",
+      "label": "dicom",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.kaggle_dsb",
+      "label": "kaggle_dsb",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.mnm2",
+      "label": "mnm2",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.mnms1",
+      "label": "mnms1",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.pathology",
+      "label": "pathology",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.registry",
+      "label": "registry",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.mri.scd",
+      "label": "scd",
+      "parent": "core.data.static.mri"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.reference",
+      "label": "reference",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.reference_build",
+      "label": "reference_build",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.splits",
+      "label": "splits",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 3,
+      "id": "core.data.static.store",
+      "label": "store",
+      "parent": "core.data.static"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.store.build",
+      "label": "build",
+      "parent": "core.data.static.store"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.store.normalize",
+      "label": "normalize",
+      "parent": "core.data.static.store"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.static.store.query",
+      "label": "query",
+      "parent": "core.data.static.store"
+    },
+    {
+      "descendants": 0,
+      "id": "core.evaluate",
+      "label": "evaluate",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.export",
+      "label": "export",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.export_onnx",
+      "label": "export_onnx",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.hparams",
+      "label": "hparams",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.inference",
+      "label": "inference",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.losses",
+      "label": "losses",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.measure",
+      "label": "measure",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.mesh",
+      "label": "mesh",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.model",
+      "label": "model",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.obs",
+      "label": "obs",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths",
+      "label": "paths",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.postprocess",
+      "label": "postprocess",
+      "parent": "core"
+    },
+    {
+      "descendants": 3,
+      "id": "core.preprocessing",
+      "label": "preprocessing",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.preprocessing.n4",
+      "label": "n4",
+      "parent": "core.preprocessing"
+    },
+    {
+      "descendants": 0,
+      "id": "core.preprocessing.nyul",
+      "label": "nyul",
+      "parent": "core.preprocessing"
+    },
+    {
+      "descendants": 0,
+      "id": "core.preprocessing.preprocess",
+      "label": "preprocess",
+      "parent": "core.preprocessing"
+    },
+    {
+      "descendants": 0,
+      "id": "core.registry",
+      "label": "registry",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.run",
+      "label": "run",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.types",
+      "label": "types",
+      "parent": "core"
+    }
+  ]
+}

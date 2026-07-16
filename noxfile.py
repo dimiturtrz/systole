@@ -100,9 +100,27 @@ def lint(session: nox.Session) -> None:
         _jscpd_cfg,
         external=True,
     )
-    # Advisory class-shape explorers — print a ranked report, always exit 0 (never block).
-    for _tool in ("state_candidates", "lcom", "data_clumps"):
+    # Advisory explorers — print a ranked report, always exit 0 (never block): class-shape smells, recurring
+    # magic literals (StrEnum/dataclass candidates), and radon cyclomatic complexity (ruff C901 is the FIXED
+    # complexity gate; this just ranks). Reviewer signal only.
+    for _tool in ("state_candidates", "lcom", "data_clumps", "magic_literals", "complexity"):
         session.run("uv", "run", "--extra", "devtools", "python", "-m", f"devtools.{_tool}", *LAYERS, external=True)
+    # Advisory (never blocks): flag a stale docs/architecture/graph.json — regenerate with `nox -s archmap`.
+    # archmap --check exits 1 on drift; success_codes swallows it so CI/nox report without failing the gate
+    # (doc-gen, not enforcement — import-linter is the directional gate). Graduates to a gate per the creep.
+    session.run(
+        "uv",
+        "run",
+        "--extra",
+        "devtools",
+        "python",
+        "-m",
+        "devtools.archmap",
+        *LAYERS,
+        "--check",
+        external=True,
+        success_codes=[0, 1],
+    )
     # ENFORCED shape-contract gate (GRADUATED advisory->blocking, bd vip.4) — every public array/tensor
     # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor (aliases in [tool.shape_contracts]).
     # A fresh gen has 0 boundaries (passes); a bare boundary then fails. No success_codes swallow — it blocks.
@@ -118,10 +136,9 @@ def lint(session: nox.Session) -> None:
         "--assert",
         external=True,
     )
-    # ENFORCED magic-literal ratchet — recurring string vocab + repeated dict schemas (StrEnum/record
-    # candidates), the non-comparison axis ruff PLR2004 can't see. Blocks over the [tool.magic_literals]
-    # ceiling (a per-repo FACT; fresh repo = 0/0). Migrate a new literal or raise the ceiling with a reason.
-    session.run("uv", "run", "--extra", "devtools", "python", "-m", "devtools.magic_literals", *LAYERS, external=True)
+    # ENFORCED dependency hygiene — deptry: undeclared (DEP001) / unused (DEP002) / transitive (DEP003)
+    # imports. `--with` adds deptry to the run so it reads installed dist metadata; config in [tool.deptry].
+    session.run("uv", "run", "--with", "deptry==0.25.1", "deptry", ".", external=True)
 
 
 @nox.session(venv_backend="none")
@@ -153,3 +170,22 @@ def gates(session: nox.Session) -> None:
     lint(session)
     test(session)
     cov(session)
+
+
+# NOT in nox.options.sessions — opt-in (`nox -s audit`), mirroring the nightly `audit` workflow. Security
+# advisories change under you, so this is a scheduled/on-demand scan, not part of the per-commit gate set.
+# NOT in nox.options.sessions — the manual regen call. archmap is doc-gen: it (re)writes docs/architecture/
+# {graph.json, index.html} from the current import graph — graph.json is the diffable erosion signal,
+# index.html the self-contained interactive viewer (a GitHub Pages architecture site). Run it after a
+# structural change and commit the graph.json diff. `lint`/CI only --check that graph.json is current.
+@nox.session(venv_backend="none")
+def archmap(session: nox.Session) -> None:
+    """Regenerate docs/architecture/ (graph.json + the interactive viewer) — commit the graph.json diff."""
+    session.run("uv", "run", "--extra", "devtools", "python", "-m", "devtools.archmap", *LAYERS, external=True)
+
+
+@nox.session(venv_backend="none")
+def audit(session: nox.Session) -> None:
+    """Known-CVE scan of the dependency closure (pip-audit); --skip-editable drops local/git source installs."""
+    session.run("uv", "sync", "--all-extras", external=True)
+    session.run("uv", "run", "--with", "pip-audit==2.10.1", "pip-audit", "--skip-editable", external=True)
