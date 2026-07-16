@@ -10,8 +10,20 @@ Everything else supports it or is a diagnostic for it.
 
 ## THE GOAL — A. Zero-real GENERATE (synth mask + synth color)
 
-**Best: ~0.61 test** (composition-fixed) · real-trained 0.854 · **blocker (CORRECTED 2026-07-16 by looking at
-predictions): RV OMISSION in a patient-clustered tail, NOT a uniform color collapse.**
+**Best: ~0.61 test** (composition-fixed) · real-trained 0.854.
+
+> **CEILING VERDICT (2026-07-16, lit-grounded — `2026-07-16_zero_real_ceiling_lit_grounded.md`):** 0.61 is
+> **in-band with the achievable pure-parametric zero-real ceiling** for hard multi-vendor SAX cine. No published
+> pure-zero-real number exists on ACDC/M&M (unmapped — our triad is the contribution); the *only* comparable
+> zero-real cardiac result on a hard real set is **~0.66** ([S12] label-space synth on MSCMR). The high numbers are
+> an easier target (SynthSeg/MMWHS ~0.87) or a **real-trained** generator (XCAT-GAN 0.94, out of bounds). With
+> every parametric micro-lever exhausted this cycle (color/boundary/resolution/RV/coverage), lit + internal
+> convergence agree: **stop chasing zero-real Dice with parametric tweaks.** Additive directions are different
+> value props — twin (`ncph`), augmentation (`pwih`), or `vpn5` learned-shape as *exploration* (no lit warrant it
+> closes the gap). The residual to 0.85 is tax + intrinsic multi-vendor hardness, not a big findable defect.
+
+**Historical blocker note (superseded by the ceiling verdict):** RV was framed as an omission tail; egeh later
+showed the RV deficit is a partial-quality continuum (3 hard omissions), and the RV lever is exhausted on all axes.
 
 Pooled RV 0.457 was a **bimodal artifact**: median per-case RV (mid-slice) = **0.853** (real-trained level),
 but a tail of ~7–10% of cases (patient-clustered: P004/P011/P014) score RV **0.0** — the model segments the LV

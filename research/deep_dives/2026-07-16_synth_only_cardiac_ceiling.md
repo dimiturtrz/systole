@@ -129,12 +129,72 @@ UltimateSynth grounds randomization in MRI physics [S6][S7]:
 
 ---
 
+## Update 2026-07-16: Comprehensive Metrics Across Synth Methods
+
+### Synth-Only vs Real-Supervised Baselines (All Methods)
+
+**Real-Supervised SOTA (Upper Ceiling):**
+
+| Architecture | Dataset | Phase | RV Dice | Myo Dice | LV Dice | Citation |
+|--------------|---------|-------|---------|----------|---------|----------|
+| nnU-Net (2D/3D) | ACDC | ED | 0.963 | 0.898 | 0.944 | [S10] |
+| nnU-Net (2D/3D) | ACDC | ES | 0.922 | 0.915 | 0.892 | [S10] |
+| nnU-Net (2D/3D) | M&M | ED | 0.913 | 0.826 | 0.937 | [S10] |
+| nnU-Net (2D/3D) | M&M | ES | 0.852 | 0.864 | 0.888 | [S10] |
+
+**Synth-Only SAX Cardiac MRI:**
+
+| Method | Synth Source | Test Set | RV Dice | Myo Dice | LV Dice | Citation |
+|--------|--------------|----------|---------|----------|---------|----------|
+| **SynthSeg** (GMM random) | Parametric GMM (no real images) | MMWHS MRI | 0.84 | 0.81 | 0.89 | [S2] |
+| **SynthSeg** (GMM random) | Parametric GMM (no real images) | MMWHS CT | 0.88 | 0.85 | 0.89 | [S2] |
+| **XCAT-GAN** (parametric + GAN refinement) | XCAT + real-supervised GAN pairs | ACDC ED | 0.946 | 0.902 | 0.968 | [S11] |
+| **XCAT-GAN** (parametric + GAN refinement) | XCAT + real-supervised GAN pairs | ACDC ES | 0.889 | 0.919 | 0.931 | [S11] |
+| Unsupervised label-space | Image-to-image from labels (mixed) | MICCAI2019 MSCMR | 0.6287 | 0.5737 | 0.7796 | [S12] |
+
+**Synth-Only Echocardiography (Ultrasound):**
+
+| Method | Synth Source | Test Dataset | LV Endo Dice | LV Epi Dice | LA Dice | Citation |
+|--------|--------------|--------------|--------------|-------------|---------|----------|
+| Synthetic from anatomical models (GAN) | CycleGAN on anatomical models | EchoNet | 87% | N/A | N/A | [S13] |
+| Synthetic from anatomical models (GAN) | CycleGAN on anatomical models | CAMUS | 88% | 90.3% | 79.6% | [S13] |
+| Synthetic from anatomical models (GAN) | CycleGAN on anatomical models | SiteA→SiteB | 91% | 90.7% | 83.1% | [S13] |
+| **Echo from Noise** (Diffusion) | Diffusion model + anatomy prior | CAMUS (all views/phases) | 88.6±4.91 | 91.9±4.22 | 85.2±4.83 | [S14] |
+
+### Gap Analysis: Synth-Only → Real SOTA
+
+**SAX Cardiac MRI:**
+- **SynthSeg on MMWHS**: RV 0.84 synth vs ~0.92 real → **−8 Dice points**
+- **XCAT-GAN on ACDC ED**: RV 0.946 synth vs 0.963 real → **−1.7 Dice points** (smallest gap, but includes real-supervised GAN pairs)
+
+**Echocardiography:**
+- **Synthetic anatomical models on CAMUS**: LV endo 88% synth vs ~90–92% inter-observer → **−2 to −4 Dice points**
+- **Echo from Noise diffusion on CAMUS**: LV endo 88.6% synth vs inter-observer ~90–92% → **−1.4 to −3.4 Dice points**
+
+**Key observation**: Echocardiography synth-only gaps (~2–4 points) are significantly tighter than SAX MRI gaps (~8 points), suggesting 2D ultrasound is easier to synthesize than 3D cardiac MRI.
+
+### Mechanism Comparison: Random (SynthSeg) vs Physics-Constrained (UltimateSynth)
+
+**Brain segmentation (empirical validation):**
+
+| Metric | SynthSeg (GMM Random) | UltimateSynth (Physics) | Δ |
+|--------|----------------------|------------------------|-----|
+| Mean Dice | 0.76 ± 0.19 | 0.83 ± 0.07 | **+7 points** |
+| Volume error | 16.41% ± 33.28% | 3.35% ± 3.75% | **−13 points** |
+| Worst-case structure | 0.10 | 0.59 | **+49 points** |
+
+**Extrapolation to cardiac**: If physics-constrained synthesis improves brain by 7 Dice points, and cardiac synth-only on MMWHS is 0.84 (RV), then UltimateSynth applied to cardiac might reach **0.89–0.91 RV Dice on MMWHS** — still below real SOTA (0.92–0.96), but significant improvement over random GMM. **Validation needed.**
+
+---
+
 ## Open Questions
 
-- **What is the synth-only Dice ceiling on ACDC short-axis segmentation?** SynthSeg + physics-constrained contrast needed to answer this empirically.
-- **Does UltimateSynth's physics-constrained approach improve cardiac segmentation?** Brain validation complete; cardiac is unstudied.
+- **What is the synth-only Dice ceiling on ACDC short-axis segmentation?** SynthSeg was not benchmarked on ACDC; UltimateSynth cardiac application is unpublished.
+- **Does XCAT-GAN's 0.946 RV count as "synth-only"?** Uses XCAT geometry (parametric, no images) but GAN refinement is trained on real image pairs — technically synth-heavy, not pure synth-only.
+- **Does UltimateSynth's physics-constrained approach improve cardiac segmentation?** Brain validation complete (7-point gain vs SynthSeg); cardiac is unstudied.
 - **How much does cardiac domain shift (vendor/protocol variability) erode synth-only performance?** Cardiac is higher-variance than brain; unclear if domain randomization suffices without targeted cardiac physics (bSSFP k-space, field-of-view geometry, motion blur).
 - **Can thin-wall structures (RV, atrial walls) be reliably synthesized with random GMM?** Myocardium scored 0.81 on MMWHS; RV only 0.84 — lower confidence on thin tissue, but not separately analyzed.
+- **Why does echocardiography synth-only (~88%) outperform cardiac MRI synth-only (~0.84)?** Possible factors: 2D is simpler than 3D/4D; ultrasound acquisition model is more tractable; inter-observer variability lower bounds SOTA ceiling (~90–92% for ultrasound vs ~96% for MRI).
 
 ---
 
@@ -149,4 +209,9 @@ UltimateSynth grounds randomization in MRI physics [S6][S7]:
 - [S7] **UltimateSynth contrast landscape** — 150,000 unique images per subject; uniform sampling of qMRI (T1, T2) × flip-angle space; brain validation complete; cardiac not yet published.
 - [S8] **Billot et al. (2021)** — "Partial Volume Segmentation of Brain MRI Scans of any Resolution and Contrast", *arXiv:2004.10221* / *IEEE Transactions on Medical Imaging* (2023). https://doi.org/10.1109/TMI.2023.3267289 — SynthSeg generative model detail: GMM contrast sampling, bias field via low-res normal sampling + exponential, diffeomorphic deformation via velocity-field integration, artifact randomization.
 - [S9] **Improving robustness of automatic cardiac function quantification from cine magnetic resonance imaging using synthetic image data** — *PMC8844403* (2021). https://pmc.ncbi.nlm.nih.gov/articles/PMC8844403/ — Synthetic GAN data for cardiac; focus on synth+real hybrid; synth-only performance not reported separately.
+- [S10] **"How good nnU-Net for Segmenting Cardiac MRI: A Comprehensive Evaluation"** — arXiv:2408.06358 (2024). Per-structure Dice on ACDC and M&M test sets; nnU-Net = real-supervised upper ceiling (RV 0.96 ED, 0.92 ES on ACDC).
+- [S11] **Amirrajab et al. (2020)** — "XCAT-GAN for Synthesizing 3D Consistent Labeled Cardiac MR Images on Anatomically Variable XCAT Phantoms", *arXiv:2007.13408*, MICCAI 2020. XCAT parametric geometry + GAN refinement on real image pairs; ACDC ED: RV 0.946, MYO 0.902, LV 0.968; ES: RV 0.889, MYO 0.919, LV 0.931.
+- [S12] **"Unsupervised Cardiac Segmentation Utilizing Synthesized Images from Anatomical Labels"** — arXiv:2301.06043 (2023). Label-space synthesis via image-to-image translation; MICCAI2019 MSCMR: Myo 0.5737, LV 0.7796, RV 0.6287.
+- [S13] **Gilbert et al. (2021)** — "Generating Synthetic Labeled Data From Existing Anatomical Models: An Example With Echocardiography Segmentation", MICCAI 2021, PMC8493532. Synth-only training on anatomical model + CycleGAN; echocardiography cross-site generalization: LV endo 87–91% Dice across EchoNet, CAMUS, and two clinic sites.
+- [S14] **"Echo from Noise: Synthetic Ultrasound Image Generation Using Diffusion Models for Real Image Segmentation"** — MICCAI 2024. Diffusion model synth-only training on CAMUS; LV endocardium 88.6±4.91, epicardium 91.9±4.22, LA 85.2±4.83 Dice.
 
