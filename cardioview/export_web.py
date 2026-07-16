@@ -57,7 +57,7 @@ CINE_BBOX_MARGIN = 14      # in-plane crop margin (voxels) around the whole-cine
 OUT = Path(Config.data_root("meshes")) / "cardioview"
 
 
-def publish_model(model_name: str) -> None:  # pragma: no cover  (shutil.copyfile of the ONNX artifact — file-copy shell)
+def publish_model(model_name: str) -> None:  # pragma: no cover  (file-copy shell)
     """Copy the exact ONNX that produced these assets into the external home (models/<name>.onnx),
     so the web bundle's model travels with its manifest. The registry artifact dir holds model.onnx
     (built by core.export_onnx at train time)."""
@@ -77,7 +77,7 @@ def heldout_set(model_name: str) -> set[str]:
     80/20 ACDC val split for older runs without a config.json."""
     run = model_dir(MODELS[model_name])
     cfg_path = run / "config.json"
-    if cfg_path.exists():  # pragma: no cover  (reads a real run config.json + consolidated store — registry/data dependency)
+    if cfg_path.exists():  # pragma: no cover  (registry/data dependency)
         dc = Hparams.from_json(cfg_path).generator.data
         meta = store.load(list(dc.sources))
         _, val, test = splits.Splits.make_split(meta, dc.test_datasets, dc.test_vendors, dc.val_frac,
@@ -157,7 +157,7 @@ def manifest_with(data, entry: dict, model_name: str) -> dict:
     return {"model": model_name, "hearts": hearts}
 
 
-def upsert_manifest(entry: ManifestEntry, model_name: str) -> None:  # pragma: no cover  (manifest.json read/write — file-IO shell around manifest_with)
+def upsert_manifest(entry: ManifestEntry, model_name: str) -> None:  # pragma: no cover  (file-IO shell)
     """Insert/replace one patient in manifest.json. Manifest = {model, hearts}; the web
     reads `model` to know which bundled .onnx to load (so it follows what was exported)."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -180,7 +180,7 @@ def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
-def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case disk read + export_glb write — export orchestration shell)
+def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (export orchestration shell)
     held = heldout_set(ctx.model_name)
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
@@ -201,14 +201,14 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (preprocess_case
                  entry.pred.get("ef"), entry.gt.get("ef"))
 
 
-def run_animate(patients, ctx: ExportCtx, stride=1):  # pragma: no cover  (per-patient cine segmentation + glb write — export orchestration shell)
+def run_animate(patients, ctx: ExportCtx, stride=1):  # pragma: no cover  (export orchestration shell)
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry, per patient."""
     held = heldout_set(ctx.model_name)
     for p in patients:
         _animate_patient(p, ctx, held, stride)
 
 
-def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (load_4d disk read + predict_volume GPU model — inference shell)
+def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (inference shell)
     """Segment every strided cine frame -> (frames_t, masks{k}, grays{k} aligned, rspacing)."""
     vol, spacing = load_4d(pdir, name)
     rspacing = (spacing[0], INPLANE_MM, INPLANE_MM)
@@ -216,7 +216,8 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (loa
     masks, grays = {}, {}
     for k, t in enumerate(frames_t):
         img = Preprocess.zscore(Preprocess.resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
-        masks[k] = Postprocess.largest_cc_per_class(Inference(ctx.model, SIZE, ctx.device).predict_volume(img, tta=True))
+        masks[k] = Postprocess.largest_cc_per_class(
+            Inference(ctx.model, SIZE, ctx.device).predict_volume(img, tta=True))
         grays[k] = square_stack(img)
     return frames_t, masks, grays, rspacing
 
@@ -233,7 +234,7 @@ def _heart_bbox(masks, margin=CINE_BBOX_MARGIN):
             max(0, int(xs.min()) - margin), min(SIZE, int(xs.max()) + margin + 1))
 
 
-def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (disk read + model inference + glb/png writes — export orchestration shell)
+def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (export orchestration shell)
     """One patient: segment the cine, write per-frame slice strips + chamber glbs, upsert the entry."""
     pdir = patient_dir(p)
     name = pdir.name
@@ -268,7 +269,7 @@ def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (dis
 
 
 
-def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:  # pragma: no cover  (PIL Image write — file-write shell)
+def save_strip(gray: np.ndarray, mask: np.ndarray, path: Path) -> None:  # pragma: no cover  (file-write shell)
     """One cine frame's (already heart-cropped) slices -> a vertical RGBA PNG strip [D*H, W]:
     R = grayscale (percentile-windowed for real MRI contrast), G = label (0..3). The web decodes it
     directly (W from image width, H from height/D)."""

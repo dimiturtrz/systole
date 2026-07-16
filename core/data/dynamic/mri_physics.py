@@ -209,8 +209,10 @@ class MriPhysics:
         return table[f]
 
     @staticmethod
-    def sample_heart_tissue(t1: Float[torch.Tensor, "*b *n"], t2: Float[torch.Tensor, "*b *n"], fi: Integer[torch.Tensor, "*b"],  # noqa: PLR0913
-                            fields: tuple[float, ...], n_classes: int, spread: float) -> tuple[Float[torch.Tensor, "*b *n"], Float[torch.Tensor, "*b *n"]]:
+    def sample_heart_tissue(  # noqa: PLR0913
+        t1: Float[torch.Tensor, "*b *n"], t2: Float[torch.Tensor, "*b *n"], fi: Integer[torch.Tensor, "*b"],
+        fields: tuple[float, ...], n_classes: int, spread: float,
+    ) -> tuple[Float[torch.Tensor, "*b *n"], Float[torch.Tensor, "*b *n"]]:
         """Per-sample redraw of HEART-class (blood/myo) T1/T2 from the literature TISSUE_RANGE band, lerped
         from the current point value by `spread` (0=point/off, 1=full uniform band). Physically-constrained
         breadth (UltimateSynth) in place of decorrelated jitter: contrast then flows through bssfp_signal, so

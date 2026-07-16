@@ -96,4 +96,5 @@ class ExportOnnx:
     @staticmethod
     def run(args):
         verify = args.verify if args.verify else store.load([Dataset.ACDC]).get_column("path")[0]
-        ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize, opset=args.opset, parity_min=args.parity_min)
+        ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize,
+                          opset=args.opset, parity_min=args.parity_min)

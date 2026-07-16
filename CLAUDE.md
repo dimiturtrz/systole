@@ -137,9 +137,10 @@ specific-exception-or-let-it-crash (BLE001/S110 — no blind `except`), low comp
 (C901/PLR0912/0915), config objects over long arg lists (PLR0913), imports-at-top (PLC0415 — fix
 circulars by **extraction**, never lazy imports), **no dead noqa** (RUF100). noqa policy: **bare
 `# noqa: RULE`** — no prose reasons. **Minimal comments** — prefer self-documenting code + names.
-`getattr`/`hasattr` on a constant attr is a smell (B009 catches the no-default form). E501 stays
-advisory (the dense hand-tuned style). Config `pyproject [tool.ruff]`; evaluating vulture + coverage
-next (advisory).
+`getattr`/`hasattr` on a constant attr is a smell (B009 catches the no-default form). E501 + SLF001
+**graduated to enforced** (scaffold v1.12, 2026-07-16): line-length 120 is a decided absolute, a
+genuine long line (URL/dense literal) takes a bare `# noqa: E501`, reflow otherwise; SLF001 flags
+private-member reach-in. Config `pyproject [tool.ruff]`.
 
 ## Scaffolding
 

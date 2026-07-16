@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: ruff-gate
         name: ruff — enforced (full select)
-        entry: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722,F821
+        entry: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001 --ignore F722,F821
         language: system
         pass_filenames: false
         always_run: true
@@ -98,4 +98,17 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # Fast unit suite at the PRE-PUSH stage (not pre-commit): shift-left the CI `tests` gate so a change
+      # that lints clean but breaks a test CONTRACT (e.g. a signature change a mirror test still calls the old
+      # way) is caught locally before the push round-trip, not after. pre-push (pushes are rare) not pre-commit
+      # (torch-import + tests every commit kills flow); tests/unit only (no integration/e2e/GPU/download — fast
+      # + deterministic); NOT coverage (the floor stays a CI job). Enable once: `pre-commit install --hook-type
+      # pre-push` (it is NOT installed by the default `pre-commit install`, which wires only the commit stage).
+      - id: unit-tests
+        name: unit tests — pre-push (fast contract check; shift-left the CI test gate)
+        entry: uv run --extra dev pytest tests/unit -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       

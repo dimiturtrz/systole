@@ -38,8 +38,11 @@ class Inverse:
     """The FIT operator as a namespace: differentiable heart render + acquisition fit (bd ncph/ixea)."""
 
     @staticmethod
-    def render_heart(seg: Integer[torch.Tensor, "*b *grid"], tr: Float[torch.Tensor, "*b 1"], flip_deg: Float[torch.Tensor, "*b 1"], n_classes: int,  # noqa: PLR0913  physics params (independent scalars)
-                     field: float, device) -> Float[torch.Tensor, "*b 1 *h *w"]:
+    def render_heart(  # noqa: PLR0913  physics params (independent scalars)
+        seg: Integer[torch.Tensor, "*b *grid"], tr: Float[torch.Tensor, "*b 1"],
+        flip_deg: Float[torch.Tensor, "*b 1"], n_classes: int,
+        field: float, device,
+    ) -> Float[torch.Tensor, "*b 1 *h *w"]:
         """Deterministic, differentiable bSSFP paint of the HEART classes (bg=0, excluded from any loss).
         seg [B,H,W] long; tr/flip_deg [B,1]; -> signal [B,1,H,W]. Tissue T1/T2/PD at literature values
         (tissue_params, no bg tiers). Differentiable wrt tr and flip_deg."""
@@ -54,9 +57,12 @@ class Inverse:
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 
     @staticmethod
-    def fit_acquisition(real_img: Float[torch.Tensor, "*b 1 *h *w"], seg: Integer[torch.Tensor, "*b *grid"], n_classes: int, field: float = 1.5,  # noqa: PLR0913  physics params (independent scalars)
-                        fit_params: tuple[str, ...] = ("flip",), tr0: float = 3.0, flip0: float = 50.0,
-                        steps: int = 400, lr: float = 0.5, device: str = "cpu") -> dict:
+    def fit_acquisition(  # noqa: PLR0913  physics params (independent scalars)
+        real_img: Float[torch.Tensor, "*b 1 *h *w"], seg: Integer[torch.Tensor, "*b *grid"],
+        n_classes: int, field: float = 1.5,
+        fit_params: tuple[str, ...] = ("flip",), tr0: float = 3.0, flip0: float = 50.0,
+        steps: int = 400, lr: float = 0.5, device: str = "cpu",
+    ) -> dict:
         """FIT the acquisition θ (subset in `fit_params`, default flip only = identifiable) to ONE real scan
         given its seg, by Adam on MSE of the standardized heart-region render vs real. real_img [B,1,H,W]
         z-scored; seg [B,H,W]. Returns fitted tr/flip (deg), final recon loss, and the recon image."""
@@ -107,9 +113,12 @@ class Inverse:
         both_a = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=2.5, flip0=30.0)
         both_b = Inverse.fit_acquisition(ti, tg, n, field=args.field, fit_params=("tr", "flip"), tr0=5.0, flip0=70.0)
         log.info(f"slice {k}  n_classes {n}")
-        log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  recon_loss={flip_only['recon_loss']:.4f}")
-        log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  recon_loss={both_a['recon_loss']:.4f}")
-        log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  recon_loss={both_b['recon_loss']:.4f}")
+        log.info(f"  flip-only : flip={flip_only['flip']:.1f}  (tr fixed {3.0})  "
+                 f"recon_loss={flip_only['recon_loss']:.4f}")
+        log.info(f"  tr+flip #1: tr={both_a['tr']:.2f} flip={both_a['flip']:.1f}  "
+                 f"recon_loss={both_a['recon_loss']:.4f}")
+        log.info(f"  tr+flip #2: tr={both_b['tr']:.2f} flip={both_b['flip']:.1f}  "
+                 f"recon_loss={both_b['recon_loss']:.4f}")
         log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
         heart = (tg[0] > 0).numpy()
         def show(t):

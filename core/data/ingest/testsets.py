@@ -112,7 +112,8 @@ SCD_LV = TestSets.ts("scd_lv", Task.SEG_LV, V("dataset") == Dataset.SCD)
 # ── composites (a split's `test`) ────────────────────────────────────────────────────────────────
 # static_main: unseen vendors (GE, Canon) + the motion cohort. == the old xvendor frozen test (147).
 STATIC_MAIN_TEST = TestSets.ts("static_main_test", Task.SEG4,
-                                _IN_SEG & (V("vendor").is_in([Vendor.GE, Vendor.CANON]) | (V("dataset") == Dataset.CMRXMOTION)))
+                                _IN_SEG & (V("vendor").is_in([Vendor.GE, Vendor.CANON])
+                                           | (V("dataset") == Dataset.CMRXMOTION)))
 # synth_main: all seg real EXCEPT the ACDC val (642) — the near-all-real test for the synth arm.
 SYNTH_MAIN_TEST = TestSets.ts("synth_main_test", Task.SEG4, _IN_SEG & (V("dataset") != Dataset.ACDC))
 

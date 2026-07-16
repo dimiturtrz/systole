@@ -64,7 +64,9 @@ class SyncNumbers:
         for g, lab in order:
             s = st.get(g)
             if s:
-                rows.append(f"| {lab} | {s['gt_ef_mean']:.0f}% | {s['dice_mean']:.2f} | {s['ef_mae']:.1f}% | {s['ef_bias']:+.1f}% |")
+                rows.append(
+                    f"| {lab} | {s['gt_ef_mean']:.0f}% | {s['dice_mean']:.2f} | "
+                    f"{s['ef_mae']:.1f}% | {s['ef_bias']:+.1f}% |")
         return "\n".join(rows)
 
     @staticmethod
@@ -77,9 +79,12 @@ class SyncNumbers:
         cal = R.get("ef_calibration")
         rows = [
             "| held-out axis | role | n | mean Dice | EF MAE | EF MAE (cal)† |", "|---|---|---|---|---|---|",
-            f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | {_A['ef_mae']}% | {SyncNumbers._cal(_A)} |",
-            f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | {_C['ef_mae']}% | {SyncNumbers._cal(_C)} |",
-            f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | {_G['ef_mae']}% | {SyncNumbers._cal(_G)} |",
+            f"| **ACDC** — centre / protocol shift | val | {_A['n']} | {_A['dice']['mean']:.2f} | "
+            f"{_A['ef_mae']}% | {SyncNumbers._cal(_A)} |",
+            f"| **Canon** — unseen vendor | test | {_C['n']} | {_C['dice']['mean']:.2f} | "
+            f"{_C['ef_mae']}% | {SyncNumbers._cal(_C)} |",
+            f"| **GE** — unseen vendor | test | {_G['n']} | {_G['dice']['mean']:.2f} | "
+            f"{_G['ef_mae']}% | {SyncNumbers._cal(_G)} |",
         ]
         if cal:
             rows.append(f"\n† post-hoc linear EF correction `ef_corr = {cal['slope']}·ef_pred + {cal['intercept']}`, "
@@ -94,7 +99,8 @@ class SyncNumbers:
             "| unseen-vendor (held out) | nnU-Net (50ep/fold0) | this model |", "|---|---|---|",
             f"| Canon mean Dice | {_NN['canon']['dice']['mean']:.3f} | {_C['dice']['mean']:.3f} |",
             f"| GE mean Dice | {_NN['ge']['dice']['mean']:.3f} | {_G['dice']['mean']:.3f} |",
-            f"| Canon / GE EF MAE | **{_NN['canon']['ef_mae']} / {_NN['ge']['ef_mae']}%** | {_C['ef_mae']} / {_G['ef_mae']}% |",
+            f"| Canon / GE EF MAE | **{_NN['canon']['ef_mae']} / {_NN['ge']['ef_mae']}%** | "
+            f"{_C['ef_mae']} / {_G['ef_mae']}% |",
         ])
 
     @staticmethod
@@ -106,18 +112,22 @@ class SyncNumbers:
         return "\n".join([
             "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
             "|---|---|---|---|---|---|---|",
-            f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | {ours['mean']:.3f} | {ours['LV-cav']:.3f} | "
+            f"| our 2D U-Net (+ heavy aug + early stop + largest-CC + TTA) | "
+            f"{ours['mean']:.3f} | {ours['LV-cav']:.3f} | "
             f"{ours['LV-myo']:.3f} | {ours['RV']:.3f} | {_G['ef_mae']}% | deployable / ONNX |",
-            f"| **nnU-Net** (50 ep, 1 fold) | **{nnunet['mean']:.3f}** | **{nnunet['LV-cav']:.3f}** | **{nnunet['LV-myo']:.3f}** | "
+            f"| **nnU-Net** (50 ep, 1 fold) | **{nnunet['mean']:.3f}** | "
+            f"**{nnunet['LV-cav']:.3f}** | **{nnunet['LV-myo']:.3f}** | "
             f"**{nnunet['RV']:.3f}** | **{_NN['ge']['ef_mae']}%** | baseline / not deployed |",
-            f"| Δ (nnU-Net − ours) | +{dice_delta('mean'):.1f} | +{dice_delta('LV-cav'):.1f} | +{dice_delta('LV-myo'):.1f} | "
+            f"| Δ (nnU-Net − ours) | +{dice_delta('mean'):.1f} | "
+            f"+{dice_delta('LV-cav'):.1f} | +{dice_delta('LV-myo'):.1f} | "
             f"+{dice_delta('RV'):.1f} | {_NN['ge']['ef_mae'] - _G['ef_mae']:+.1f} | |",
         ])
 
     @staticmethod
     def headline() -> str:
         return (f"Unseen-vendor (held out: Canon n={_C['n']} + GE n={_G['n']}) mean Dice "
-                f"**{_C['dice']['mean']:.2f}** / **{_G['dice']['mean']:.2f}**, EF MAE {_C['ef_mae']} / {_G['ef_mae']}%; "
+                f"**{_C['dice']['mean']:.2f}** / **{_G['dice']['mean']:.2f}**, "
+                f"EF MAE {_C['ef_mae']} / {_G['ef_mae']}%; "
                 f"ACDC centre-shift (val, n={_A['n']}) Dice **{_A['dice']['mean']:.2f}**, EF MAE **{_A['ef_mae']}%** "
                 f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]).")
 

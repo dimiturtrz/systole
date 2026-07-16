@@ -176,7 +176,9 @@ def test_ef_invariant_to_spacing_volumes_scale():
     ef1, edv1, _ = Measure.ejection_fraction(ed, es, (10.0, 1.5, 1.5))
     ef2, edv2, _ = Measure.ejection_fraction(ed, es, (5.0, 0.75, 0.75))  # every dim halved -> 1/8 volume
     assert np.isclose(ef1, ef2)
-    assert np.isclose(edv2 / edv1, Measure.voxel_volume_ml((5.0, 0.75, 0.75)) / Measure.voxel_volume_ml((10.0, 1.5, 1.5)))
+    assert np.isclose(
+        edv2 / edv1, Measure.voxel_volume_ml((5.0, 0.75, 0.75)) / Measure.voxel_volume_ml((10.0, 1.5, 1.5)),
+    )
 
 
 # === surface chain: distances -> metrics -> hd/hd95/assd ==================

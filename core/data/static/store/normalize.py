@@ -47,8 +47,10 @@ class Normalizer:
         return np.asarray(v, dtype=np.float64) if v is not None else None
 
     @staticmethod
-    def fit_standard(names: list[str] | None = None, inplane: float = DEFAULT_INPLANE,  # pragma: no cover  reads real adapter NIfTI from disk + writes reference/nyul.yaml
-                     per_dataset: int = 40) -> "np.ndarray":
+    def fit_standard(  # pragma: no cover  reads real adapter NIfTI + writes reference/nyul.yaml
+        names: list[str] | None = None, inplane: float = DEFAULT_INPLANE,
+        per_dataset: int = 40,
+    ) -> "np.ndarray":
         """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
         it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks
         are stable). The standard is a normalization axis -> reference data, fit once, applied per case."""

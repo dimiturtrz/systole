@@ -37,15 +37,20 @@ class Render:
         data_cfg = TrainCfg().generator.data
         n = len(CLASSES) + 1
         meta = store.load_cfg(data_cfg, workers=4)              # ALL preprocessing params (nyul/norm too)
-        val_split = splits.ModelSplit(data_cfg, meta).val                   # held-out real slices (coded split's val if set)
+        # held-out real slices (coded split's val if set)
+        val_split = splits.ModelSplit(data_cfg, meta).val
         X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, "cpu")
         all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[all_class_slices], Y[all_class_slices]
-        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), n)
-        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(Y, SynthCfg(synth_p=1.0, deform=0.0, bg=PartitionBgCfg()), n, real_img=X)
+        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(
+            Y, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), n)
+        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(
+            Y, SynthCfg(synth_p=1.0, deform=0.0, bg=PartitionBgCfg()), n, real_img=X)
 
-        rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", synth_flat[:, 0]), ("synth partition", synth_partition[:, 0])]
-        fig, ax = plt.subplots(len(rows), len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * len(rows)), squeeze=False)
+        rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", synth_flat[:, 0]),
+                ("synth partition", synth_partition[:, 0])]
+        fig, ax = plt.subplots(len(rows), len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * len(rows)),
+                               squeeze=False)
         for r, (name, vol) in enumerate(rows):
             for c in range(len(all_class_slices)):
                 ax[r, c].imshow(vol[c].cpu().numpy(), cmap="viridis" if "mask" in name else "gray")
@@ -57,7 +62,8 @@ class Render:
         log.info(f"wrote {out_png}\nPER-CLASS mean±std (z), real vs synth-partition:")
         for class_index in range(n):
             real_intensities, synth_intensities = X[:, 0][class_index == Y], synth_partition[:, 0][class_index == Y]
-            log.info(f"  {_NAMES[class_index]:8} real {real_intensities.mean():+.2f}±{real_intensities.std():.2f}   synth {synth_intensities.mean():+.2f}±{synth_intensities.std():.2f}")
+            log.info(f"  {_NAMES[class_index]:8} real {real_intensities.mean():+.2f}±{real_intensities.std():.2f}   "
+                     f"synth {synth_intensities.mean():+.2f}±{synth_intensities.std():.2f}")
 
 
     @staticmethod

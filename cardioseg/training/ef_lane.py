@@ -60,23 +60,31 @@ class EfLane:
 
     @staticmethod
     @shapecheck
-    def ef_ratio_loss(ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets, delta: float = 0.1) -> Float[torch.Tensor, ""]:
+    def ef_ratio_loss(
+        ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets, delta: float = 0.1,
+    ) -> Float[torch.Tensor, ""]:
         """Huber loss of predicted EF-ratio vs csv EF targets, both in [0,1] (÷100). Dimensionless, spacing-
         invariant — the KaggleEF objective. `targets` in percent; a [K] tensor/list. Pulled out of .loss so
         the weak-supervision math is testable with synthetic cavity totals (no cine, no GPU forward)."""
         ef_pred = EfLane.ef_ratio(ed, es)
-        target_tensor = ed.new_tensor([float(t) for t in targets]) if not isinstance(targets, torch.Tensor) else targets
+        target_tensor = (
+            ed.new_tensor([float(t) for t in targets]) if not isinstance(targets, torch.Tensor) else targets
+        )
         return F.huber_loss(ef_pred / 100, target_tensor.to(ef_pred) / 100, delta=delta)
 
     @staticmethod
     @shapecheck
-    def cav_volume(model, stacks: Float[torch.Tensor, "n 1 h w"], sizes: Int[torch.Tensor, "*k"], lv: int, *, amp: bool) -> Float[torch.Tensor, "*k"]:
+    def cav_volume(
+        model, stacks: Float[torch.Tensor, "n 1 h w"], sizes: Int[torch.Tensor, "*k"], lv: int, *, amp: bool,
+    ) -> Float[torch.Tensor, "*k"]:
         """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
         by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
         owner = torch.repeat_interleave(torch.arange(len(sizes), device=stacks.device), sizes)
         with torch.autocast("cuda", enabled=amp):
             cavity_pixels = model(stacks).softmax(1)[:, lv].float().sum((1, 2))       # [ΣDi]
-        return torch.zeros(len(sizes), device=cavity_pixels.device, dtype=cavity_pixels.dtype).index_add_(0, owner, cavity_pixels)
+        return torch.zeros(
+            len(sizes), device=cavity_pixels.device, dtype=cavity_pixels.dtype,
+        ).index_add_(0, owner, cavity_pixels)
 
     @staticmethod
     def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
@@ -88,8 +96,10 @@ class EfLane:
         size = cfg.generator.data.size
         lanes: list = [VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects)]
         if cfg.ef_kaggle:
-            lanes.append(KaggleEF(KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
-                                  cfg.ef_kaggle_subjects, seed=cfg.seed))
+            lanes.append(KaggleEF(
+                KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
+                cfg.ef_kaggle_subjects, seed=cfg.seed,
+            ))
         return lanes
 
 
@@ -171,7 +181,8 @@ class KaggleEF:
         if self.n == 0:
             return None
         case_indices = [int(i) for i in torch.randperm(self.n)[:self.k]]
-        sampled_cines = [self.X[i].to(self.device, non_blocking=True) for i in case_indices]   # ship sampled cines to GPU
+        # ship sampled cines to GPU
+        sampled_cines = [self.X[i].to(self.device, non_blocking=True) for i in case_indices]
         stack_sizes = [x.shape[0] for x in sampled_cines]
         with torch.no_grad(), torch.autocast("cuda", enabled=amp):      # phase-find, batched
             cavity_pixels = model(torch.cat(sampled_cines)).softmax(1)[:, self.lv].float().sum((1, 2))
@@ -179,7 +190,9 @@ class KaggleEF:
         offset = 0
         for cine_on_gpu, i, stack_size in zip(sampled_cines, case_indices, stack_sizes, strict=True):
             n_slices, n_phases = self.LP[i]
-            phase_volumes = cavity_pixels[offset:offset + stack_size].view(n_slices, n_phases).sum(0); offset += stack_size    # [n_phases] cavity vol / phase
+            # [n_phases] cavity vol / phase
+            phase_volumes = cavity_pixels[offset:offset + stack_size].view(n_slices, n_phases).sum(0)
+            offset += stack_size
             cine = cine_on_gpu.view(n_slices, n_phases, 1, self.size, self.size)
             ed_stacks.append(cine[:, int(phase_volumes.argmax())])
             es_stacks.append(cine[:, int(phase_volumes.argmin())])

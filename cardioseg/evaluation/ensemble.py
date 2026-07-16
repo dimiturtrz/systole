@@ -128,7 +128,7 @@ class Ensemble:
                 ea.append(ale[fg]); ee.append(epi[fg])
                 _, _, _, sa, se_ = Uncertainty.tta_uncertainty(models[0], case[f"{tag}_img"], size, device)
                 ta.append(sa[fg]); te.append(se_[fg])
-        return Ensemble.reducible_frac(ea, ee), Ensemble.reducible_frac(ta, te)   # ensemble reducible-frac, single(TTA) reducible-frac
+        return Ensemble.reducible_frac(ea, ee), Ensemble.reducible_frac(ta, te)   # ensemble, single(TTA)
 
     @staticmethod
     def add_args(ap):
@@ -157,5 +157,6 @@ class Ensemble:
                   f"EF MAE {ens['ef_mae']} vs {sgl['ef_mae']} | reducible {ef_red:.0%} (ensemble) / {tf_red:.0%} (TTA)")
             trk.metric(f"{ax}_dice_ensemble", ens["dice_mean"]); trk.metric(f"{ax}_dice_single", sgl["dice_mean"])
             trk.metric(f"{ax}_ef_ensemble", ens["ef_mae"]); trk.metric(f"{ax}_ef_single", sgl["ef_mae"])
-            trk.metric(f"{ax}_reducible_ensemble", round(ef_red, 3)); trk.metric(f"{ax}_reducible_tta", round(tf_red, 3))
+            trk.metric(f"{ax}_reducible_ensemble", round(ef_red, 3))
+            trk.metric(f"{ax}_reducible_tta", round(tf_red, 3))
         trk.end()

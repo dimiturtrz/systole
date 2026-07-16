@@ -57,7 +57,8 @@ class Uncertainty:
             epistemic  = total - aleatoric  (BALD / mutual information — reducible model uncertainty)
         NB the 4 flips are a *weak* ensemble (input-perturbation, not weight diversity), so epistemic
         here is a lower-bound proxy, not deep-ensemble gold."""
-        pred, mean, members = Inference(model, size, device).predict_volume_members(vol_img)  # mean [D,C,H,W]; members [K,D,C,H,W]
+        # mean [D,C,H,W]; members [K,D,C,H,W]
+        pred, mean, members = Inference(model, size, device).predict_volume_members(vol_img)
         logc = np.log(mean.shape[1])
         total = -(mean * (mean + 1e-12).log()).sum(1) / logc                        # H[mean]
         aleat = (-(members * (members + 1e-12).log()).sum(2)).mean(0) / logc        # mean_k H[p_k]
@@ -132,7 +133,9 @@ class Uncertainty:
                 bnd_u.extend(b); int_u.extend(i)
                 if not saved and eval_name == "acdc" and tag == Phase.ED.lower():  # one overlay PNG
                     z = int(np.argmax([(g > 0).sum() for g in gt]))
-                    Uncertainty._save_overlay(case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem, out / "uncertainty_map.png", Preprocess.fit_square, SIZE, plt)
+                    Uncertainty._save_overlay(
+                        case[f"{tag}_img"], pred[z], ent[z], z, Path(r["path"]).stem,
+                        out / "uncertainty_map.png", Preprocess.fit_square, SIZE, plt)
                     saved = True
         return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 
@@ -155,8 +158,12 @@ class Uncertainty:
         cmap = Labels.overlay_cmap()
         fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
         ax[0].imshow(img, cmap="gray"); ax[0].set_title(f"{name} ED  z={z}")
-        ax[1].imshow(img, cmap="gray"); ax[1].imshow(pred, cmap=cmap, vmin=0, vmax=3, interpolation="nearest"); ax[1].set_title("prediction")
-        ax[2].imshow(img, cmap="gray"); im = ax[2].imshow(ent, cmap="inferno", alpha=.7, vmin=0, vmax=ent.max() or 1); ax[2].set_title("uncertainty (entropy)")
+        ax[1].imshow(img, cmap="gray")
+        ax[1].imshow(pred, cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
+        ax[1].set_title("prediction")
+        ax[2].imshow(img, cmap="gray")
+        im = ax[2].imshow(ent, cmap="inferno", alpha=.7, vmin=0, vmax=ent.max() or 1)
+        ax[2].set_title("uncertainty (entropy)")
         for a in ax: a.axis("off")
         fig.colorbar(im, ax=ax[2], fraction=.046)
         fig.tight_layout(); fig.savefig(path, dpi=120); plt.close(fig)
@@ -171,11 +178,12 @@ class Uncertainty:
         run = Registry.resolve(args.run)
         model, _, device = Run.load_run(run)
 
-        df = splits.Splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else the whole dataset (vendor knowledge in splits)
+        df = splits.Splits.eval_set(args.eval)   # 'canon' -> unseen-vendor slice; else whole dataset
 
         out = run / "plots"
         out.mkdir(parents=True, exist_ok=True)
-        confs, corrects, ents, ales, epis, bnd_u, int_u, cases = Uncertainty._collect_uncertainty(model, df, device, out, args.eval)
+        confs, corrects, ents, ales, epis, bnd_u, int_u, cases = Uncertainty._collect_uncertainty(
+            model, df, device, out, args.eval)
 
         conf = np.concatenate(confs); correct = np.concatenate(corrects).astype(float)
         e, bins = Uncertainty.ece(conf, correct)

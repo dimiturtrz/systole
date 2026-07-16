@@ -75,7 +75,7 @@ class KaggleDsbAdapter:
         return sorted((p for p in d.glob("*") if p.is_dir()), key=lambda p: int(p.name))
 
     @staticmethod
-    def load_sax(case: str | Path) -> list[tuple]:  # pragma: no cover  reads real Kaggle SAX DICOM series from disk (read_series)
+    def load_sax(case: str | Path) -> list[tuple]:  # pragma: no cover  real Kaggle SAX DICOM series (read_series)
         """SAX cine of one case: list of (volume [phases,H,W], spacing (z,y,x), meta) — one entry per `sax_*`
         series (slice location), sorted apex→base by SliceLocation. Each series is the ~30-phase cine loop at
         that slice. Uses `Dicom.read_series`; broken/odd series skipped."""
@@ -100,11 +100,11 @@ class KaggleDsbAdapter:
              "region": MetaBuilder.region_of(KaggleDsbAdapter.COUNTRY)}
         sd = next(iter((case / "study").glob("sax_*")), None)
         dcm = next(iter(sd.glob("*.dcm")), None) if sd else None
-        if dcm is not None:                                       # pragma: no cover  reads a real Kaggle SAX DICOM header for vendor/acquisition
+        if dcm is not None:  # pragma: no cover  real Kaggle SAX DICOM header (vendor/acquisition)
             _, _, d = Dicom.read_image(dcm)
-            m.update(vendor=MetaBuilder.norm_vendor(d.get("vendor")), scanner=d.get("scanner"), field_T=d.get("field_T"),
-                     tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
-                     institution=d.get("institution"))
+            m.update(vendor=MetaBuilder.norm_vendor(d.get("vendor")), scanner=d.get("scanner"),
+                     field_T=d.get("field_T"), tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"),
+                     flip_deg=d.get("flip_deg"), institution=d.get("institution"))
         if ef_targets and (t := ef_targets.get(case.name)):
             m.update(t)                                          # edv, esv, ef
         return m

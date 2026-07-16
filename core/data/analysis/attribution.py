@@ -49,7 +49,8 @@ class Attribution:
         self.model, self.device, self.n_classes = model, device, n_classes
 
     @staticmethod
-    def class_confusion(pred: Integer[torch.Tensor, "*grid"], gt: Integer[torch.Tensor, "*grid"], n_classes: int) -> Float[torch.Tensor, "*n *n"]:
+    def class_confusion(pred: Integer[torch.Tensor, "*grid"], gt: Integer[torch.Tensor, "*grid"],
+                        n_classes: int) -> Float[torch.Tensor, "*n *n"]:
         """Row-normalized confusion [n,n]: M[g,p] = fraction of GT-class-g voxels predicted as p. Rows for
         absent GT classes are left zero. Pure (no model) -> unit-testable."""
         confusion = torch.zeros(n_classes, n_classes)
@@ -70,7 +71,8 @@ class Attribution:
             return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()
                               for i in range(0, X.shape[0], batch)])
 
-    def attribute(self, X: Float[torch.Tensor, "*batch *c *h *w"], Y: Integer[torch.Tensor, "*batch *h *w"], out_dir: str | Path) -> dict:
+    def attribute(self, X: Float[torch.Tensor, "*batch *c *h *w"], Y: Integer[torch.Tensor, "*batch *h *w"],
+                  out_dir: str | Path) -> dict:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out_dir_path = Path(out_dir)
@@ -79,8 +81,10 @@ class Attribution:
         # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
         summary = {
             "names": _NAMES[:self.n_classes],
-            "confusion": [[round(float(confusion[gt_class, pred_class]), 3) for pred_class in range(self.n_classes)] for gt_class in range(self.n_classes)],
-            "recall": {_NAMES[gt_class]: round(float(confusion[gt_class, gt_class]), 3) for gt_class in range(self.n_classes)},
+            "confusion": [[round(float(confusion[gt_class, pred_class]), 3) for pred_class in range(self.n_classes)]
+                          for gt_class in range(self.n_classes)],
+            "recall": {_NAMES[gt_class]: round(float(confusion[gt_class, gt_class]), 3)
+                       for gt_class in range(self.n_classes)},
         }
         has_saliency = self._render(X, Y, pred, out_dir_path / "attribution.png")
         summary["saliency"] = has_saliency
@@ -90,7 +94,8 @@ class Attribution:
     def _render(self, X, Y, pred, out_png: Path, k: int = 4) -> bool:
         """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
         it was drawn. Always writes the real/GT/pred panel."""
-        all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
+        all_class_slices = [i for i in range(Y.shape[0])
+                            if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
         if not all_class_slices:
             all_class_slices = list(range(min(k, Y.shape[0])))
         def _fwd(x):
@@ -99,7 +104,8 @@ class Attribution:
 
         rows = 4 if saliency is not None else 3
         vmax = self.n_classes - 1
-        fig, ax = plt.subplots(rows, len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * rows), squeeze=False)
+        fig, ax = plt.subplots(rows, len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * rows),
+                               squeeze=False)
         def _panel(row, c, img, title, **kw):
             ax[row, c].imshow(img, **kw); ax[row, c].set_title(title); ax[row, c].axis("off")
         for c, i in enumerate(all_class_slices):
@@ -108,7 +114,8 @@ class Attribution:
             _panel(1, c, Y[i].cpu(), "GT", cmap="viridis", vmin=0, vmax=vmax)
             _panel(2, c, pred[i], "pred", cmap="viridis", vmin=0, vmax=vmax)
             if saliency is not None:
-                saliency_map = saliency.attribute(slice_input, target=self.n_classes - 1).abs()[0, 0].detach().cpu().numpy()
+                saliency_map = (saliency.attribute(slice_input, target=self.n_classes - 1)
+                                .abs()[0, 0].detach().cpu().numpy())
                 _panel(3, c, saliency_map, f"saliency({_NAMES[-1]})", cmap="hot")
         fig.tight_layout(); fig.savefig(out_png, dpi=90); plt.close(fig)
         return saliency is not None

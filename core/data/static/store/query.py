@@ -312,7 +312,7 @@ class AcqReference:
         return acq
 
     @staticmethod
-    def fit(root: str | Path | None = None) -> dict:  # pragma: no cover  globs built meta.csv from disk + writes reference/acquisition.yaml (pure core = from_frame, tested)
+    def fit(root: str | Path | None = None) -> dict:  # pragma: no cover  globs meta.csv + writes acquisition.yaml
         """Aggregate REAL DICOM acquisition from the built stores -> reference/acquisition.yaml. Only rows
         with real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are
         skipped, so the domain-randomization sweep survives for everything we lack real values for."""

@@ -38,7 +38,7 @@ dev = ["pytest", "pytest-cov"]
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.10.0#subdirectory=sdlc-devtools"]
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.12.0#subdirectory=sdlc-devtools"]
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
@@ -46,7 +46,7 @@ mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
 all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov",
-       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.10.0#subdirectory=sdlc-devtools"]
+       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.12.0#subdirectory=sdlc-devtools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -103,7 +103,7 @@ extend-exclude = ["baselines", "cardioview/web/node_modules", "cardioview/web/di
 # <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123"]
+select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "E501", "SLF001"]
 ignore = [
     # jaxtyping shape strings are deliberate runtime-checked annotations that ruff's forward-ref parser
     # misreads (jaxtyping's own FAQ prescribes disabling both): F722 = a multi-token dim string
@@ -134,10 +134,10 @@ ignore-names = ["X*", "Y*", "B", "C", "H", "W", "T1", "T2", "TR", "PD", "F", "si
 [tool.ruff.lint.per-file-ignores]
 # Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); mock classes mirror external
 # PascalCase APIs + local math/alias scratch (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE
-# gates (imports-at-top, real bugs, dead code) still apply to tests. (SLF001 is no longer enforced anywhere
-# — moved to the advisory surface, bd 8ex — so it needs no tests carve-out.)
+# gates (imports-at-top, real bugs, dead code) still apply to tests. SLF001 is enforced house-wide again
+# (bd 8ex reopened) but tests legitimately poke privates-under-test, so it sits in the tests carve-out.
 "__init__.py" = ["F401"]
-"tests/**" = ["S101", "PLR2004", "FBT", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
 # >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
 # that must never raise). Add lines here; copier update won't overwrite this region.
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training

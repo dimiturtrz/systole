@@ -44,10 +44,12 @@ class StaticCompare:
             return None
         rv, myo, lvc = mask == _RV, mask == _MYO, mask == _LVC
         rv_area, myo_area, lvc_area = int(rv.sum()), int(myo.sum()), int(lvc.sum())
-        metrics = {"rv_area": rv_area, "myo_area": myo_area, "lvc_area": lvc_area, "fg_area": int(foreground.sum())}
+        metrics = {"rv_area": rv_area, "myo_area": myo_area, "lvc_area": lvc_area,
+                   "fg_area": int(foreground.sum())}
         # myo WALL THICKNESS: mean over the myo of the distance-to-non-myo (×2 ≈ local thickness)
         distance_transform = distance_transform_edt(myo)
-        metrics["myo_thickness"] = float(distance_transform[myo].mean() * 2.0) if myo_area else 0.0   # over myo pixels only (px)
+        # over myo pixels only (px)
+        metrics["myo_thickness"] = float(distance_transform[myo].mean() * 2.0) if myo_area else 0.0
         # LV-cavity SPHERICITY (2D roundness): 4πA / P²  (1 = perfect circle). P ≈ boundary-pixel count.
         if lvc_area >= _MIN_LVC_PX:
             perimeter = int((lvc & ~binary_erosion(lvc)).sum())
@@ -70,7 +72,8 @@ class StaticCompare:
         real_distributions, synth_distributions = StaticCompare._dist(real_masks), StaticCompare._dist(synth_masks)
         comparison = {}
         for metric in real_distributions:
-            real_values, synth_values = torch.tensor(real_distributions[metric]), torch.tensor(synth_distributions[metric])
+            real_values = torch.tensor(real_distributions[metric])
+            synth_values = torch.tensor(synth_distributions[metric])
             comparison[metric] = {"w1": round(SynthFidelity.wasserstein1d(real_values, synth_values), 3),
                       "real_median": round(float(np.median(real_distributions[metric])), 2),
                       "synth_median": round(float(np.median(synth_distributions[metric])), 2)}

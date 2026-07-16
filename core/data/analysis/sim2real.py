@@ -58,7 +58,8 @@ class Sim2Real:
                     residual = float(((synth_standardized - real_standardized) ** 2).mean())
                     if residual < best["residual"]:
                         best = {"field": field, "tr": float(tr), "flip": float(flip),
-                                "residual": round(residual, 4), "synth_z": [round(value, 3) for value in synth_standardized.tolist()]}
+                                "residual": round(residual, 4),
+                                "synth_z": [round(value, 3) for value in synth_standardized.tolist()]}
         return best
 
 
@@ -80,5 +81,5 @@ class Sim2Real:
             real = torch.tensor([X[:, 0][c == Y].mean() for c in range(1, n_classes)])
             best_fit = Sim2Real.fit_acquisition(real, n_classes)
             real_z = [round(value, 2) for value in Sim2Real._standardize(real).tolist()]
-            log.info(f"{vendor:10} {X.shape[0]:>4}  {best_fit['field']}  {best_fit['tr']:.1f}  {best_fit['flip']:.0f}  | "
-                  f"{best_fit['residual']:.4f} | real {real_z} synth {best_fit['synth_z']}")
+            log.info(f"{vendor:10} {X.shape[0]:>4}  {best_fit['field']}  {best_fit['tr']:.1f}  "
+                  f"{best_fit['flip']:.0f}  | {best_fit['residual']:.4f} | real {real_z} synth {best_fit['synth_z']}")

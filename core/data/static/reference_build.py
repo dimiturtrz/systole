@@ -81,7 +81,8 @@ class ReferenceBuild:
         healthy = [p for p in by_path if "normal" in p.lower() or p.lower() == "nor"]
         if healthy:
             p = healthy[0]
-            base = f"processed/{paramkey} GT, healthy cohort='{p}', n={len(by_path[p]['ef'])}, datasets={sorted(d for d in datasets[p] if d)}"
+            base = (f"processed/{paramkey} GT, healthy cohort='{p}', "
+                    f"n={len(by_path[p]['ef'])}, datasets={sorted(d for d in datasets[p] if d)}")
             out["normal_ranges"] = {"ef_normal": ReferenceBuild._range_entry(by_path[p]["ef"], base),
                                     "edv_normal_ml": ReferenceBuild._range_entry(by_path[p]["edv"], base),
                                     "esv_normal_ml": ReferenceBuild._range_entry(by_path[p]["esv"], base)}
@@ -228,7 +229,8 @@ class ReferenceBuild:
 
     @staticmethod
     def add_args(ap):
-        ap.add_argument("--build", action="store_true", help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
+        ap.add_argument("--build", action="store_true",
+                        help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
         ap.add_argument("--real-levels", action="store_true", dest="real_levels",
                         help="compute + write <data>/reference/real_levels.yaml (per-vendor per-class intensity)")
         ap.add_argument("--acquisition", action="store_true",

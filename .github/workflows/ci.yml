@@ -28,12 +28,12 @@ jobs:
       # repeated on the CLI — F722 (multi-token dim strings "b c h w") + F821 (single-axis "n" = an undefined
       # forward-ref). Else a fresh ml gen with any jaxtyping annotation red-CIs on its own config (skr/kqk).
       - name: Lint — enforced (shipped source, full select)
-        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123 --ignore F722,F821
-      # ADVISORY (never blocks): full curated config over the whole tree, surfaces any pending families +
-      # the advisory-only codes (E501/SLF001 — cosmetic / house-gate-conflicting, bd 4c2/8ex): reported,
-      # never a merge gate.
+        run: uvx ruff@0.15.13 check core cardioseg cardioview tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001 --ignore F722,F821
+      # ADVISORY (never blocks): the full enforced select over the WHOLE tree (`.` vs the enforced `lint_paths`)
+      # — surfaces any pending families outside the shipped source. `ruff_advisory_select` is empty by default
+      # (E501/SLF001 graduated into the enforced union, bd 4c2/8ex); the extend flag rides only when it's set.
       - name: Lint — advisory full (non-blocking)
-        run: uvx ruff@0.15.13 check . --statistics --extend-select E501,SLF001 || true
+        run: uvx ruff@0.15.13 check . --statistics || true
       # ADVISORY: format drift, shown but never blocks.
       - name: Format — advisory (non-blocking)
         run: uvx ruff@0.15.13 format --check . || true
