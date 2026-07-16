@@ -4,6 +4,7 @@ synthetic target (round-trip, where flip-only IS identifiable)."""
 import torch
 
 from core.data.dynamic.inverse import Inverse
+from core.data.dynamic.mri_physics import MriPhysics
 
 N = 4  # 0 bg, 1 RV-cav, 2 myo, 3 LV-cav
 
@@ -37,6 +38,21 @@ def test_acquisition_unidentifiable_from_two_tissue_heart():
     hi = Inverse.fit_acquisition(target, seg, N, fit_params=("flip",), flip0=75.0, steps=400, lr=1.0)
     assert lo["recon_loss"] < 1e-3 and hi["recon_loss"] < 1e-3    # both fit the 2-level pattern perfectly
     assert abs(lo["flip"] - hi["flip"]) > 20.0                    # ...at very different flips = non-unique
+
+
+def test_fit_tissue_identifiability_calibrated_vs_uncalibrated():
+    """5ev5: per-class tissue contrast is recoverable ONLY under shared ABSOLUTE scale (calibrated). In the
+    uncalibrated regime real cardiac forces (one joint affine removed), the 2 heart levels + a 2-dof affine
+    leave 0 contrast dof -> the fit collapses to the prior (margin ~0). absolute=True moves params off the
+    planted prior; absolute=False does not."""
+    segs = torch.cat([_seg(), _seg()])                       # same-session set (K=2)
+    t1p, t2p, pdp = MriPhysics.tissue_params(N, 0, 1.5, "cpu")
+    t2_true = t2p * torch.tensor([1.0, 0.8, 1.3, 0.8])       # plant a contrast off the prior
+    imgs = Inverse._recon_set(segs, t1p, t2_true, pdp, torch.tensor([3.0]), torch.tensor([62.0]))
+    calib = Inverse.fit_tissue(imgs, segs, N, absolute=True, prior_w=0.001, steps=600, lr=0.03)
+    real = Inverse.fit_tissue(imgs, segs, N, absolute=False, prior_w=0.001, steps=600, lr=0.03)
+    assert calib["margin"] > 0.1                             # calibrated: data pins params off the prior
+    assert real["margin"] < 0.02                             # uncalibrated: prior wins (degenerate)
 
 
 def test_fit_needs_foreground():
