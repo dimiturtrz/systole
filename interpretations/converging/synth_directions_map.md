@@ -78,6 +78,11 @@ slices: every omitted slice carries real RV softmax (max 0.21–0.57, never <0.0
 **Takeaway:** the RV-omission fix is **RV-targeted**, not a global loss. The free logit-bias already banks the RV
 win; a source-level version (if ever needed) must be **RV-class-weighted**, not global Tversky.
 
+**nttu epic CLOSED (8/8, 2026-07-16).** Diagnostics committed (nttu.6): `python -m cardioseg.evaluation
+rv_omission --run <zero-real> --mode {probe,bias}` reproduces the nttu.5 recall-vs-coverage split + the nttu.7
+logit-bias sweep. Coverage levers (nttu.4/.8) resolved by root cause — the model fires RV softmax on the failing
+slices, so those shapes ARE covered; the gap is argmax recall, not coverage.
+
 **Open next:** (1) optionally productionize the RV logit-bias as an opt-in inference class-prior (small, val-fit;
 label post-hoc like tb58) — filed, not urgent (gain modest, +0.012 test mean). (2) nttu.4/.8 shape-coverage
 **deprioritized** for omission (root cause isn't coverage). Do **not** pivot off A. Method note: always run the

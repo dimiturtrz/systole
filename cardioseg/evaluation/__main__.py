@@ -14,6 +14,7 @@ from .matrix import Matrix
 from .modelcard import ModelCard
 from .overlay import Overlay
 from .results import Results
+from .rv_omission import RvOmission
 from .soft_eval import SoftEval
 from .sync_numbers import SyncNumbers
 from .uncertainty import Uncertainty
@@ -22,7 +23,7 @@ COMMANDS = {
     "calibrate": Calibrate, "ef_calibrate": EfCalibrate, "distribution": Distribution, "ensemble": Ensemble,
     "matrix": Matrix, "modelcard": ModelCard, "overlay": Overlay, "results": Results,
     "soft_eval": SoftEval, "sync_numbers": SyncNumbers, "uncertainty": Uncertainty,
-    "persist": Persist,
+    "rv_omission": RvOmission, "persist": Persist,
 }
 
 
