@@ -11,5 +11,5 @@ jscpd_paths: core cardioseg cardioview/web/src
 lint_paths: core cardioseg cardioview tests
 packages: core,cardioseg
 project_name: cardioseg
-repo_url: ''
+repo_url: https://github.com/dimiturtrz/systole
 

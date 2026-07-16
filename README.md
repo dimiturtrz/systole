@@ -1,5 +1,8 @@
 # Systole — cardiac segmentation + function (MRI, CT, echo)
 
+[![ci](https://github.com/dimiturtrz/systole/actions/workflows/ci.yml/badge.svg)](https://github.com/dimiturtrz/systole/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **What this is.** systole segments the heart from cardiac MRI and computes its **ejection
 fraction** — then asks the question most demos skip: *does that number survive a change of
 scanner?* The model trains on two vendors (Siemens + Philips, 495 subjects) and is evaluated on
@@ -268,6 +271,8 @@ evaluation discipline carry over from prior ML work; the clinical specifics I le
 `nox -s archmap` writes `docs/architecture/graph.json` (committed, diffable — nodes + weighted import edges)
 plus a self-contained interactive viewer (`index.html`, gitignored, rebuilt on demand). **Commit the
 graph.json diff** — it's the architecture-erosion record.
+
+▶ **Live viewer: [https://dimiturtrz.github.io/systole/architecture/](https://dimiturtrz.github.io/systole/architecture/)** — main; dev preview at [https://dimiturtrz.github.io/systole/architecture/preview/](https://dimiturtrz.github.io/systole/architecture/preview/)
 
 
 Publishing to GitHub Pages — one repo = one Pages site, so pick ONE of:
