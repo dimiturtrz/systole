@@ -68,7 +68,8 @@ class DiceCETversky:
 
     def __init__(self, alpha: float = 0.3, beta: float = 0.7, lam: float = 1.0):
         self.dce = DiceCELoss(to_onehot_y=True, softmax=True)
-        self.tv = TverskyLoss(to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
+        # bg excluded (as HD/HER): a β>α FN-penalty on the dominant bg channel suppresses foreground recall
+        self.tv = TverskyLoss(to_onehot_y=True, softmax=True, include_background=False, alpha=alpha, beta=beta)
         self.lam = lam
 
     def __call__(self, logits, y):

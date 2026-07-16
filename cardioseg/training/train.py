@@ -39,6 +39,7 @@ from core.types import shapecheck
 from ..evaluation.modelcard import ModelCard
 from ..evaluation.validate import EvalCfg, Evaluator
 from ..tracking import Tracker
+from .earlystop import EarlyStop
 from .ef_lane import EfLane
 
 # Declarative CLI-arg -> cfg mapping (bd cardiac-seg-dlj0): one table replaces the per-flag if-ladder.
@@ -337,7 +338,7 @@ class SeedTrainer:
         partial, log_sig, log, trk = self.partial, self.log_sig, self.log, self.trk
         gen, aux, Xva, Yva = self.gen, self.aux, self.sh["Xva"], self.sh["Yva"]
         nb, pin, device = self.sh["nb"], self.pin, self.device
-        best_dice, best_state, bad = -1.0, None, 0
+        es, best_state = EarlyStop(cfg.patience, cfg.es_min_delta), None
         fit_t0 = time.perf_counter()                            # real training wall-clock (run-duration is unreliable)
         for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
             t0 = time.perf_counter()
@@ -370,18 +371,15 @@ class SeedTrainer:
                     scaler.step(opt)
                     scaler.update()
             vd = Train.val_dice(model, Xva, Yva, cfg.batch, device)        # fast batched slice-Dice (no TTA)
-            improved = vd > best_dice + 1e-4
+            improved = es.update(vd)
             if improved:
-                best_dice, bad = vd, 0
                 best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-            else:
-                bad += 1
             dt = time.perf_counter() - t0
             log.info("epoch %2d  train_loss %.4f  val_dice %.4f%s  (%.1fs, %.1f batch/s)",
                      ep, tot / nb, vd, " *" if improved else "", dt, nb / dt)
             trk.metric("train_loss", tot / nb, step=ep); trk.metric("val_dice", vd, step=ep)
-            if bad >= cfg.patience:
-                log.info("early stop @ epoch %d (no val gain for %d); best val_dice %.4f", ep, cfg.patience, best_dice)
+            if es.stop:
+                log.info("early stop @ epoch %d (no val gain for %d); best %.4f", ep, cfg.patience, es.best)
                 break
         trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
         return best_state
