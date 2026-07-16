@@ -88,10 +88,39 @@ per-structure / per-vendor Dice + the 20 worst overlays. The hypothesis predicts
 pathological slices. If instead the loss is a specific structure/vendor/slice band → it's a targetable defect,
 not the randomization tax.
 
+## The counter-argument (owner, and it is decisive)
+
+A good synth-only model **should** generalize to this test — that is the entire promise of domain
+randomization — and the prior art says it can. **SynthSeg** reaches near-real Dice on real data trained purely
+on synthetic; **UltimateSynth** (our own CLAUDE.md thesis: physics > random contrast) goes further. If the 0.17
+were an *inherent* shared-mapping tax, SynthSeg could not work. It does. **So the ceiling is not inherent, and
+the tax hypothesis is at most a partial contributor — leaning on it is a cope** ("synth is fine, the benchmark
+is unfair"). It does not earn that pass.
+
+What survives: the tax framing explains the *internal* pattern (why fidelity/coverage moves were Dice-neutral —
+they don't add a stable map). It does **not** license "0.68 is as good as physics-randomized color gets."
+Physical-synth SOTA says otherwise. **The likeliest truth is a synth INADEQUACY: our manifold does not actually
+cover real, and we underperform what our own paradigm (physical synth-only) can reach.** That is a findable
+defect, not a tax to accept.
+
+## Reframed conclusion + what's owed
+
+The 0.17 is **most likely a synth inadequacy**; the randomization tax is a secondary, internal-pattern effect,
+not the explanation. Do NOT pivot to learned color or accept the ceiling. Diagnostic-first:
+
+1. **Lit-ground the achievable ceiling** — what does SOTA physical synth-only score on cardiac short-axis, and
+   their randomization recipe (GMM-random contrast vs our physically-constrained bSSFP sweep; how aggressive;
+   which axes) vs ours. Tells us if 0.61 is far below achievable and *which axis* we under-cover.
+2. **Failure analysis of the 0.68 repaint model** — per-slice / per-structure / per-vendor Dice + 20 worst
+   overlays. Where do we lose: uniform low-contrast boundary (invariance-limited) vs a targetable
+   vendor/structure/slice-band (a fixable defect)?
+3. **Name the inadequacy axis and test one cheap arm** — under-randomized contrast? a missing real texture /
+   artifact class? boundary contrast? Confirm it moves Dice before hardening.
+
 ## Honesty
 
-This is a hypothesis that *fits* every result retrospectively — that is its weakness. It has not been tested
-forward. The two experiments above are designed to *break* it, and either could. What is solid: (1) fidelity /
-coverage do not move zero-real Dice (many arms, multi-seed on the neutral ones); (2) only gross-level correction
-moved it; (3) broadband noise is load-bearing. The interpretation of *why* — the stable-mapping tax — is the
-part still owed a forward test. Until then it is the best available account, not a verdict.
+The stable-mapping hypothesis *fits* every result retrospectively — that is its weakness, and the SynthSeg
+counter-argument shows the strong form is likely wrong. What is solid: (1) fidelity / coverage do not move
+zero-real Dice; (2) only gross-level correction moved it; (3) broadband noise is load-bearing; (4) physical
+synth-only CAN approach real (prior art) → our 0.61 is an inadequacy, not a law. The next work is to *locate*
+that inadequacy, not to explain the number away.
