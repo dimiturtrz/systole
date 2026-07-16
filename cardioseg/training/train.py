@@ -478,13 +478,16 @@ if __name__ == "__main__":
     ap.add_argument("--n4", action="store_true"); ap.add_argument("--out", default=None)
     ap.add_argument("--alias", default=None,
                     help="registry alias to set (e.g. 'production' to make this run the flagship)")
+    ap.add_argument("--from-config", default=None, dest="from_config",
+                    help="load the full TrainCfg from a run's config.json (retrain a run with a tweak); "
+                         "--split/--set apply on top. E.g. reproduce a staged run + change only the loss")
     ap.add_argument("--set", nargs="*", default=[], dest="overrides",
                     help="deep cfg overrides, e.g. generator.data.test_vendors=('GE',) generator.aug.gamma_p=0.5")
     ap.add_argument("--quick", action="store_true",
                     help="experiment sweep: train + eval only, skip ONNX/INT8/attribution/registry (~2x faster)")
     args = ap.parse_args()
 
-    cfg = TrainCfg()
+    cfg = Hparams.from_json(args.from_config) if args.from_config else TrainCfg()
     if args.split:     # coded-filter family owns the partition (core.data.ingest.splits)
         name = args.split.split("@", 1)[0]
         if name not in Splits.list_splits():

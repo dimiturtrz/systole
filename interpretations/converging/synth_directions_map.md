@@ -104,6 +104,17 @@ bug (fixed in `DiceCETversky`, now bg-excluded like HD/HER — recovered ~+0.028
 foreground loss for an RV-specific problem. The **logit-bias dominates** (same/bigger RV gain, no cav cost, free);
 a source-level RV-weight is viable-but-needs-tuning (×3 costs cav; a milder weight likely lands RV+ cleaner).
 
+**Source RV class-weight — REFUTED (2026-07-16, matched 4-point sweep).** The nttu.7 "×3 RV +0.022" did **not
+reproduce**. Ran base vs `ce_weight` ×1.5 / ×2 / ×3 (MONAI `DiceCELoss(weight=)` weights **both** Dice+CE — the
+full nttu.7 instrument), matched 40ep single-seed off `--from-config refac_proc`. Every up-weight is **≤ base on
+RV and mean**, both splits (TEST Canon+GE n=147): base RV 0.427/mean 0.542 · ×1.5 0.363/0.506 · ×2 0.426/0.530 ·
+×3 0.312/0.492. No arm lifts RV; cav bleeds (0.738→0.680). nttu.7's single point was **noise** (single-seed
+cross-vendor RV scatters ±0.02–0.03). **KILL.** Combined with we55 (global logit-bias) + ru27 (gated logit-bias),
+the RV-recall lever is now **exhausted on both axes** — post-hoc *and* source. Global reweighting (CE, Dice, or
+logit) cannot fix a **localized apical-slice detection** failure: it only trades cav mass, never creates RV where
+the detector is absent. The RV-collapse chunk is not cheaply recoverable — the real fix is coverage/architecture
+or accept it. Reusable infra kept: `DiceCECfg.ce_weight` (no-op default) + `train --from-config`.
+
 **nttu epic CLOSED (8/8, 2026-07-16).** Diagnostics committed (nttu.6): `python -m cardioseg.evaluation
 rv_omission --run <zero-real> --mode {probe,bias}` reproduces the nttu.5 recall-vs-coverage split + the nttu.7
 logit-bias sweep. Coverage levers (nttu.4/.8) resolved by root cause — the model fires RV softmax on the failing
