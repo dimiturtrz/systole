@@ -89,6 +89,28 @@ volume mapping repaint never had.
 - **`ncph` (inverse twin)** remains the right home for the *tax* portion (reduce contrast variance toward a known
   deployment domain), but it is a twin move that trades generalization — not the fix for the residual inadequacy.
 
+## Follow-up — we55: productionizing the #1 lever refutes it as a global default
+
+The verdict ranked the RV logit-bias (nttu.7) the biggest in-hand lever. Productionized it
+(`core.inference.Inference.logit_bias` opt-in prior + `rv_omission.select_bias` val-fit) and measured it
+**per-vendor** on the zero-real model's own cross-vendor test (fit b\*=2.0 on acdc val, apply once):
+
+| test vendor | n | RV b0→b\* | mean Δ | read |
+|---|---|---|---|---|
+| Canon | 9 | 0.278→0.322 | **+0.025** | RV collapsed → bias recovers it (verdict holds) |
+| Siemens | 69 | 0.590→0.604 | +0.013 | lift |
+| **GE** | 69 | 0.621→**0.515** | **−0.025** | RV already healthy → bias **over-segments (RV −0.106)** |
+| pooled | 147 | — | **−0.004** | GE loss cancels Canon+Siemens gains |
+
+**The global constant is the wrong instrument.** The RV deficit is **vendor-heterogeneous** — collapsed on
+Canon (0.28), already fine on GE (0.62) — so a single val-fit bias recovers the collapse *and* over-segments
+where RV is healthy. nttu.7's "+0.014 test" was cmrx-only (Siemens-like); the full cross-vendor test exposes the
+GE regression it never saw. **The verdict's "biggest lever" claim was half-right:** the bias works where RV
+actually collapses (Canon +0.044) — confirming the mechanism — but it is **not** a shippable global default.
+The `logit_bias` primitive stays (a correct opt-in capability, off by default); the global RV prior is
+**declined**. A conditional form (per-vendor, or gated to low-RV-confidence cases only) is the real fix — filed
+follow-up. Method note: this is why productionize-and-measure-cross-vendor beat citing the single cmrx number.
+
 ## Honesty / caveats
 
 - Single-flagship, eval-only (no retrain, no seeds) — per finding-stage rigor; the effects are large (0.25 vs

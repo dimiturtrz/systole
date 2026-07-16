@@ -49,9 +49,13 @@ repaint model's actual errors (not input stats). The color gap **decomposes**, i
   shouldn't → a **findable** synth defect, not a law. Do NOT accept 0.61 as a ceiling; do NOT pivot wholesale to
   learned color on an "irreducible tax" story (only half-true).
 
-Lever ranking out of the verdict: (1) **productionize RV logit-bias** into the zero-real lane (we55) — biggest
-chunk; (2) name the residual-inadequacy axis (boundary contrast / finite-res PV) + test one arm; (3) `hpy`
-(MRXCAT2 MRI-native contrast) justified by the residual, `ncph` (twin) is the home for the *tax* portion only.
+Lever ranking out of the verdict: (1) ~~productionize RV logit-bias (we55)~~ **DONE → declined as a global
+default**: the val-fit global RV bias helps where RV collapses (Canon +0.044/Siemens +0.014) but **over-segments
+GE where RV is already healthy** (RV −0.106), so pooled cross-vendor is **−0.004** — the RV deficit is
+vendor-heterogeneous, a global constant can't fix it. `Inference.logit_bias` primitive kept (opt-in, off); a
+**conditional/confidence-gated** RV prior is the real fix (filed). (2) name the residual-inadequacy axis
+(boundary contrast / finite-res PV) + test one arm; (3) `hpy` (MRXCAT2 MRI-native contrast) justified by the
+residual, `ncph` (twin) is the home for the *tax* portion only.
 
 ---
 
