@@ -87,3 +87,23 @@ def test_biased_pred_tilts_rv_over_bg():
     tilted = RvOmission.biased_pred(logits, d, 2.0)
     assert (base == 0).all()                                # bg wins with no bias
     assert (tilted == RV).all()                             # +2.0 RV bias flips it
+
+
+def test_gated_bias_preserves_healthy_rv_and_recovers_omission():
+    # ru27: gate the RV bias on per-slice max RV softmax < tau. z0 healthy (RV wins center strongly ->
+    # NOT gated), z1 under-fired (bg just over RV everywhere -> gated). Global bias over-segments z0's
+    # border (cav->RV); gating leaves z0 alone yet still recovers z1. Flip-symmetric so TTA is a no-op.
+    d, c, h, w = 2, 4, 4, 4
+    pat = torch.zeros((d, c, h, w))
+    pat[0, 3] = 1.5                                         # z0: cav border baseline (moderate)
+    pat[0, 1, 1:3, 1:3] = 3.0; pat[0, 3, 1:3, 1:3] = 0.0   # z0: strong RV center (RV wins, maxP>tau)
+    pat[1, 0] = 1.0; pat[1, RV] = 0.6                       # z1: bg just over RV (omission, maxP<tau)
+    logits = pat.repeat(4, 1, 1, 1)                         # [K*D=8, C, H, W]: 4 identical flip blocks
+    base = RvOmission.biased_pred(logits, d, 0.0)
+    glob = RvOmission.biased_pred(logits, d, 2.0)
+    gated = RvOmission.gated_biased_pred(logits, d, 2.0, 0.6)
+    assert (base[1] == 0).all()                            # z1 omitted: bg wins
+    assert base[0, 0, 0] == 3 and base[0, 1, 1] == RV      # z0 healthy: cav border, RV center
+    assert (glob[0] != base[0]).any()                      # global over-segments z0 (border cav->RV)
+    assert np.array_equal(gated[0], base[0])               # gate preserves healthy z0
+    assert (gated[1] == RV).all()                          # gate still recovers omitted z1
