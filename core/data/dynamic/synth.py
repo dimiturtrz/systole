@@ -519,7 +519,7 @@ class SynthPainter:
         #     lowers blood MEAN (real +1.66 < steady +2.04) and adds within-class blood TEXTURE (interior
         #     heterogeneity pv can't reach). Spatially-correlated at a physical trabecular scale. ---
         if cfg.trabec_lv > 0 or cfg.trabec_rv > 0:
-            myo_sig = mu[:, MYO].view(b, 1, 1, 1) if MYO < n_paint else mu_map
+            myo_sig = mu[:, MYO].view(b, 1, 1, 1) if n_paint > MYO else mu_map
             tgrid = max(_MIN_TRABEC_GRID, mask.shape[-1] // 2)                   # ~3mm trabecular scale @1.5mm grid
             tfield = F.interpolate(torch.rand(b, 1, tgrid, tgrid, device=dev),
                                    size=mask.shape[-2:], mode="bilinear", align_corners=False)
