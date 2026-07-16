@@ -89,7 +89,7 @@ isolator*: color costs 0.17, shape 0.07. Told us the A blocker is mostly color, 
 | # | direction | best | maturity | note |
 |---|---|---|---|---|
 | C | Real + synth **AUGMENTATION** (mix) | ~0.84 | under-measured | does synth help *on top of* real? (pwih) — no clean matched A/B yet |
-| D | Controlled / **INVERSE / twin** | — | not started | fit color to a scan; project's 2nd named direction (ncph) |
+| D | Controlled / **INVERSE / twin** | — | **identifiability-blocked (tissue)** | `fit_tissue` built (ncph/5ev5). Tissue qMRI from standard cine is under-determined: 2 heart levels + a joint affine → margin collapses to prior (real ACDC 0.08 vs calibrated-synth 0.23). Needs qMRI (varied flip/TR) or calibration. Forward residual 0.315 = the "synth too clean" gap from the inverse side. `2026-07-16_twin_tissue_identifiability.md` |
 | E | **EF lane** | cal −4pp | mature ✅ | calibration (tb58), Kaggle weak-sup (2b7m); own objective |
 | F | nnU-Net baseline | — | reference | quarantined SOTA ref |
 
