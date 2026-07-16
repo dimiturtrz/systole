@@ -115,6 +115,17 @@ logit) cannot fix a **localized apical-slice detection** failure: it only trades
 the detector is absent. The RV-collapse chunk is not cheaply recoverable — the real fix is coverage/architecture
 or accept it. Reusable infra kept: `DiceCECfg.ce_weight` (no-op default) + `train --from-config`.
 
+**RV deficit SHAPE — it's not omission, it's a partial-quality continuum (egeh, 2026-07-16, `--mode deficit`).**
+Chased the "coverage/architecture" RV lever to its root. Per-slice RV Dice over 1165 GT-RV-present cross-vendor
+slices: **8% <0.05 · 11% [0.05,0.3) · 20% [0.3,0.6) · 26% [0.6,0.8) · 34% ≥0.8**, mean **0.600**. The gap is a
+**broad continuum**, not a cliff. **True 0-px omissions = 3 slices (0.26%)** — negligible; all apical, all with a
+confident-RV neighbour at z±1 (2.5D signal exists but recovering 3 slices is worthless). Of the 93 near-miss
+(<0.05) slices, only 3 are absent — the other ~90 predict RV in the **wrong place** (mislocation, not omission).
+So coverage is dead (shape present, nttu.5) AND omission is a non-lever (3 slices). The RV deficit is broad
+partial-quality + mislocation on OOD-color vendors = the verdict's vendor-gated RV-under-color, **capped**. A 2.5D
+build would be a speculative general-quality bet against a per-slice-color root — not pursued. **The RV chapter is
+closed: no cheap RV win exists.** Frontier shifts off RV → residual-LV-inadequacy (uw5p) / new generation sources.
+
 **nttu epic CLOSED (8/8, 2026-07-16).** Diagnostics committed (nttu.6): `python -m cardioseg.evaluation
 rv_omission --run <zero-real> --mode {probe,bias}` reproduces the nttu.5 recall-vs-coverage split + the nttu.7
 logit-bias sweep. Coverage levers (nttu.4/.8) resolved by root cause — the model fires RV softmax on the failing
