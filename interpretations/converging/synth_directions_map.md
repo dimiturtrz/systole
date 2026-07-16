@@ -66,17 +66,20 @@ A is the goal, best ~0.61 (composition). Reframed the blocker from "RV color col
 **RV omission/under-seg** (detection, not color), root-caused (nttu.5) to **RV-vs-bg recall** on apical/small-RV
 slices: every omitted slice carries real RV softmax (max 0.21–0.57, never <0.05) lost to **background** at argmax.
 
-**nttu.7 (2026-07-16) — recall lever characterized, targeted vs global:**
-- ✅ **TARGETED = KEEP.** An inference-time RV logit-bias on the *existing* model (val-tuned b≈1.5–2.0) lifts
-  **val RV +0.043** (monotone over 6 bias steps = signal, not scatter), val mean +0.018; **transfers** to cmrx
-  test RV +0.014 / mean +0.012. Free, no retrain, val-fit post-hoc (tb58 family, leak-clean).
-- ❌ **GLOBAL = KILL.** Matched 40ep A/B (dice_ce vs dice_ce_tversky β=0.6): val mean **−0.030**, test **−0.048**;
-  myo/cav both bleed, **RV flat**. Tversky's FN-penalty is *global* → over-segments every class without localizing
-  the RV-vs-bg margin. Sound mechanism, wrong instrument. (Retracts the earlier "RV +0.044 directional" read —
-  that was a single-seed scatter; the matched A/B shows global recall net-negative.)
+**nttu.7 (2026-07-16) — recall IS a real lever; the question was "used right?", answered by 4 matched 40ep arms:**
 
-**Takeaway:** the RV-omission fix is **RV-targeted**, not a global loss. The free logit-bias already banks the RV
-win; a source-level version (if ever needed) must be **RV-class-weighted**, not global Tversky.
+| lever | test RV | test mean | read |
+|---|---|---|---|
+| Tversky **bg-INCLUDED** (β=0.6) | flat | **−0.048** | **BUG**, not a fair test — `include_background=True` penalizes bg-FN = rewards predicting MORE bg = **suppresses foreground recall**. Doubly broken. |
+| Tversky **bg-EXCLUDED, global** | −0.037 | −0.022 | fixing the bug recovers the bleed (myo +0.073, cav vs bg-incl), but RV still flat — **global≠targeted** |
+| **RV-targeted** (class-weight ×3) | **+0.022** | −0.019 | targeted source recall **lifts RV** (val +0.028), but ×3 over-corrects → **cav −0.069** (steals softmax mass from the other blood pool) |
+| **logit-bias** (targeted, inference) | +0.014 | **+0.012** | cleanest: RV up (+0.043 val, monotone/6-step), **cav held**, free, no-retrain (tb58 family, leak-clean) |
+
+**Takeaway (corrected — the earlier flat "Tversky KILL" was wrong):** recall is a **real RV lever both post-hoc and
+at source** — the moment the pressure is RV-*targeted*, RV lifts. What failed was (1) a genuine `include_background`
+bug (fixed in `DiceCETversky`, now bg-excluded like HD/HER — recovered ~+0.028 mean) and (2) using a *global*-
+foreground loss for an RV-specific problem. The **logit-bias dominates** (same/bigger RV gain, no cav cost, free);
+a source-level RV-weight is viable-but-needs-tuning (×3 costs cav; a milder weight likely lands RV+ cleaner).
 
 **nttu epic CLOSED (8/8, 2026-07-16).** Diagnostics committed (nttu.6): `python -m cardioseg.evaluation
 rv_omission --run <zero-real> --mode {probe,bias}` reproduces the nttu.5 recall-vs-coverage split + the nttu.7
