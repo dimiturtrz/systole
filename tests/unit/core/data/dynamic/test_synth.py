@@ -190,6 +190,26 @@ def test_kspace_lowpass_changes_and_keeps_shape():
     assert b.shape == a.shape and torch.isfinite(b).all() and not torch.allclose(a, b)
 
 
+def test_noise_bandlimited_colimits_high_freq():
+    """noise_bandlimited adds noise BEFORE the k-space window -> co-limited (less high-freq power) vs white."""
+    cfg = {"noise": 0.1, "kspace": 0.5}
+    torch.manual_seed(0); white, _ = synthesize_from_labels(_mask(), _fixed(**cfg), N)
+    torch.manual_seed(0); band, _ = synthesize_from_labels(_mask(), _fixed(**cfg, noise_bandlimited=True), N)
+    assert band.shape == white.shape and torch.isfinite(band).all() and not torch.allclose(white, band)
+
+    def hf(v):
+        return torch.fft.fftshift(torch.fft.fft2(v[:, 0]), dim=(-2, -1)).abs()[..., -1, :].pow(2).mean()
+
+    assert hf(band) < hf(white)
+
+
+def test_contrast_random_breaks_physics_ordering():
+    """contrast_random>0 scrambles heart-class means per-sample -> output differs from physics, orderings vary."""
+    torch.manual_seed(0); phys, _ = synthesize_from_labels(_mask(), _fixed(), N)
+    torch.manual_seed(0); rand, _ = synthesize_from_labels(_mask(), _fixed(contrast_random=1.0), N)
+    assert rand.shape == phys.shape and torch.isfinite(rand).all() and not torch.allclose(phys, rand)
+
+
 def test_seed_deterministic():
     cfg, m = SynthCfg(synth_p=1.0, bg=FlatBgCfg()), _mask()
     torch.manual_seed(7); a, ma = synthesize_from_labels(m, cfg, N)

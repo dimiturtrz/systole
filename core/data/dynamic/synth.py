@@ -231,6 +231,8 @@ class SynthCfg(BaseModel):
     bias_strength: float = Field(0.3, ge=0)         # smooth multiplicative B1/coil bias field, +/- fraction
     blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
+    noise_bandlimited: bool = False                # add noise BEFORE blur/k-space (acquisition band-limits it) vs white
+    contrast_random: float = Field(0.0, ge=0, le=1)  # unconstrain heart-class contrast (SynthSeg GMM); 0=physics 1=random
 
 
 class Background(ABC):
@@ -446,6 +448,12 @@ class SynthPainter:
         return out
 
     @staticmethod
+    def _rician(img: torch.Tensor, sigma: float) -> torch.Tensor:
+        re = img + sigma * torch.randn_like(img)
+        im = sigma * torch.randn_like(img)
+        return torch.sqrt(re * re + im * im)
+
+    @staticmethod
     @shapecheck
     def synthesize_from_labels(mask: Integer[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
                                real_img: Float[torch.Tensor, "*b 1 h w"] | None = None, *, return_meta: bool = False):
@@ -500,6 +508,10 @@ class SynthPainter:
         if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
             for c in MriPhysics.blood_classes(n_classes):
                 mu[:, c] = mu[:, c] * cfg.blood_scale
+        if cfg.contrast_random > 0:                   # SynthSeg-style: unconstrain heart contrast (break physics ordering)
+            lo, hi = float(mu.abs().amin()), float(mu.abs().amax())
+            rand = torch.rand(b, n_classes - 1, device=dev) * (hi - lo) + lo
+            mu[:, 1:n_classes] = (1 - cfg.contrast_random) * mu[:, 1:n_classes] + cfg.contrast_random * rand
         sg = mu.abs() * cfg.texture                                              # within-class texture
         if cfg.flow > 0:                                                         # flow: blood pools spread
             for c in MriPhysics.blood_classes(n_classes):
@@ -542,6 +554,9 @@ class SynthPainter:
                                                             align_corners=False)
             img = img * field
     
+        if cfg.noise > 0 and cfg.noise_bandlimited:
+            img = SynthPainter._rician(img, cfg.noise)     # co-limited: blur/k-space below band-limit it like the signal
+
         # --- random Gaussian blur (resolution variation); single σ per call (varies every batch) ---
         bl_lo, bl_hi = cfg.blur
         sigma = float(torch.rand(1, device=dev) * (bl_hi - bl_lo) + bl_lo)
@@ -562,10 +577,8 @@ class SynthPainter:
             img = torch.fft.ifft2(torch.fft.ifftshift(f * win, dim=(-2, -1))).real
     
         # --- Rician noise (MRI magnitude noise: sqrt of two independent Gaussian channels) ---
-        if cfg.noise > 0:
-            re = img + cfg.noise * torch.randn_like(img)
-            im = cfg.noise * torch.randn_like(img)
-            img = torch.sqrt(re * re + im * im)
+        if cfg.noise > 0 and not cfg.noise_bandlimited:
+            img = SynthPainter._rician(img, cfg.noise)
     
         # post-paint composite (strategy-specific: hybrid pastes the synth heart into the real image;
         # every other strategy is a no-op). real_img must be heart-excised for this to be clean (bd mirs).
