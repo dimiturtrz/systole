@@ -82,16 +82,20 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-      # Architecture graph — REGEN on commit (the formatter pattern, like ruff-format/isort hooks): rewrites
-      # docs/architecture/{graph.json,index.html} from the current import graph. If the structure moved,
-      # graph.json changes -> pre-commit reports the modified file and fails the commit; `git add` + re-commit.
-      # Doc-gen, not enforcement (import-linter is the directional gate). Manual regen: `nox -s archmap`.
+      # Architecture graph — REGEN at PRE-PUSH (c80): rewrites docs/architecture/{graph.json,index.html} from
+      # the current import graph, then keeps the committed graph.json current so the /architecture/ page it
+      # feeds is fresh on the next deploy — with no manual `nox -s archmap`. Pre-push, not per-commit: commits
+      # stay fast and the graph refreshes once before the push that deploys. If graph.json drifted it stages
+      # the regen and BLOCKS the push — commit it and push again (the diff stays your reviewable
+      # architecture-erosion signal; auto-committing in a hook can't join the in-flight push). Doc-gen, not
+      # enforcement (import-linter is the directional gate; CI `archmap --check` is the backstop).
       - id: archmap
-        name: architecture graph — regenerate docs/architecture/ (commit the graph.json diff)
-        entry: uv run --extra devtools python -m devtools.archmap core cardioseg
+        name: architecture graph — regenerate docs/architecture/ at pre-push (commit the graph.json diff)
+        entry: bash -c 'uv run --extra devtools python -m devtools.archmap core cardioseg; git diff --quiet -- docs/architecture/graph.json || { git add docs/architecture/graph.json; echo "graph.json was stale - regenerated & staged; commit it and push again."; exit 1; }'
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-push]
       - id: shape-contracts
         name: shape-contracts — enforced (array/tensor boundaries need a jaxtyping shape; vip.4)
         entry: uv run --extra devtools python -m devtools.shape_contracts core cardioseg --assert

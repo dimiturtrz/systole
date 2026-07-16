@@ -33,12 +33,29 @@ levers were dead — the problem was never contrast. Viz: `scratchpad/rv_fail.pn
 | **RV omission tail** (0-px total misses) | 🩺 **root-caused (nttu.5)**: RV-vs-**bg** recall, NOT coverage | all 9 omitted slices have RV softmax present (max 0.21–0.57, med 0.41, **never zero**); winner = **bg** 71–98%; apical/small-RV (z 7–8). TARGETED recall recovers it (logit-bias ✅); coverage (nttu.4/.8) is NOT the cure |
 | within-label heterogeneity (multi-Gaussian paint) | ⬜ deprioritized | it's a *color* lever; the blocker isn't color |
 | **learned shape prior** (pathology tail) | ⬜ filed (vpn5) | reaches the 22% DCM/HCM tail SSM misses |
+| **the 0.17 color gap: tax vs inadequacy** | ⚖️ **verdict (49b7)**: BOTH, in named proportions | repaint failure analysis + truly-OOD test — see below |
 
 **Frontier redirected by the failure viz:** the blocker is RV **omission** on a patient tail, so the levers are
-**RV detection/recall** and **RV-shape coverage**, NOT color/heterogeneity. Open disambiguation: is the tail a
-recall problem (model under-fires RV), a coverage problem (these RV shapes absent from synth), or an
-appearance-quirk of specific scans? Characterize the failing patients (all-slices? common vendor/motion/RV-size?)
-to pick the lever.
+**RV detection/recall** and **RV-shape coverage**, NOT color/heterogeneity.
+
+**Tax vs inadequacy — RESOLVED (49b7, 2026-07-16, `2026-07-16_repaint_failure_tax_verdict.md`).** Looked at the
+repaint model's actual errors (not input stats). The color gap **decomposes**, it is not one uniform tax:
+- **RV recall collapse** (largest chunk): RV 0.37–0.44 on unseen GE/Canon vs 0.59 on cmrx, HD95 50–103 mm —
+  vendor-gated recall failure (the nttu defect amplified under OOD color), **targetable**, lever in hand (nttu.7).
+- **shared-mapping tax** (real, partial): on truly-OOD SCD the real model drops 0.83→0.71 while repaint stays
+  domain-flat ~0.57 → the real↔repaint gap narrows **0.25→0.14**. Half the LV color advantage evaporates OOD, as
+  the tax predicts — so that half is the price of randomization and **synth's value is the unseen-domain regime**.
+- **residual LV inadequacy** (~0.14, survives truly-OOD): real still beats repaint where the tax says it
+  shouldn't → a **findable** synth defect, not a law. Do NOT accept 0.61 as a ceiling; do NOT pivot wholesale to
+  learned color on an "irreducible tax" story (only half-true).
+
+Lever ranking out of the verdict: (1) ~~productionize RV logit-bias (we55)~~ **DONE → declined as a global
+default**: the val-fit global RV bias helps where RV collapses (Canon +0.044/Siemens +0.014) but **over-segments
+GE where RV is already healthy** (RV −0.106), so pooled cross-vendor is **−0.004** — the RV deficit is
+vendor-heterogeneous, a global constant can't fix it. `Inference.logit_bias` primitive kept (opt-in, off); a
+**conditional/confidence-gated** RV prior is the real fix (filed). (2) name the residual-inadequacy axis
+(boundary contrast / finite-res PV) + test one arm; (3) `hpy` (MRXCAT2 MRI-native contrast) justified by the
+residual, `ncph` (twin) is the home for the *tax* portion only.
 
 ---
 
