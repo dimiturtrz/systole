@@ -232,6 +232,7 @@ class SynthCfg(BaseModel):
     blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
     noise_bandlimited: bool = False                # add noise BEFORE blur/k-space (acquisition band-limits it) vs white
+    contrast_random: float = Field(0.0, ge=0, le=1)  # unconstrain heart-class contrast (SynthSeg GMM); 0=physics 1=random
 
 
 class Background(ABC):
@@ -507,6 +508,10 @@ class SynthPainter:
         if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
             for c in MriPhysics.blood_classes(n_classes):
                 mu[:, c] = mu[:, c] * cfg.blood_scale
+        if cfg.contrast_random > 0:                   # SynthSeg-style: unconstrain heart contrast (break physics ordering)
+            lo, hi = float(mu.abs().amin()), float(mu.abs().amax())
+            rand = torch.rand(b, n_classes - 1, device=dev) * (hi - lo) + lo
+            mu[:, 1:n_classes] = (1 - cfg.contrast_random) * mu[:, 1:n_classes] + cfg.contrast_random * rand
         sg = mu.abs() * cfg.texture                                              # within-class texture
         if cfg.flow > 0:                                                         # flow: blood pools spread
             for c in MriPhysics.blood_classes(n_classes):

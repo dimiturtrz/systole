@@ -203,6 +203,13 @@ def test_noise_bandlimited_colimits_high_freq():
     assert hf(band) < hf(white)
 
 
+def test_contrast_random_breaks_physics_ordering():
+    """contrast_random>0 scrambles heart-class means per-sample -> output differs from physics, orderings vary."""
+    torch.manual_seed(0); phys, _ = synthesize_from_labels(_mask(), _fixed(), N)
+    torch.manual_seed(0); rand, _ = synthesize_from_labels(_mask(), _fixed(contrast_random=1.0), N)
+    assert rand.shape == phys.shape and torch.isfinite(rand).all() and not torch.allclose(phys, rand)
+
+
 def test_seed_deterministic():
     cfg, m = SynthCfg(synth_p=1.0, bg=FlatBgCfg()), _mask()
     torch.manual_seed(7); a, ma = synthesize_from_labels(m, cfg, N)

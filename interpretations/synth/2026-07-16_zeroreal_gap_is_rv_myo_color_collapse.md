@@ -87,12 +87,29 @@ RV cue. The RV color-residual (~0.27, perfect-shape) is **not contrast *diversit
    RV free wall too thin/clean, RV–lung boundary wrong, no within-label heterogeneity. A targeted RV-fidelity
    fix, within physics.
 
+## Update — contrast DIVERSITY is refuted for RV (both levers)
+
+The follow-on epic (nttu) tested the highest-evidence lever: **unconstrained contrast** (`contrast_random=1.0` —
+SynthSeg-style, heart-class means scrambled per-sample so myo can exceed blood). Zero-real synth_main --quick:
+**TEST RV 0.440** (val RV 0.344) vs baseline RV ~0.49 — **RV went DOWN.** Combined with `tissue_spread` (flat):
+
+- widen physical contrast → flat
+- randomize contrast (SynthSeg's actual edge) → **hurts RV**
+
+**RV's cap is NOT contrast diversity — it is the opposite.** Mechanism: RV is thin and hard to *localize*; the
+model *uses* the physical blood-bright/myo-dark contrast to find it. Scramble that and RV localization degrades.
+SynthSeg's random-contrast edge works on thick high-contrast **brain** structures; it does **not** transfer to
+the thin cardiac RV free wall. **This refutes the gate-0 "narrow contrast is the 21pt cap" attribution.** RV
+needs contrast *structure*, not diversity.
+
 ## Status
 
-**Located, not yet closed.** The inadequacy is a color-driven RV/myo thin-structure collapse (gates 0+1, banked
-with evidence). The first principled fix — physical contrast widening — is flat (gate 2). The remaining fix
-levers are a genuine fork (physically-impossible randomization vs RV-appearance fidelity vs within-label
-heterogeneity); one tensions the physics thesis and needs an owner decision. Scoped to a follow-on epic.
+**Located; contrast-axis fix refuted.** The inadequacy is a color-driven RV/myo thin-structure collapse (gates
+0+1). Both contrast levers (width, randomization) are killed — RV is stubbornly ~0.44–0.50 across every
+generator-appearance change tried this project. Remaining RV hypotheses are speculative (RV-specific
+boundary/appearance fidelity within physics; within-label heterogeneity, held per stage-gate) or point to RV
+being near the honest synth-only ceiling — real-trained also drops RV most OOD (0.854→0.587). `contrast_random`
+and `noise_bandlimited` kept off-by-default as gate-clean generator infrastructure.
 
 ## Honesty
 
