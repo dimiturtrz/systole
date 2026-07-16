@@ -64,12 +64,35 @@ brightness, even > blood) plus **within-label heterogeneity**. Ours (`refac_proc
 — the tissue contrast is **fixed**, only acquisition (TR/flip/field) varies. **Our contrast randomization is too
 narrow**: the model overfits our single contrast ordering and thin structures drop when real deviates.
 
-## Gate 2 — the fix test (in progress)
+## Gate 2 — the fix test: physical contrast-widening is FLAT
 
-Turn on the **physical per-sample T1/T2 sweep** (`tissue_spread`, literature-bounded Stanisz/Bojorquez —
-leak-free, within the physics thesis, NOT a random-GMM hack) to widen contrast. Predict RV/myo recover toward
-real. If they do → narrow-contrast is the inadequacy and the fix moves Dice. If flat → physical widening is
-insufficient and the next lever is within-label heterogeneity or more aggressive randomization. `runs/xmcf_widen`.
+Turned on the **physical per-sample T1/T2 sweep** (`tissue_spread=1.0`, literature-bounded, leak-free) —
+`runs/xmcf_widen`, zero-real synth_main --quick:
+
+| test | RV | myo | cav | mean |
+|---|---|---|---|---|
+| baselines (every zero-real config) | 0.488–0.503 | 0.449–0.503 | 0.71–0.74 | 0.55–0.57 |
+| **widen (tissue_spread=1.0)** | **0.488** | 0.490 | 0.716 | 0.565 |
+
+**RV did not move** — 0.488 is dead-centre of the ~0.49 band every zero-real config sits at (robust without a
+matched baseline, since RV is stable there across all configs). myo maybe +0.03 (within band), mean flat.
+**Physical contrast-width is refuted as the RV lever.**
+
+**Why it failed:** `tissue_spread` varies brightness *within physical T1/T2 bounds* but does not add the missing
+RV cue. The RV color-residual (~0.27, perfect-shape) is **not contrast *diversity***. Two live candidates:
+1. **SynthSeg's edge may be physically-impossible contrast** (random GMM lets myo be brighter than blood, which
+   bSSFP forbids) — forcing the model into pure shape/context invariance. Our physics **forbids** that. This
+   directly tensions the project's physics>random thesis and is an **owner call**.
+2. **RV-specific appearance defect** (not global contrast): RV blood painted too bright (z 2.04 vs real 1.55),
+   RV free wall too thin/clean, RV–lung boundary wrong, no within-label heterogeneity. A targeted RV-fidelity
+   fix, within physics.
+
+## Status
+
+**Located, not yet closed.** The inadequacy is a color-driven RV/myo thin-structure collapse (gates 0+1, banked
+with evidence). The first principled fix — physical contrast widening — is flat (gate 2). The remaining fix
+levers are a genuine fork (physically-impossible randomization vs RV-appearance fidelity vs within-label
+heterogeneity); one tensions the physics thesis and needs an owner decision. Scoped to a follow-on epic.
 
 ## Honesty
 
