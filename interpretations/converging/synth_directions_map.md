@@ -28,8 +28,8 @@ levers were dead — the problem was never contrast. Viz: `scratchpad/rv_fail.pn
 | contrast diversity (tissue_spread width, contrast_random) | ❌ **refuted** | nttu — widen flat, randomize *hurts* RV; RV needs contrast *structure* not diversity |
 | shape coverage (composite / pathology pool) | ❌ dice-neutral | coverage 0.78→0.94, Dice flat |
 | noise / high-freq aug | 🔒 load-bearing (constraint) | nk70.1 — can't lower (→0.385) |
-| **RV detection / recall** (why RV fires 0 px on a patient tail) | ⬜ **UNTRIED — now the prime suspect** | omission mode; is RV under-weighted / under-represented in synth batches? |
-| **RV-shape coverage** (the failing configs) | ⬜ **UNTRIED** | do synth RV shapes cover the omitted patients' RV? |
+| **RV recall** (Tversky FN-penalty, β>α) | 🟡 **directional, marginal** | vs MATCHED baseline (0.594): RV +0.044, myo −0.010, mean +0.013 (near noise). RV-specific gain w/ myo tradeoff; single-seed, not confirmed. Fixes under-seg, not omission |
+| **RV omission tail** (0-px total misses) | ⬜ UNSOLVED | recall lever left it unchanged (16/69, 42% slice-omit); deeper detection/coverage |
 | within-label heterogeneity (multi-Gaussian paint) | ⬜ deprioritized | it's a *color* lever; the blocker isn't color |
 | **learned shape prior** (pathology tail) | ⬜ filed (vpn5) | reaches the 22% DCM/HCM tail SSM misses |
 
@@ -61,7 +61,13 @@ isolator*: color costs 0.17, shape 0.07. Told us the A blocker is mostly color, 
 
 ## Where we are right now (2026-07-16)
 
-A is the goal and it's stuck at ~0.61. The **color/contrast sub-levers are exhausted** (nk70, xmcf, nttu). The
-frontier is the **three untried A-levers** — within-label heterogeneity, RV-appearance, learned shape prior —
-plus the deeper question of an RV floor. **Next:** take the untried levers seriously, warm-started for speed;
-start with within-label heterogeneity (distinct, cheap). Do **not** pivot off A.
+A is the goal, best ~0.61 (composition). This session: **looked at the failures** and reframed the blocker from
+"RV color collapse" (a pooling artifact) to **RV omission/under-seg** (detection, not color) — which retroactively
+explains why every color/contrast lever was dead. Then tested the **recall lever** (Tversky FN-penalty): RV
++0.044 vs matched baseline but a myo −0.01 tradeoff, mean +0.013 (near noise, single-seed) — **directional, not a
+confirmed keep**; it fixes *under-seg*, not the *omission* tail.
+
+**Open next:** (1) harden/refine recall — milder β + multi-seed to see if RV gain survives without the myo cost;
+(2) the **omission tail** (0-px RV on ~16/69 cases) is the real unsolved blocker — a loss reweight can't create
+RV activation from zero, so it's detection/coverage (why does the RV detector not fire on those slice configs?).
+Do **not** pivot off A. Method note: always run the MATCHED default baseline before claiming a mover.

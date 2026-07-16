@@ -62,9 +62,9 @@ class DiceCEHD:
 
 
 class DiceCETversky:
-    """Dice+CE + λ·Tversky(α,β). With β>α the Tversky term penalizes false positives harder, directly
-    discouraging over-segmentation (the ES cavity over-fill). Pure GPU region loss — stable from
-    epoch 0, no warmup, as fast as Dice (unlike Hausdorff-DT, which is CPU-bound on Windows)."""
+    """Dice+CE + λ·Tversky(α,β). MONAI convention: α=FP weight, β=FN weight. β>α penalizes false
+    NEGATIVES harder → boosts RECALL (reduces omission/under-seg); α>β penalizes false positives
+    (curbs over-seg). Pure GPU region loss — stable from epoch 0, no warmup, as fast as Dice."""
 
     def __init__(self, alpha: float = 0.3, beta: float = 0.7, lam: float = 1.0):
         self.dce = DiceCELoss(to_onehot_y=True, softmax=True)
@@ -222,10 +222,10 @@ class DiceCECfg(LossCfg):
 
 
 class DiceCETverskyCfg(LossCfg):
-    """Dice+CE + Tversky FP-penalty (beta>alpha discourages over-seg)."""
+    """Dice+CE + Tversky term (beta>alpha penalizes false negatives -> recall/anti-omission)."""
     kind: Literal["dice_ce_tversky"] = "dice_ce_tversky"
-    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FN weight
-    tversky_beta: float = Field(0.7, ge=0, le=1)   # FP weight (> alpha = punish over-seg)
+    tversky_alpha: float = Field(0.3, ge=0, le=1)  # FP weight (MONAI convention)
+    tversky_beta: float = Field(0.7, ge=0, le=1)   # FN weight; > alpha -> punish omission (recall)
     tversky_lambda: float = Field(1.0, ge=0)
 
     def _build(self):
