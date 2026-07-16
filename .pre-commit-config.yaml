@@ -71,8 +71,24 @@ repos:
         pass_filenames: false
         always_run: true
       - id: magic-literals
-        name: magic-literals — enforced ratchet ([tool.magic_literals] ceiling)
+        name: magic-literals — advisory (recurring literal / repeated key-set report)
         entry: uv run --extra devtools python -m devtools.magic_literals core cardioseg
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: complexity
+        name: complexity — advisory (radon CC ranking; ruff C901 is the fixed gate)
+        entry: uv run --extra devtools python -m devtools.complexity core cardioseg
+        language: system
+        pass_filenames: false
+        always_run: true
+      # Architecture graph — REGEN on commit (the formatter pattern, like ruff-format/isort hooks): rewrites
+      # docs/architecture/{graph.json,index.html} from the current import graph. If the structure moved,
+      # graph.json changes -> pre-commit reports the modified file and fails the commit; `git add` + re-commit.
+      # Doc-gen, not enforcement (import-linter is the directional gate). Manual regen: `nox -s archmap`.
+      - id: archmap
+        name: architecture graph — regenerate docs/architecture/ (commit the graph.json diff)
+        entry: uv run --extra devtools python -m devtools.archmap core cardioseg
         language: system
         pass_filenames: false
         always_run: true

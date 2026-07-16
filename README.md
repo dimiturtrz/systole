@@ -1,5 +1,8 @@
 # Systole — cardiac segmentation + function (MRI, CT, echo)
 
+[![ci](https://github.com/dimiturtrz/systole/actions/workflows/ci.yml/badge.svg)](https://github.com/dimiturtrz/systole/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **What this is.** systole segments the heart from cardiac MRI and computes its **ejection
 fraction** — then asks the question most demos skip: *does that number survive a change of
 scanner?* The model trains on two vendors (Siemens + Philips, 495 subjects) and is evaluated on
@@ -262,6 +265,38 @@ Agent-driven build, human-owned judgment — coding agents scaffold the plumbing
 modeling decisions, the measurement correctness, and the evaluation. Data-structure reasoning and
 evaluation discipline carry over from prior ML work; the clinical specifics I learn as I go
 ([learning/](learning/)).
+
+## Architecture site
+
+`nox -s archmap` writes `docs/architecture/graph.json` (committed, diffable — nodes + weighted import edges)
+plus a self-contained interactive viewer (`index.html`, gitignored, rebuilt on demand). **Commit the
+graph.json diff** — it's the architecture-erosion record.
+
+▶ **Live viewer: [https://dimiturtrz.github.io/systole/architecture/](https://dimiturtrz.github.io/systole/architecture/)** — main; dev preview at [https://dimiturtrz.github.io/systole/architecture/preview/](https://dimiturtrz.github.io/systole/architecture/preview/)
+
+
+Publishing to GitHub Pages — one repo = one Pages site, so pick ONE of:
+
+- **Sole owner** — this repo has no other Pages deployer. Answer `archviz_pages` yes at scaffold time; the
+  generated `pages.yml` owns a staged site (`/architecture/` = main, `/architecture/preview/` = dev, `/`
+  redirects) and enables it. Nothing else to do.
+- **Compose** — this repo ALREADY deploys Pages (a docs/demo site). Leave `archviz_pages` off and fold the
+  archmap build into that existing workflow as an `/architecture/` subpath. Build it isolated (no project
+  sync, no touch to the pinned devtools) — `write_viewer` only needs the vendored template + libs:
+
+  ```yaml
+  - uses: astral-sh/setup-uv@v5
+  - name: Architecture view (/architecture/)
+    run: |
+      uv run --no-project --with "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.8.0#subdirectory=sdlc-devtools" \
+        python -c "from devtools.archmap import Archmap; Archmap(['core', 'cardioseg']).write_viewer(project='cardioseg')"
+      mkdir -p _site/architecture
+      cp docs/architecture/graph.json docs/architecture/index.html _site/architecture/
+  ```
+
+  graph.json stays committed (the diff-truth); regen it locally with `nox -s archmap` when the import
+  structure changes. (`../synthscape` is the reference — archmap folded into its `deploy-fit-explorer`
+  workflow beside the fit-explorer views.)
 
 ## Development
 Tooling and quality gates are provisioned by an in-house copier template (sdlc-scaffold); refresh with
