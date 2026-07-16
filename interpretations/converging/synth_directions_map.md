@@ -10,8 +10,20 @@ Everything else supports it or is a diagnostic for it.
 
 ## THE GOAL — A. Zero-real GENERATE (synth mask + synth color)
 
-**Best: ~0.61 test** (composition-fixed) · real-trained 0.854 · **blocker (CORRECTED 2026-07-16 by looking at
-predictions): RV OMISSION in a patient-clustered tail, NOT a uniform color collapse.**
+**Best: ~0.61 test** (composition-fixed) · real-trained 0.854.
+
+> **CEILING VERDICT (2026-07-16, lit-grounded — `2026-07-16_zero_real_ceiling_lit_grounded.md`):** 0.61 is
+> **in-band with the achievable pure-parametric zero-real ceiling** for hard multi-vendor SAX cine. No published
+> pure-zero-real number exists on ACDC/M&M (unmapped — our triad is the contribution); the *only* comparable
+> zero-real cardiac result on a hard real set is **~0.66** ([S12] label-space synth on MSCMR). The high numbers are
+> an easier target (SynthSeg/MMWHS ~0.87) or a **real-trained** generator (XCAT-GAN 0.94, out of bounds). With
+> every parametric micro-lever exhausted this cycle (color/boundary/resolution/RV/coverage), lit + internal
+> convergence agree: **stop chasing zero-real Dice with parametric tweaks.** Additive directions are different
+> value props — twin (`ncph`), augmentation (`pwih`), or `vpn5` learned-shape as *exploration* (no lit warrant it
+> closes the gap). The residual to 0.85 is tax + intrinsic multi-vendor hardness, not a big findable defect.
+
+**Historical blocker note (superseded by the ceiling verdict):** RV was framed as an omission tail; egeh later
+showed the RV deficit is a partial-quality continuum (3 hard omissions), and the RV lever is exhausted on all axes.
 
 Pooled RV 0.457 was a **bimodal artifact**: median per-case RV (mid-slice) = **0.853** (real-trained level),
 but a tail of ~7–10% of cases (patient-clustered: P004/P011/P014) score RV **0.0** — the model segments the LV
@@ -103,6 +115,28 @@ at source** — the moment the pressure is RV-*targeted*, RV lifts. What failed 
 bug (fixed in `DiceCETversky`, now bg-excluded like HD/HER — recovered ~+0.028 mean) and (2) using a *global*-
 foreground loss for an RV-specific problem. The **logit-bias dominates** (same/bigger RV gain, no cav cost, free);
 a source-level RV-weight is viable-but-needs-tuning (×3 costs cav; a milder weight likely lands RV+ cleaner).
+
+**Source RV class-weight — REFUTED (2026-07-16, matched 4-point sweep).** The nttu.7 "×3 RV +0.022" did **not
+reproduce**. Ran base vs `ce_weight` ×1.5 / ×2 / ×3 (MONAI `DiceCELoss(weight=)` weights **both** Dice+CE — the
+full nttu.7 instrument), matched 40ep single-seed off `--from-config refac_proc`. Every up-weight is **≤ base on
+RV and mean**, both splits (TEST Canon+GE n=147): base RV 0.427/mean 0.542 · ×1.5 0.363/0.506 · ×2 0.426/0.530 ·
+×3 0.312/0.492. No arm lifts RV; cav bleeds (0.738→0.680). nttu.7's single point was **noise** (single-seed
+cross-vendor RV scatters ±0.02–0.03). **KILL.** Combined with we55 (global logit-bias) + ru27 (gated logit-bias),
+the RV-recall lever is now **exhausted on both axes** — post-hoc *and* source. Global reweighting (CE, Dice, or
+logit) cannot fix a **localized apical-slice detection** failure: it only trades cav mass, never creates RV where
+the detector is absent. The RV-collapse chunk is not cheaply recoverable — the real fix is coverage/architecture
+or accept it. Reusable infra kept: `DiceCECfg.ce_weight` (no-op default) + `train --from-config`.
+
+**RV deficit SHAPE — it's not omission, it's a partial-quality continuum (egeh, 2026-07-16, `--mode deficit`).**
+Chased the "coverage/architecture" RV lever to its root. Per-slice RV Dice over 1165 GT-RV-present cross-vendor
+slices: **8% <0.05 · 11% [0.05,0.3) · 20% [0.3,0.6) · 26% [0.6,0.8) · 34% ≥0.8**, mean **0.600**. The gap is a
+**broad continuum**, not a cliff. **True 0-px omissions = 3 slices (0.26%)** — negligible; all apical, all with a
+confident-RV neighbour at z±1 (2.5D signal exists but recovering 3 slices is worthless). Of the 93 near-miss
+(<0.05) slices, only 3 are absent — the other ~90 predict RV in the **wrong place** (mislocation, not omission).
+So coverage is dead (shape present, nttu.5) AND omission is a non-lever (3 slices). The RV deficit is broad
+partial-quality + mislocation on OOD-color vendors = the verdict's vendor-gated RV-under-color, **capped**. A 2.5D
+build would be a speculative general-quality bet against a per-slice-color root — not pursued. **The RV chapter is
+closed: no cheap RV win exists.** Frontier shifts off RV → residual-LV-inadequacy (uw5p) / new generation sources.
 
 **nttu epic CLOSED (8/8, 2026-07-16).** Diagnostics committed (nttu.6): `python -m cardioseg.evaluation
 rv_omission --run <zero-real> --mode {probe,bias}` reproduces the nttu.5 recall-vs-coverage split + the nttu.7

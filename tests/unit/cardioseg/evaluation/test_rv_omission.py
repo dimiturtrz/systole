@@ -53,6 +53,15 @@ def test_split_verdict_empty():
     assert np.isnan(v["med"])
 
 
+def test_dice_buckets_histograms_the_deficit():
+    # egeh: half-open [lo,hi) bins; a value ON an edge lands in the upper bin, 1.0 caught by the 1.01 top.
+    edges = (0.0, 0.05, 0.3, 0.6, 1.01)
+    got = RvOmission.dice_buckets([0.0, 0.04, 0.05, 0.3, 0.7, 1.0], edges)
+    assert [c for _, _, c in got] == [2, 1, 1, 2]             # {0,.04}|{.05}|{.3}|{.7,1.0}
+    assert [(lo, hi) for lo, hi, _ in got] == [(0.0, 0.05), (0.05, 0.3), (0.3, 0.6), (0.6, 1.01)]
+    assert RvOmission.dice_buckets([], edges) == [(0.0, 0.05, 0), (0.05, 0.3, 0), (0.3, 0.6, 0), (0.6, 1.01, 0)]
+
+
 def test_select_bias_picks_best_mean_when_cav_held():
     # RV rises with b, cav flat -> pick the b with the best foreground mean (b=2.0 here).
     sweep = {0.0: {"RV": 0.40, "myo": 0.60, "cav": 0.70},

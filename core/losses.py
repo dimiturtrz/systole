@@ -215,11 +215,16 @@ class LossCfg(BaseModel):
 
 
 class DiceCECfg(LossCfg):
-    """MONAI Dice+CE region baseline."""
+    """MONAI Dice+CE region baseline. `ce_weight` is a per-class CE weight [bg,RV,myo,cav]; uniform
+    (the default) is an exact no-op, a class > 1 up-weights that class's recall at source (bd nttu.7:
+    RV-weight lifts RV Dice; the ru27 conclusion that the RV-collapse fix belongs in training)."""
     kind: Literal["dice_ce"] = "dice_ce"
+    ce_weight: tuple[float, ...] = (1.0, 1.0, 1.0, 1.0)
 
     def _build(self):
-        return Losses.dice_ce_loss()
+        w = torch.as_tensor(self.ce_weight, dtype=torch.float32)
+        kw = {} if bool((w == w[0]).all()) else {"weight": w}
+        return Losses.dice_ce_loss(**kw)
 
 
 class DiceCETverskyCfg(LossCfg):

@@ -1,6 +1,7 @@
 """RV-omission diagnostics for a zero-real model — the reproducible core of the nttu epic (bd nttu.6).
 
-Three modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-real> --mode {probe,bias,gated}`):
+Four modes via `python -m cardioseg.evaluation rv_omission --run <zero-real> --mode M`, M in
+`{probe, bias, gated, deficit}`:
 
 - **probe** (nttu.5 root-cause): on every slice where GT-RV is present but argmax omits it (<OMIT_PX RV
   pixels, PRE-largest-CC), is there raw RV softmax to recover (recall/threshold-fixable) or is it truly
@@ -14,11 +15,16 @@ Three modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-
   under-fired slices (per-slice max RV softmax < `GATE_TAU`, the nttu.5 omission signature). Fits b* on
   val under the gate, then reports base vs global vs GATED per vendor: gating should recover the
   collapsed vendors (Canon) without the global bias's GE over-segmentation (we55).
+- **deficit** (egeh): is the RV gap a hard-omission cliff or a broad partial-quality continuum? Reports
+  the per-slice RV-Dice histogram over the model's own cross-vendor test, the true 0-px omission count,
+  and whether those omissions have a confident-RV neighbour (2.5D signal). Verdict: omission is a
+  negligible tail; the deficit is broad partial under-segmentation — not a coverage/omission lever.
 
 Zero-real models live in staging (unregistered), so `--run` is explicit (a run dir / alias / id resolvable
 by the registry), e.g. `--run .staging/refac_proc`.
 """
 import logging
+from itertools import pairwise
 from typing import NamedTuple
 
 import numpy as np
@@ -53,6 +59,8 @@ FOREGROUND = {"RV": 1, "myo": 2, "cav": 3}
 ACTIVATION_FLOOR = 0.05  # maxP below this = true-zero-activation (coverage), above = recall-recoverable
 BIASES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0)
 GATE_TAU = 0.6  # nttu.5: under-fired RV peaks 0.21-0.57, healthy RV wins >0.6 -> gate the bias below this
+DICE_EDGES = (0.0, 0.05, 0.3, 0.6, 0.8, 1.01)  # egeh: RV per-slice Dice buckets (deficit-shape histogram)
+CONFIDENT_PX = 20  # egeh: a slice "has confident RV" if argmax fires >= this many RV pixels
 
 
 class RvOmission:
@@ -98,6 +106,13 @@ class RvOmission:
         return torch.stack(flips).mean(0)
 
     @staticmethod
+    def dice_buckets(dices: list[float], edges: tuple[float, ...]) -> list[tuple[float, float, int]]:
+        """Histogram per-slice RV Dice into [edges[i], edges[i+1]) bins — the deficit SHAPE (egeh: is the
+        RV gap a hard-omission cliff or a broad partial-quality continuum?). Pure, testable off-GPU."""
+        arr = np.array(dices) if dices else np.zeros(0)
+        return [(lo, hi, int(((arr >= lo) & (arr < hi)).sum())) for lo, hi in pairwise(edges)]
+
+    @staticmethod
     def biased_pred(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float) -> UInt8[np.ndarray, "d h w"]:
         """argmax label map after a GLOBAL RV logit bias (every slice). The we55 lever — over-segments
         vendors whose RV is already healthy (bd ru27)."""
@@ -136,7 +151,7 @@ class RvOmission:
     def add_args(ap):
         ap.add_argument("--run", required=True,
                         help="zero-real model (run dir / alias / id), e.g. .staging/refac_proc")
-        ap.add_argument("--mode", choices=("probe", "bias", "gated"), default="probe")
+        ap.add_argument("--mode", choices=("probe", "bias", "gated", "deficit"), default="probe")
         ap.add_argument("--testset", default="cmrxmotion",
                         help="probe eval set (bias uses the model's own val/test split)")
 
@@ -183,6 +198,40 @@ class RvOmission:
             log.info("  gtpx %4d  maxP_gt %.3f  meanP_gt %.3f  win %-3s %.2f",
                      x["gtpx"], x["maxp_in_gt"], x["meanp_in_gt"], x["win"], x["win_frac"])
         return verdict
+
+    @staticmethod
+    def _deficit(s: Session, frame):  # pragma: no cover  (GPU inference over the model's own test)
+        """egeh: is the RV gap a hard-omission cliff or a broad partial-quality continuum? Reports the
+        per-slice RV-Dice histogram over GT-RV-present slices, the true 0-px omission count, and — for
+        those omissions — whether the missing apical RV is available in an adjacent z-slice (2.5D signal)."""
+        size = s.cfg.generator.data.size
+        dices, n_omit, neigh_hit, apical = [], 0, 0, []
+        for r in frame.iter_rows(named=True):
+            case = Store.load_arrays(r["path"])
+            gt = Preprocess.stack_slices(case["ed_gt"], size)
+            lg, d = RvOmission._logits(s, case["ed_img"])
+            pred = torch.softmax(lg[:d], dim=1).argmax(1).to(torch.uint8).cpu().numpy()
+            rvpx = np.array([int((pred[z] == RV).sum()) for z in range(pred.shape[0])])
+            for z in range(pred.shape[0]):
+                gz, pz = gt[z] == RV, pred[z] == RV
+                if int(gz.sum()) <= OMIT_PX:
+                    continue
+                inter = int((gz & pz).sum())
+                dices.append(2 * inter / int(gz.sum() + pz.sum()) if int(gz.sum() + pz.sum()) else 1.0)
+                if rvpx[z] < OMIT_PX:                          # true 0-px omission
+                    n_omit += 1
+                    apical.append(z / max(pred.shape[0] - 1, 1))
+                    nb = [zz for zz in (z - 1, z + 1) if 0 <= zz < pred.shape[0]]
+                    if any(rvpx[zz] >= CONFIDENT_PX for zz in nb):
+                        neigh_hit += 1
+        log.info("=== RV per-slice Dice on GT-RV-present slices (n=%d) — deficit shape ===", len(dices))
+        for lo, hi, m in RvOmission.dice_buckets(dices, DICE_EDGES):
+            log.info("  Dice [%.2f,%.2f): %5d (%4.1f%%)", lo, hi, m, 100 * m / max(len(dices), 1))
+        arr = np.array(dices) if dices else np.zeros(1)
+        log.info("  mean per-slice RV Dice %.3f  median %.3f", float(arr.mean()), float(np.median(arr)))
+        log.info("true 0-px omissions: %d (%.2f%% of slices) | apical z-pos med %.2f | with confident-RV "
+                 "neighbor +-1: %d/%d", n_omit, 100 * n_omit / max(len(dices), 1),
+                 float(np.median(apical)) if apical else float("nan"), neigh_hit, n_omit)
 
     @staticmethod
     def _mean(d: dict[str, float]) -> float:
@@ -297,5 +346,8 @@ class RvOmission:
             return
         meta = store.load(list(s.cfg.generator.data.sources))
         model_split = ModelSplit(s.cfg.generator.data, meta)
+        if args.mode == "deficit":
+            RvOmission._deficit(s, model_split.test)
+            return
         fit = RvOmission._gated if args.mode == "gated" else RvOmission._bias
         fit(s, model_split.val, model_split.test)

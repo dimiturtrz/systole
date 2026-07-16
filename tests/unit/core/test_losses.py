@@ -5,7 +5,7 @@ targets accepted.
 import torch
 
 from core.data.static.labels import Labels
-from core.losses import Losses, PartialLabelDiceCE
+from core.losses import DiceCECfg, Losses, PartialLabelDiceCE
 
 FULL = torch.tensor([[True, True, True, True]])       # all classes valid
 SCD = torch.tensor([[False, False, True, True]])      # LV-only: bg + RV untrustworthy
@@ -61,3 +61,13 @@ def test_uncertainty_weighted_matches_kendall_formula():
     got = Losses.uncertainty_weighted([L1, L2], [s1, s2])
     want = torch.exp(-s1) * L1 + s1 + torch.exp(-s2) * L2 + s2
     assert torch.allclose(got, want)
+
+
+def test_dice_ce_uniform_weight_is_noop():
+    """Uniform ce_weight builds the unweighted DiceCE (no `weight` passed); a non-uniform one carries it."""
+    logits = torch.randn(2, 4, 8, 8); y = torch.randint(0, 4, (2, 1, 8, 8))
+    plain = DiceCECfg().build()                                     # default (1,1,1,1) -> no weight kwarg
+    weighted = DiceCECfg(ce_weight=(1.0, 2.0, 1.0, 1.0)).build()    # RV up-weighted at source (nttu.7)
+    assert plain.cross_entropy.weight is None and weighted.cross_entropy.weight is not None
+    assert torch.equal(weighted.cross_entropy.weight, torch.tensor([1.0, 2.0, 1.0, 1.0]))
+    assert torch.isclose(plain(logits, y), DiceCECfg(ce_weight=(1.0, 1.0, 1.0, 1.0)).build()(logits, y))
