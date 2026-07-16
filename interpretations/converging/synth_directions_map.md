@@ -28,8 +28,9 @@ levers were dead — the problem was never contrast. Viz: `scratchpad/rv_fail.pn
 | contrast diversity (tissue_spread width, contrast_random) | ❌ **refuted** | nttu — widen flat, randomize *hurts* RV; RV needs contrast *structure* not diversity |
 | shape coverage (composite / pathology pool) | ❌ dice-neutral | coverage 0.78→0.94, Dice flat |
 | noise / high-freq aug | 🔒 load-bearing (constraint) | nk70.1 — can't lower (→0.385) |
-| **RV recall** (Tversky FN-penalty, β>α) | 🟡 **directional, marginal** | vs MATCHED baseline (0.594): RV +0.044, myo −0.010, mean +0.013 (near noise). RV-specific gain w/ myo tradeoff; single-seed, not confirmed. Fixes under-seg, not omission |
-| **RV omission tail** (0-px total misses) | 🩺 **root-caused (nttu.5)**: RV-vs-**bg** recall, NOT coverage | all 9 omitted slices have RV softmax present (max 0.21–0.57, med 0.41, **never zero**); winner = **bg** 71–98%; apical/small-RV (z 7–8). Threshold/recall-fixable → nttu.7 on-target; coverage (nttu.4/.8) is NOT the cure |
+| **RV recall — TARGETED** (inference RV logit-bias) | ✅ **KEEP (nttu.7)** — free, no-retrain | val-tuned b≈1.5–2.0 on existing 0.61 model: **val RV +0.043** (0.473→0.516, monotone/6-step), val mean +0.018; transfers to cmrx test **RV +0.014, mean +0.012**. Post-hoc, val-fit, leak-clean (tb58 family) |
+| **RV recall — GLOBAL** (Tversky FN-penalty, β>α) | ❌ **KILL (nttu.7)** | matched 40ep A/B: β=0.6 vs dice_ce → val mean **−0.030**, test **−0.048**, myo/cav both bleed (test −0.061/−0.073), **RV flat**. Global FN-penalty over-segs every class, doesn't localize the RV-vs-bg margin. Mechanism sound, instrument wrong (global≠targeted) |
+| **RV omission tail** (0-px total misses) | 🩺 **root-caused (nttu.5)**: RV-vs-**bg** recall, NOT coverage | all 9 omitted slices have RV softmax present (max 0.21–0.57, med 0.41, **never zero**); winner = **bg** 71–98%; apical/small-RV (z 7–8). TARGETED recall recovers it (logit-bias ✅); coverage (nttu.4/.8) is NOT the cure |
 | within-label heterogeneity (multi-Gaussian paint) | ⬜ deprioritized | it's a *color* lever; the blocker isn't color |
 | **learned shape prior** (pathology tail) | ⬜ filed (vpn5) | reaches the 22% DCM/HCM tail SSM misses |
 
@@ -61,18 +62,23 @@ isolator*: color costs 0.17, shape 0.07. Told us the A blocker is mostly color, 
 
 ## Where we are right now (2026-07-16)
 
-A is the goal, best ~0.61 (composition). This session: **looked at the failures** and reframed the blocker from
-"RV color collapse" (a pooling artifact) to **RV omission/under-seg** (detection, not color) — which retroactively
-explains why every color/contrast lever was dead. Then tested the **recall lever** (Tversky FN-penalty): RV
-+0.044 vs matched baseline but a myo −0.01 tradeoff, mean +0.013 (near noise, single-seed) — **directional, not a
-confirmed keep**; it fixes *under-seg*, not the *omission* tail.
+A is the goal, best ~0.61 (composition). Reframed the blocker from "RV color collapse" (a pooling artifact) to
+**RV omission/under-seg** (detection, not color), root-caused (nttu.5) to **RV-vs-bg recall** on apical/small-RV
+slices: every omitted slice carries real RV softmax (max 0.21–0.57, never <0.05) lost to **background** at argmax.
 
-**Root-caused (nttu.5, 2026-07-16):** the omission tail is **NOT** zero-activation — every omitted slice carries
-real RV softmax (max 0.21–0.57, never <0.05), lost to **background** at argmax (bg wins 71–98% of the GT-RV region).
-So a loss reweight CAN recover it (activation exists to amplify) — it's RV-vs-bg **recall/calibration**, apical/small-RV
-slices, **not** shape coverage. Kills the "detector doesn't fire" hypothesis.
+**nttu.7 (2026-07-16) — recall lever characterized, targeted vs global:**
+- ✅ **TARGETED = KEEP.** An inference-time RV logit-bias on the *existing* model (val-tuned b≈1.5–2.0) lifts
+  **val RV +0.043** (monotone over 6 bias steps = signal, not scatter), val mean +0.018; **transfers** to cmrx
+  test RV +0.014 / mean +0.012. Free, no retrain, val-fit post-hoc (tb58 family, leak-clean).
+- ❌ **GLOBAL = KILL.** Matched 40ep A/B (dice_ce vs dice_ce_tversky β=0.6): val mean **−0.030**, test **−0.048**;
+  myo/cav both bleed, **RV flat**. Tversky's FN-penalty is *global* → over-segments every class without localizing
+  the RV-vs-bg margin. Sound mechanism, wrong instrument. (Retracts the earlier "RV +0.044 directional" read —
+  that was a single-seed scatter; the matched A/B shows global recall net-negative.)
 
-**Open next:** (1) **nttu.7 recall — now the primary lever** (Tversky FN-penalty raises RV over bg exactly here):
-milder β + multi-seed to see if the RV gain survives without the myo cost; a class-prior/logit-bias at inference is
-a cheaper same-family test. (2) nttu.4/.8 shape-coverage **deprioritized** for omission (root cause isn't coverage).
-Do **not** pivot off A. Method note: always run the MATCHED default baseline before claiming a mover.
+**Takeaway:** the RV-omission fix is **RV-targeted**, not a global loss. The free logit-bias already banks the RV
+win; a source-level version (if ever needed) must be **RV-class-weighted**, not global Tversky.
+
+**Open next:** (1) optionally productionize the RV logit-bias as an opt-in inference class-prior (small, val-fit;
+label post-hoc like tb58) — filed, not urgent (gain modest, +0.012 test mean). (2) nttu.4/.8 shape-coverage
+**deprioritized** for omission (root cause isn't coverage). Do **not** pivot off A. Method note: always run the
+MATCHED default baseline before claiming a mover; a monotone dose-response beats a single-seed delta.
