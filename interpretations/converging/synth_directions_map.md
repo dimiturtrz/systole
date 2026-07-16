@@ -29,7 +29,7 @@ levers were dead — the problem was never contrast. Viz: `scratchpad/rv_fail.pn
 | shape coverage (composite / pathology pool) | ❌ dice-neutral | coverage 0.78→0.94, Dice flat |
 | noise / high-freq aug | 🔒 load-bearing (constraint) | nk70.1 — can't lower (→0.385) |
 | **RV recall** (Tversky FN-penalty, β>α) | 🟡 **directional, marginal** | vs MATCHED baseline (0.594): RV +0.044, myo −0.010, mean +0.013 (near noise). RV-specific gain w/ myo tradeoff; single-seed, not confirmed. Fixes under-seg, not omission |
-| **RV omission tail** (0-px total misses) | ⬜ UNSOLVED | recall lever left it unchanged (16/69, 42% slice-omit); deeper detection/coverage |
+| **RV omission tail** (0-px total misses) | 🩺 **root-caused (nttu.5)**: RV-vs-**bg** recall, NOT coverage | all 9 omitted slices have RV softmax present (max 0.21–0.57, med 0.41, **never zero**); winner = **bg** 71–98%; apical/small-RV (z 7–8). Threshold/recall-fixable → nttu.7 on-target; coverage (nttu.4/.8) is NOT the cure |
 | within-label heterogeneity (multi-Gaussian paint) | ⬜ deprioritized | it's a *color* lever; the blocker isn't color |
 | **learned shape prior** (pathology tail) | ⬜ filed (vpn5) | reaches the 22% DCM/HCM tail SSM misses |
 
@@ -67,7 +67,12 @@ explains why every color/contrast lever was dead. Then tested the **recall lever
 +0.044 vs matched baseline but a myo −0.01 tradeoff, mean +0.013 (near noise, single-seed) — **directional, not a
 confirmed keep**; it fixes *under-seg*, not the *omission* tail.
 
-**Open next:** (1) harden/refine recall — milder β + multi-seed to see if RV gain survives without the myo cost;
-(2) the **omission tail** (0-px RV on ~16/69 cases) is the real unsolved blocker — a loss reweight can't create
-RV activation from zero, so it's detection/coverage (why does the RV detector not fire on those slice configs?).
+**Root-caused (nttu.5, 2026-07-16):** the omission tail is **NOT** zero-activation — every omitted slice carries
+real RV softmax (max 0.21–0.57, never <0.05), lost to **background** at argmax (bg wins 71–98% of the GT-RV region).
+So a loss reweight CAN recover it (activation exists to amplify) — it's RV-vs-bg **recall/calibration**, apical/small-RV
+slices, **not** shape coverage. Kills the "detector doesn't fire" hypothesis.
+
+**Open next:** (1) **nttu.7 recall — now the primary lever** (Tversky FN-penalty raises RV over bg exactly here):
+milder β + multi-seed to see if the RV gain survives without the myo cost; a class-prior/logit-bias at inference is
+a cheaper same-family test. (2) nttu.4/.8 shape-coverage **deprioritized** for omission (root cause isn't coverage).
 Do **not** pivot off A. Method note: always run the MATCHED default baseline before claiming a mover.
