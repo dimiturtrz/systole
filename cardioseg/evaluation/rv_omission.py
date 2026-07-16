@@ -15,6 +15,7 @@ import logging
 
 import numpy as np
 import torch
+from jaxtyping import Float, Integer, UInt8
 
 from core.data.static import splits
 from core.data.static.splits import ModelSplit
@@ -44,7 +45,8 @@ class RvOmission:
     inference-time RV logit-bias recall lever."""
 
     @staticmethod
-    def omission_row(rv_prob: np.ndarray, argmax: np.ndarray, gt: np.ndarray, pred: np.ndarray) -> dict | None:
+    def omission_row(rv_prob: Float[np.ndarray, "h w"], argmax: Integer[np.ndarray, "h w"],
+                     gt: Integer[np.ndarray, "h w"], pred: Integer[np.ndarray, "h w"]) -> dict | None:
         """One omitted-slice record, or None if the slice isn't an omission. Omission = GT-RV present
         (>OMIT_PX) yet argmax fired <OMIT_PX RV pixels. Reports the max/mean RV softmax INSIDE the GT-RV
         region and which class won there. Pure numpy — the recall-vs-coverage evidence, testable off-GPU."""
@@ -69,7 +71,7 @@ class RvOmission:
                 "max": float(arr.max()) if arr.size else float("nan")}
 
     @staticmethod
-    def biased_pred(logits: torch.Tensor, d: int, bias: float) -> np.ndarray:
+    def biased_pred(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float) -> UInt8[np.ndarray, "d h w"]:
         """argmax label map after adding `bias` to the RV logit pre-softmax, TTA-averaged over FLIPS.
         `logits` is the stacked [K*D,C,H,W] forward; `d` the per-flip depth. The targeted-recall op."""
         biased = logits.clone()
