@@ -53,7 +53,13 @@ Lever ranking out of the verdict: (1) ~~productionize RV logit-bias (we55)~~ **D
 default**: the val-fit global RV bias helps where RV collapses (Canon +0.044/Siemens +0.014) but **over-segments
 GE where RV is already healthy** (RV −0.106), so pooled cross-vendor is **−0.004** — the RV deficit is
 vendor-heterogeneous, a global constant can't fix it. `Inference.logit_bias` primitive kept (opt-in, off); a
-**conditional/confidence-gated** RV prior is the real fix (filed). (2) name the residual-inadequacy axis
+**conditional/confidence-gated** RV prior (ru27) **DONE — correct instrument, marginal + un-tunable gain**: the
+gate (`gated_biased_pred`, `--mode gated`) recovers Canon's collapse (RV +0.018 @τ=0.85) while sparing healthy
+GE (−0.002) where the global bias wiped it (−0.106) — vendor-heterogeneity *is* separable by the model's own
+per-slice confidence. But the omission is a small apical tail (fires on 1–8% of slices), safe ceiling ~Canon
++0.006 mean / pooled ≈0, and the gain lives on unseen collapsed vendors the leak-free val (healthy acdc) can't
+fit against → not a shippable lever, real RV fix is at **source** (recall/coverage). (2) name the
+residual-inadequacy axis
 (boundary contrast / finite-res PV) + test one arm; (3) `hpy` (MRXCAT2 MRI-native contrast) justified by the
 residual, `ncph` (twin) is the home for the *tax* portion only.
 

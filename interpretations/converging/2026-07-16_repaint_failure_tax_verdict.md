@@ -111,6 +111,38 @@ The `logit_bias` primitive stays (a correct opt-in capability, off by default); 
 **declined**. A conditional form (per-vendor, or gated to low-RV-confidence cases only) is the real fix — filed
 follow-up. Method note: this is why productionize-and-measure-cross-vendor beat citing the single cmrx number.
 
+## Follow-up — ru27: the conditional gate is the right instrument, but the gain is un-tunable leak-free
+
+The we55 fix was to make the RV bias **conditional** — apply it only where RV is under-firing, gated on the
+model's own per-slice max RV softmax `< τ` (the nttu.5 omission signature), so healthy-RV vendors are left
+alone. Implemented as `RvOmission.gated_biased_pred` + `--mode gated`; measured base vs GLOBAL vs GATED
+per-vendor on the same zero-real cross-vendor test (b=2.0, τ swept for characterization):
+
+| vendor (base RV) | global Δmean / ΔRV | gated τ=0.6 (fire%) | gated τ=0.85 (fire%) |
+|---|---|---|---|
+| **GE** (0.621, healthy) | **−0.025 / −0.106** | −0.000 (0.8%) | −0.000 / −0.002 (6%) |
+| **Canon** (0.278, collapsed) | +0.025 / +0.044¹ | +0.003 / +0.008 (0.9%) | **+0.006 / +0.018** (10%) |
+| Siemens (0.590) | +0.013 / +0.014 | −0.001 (1.5%) | −0.001 (11%) |
+| pooled (147) | −0.004 | +0.000 | +0.000 |
+
+¹ global's Canon "gain" is mostly **myo/cav renormalization** (RV bias shifts the softmax), bundled with the GE wipeout.
+
+**The mechanism is confirmed: the vendor-heterogeneity IS separable by the model's own confidence.** The gate
+recovers Canon's collapse (RV +0.018 at τ=0.85) while leaving healthy GE untouched (−0.002) — exactly what a
+single global constant could not do. The omission signature is a **small apical tail** (τ=0.6 fires on 1% of
+slices, τ=0.85 on 8.5%), so gating is safe by construction: it only touches slices where RV is not confidently
+winning.
+
+**But the recoverable gain is marginal AND structurally un-tunable leak-free.** Two facts kill it as a headline
+lever: (1) the safe ceiling is ~Canon +0.006 mean / pooled ≈0 — the tail is too small and largest-CC eats part of
+the recovered apical RV. (2) The gain lives entirely on **unseen collapsed vendors**; the leak-free val (acdc,
+single-centre, healthy RV) has no collapse to fit against, so its gated dose-response is **flat** and honest
+selection (`select_bias`) can't find a b/τ that turns the benefit on. The `--mode gated` CLI, fitting on val,
+therefore ships a near-zero effect — an accurate reflection that *the thing the gate fixes is invisible to the
+only split we're allowed to tune on.* The `gated_biased_pred` primitive is kept as the **correct** opt-in form
+(supersedes the global bias — safe where global regressed), off by default; the RV omission's real fix is at
+**source** (recall/coverage in training), not a post-hoc prior.
+
 ## Honesty / caveats
 
 - Single-flagship, eval-only (no retrain, no seeds) — per finding-stage rigor; the effects are large (0.25 vs

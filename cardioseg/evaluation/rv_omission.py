@@ -1,6 +1,6 @@
 """RV-omission diagnostics for a zero-real model — the reproducible core of the nttu epic (bd nttu.6).
 
-Two modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-real> --mode {probe,bias}`):
+Three modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-real> --mode {probe,bias,gated}`):
 
 - **probe** (nttu.5 root-cause): on every slice where GT-RV is present but argmax omits it (<OMIT_PX RV
   pixels, PRE-largest-CC), is there raw RV softmax to recover (recall/threshold-fixable) or is it truly
@@ -10,11 +10,16 @@ Two modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-re
   model's own cross-vendor TEST, reported pooled + PER-VENDOR. The verdict (49b7) predicts the biggest
   lift on the unseen vendors (GE/Canon), where RV collapses under OOD color. `core.inference.Inference`
   carries the fitted b* as an opt-in `logit_bias` for the real pipeline.
+- **gated** (ru27): the conditional fix for `bias`'s vendor-heterogeneity — apply the RV bias ONLY on
+  under-fired slices (per-slice max RV softmax < `GATE_TAU`, the nttu.5 omission signature). Fits b* on
+  val under the gate, then reports base vs global vs GATED per vendor: gating should recover the
+  collapsed vendors (Canon) without the global bias's GE over-segmentation (we55).
 
 Zero-real models live in staging (unregistered), so `--run` is explicit (a run dir / alias / id resolvable
 by the registry), e.g. `--run .staging/refac_proc`.
 """
 import logging
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -25,13 +30,20 @@ from core.data.static.splits import ModelSplit
 from core.data.static.store import Store
 from core.data.static.store.build import Build as store
 from core.evaluate import Evaluate
-from core.hparams import Hparams
+from core.hparams import Hparams, TrainCfg
 from core.model import Model
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
 
 log = logging.getLogger("cardioseg.rv_omission")
+
+
+class Session(NamedTuple):
+    """The loaded inference session threaded through the diagnostics: model + its cfg + device."""
+    model: torch.nn.Module
+    cfg: TrainCfg
+    device: str
 
 RV = 1
 OMIT_PX = 20
@@ -40,6 +52,7 @@ CLASS_NAMES = ("bg", "RV", "myo", "cav")
 FOREGROUND = {"RV": 1, "myo": 2, "cav": 3}
 ACTIVATION_FLOOR = 0.05  # maxP below this = true-zero-activation (coverage), above = recall-recoverable
 BIASES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0)
+GATE_TAU = 0.6  # nttu.5: under-fired RV peaks 0.21-0.57, healthy RV wins >0.6 -> gate the bias below this
 
 
 class RvOmission:
@@ -74,15 +87,34 @@ class RvOmission:
                 "max": float(arr.max()) if arr.size else float("nan")}
 
     @staticmethod
-    def biased_pred(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float) -> UInt8[np.ndarray, "d h w"]:
-        """argmax label map after adding `bias` to the RV logit pre-softmax, TTA-averaged over FLIPS.
-        `logits` is the stacked [K*D,C,H,W] forward; `d` the per-flip depth. The targeted-recall op."""
+    def _tta_mean(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float) -> Float[torch.Tensor, "d c h w"]:
+        """TTA-mean softmax after adding `bias` to the RV logit pre-softmax. `logits` is the stacked
+        [K*D,C,H,W] forward; `d` the per-flip depth. Un-flips each block back before averaging."""
         biased = logits.clone()
         biased[:, RV] += bias
         probs = torch.softmax(biased, dim=1)
         flips = [torch.flip(probs[i * d:(i + 1) * d], dm) if dm else probs[i * d:(i + 1) * d]
                  for i, dm in enumerate(FLIPS)]
-        return torch.stack(flips).mean(0).argmax(1).to(torch.uint8).cpu().numpy()
+        return torch.stack(flips).mean(0)
+
+    @staticmethod
+    def biased_pred(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float) -> UInt8[np.ndarray, "d h w"]:
+        """argmax label map after a GLOBAL RV logit bias (every slice). The we55 lever — over-segments
+        vendors whose RV is already healthy (bd ru27)."""
+        return RvOmission._tta_mean(logits, d, bias).argmax(1).to(torch.uint8).cpu().numpy()
+
+    @staticmethod
+    def gated_biased_pred(logits: Float[torch.Tensor, "kd c h w"], d: int, bias: float,
+                          tau: float) -> UInt8[np.ndarray, "d h w"]:
+        """CONDITIONAL RV bias (ru27): apply `bias` only on slices whose unbiased per-slice max RV
+        softmax is below `tau` — the nttu.5 omission signature (RV present but out-competed). Slices
+        where RV already wins strongly (>tau) keep the unbiased argmax, so the collapse is recovered
+        WITHOUT over-segmenting healthy-RV vendors (the we55 global-bias failure mode)."""
+        mean0 = RvOmission._tta_mean(logits, d, 0.0)
+        meanb = RvOmission._tta_mean(logits, d, bias)
+        gated = mean0[:, RV].amax(dim=(1, 2)) < tau                   # [d] per-slice under-fired mask
+        out = torch.where(gated[:, None, None], meanb.argmax(1), mean0.argmax(1))
+        return out.to(torch.uint8).cpu().numpy()
 
     @staticmethod
     def select_bias(sweep: dict[float, dict[str, float]], *, cav_guard: float = 0.01) -> float:
@@ -104,37 +136,38 @@ class RvOmission:
     def add_args(ap):
         ap.add_argument("--run", required=True,
                         help="zero-real model (run dir / alias / id), e.g. .staging/refac_proc")
-        ap.add_argument("--mode", choices=("probe", "bias"), default="probe")
+        ap.add_argument("--mode", choices=("probe", "bias", "gated"), default="probe")
         ap.add_argument("--testset", default="cmrxmotion",
                         help="probe eval set (bias uses the model's own val/test split)")
 
     @staticmethod
-    def _load(run_ref: str):  # pragma: no cover  (registry resolve + torch model load)
+    def _load(run_ref: str) -> Session:  # pragma: no cover  (registry resolve + torch model load)
         run = Registry.resolve(run_ref)
         cfg = Hparams.from_json(run / "config.json")
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = Model.build_unet(cfg.model).to(device)
         model.load_state_dict(torch.load(run / "model.pth", map_location=device))
         model.eval()
-        return model, cfg, device
+        return Session(model, cfg, device)
 
     @staticmethod
-    def _logits(model, vol_img, size: int, device: str):  # pragma: no cover  (GPU forward)
+    def _logits(s: Session, vol_img):  # pragma: no cover  (GPU forward)
+        size = s.cfg.generator.data.size
         xs = np.stack([Preprocess.fit_square(vol_img[z].astype(np.float32), size, 0.0)
                        for z in range(vol_img.shape[0])])
         with torch.no_grad():
-            x = torch.from_numpy(xs)[:, None].to(device)
+            x = torch.from_numpy(xs)[:, None].to(s.device)
             batched = torch.cat([torch.flip(x, dm) if dm else x for dm in FLIPS], dim=0)
-            return model(batched), x.shape[0]
+            return s.model(batched), x.shape[0]
 
     @staticmethod
-    def _probe(model, cfg, device, frame):  # pragma: no cover  (GPU inference over the eval frame)
-        size = cfg.generator.data.size
+    def _probe(s: Session, frame):  # pragma: no cover  (GPU inference over the eval frame)
+        size = s.cfg.generator.data.size
         rows = []
         for r in frame.iter_rows(named=True):
             case = Store.load_arrays(r["path"])
             gt = Preprocess.stack_slices(case["ed_gt"], size)
-            lg, d = RvOmission._logits(model, case["ed_img"], size, device)
+            lg, d = RvOmission._logits(s, case["ed_img"])
             probs = torch.softmax(lg[:d], dim=1)                 # identity-flip block = un-augmented
             rv_prob = probs[:, RV].cpu().numpy()
             pred = probs.argmax(1).to(torch.uint8).cpu().numpy()
@@ -156,18 +189,20 @@ class RvOmission:
         return float(np.mean([d[c] for c in FOREGROUND]))
 
     @staticmethod
-    def _score_cases(model, cfg, device, frame, biases):  # pragma: no cover  (GPU forward per case)
+    def _score_cases(s: Session, frame, biases, tau=None):  # pragma: no cover  (GPU forward per case)
         """Per-case foreground Dice at each bias, keeping the case vendor. Forward runs ONCE per case;
-        the bias is a cheap logit add on the cached logits. Returns [(vendor, {b: {class: dice}})]."""
-        size = cfg.generator.data.size
+        the bias is a cheap logit add on the cached logits. `tau=None` = global bias; a float gates the
+        bias to under-fired slices (ru27). Returns [(vendor, {b: {class: dice}})]."""
+        size = s.cfg.generator.data.size
         cases = []
         for r in frame.iter_rows(named=True):
             case = Store.load_arrays(r["path"])
             gt = Preprocess.stack_slices(case["ed_gt"], size)
-            lg, d = RvOmission._logits(model, case["ed_img"], size, device)
+            lg, d = RvOmission._logits(s, case["ed_img"])
             per = {}
             for b in biases:
-                pred = Postprocess.largest_cc_per_class(RvOmission.biased_pred(lg, d, b))
+                raw = RvOmission.biased_pred(lg, d, b) if tau is None else RvOmission.gated_biased_pred(lg, d, b, tau)
+                pred = Postprocess.largest_cc_per_class(raw)
                 per[b] = {c: float(Evaluate.dice(pred, gt, lab)) for c, lab in FOREGROUND.items()}
             cases.append((r.get("vendor"), per))
         return cases
@@ -176,6 +211,29 @@ class RvOmission:
     def _agg(cases, biases) -> dict[float, dict[str, float]]:
         """Pooled mean per-bias per-class over [(vendor, {b:{class:dice}})]."""
         return {b: {c: float(np.mean([pc[b][c] for _, pc in cases])) for c in FOREGROUND} for b in biases}
+
+    @staticmethod
+    def _score_arms(s: Session, frame, b, tau):  # pragma: no cover  (GPU forward per case)
+        """Per case, from ONE forward: base (b=0), global (b every slice), gated (b on under-fired
+        slices only). The ru27 head-to-head. Returns [(vendor, {arm: {class: dice}})]."""
+        size = s.cfg.generator.data.size
+        cases = []
+        for r in frame.iter_rows(named=True):
+            case = Store.load_arrays(r["path"])
+            gt = Preprocess.stack_slices(case["ed_gt"], size)
+            lg, d = RvOmission._logits(s, case["ed_img"])
+            preds = {"base": RvOmission.biased_pred(lg, d, 0.0), "global": RvOmission.biased_pred(lg, d, b),
+                     "gated": RvOmission.gated_biased_pred(lg, d, b, tau)}
+            row = {a: {c: float(Evaluate.dice(Postprocess.largest_cc_per_class(p), gt, lab))
+                       for c, lab in FOREGROUND.items()} for a, p in preds.items()}
+            cases.append((r.get("vendor"), row))
+        return cases
+
+    @staticmethod
+    def _agg_arm(cases, arm, b) -> dict[float, dict[str, float]]:
+        """A base-vs-`arm` agg keyed {0.0: base, b: arm} so `_report` renders the arm's Δ over base."""
+        return {0.0: {c: float(np.mean([row["base"][c] for _, row in cases])) for c in FOREGROUND},
+                b: {c: float(np.mean([row[arm][c] for _, row in cases])) for c in FOREGROUND}}
 
     @staticmethod
     def _report(agg, label, b_star):  # pragma: no cover  (logging)
@@ -187,9 +245,9 @@ class RvOmission:
                  biased["cav"] - base["cav"], RvOmission._mean(biased) - RvOmission._mean(base))
 
     @staticmethod
-    def _bias(model, cfg, device, val_frame, test_frame):  # pragma: no cover  (GPU sweep + fit + transfer)
+    def _bias(s: Session, val_frame, test_frame):  # pragma: no cover  (GPU sweep + fit + transfer)
         # fit on VAL (leak-free): full dose-response, then select b* (best mean, cav-guarded)
-        val_sweep = RvOmission._agg(RvOmission._score_cases(model, cfg, device, val_frame, BIASES), BIASES)
+        val_sweep = RvOmission._agg(RvOmission._score_cases(s, val_frame, BIASES), BIASES)
         log.info("=== VAL dose-response (selection) n=%d ===  bias  RV     myo    cav    mean", len(val_frame))
         for b in BIASES:
             dd = val_sweep[b]
@@ -201,18 +259,43 @@ class RvOmission:
             log.info("no bias improves val mean without cav regression — lever declined (keep b=0)")
             return
         # apply ONCE to test: pooled + per-vendor (the verdict predicts the biggest lift on unseen vendors)
-        test_cases = RvOmission._score_cases(model, cfg, device, test_frame, (0.0, b_star))
+        test_cases = RvOmission._score_cases(s, test_frame, (0.0, b_star))
         RvOmission._report(RvOmission._agg(test_cases, (0.0, b_star)), f"TEST pooled n={len(test_cases)}", b_star)
         for v in sorted({str(v) for v, _ in test_cases}):
             sub = [(vv, pc) for vv, pc in test_cases if str(vv) == v]
             RvOmission._report(RvOmission._agg(sub, (0.0, b_star)), f"TEST {v} n={len(sub)}", b_star)
 
     @staticmethod
+    def _gated(s: Session, val_frame, test_frame):  # pragma: no cover  (GPU sweep + fit + transfer)
+        """ru27: fit b* on VAL under the CONDITIONAL gate (τ=GATE_TAU, signature-derived), then apply
+        once to TEST and report base vs GLOBAL vs GATED per vendor. The verdict: gating recovers the
+        collapsed vendors (Canon) as the global bias did, but leaves healthy-RV vendors (GE) untouched."""
+        val_sweep = RvOmission._agg(RvOmission._score_cases(s, val_frame, BIASES, GATE_TAU), BIASES)
+        log.info("=== VAL gated dose-response (τ=%.2f) n=%d ===  bias  RV     myo    cav    mean",
+                 GATE_TAU, len(val_frame))
+        for b in BIASES:
+            dd = val_sweep[b]
+            log.info("  b=%-4.1f %.3f  %.3f  %.3f  %.3f", b, dd["RV"], dd["myo"], dd["cav"], RvOmission._mean(dd))
+        b_star = RvOmission.select_bias(val_sweep)
+        log.info(">>> selected gated RV logit-bias b*=%.1f (val mean %.3f vs b=0 %.3f)", b_star,
+                 RvOmission._mean(val_sweep[b_star]), RvOmission._mean(val_sweep[0.0]))
+        if b_star == 0.0:
+            log.info("no gated bias improves val mean without cav regression — lever declined (keep b=0)")
+            return
+        arms = RvOmission._score_arms(s, test_frame, b_star, GATE_TAU)
+        for label, sub in [(f"TEST pooled n={len(arms)}", arms),
+                           *[(f"TEST {v}", [(vv, row) for vv, row in arms if str(vv) == v])
+                             for v in sorted({str(v) for v, _ in arms})]]:
+            RvOmission._report(RvOmission._agg_arm(sub, "global", b_star), f"{label} GLOBAL", b_star)
+            RvOmission._report(RvOmission._agg_arm(sub, "gated", b_star), f"{label} GATED", b_star)
+
+    @staticmethod
     def run(args):  # pragma: no cover  (loads a zero-real model + GPU inference over eval frames)
-        model, cfg, device = RvOmission._load(args.run)
+        s = RvOmission._load(args.run)
         if args.mode == "probe":
-            RvOmission._probe(model, cfg, device, splits.Splits.eval_set(args.testset))
-        else:
-            meta = store.load(list(cfg.generator.data.sources))
-            model_split = ModelSplit(cfg.generator.data, meta)
-            RvOmission._bias(model, cfg, device, model_split.val, model_split.test)
+            RvOmission._probe(s, splits.Splits.eval_set(args.testset))
+            return
+        meta = store.load(list(s.cfg.generator.data.sources))
+        model_split = ModelSplit(s.cfg.generator.data, meta)
+        fit = RvOmission._gated if args.mode == "gated" else RvOmission._bias
+        fit(s, model_split.val, model_split.test)
