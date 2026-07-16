@@ -47,7 +47,7 @@ SMALL_N = 10   # groups below this are flagged — per-group stats are noisy
 
 class Distribution:
     @staticmethod
-    def collect(run: Path, device: str, meta_rows, *, tta: bool = True):  # pragma: no cover  (loads the model + GPU predict_volume per case over the real store)
+    def collect(run: Path, device: str, meta_rows, *, tta: bool = True):  # pragma: no cover
         """One record per subject: dice + boundary distances per class, EF gt/pred, and the
         stratification keys (vendor/pathology/field) straight from the store's meta — for the
         stratified views. Pure eval on the existing model (no retrain).
@@ -74,7 +74,8 @@ class Distribution:
                 k = tag.lower()
                 if f"{k}_img" not in case:
                     continue
-                pred = Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=tta))
+                pred = Postprocess.largest_cc_per_class(
+                    Inference(model, SIZE, device).predict_volume(case[f"{k}_img"], tta=tta))
                 gt = Preprocess.stack_slices(case[f"{k}_gt"], SIZE, dtype=np.uint8)
                 masks[tag] = (pred, gt)
                 # pool BOTH phases — ES (small contracted cavity) is the harder phase; excluding it
@@ -125,7 +126,7 @@ class Distribution:
         plt.close(fig)
 
     @staticmethod
-    def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover  (matplotlib scatter + marginal-KDE render + savefig)
+    def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover
         """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
         upright on top; bias + 95% LoA as vertical lines (and in the title)."""
         gt = np.asarray(ef_gt, dtype=float)
@@ -199,7 +200,9 @@ class Distribution:
         # GT-EF mean given alongside MAE: EF is a ratio, so absolute MAE isn't comparable across groups
         # with different cavity sizes (small-cavity HCM amplifies a fixed volume error). Dice is the
         # range-independent segmentation-quality metric; read MAE *with* the GT-EF context.
-        log.info(f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} {'mean':>5}  {'gtEF':>5} {'EF MAE':>7} {'bias':>6}")
+        log.info(
+            f"  {'group':12} {'n':>4}  {'RV':>5} {'myo':>5} {'LVc':>5} "
+            f"{'mean':>5}  {'gtEF':>5} {'EF MAE':>7} {'bias':>6}")
         out = {}
         for grp, rs in g.items():
             d = {cl: np.mean([r["dice"][cl] for r in rs if "dice" in r]) for cl in CLASSES}
@@ -266,7 +269,10 @@ class Distribution:
         df = splits.Splits.eval_set(args.eval, holdout=args.holdout, seed=args.seed)
         # leak guard (bd h9bz): drop subjects THIS model trained on (val kept); fully-OOD eval drops nothing
         d_model = Hparams.from_json(run / "config.json").generator.data
-        trained = splits.ModelSplit(d_model, store.load(list(d_model.sources), Recipe(inplane=d_model.inplane, n4=d_model.n4))).train_keys()
+        trained = splits.ModelSplit(
+            d_model,
+            store.load(list(d_model.sources), Recipe(inplane=d_model.inplane, n4=d_model.n4)),
+        ).train_keys()
         kept = [r for r in df.iter_rows(named=True) if f"{r['dataset']}\t{r['subject_id']}" not in trained]
         n_excl = len(df) - len(kept)
         if n_excl:
@@ -286,8 +292,12 @@ class Distribution:
         for cl, (name, _) in CLASSES.items():
             pooled = np.concatenate([d for d in dists[cl] if d.size])
             m = Evaluate.surface_metrics(pooled)
-            log.info(f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m.assd:.2f}  HD95 {m.hd95:.2f}  HD {m.hd:.1f} mm")
-        log.info(f"=== EF Bland-Altman: bias {s.bias:+.1f}% · 95% LoA [{Distribution.lo_hi(s.bias, s.sd)}] · MAE {s.mae:.1f}%")
+            log.info(
+                f"  {name:7} Dice {np.mean(dice_acc[cl]):.3f}  ASSD {m.assd:.2f}  "
+                f"HD95 {m.hd95:.2f}  HD {m.hd:.1f} mm")
+        log.info(
+            f"=== EF Bland-Altman: bias {s.bias:+.1f}% · 95% LoA "
+            f"[{Distribution.lo_hi(s.bias, s.sd)}] · MAE {s.mae:.1f}%")
 
         # --- stratified (only axes with >1 group present) ---
         strata = {}

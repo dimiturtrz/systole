@@ -125,8 +125,10 @@ def test_load_cfg_threads_all_params(monkeypatch):
 def test_load_cfg_sources_override(monkeypatch):
     """`sources` arg overrides d.sources (e.g. the matrix's full eval cloud)."""
     captured = {}
-    monkeypatch.setattr(build_mod.Build, "load",
-                        staticmethod(lambda names=None, recipe=None, **kw: captured.update(names=names) or pl.DataFrame({"x": [1]})))
+    monkeypatch.setattr(
+        build_mod.Build, "load",
+        staticmethod(lambda names=None, recipe=None, **kw: captured.update(names=names) or pl.DataFrame({"x": [1]})),
+    )
     d = DataCfg(sources=("acdc",))
     Build.load_cfg(d, sources=("mnm2", "mnms1"))
     assert captured["names"] == ["mnm2", "mnms1"]                 # override, not d.sources

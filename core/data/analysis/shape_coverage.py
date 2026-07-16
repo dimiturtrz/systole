@@ -84,14 +84,17 @@ class ShapeCoverage:
             return distances.min(1)
         real_to_synth = nn(real_standardized, synth_standardized)   # real -> nearest synth (coverage)
         synth_to_real = nn(synth_standardized, real_standardized)   # synth -> nearest real (extrapolation if large)
-        synth_to_synth = nn(synth_standardized, synth_standardized) if len(synth_standardized) > 1 else np.array([1.0]) # synth internal scale (for a radius)
+        # synth internal scale (for a radius)
+        synth_to_synth = nn(synth_standardized, synth_standardized) if len(synth_standardized) > 1 else np.array([1.0])
         radius = float(np.median(synth_to_synth[synth_to_synth > 0])) if (synth_to_synth > 0).any() else 1.0
         return {
             "n_real": len(real), "n_synth": len(synth),
             "real_to_synth_nn_median": round(float(np.median(real_to_synth)), 3),
             "real_to_synth_nn_p95": round(float(np.percentile(real_to_synth, 95)), 3),
-            "coverage_at_synth_radius": round(float((real_to_synth <= radius).mean()), 3),   # frac real with a synth neighbour
-            "synth_to_real_nn_median": round(float(np.median(synth_to_real)), 3),         # >real-internal => extrapolates
+            # coverage_at_synth_radius: frac real with a synth neighbour
+            "coverage_at_synth_radius": round(float((real_to_synth <= radius).mean()), 3),
+            # synth_to_real_nn_median: >real-internal => extrapolates
+            "synth_to_real_nn_median": round(float(np.median(synth_to_real)), 3),
             "synth_beyond_real_frac": round(float((synth_to_real > np.percentile(real_to_synth, 95)).mean()), 3),
         }
 
@@ -115,8 +118,10 @@ class ShapeCoverage:
         projected_real = (real_standardized - union.mean(0)) @ right_singular_vectors[:2].T
         projected_synth = (synth_standardized - union.mean(0)) @ right_singular_vectors[:2].T
         plt.figure(figsize=(6, 6))
-        plt.scatter(projected_synth[:, 0], projected_synth[:, 1], s=6, alpha=0.3, label=f"synth (n={len(projected_synth)})", color="#e35")
-        plt.scatter(projected_real[:, 0], projected_real[:, 1], s=6, alpha=0.3, label=f"real (n={len(projected_real)})", color="#38e")
+        plt.scatter(projected_synth[:, 0], projected_synth[:, 1], s=6, alpha=0.3,
+                    label=f"synth (n={len(projected_synth)})", color="#e35")
+        plt.scatter(projected_real[:, 0], projected_real[:, 1], s=6, alpha=0.3,
+                    label=f"real (n={len(projected_real)})", color="#38e")
         plt.legend(); plt.title("shape-descriptor PCA: does synth (red) cover real (blue)?")
         output_path = args.out or (str(Path(args.pool).with_suffix("")) + "_shapecov.png")
         plt.savefig(output_path, dpi=110, bbox_inches="tight")

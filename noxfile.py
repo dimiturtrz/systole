@@ -11,7 +11,7 @@ nox.options.sessions = ["lint", "test", "cov"]
 
 RUFF = "ruff@0.15.13"
 VULTURE = "vulture@2.16"
-SELECT = "F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123"
+SELECT = "F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001"
 LAYERS = ["core", "cardioseg"]
 # ruff + jscpd are R1 HYGIENE gates — they may scan WIDER than the R2/R3 arch set LAYERS (a viewer / tests
 # tree worth linting). Default = LAYERS; widen via lint_paths/jscpd_paths in .copier-answers.yml (bd 9mu).
@@ -26,16 +26,15 @@ def lint(session: nox.Session) -> None:
     # here — matching CI (bd skr GAP1/kqk). F722 = multi-token dim strings ("b c h w"); F821 = single-axis
     # ("n") which parses as an undefined forward-ref. Off domain=ml both are absent (no jaxtyping dep).
     session.run("uvx", RUFF, "check", *LINT_LAYERS, "--select", SELECT, "--ignore", "F722,F821", external=True)
-    # Advisory (mirrors CI, never blocks): full curated config + the advisory-only codes (E501/SLF001 —
-    # cosmetic / house-gate-conflicting, bd 4c2/8ex) surfaced via --extend-select, plus format drift.
+    # Advisory (mirrors CI, never blocks): the full enforced select over the whole tree, plus format drift.
+    # ruff_advisory_select is empty by default (E501/SLF001 graduated into the enforced union, bd 4c2/8ex),
+    # so --extend-select is appended only when it carries a code.
     session.run(
         "uvx",
         RUFF,
         "check",
         ".",
         "--statistics",
-        "--extend-select",
-        "E501,SLF001",
         external=True,
         success_codes=[0, 1],
     )

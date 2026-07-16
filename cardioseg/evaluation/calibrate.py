@@ -39,7 +39,9 @@ class Calibrate:
 
     @staticmethod
     @shapecheck
-    def fit_temperature(logits: Float[np.ndarray, "*n c"], labels: Integer[np.ndarray, "*n"], device: str = "cpu") -> float:
+    def fit_temperature(
+        logits: Float[np.ndarray, "*n c"], labels: Integer[np.ndarray, "*n"], device: str = "cpu"
+    ) -> float:
         """T minimizing NLL of softmax(logits/T) vs labels (LBFGS). Model frozen; one scalar."""
         logits_tensor = torch.tensor(logits, dtype=torch.float32, device=device)
         labels_tensor = torch.tensor(labels, dtype=torch.long, device=device)
@@ -80,8 +82,9 @@ class Calibrate:
             resolved = Splits.resolve_cfg(data_cfg, meta)
             val, test = resolved.val.frame, resolved.test.frame
         else:
-            _, val, test = splits.Splits.make_split(meta, data_cfg.test_datasets, data_cfg.test_vendors, data_cfg.val_frac, 0,
-                                             val_datasets=data_cfg.val_datasets, val_vendors=data_cfg.val_vendors)
+            _, val, test = splits.Splits.make_split(
+                meta, data_cfg.test_datasets, data_cfg.test_vendors, data_cfg.val_frac, 0,
+                val_datasets=data_cfg.val_datasets, val_vendors=data_cfg.val_vendors)
         evaluator = Evaluator(model, device, EvalCfg(size=data_cfg.size))   # state (model/device/size) once; call many
         val_logits, val_labels = evaluator.gather(splits.Splits.paths(val))
         temperature = Calibrate.fit_temperature(val_logits, val_labels, device)
@@ -106,6 +109,7 @@ class Calibrate:
         tracked_run = tracker.track_run(run_dir=run)      # resume the train run
         tracked_run.metric("temp_T", temperature)
         for name, axis_report in report["axes"].items():
-            tracked_run.metric(f"{name}_ece_uncal", axis_report["ece_uncal"]); tracked_run.metric(f"{name}_ece_temp", axis_report["ece_temp"])
+            tracked_run.metric(f"{name}_ece_uncal", axis_report["ece_uncal"])
+            tracked_run.metric(f"{name}_ece_temp", axis_report["ece_temp"])
         tracked_run.artifact(run / "plots" / "calibration.json")
         tracked_run.end()

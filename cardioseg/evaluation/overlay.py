@@ -104,7 +104,7 @@ class Overlay:
         size = d.size
 
         meta = store.load_cfg(d)                    # the run's own preprocessing params
-        val = splits.ModelSplit(d, meta).val             # the held-out VAL split (acdc in xvendor) — split-derived, not a literal
+        val = splits.ModelSplit(d, meta).val             # held-out VAL split (split-derived, not a literal)
         paths = splits.Splits.paths(val)
 
         # score every case once: pick a clean low-error case + the worst-EF HCM case

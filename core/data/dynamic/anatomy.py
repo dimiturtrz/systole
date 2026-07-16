@@ -180,7 +180,11 @@ class Anatomy:
         if rw.any() and rv_cav.any():
             components, _ = cc_label(rv_cav)
             near_rv_wall = binary_dilation(rw, iterations=2)
-            kept_labels = {int(label_value) for label_value in np.unique(components[near_rv_wall & rv_cav]) if label_value}
+            kept_labels = {
+                int(label_value)
+                for label_value in np.unique(components[near_rv_wall & rv_cav])
+                if label_value
+            }
             rv_cav = np.isin(components, list(kept_labels)) if kept_labels else np.zeros_like(rv_cav)
         out[rv_cav] = RV                                              # RV cavity
         out[lw] = MYO                                                 # LV myocardium (RV wall -> bg)
@@ -203,7 +207,8 @@ class Anatomy:
             raise MeshError(f"degenerate mesh bounds {aligned_mesh.bounds} -> grid {(nx, ny, nz)}")
         grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=(inplane, inplane, slice_mm),
                             origin=(x0, y0, z0))
-        lv = Anatomy._wall_mask(aligned_mesh, LV_ID, grid, tag_name).reshape(nz, ny, nx)   # ImageData points iterate x-fastest -> (z,y,x)
+        # ImageData points iterate x-fastest -> (z,y,x)
+        lv = Anatomy._wall_mask(aligned_mesh, LV_ID, grid, tag_name).reshape(nz, ny, nx)
         rv = Anatomy._wall_mask(aligned_mesh, RV_ID, grid, tag_name).reshape(nz, ny, nx)
         out = np.zeros((nz, ny, nx), dtype=np.uint8)
         for k in range(nz):
@@ -270,7 +275,11 @@ class Anatomy:
         wall = lv_cavity | myo                                    # LV cavity + myocardium (outer size fixed)
         out = mask.copy()
         if lv_cavity.any() and myo.any() and k != 0:
-            new_lv_cavity = binary_dilation(lv_cavity, iterations=k) & wall if k > 0 else binary_erosion(lv_cavity, iterations=-k)
+            new_lv_cavity = (
+                binary_dilation(lv_cavity, iterations=k) & wall
+                if k > 0
+                else binary_erosion(lv_cavity, iterations=-k)
+            )
             new_myo = wall & ~new_lv_cavity
             if new_myo.sum() >= 0.10 * wall.sum():               # guard: don't dissolve the myo ring
                 out[wall] = 2
@@ -321,7 +330,8 @@ class Anatomy:
                 # drop pure-apical myo-only slices (no cavity): the mesh contributes its whole apico-basal
                 # stack, so apex slices (~all myo, no cavity) over-represent 11x vs real (19% vs 1.8%). Require
                 # some cavity to match the real slice composition — cleans the synth over-spread (bd uy4d).
-                if min_cav_frac > 0 and int(((slice_labels == RV) | (slice_labels == LV_CAV)).sum()) < min_cav_frac * fg:
+                cav_px = int(((slice_labels == RV) | (slice_labels == LV_CAV)).sum())
+                if min_cav_frac > 0 and cav_px < min_cav_frac * fg:
                     continue
                 out.append(Preprocess.fit_square(slice_labels, size, 0).astype(np.uint8))
         return out

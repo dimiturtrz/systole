@@ -50,7 +50,7 @@ def normalize(vol: np.ndarray, lo_pct: float = 1.0, hi_pct: float = 99.5) -> np.
     return np.clip((vol - lo) / max(hi - lo, 1e-6), 0.0, 1.0)
 
 
-def to_imagedata(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):  # pragma: no cover  (pyvista ImageData — render shell)
+def to_imagedata(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):  # pragma: no cover  (render shell)
     """Wrap a [z,y,x] array as a pyvista ImageData (VTK wants x-fastest)."""
     nz, ny, nx = vol_zyx.shape
     grid = pv.ImageData(dimensions=(nx, ny, nz), spacing=spacing_zyx[::-1])  # spacing as (x,y,z)
@@ -69,7 +69,7 @@ class RenderCfg:
     margin_mm: float = 15.0
 
 
-def render(cfg: RenderCfg) -> None:  # pragma: no cover  (load_ed_es disk read + pyvista Plotter/screenshot — render shell)
+def render(cfg: RenderCfg) -> None:  # pragma: no cover  (render shell)
     patient, phase = cfg.patient, cfg.phase
     d = AcdcAdapter().load_ed_es(patient_dir(patient))
     if phase not in d:

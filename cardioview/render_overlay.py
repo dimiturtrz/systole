@@ -105,7 +105,7 @@ def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
     return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 
 
-def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:  # pragma: no cover  (pyvista export_gltf/html/screenshot — file-write shell)
+def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:  # pragma: no cover  (file-write shell)
     """Dispatch the built plotter to gltf / html / interactive / screenshot per cfg."""
     if cfg.gltf:
         Path(cfg.gltf).parent.mkdir(parents=True, exist_ok=True)
@@ -126,7 +126,7 @@ def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:  # prag
     log.info("saved %s  (iso %s @ %s mm)%s", out, mask_i.shape, round(iso[0], 2), ef_txt)
 
 
-def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: no cover  (pyvista Plotter assembly — render shell)
+def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: no cover  (render shell)
     """Assemble the pyvista scene: dim intensity backdrop (screenshot only) + chamber surfaces."""
     pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
     pl.set_background("#0e1116")
@@ -149,7 +149,7 @@ def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: 
     return pl
 
 
-def render(cfg: OverlayCfg) -> None:  # pragma: no cover  (preprocess_case disk read + load_model + pyvista — render shell)
+def render(cfg: OverlayCfg) -> None:  # pragma: no cover  (render shell)
     case = Preprocess.preprocess_case(patient_dir(cfg.patient), loader=AcdcAdapter().load_ed_es)
     spacing = tuple(float(s) for s in case["spacing"])
     device = "cuda" if torch.cuda.is_available() else "cpu"

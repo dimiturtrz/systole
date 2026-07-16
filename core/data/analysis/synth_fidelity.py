@@ -74,7 +74,8 @@ class SynthFidelity:
         def subsample(v):
             return v[torch.randperm(v.numel(), device=v.device)[:cap]] if v.numel() > cap else v
         quantiles = torch.linspace(0, 1, q, device=a.device)
-        return float((torch.quantile(subsample(a).float(), quantiles) - torch.quantile(subsample(b).float(), quantiles)).abs().mean())
+        return float((torch.quantile(subsample(a).float(), quantiles)
+                      - torch.quantile(subsample(b).float(), quantiles)).abs().mean())
 
     @staticmethod
     def dprime(a: Float[torch.Tensor, "*n"], b: Float[torch.Tensor, "*n"]) -> float:
@@ -105,7 +106,8 @@ class SynthFidelity:
         return img
 
     @staticmethod
-    def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg, n_classes: int, device: str) -> dict:
+    def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg, n_classes: int,
+                     device: str) -> dict:
         """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
         and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
         synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
@@ -115,14 +117,17 @@ class SynthFidelity:
         def per_slice(x1c):
             dprime_lists = {}
             for i in range(x1c.shape[0]):
-                for pair_name, value in SynthFidelity._pair_dprime(x1c[i].reshape(-1), labels[i].reshape(-1), n_classes).items():
+                for pair_name, value in SynthFidelity._pair_dprime(
+                        x1c[i].reshape(-1), labels[i].reshape(-1), n_classes).items():
                     dprime_lists.setdefault(pair_name, []).append(value)
             return {pair_name: round(float(np.nanmean(values)), 3) for pair_name, values in dprime_lists.items()}
         result = {}
-        for level, real_dprimes, synth_dprimes in (("pooled", SynthFidelity._pair_dprime(Xr.reshape(-1), labels.reshape(-1), n_classes),
-                                    SynthFidelity._pair_dprime(Xs.reshape(-1), labels.reshape(-1), n_classes)),
+        pooled_real = SynthFidelity._pair_dprime(Xr.reshape(-1), labels.reshape(-1), n_classes)
+        pooled_synth = SynthFidelity._pair_dprime(Xs.reshape(-1), labels.reshape(-1), n_classes)
+        for level, real_dprimes, synth_dprimes in (("pooled", pooled_real, pooled_synth),
                                    ("per_slice", per_slice(Xr), per_slice(Xs))):
-            ratio = {pair_name: round(synth_dprimes[pair_name] / real_dprimes[pair_name], 3) if real_dprimes[pair_name] == real_dprimes[pair_name] and real_dprimes[pair_name] > 0
+            ratio = {pair_name: round(synth_dprimes[pair_name] / real_dprimes[pair_name], 3)
+                     if real_dprimes[pair_name] == real_dprimes[pair_name] and real_dprimes[pair_name] > 0
                      else float("nan") for pair_name in real_dprimes}
             result[level] = {"real": real_dprimes, "synth": synth_dprimes, "ratio_synth_over_real": ratio}
         return result
@@ -131,7 +136,8 @@ class SynthFidelity:
     def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
         """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
         flat_intensities, flat_labels = x1c.reshape(-1), ym.reshape(-1)
-        pooled = {c: float(flat_intensities[flat_labels == c].std()) if int((flat_labels == c).sum()) > _MIN_DPRIME_PTS else float("nan")
+        pooled = {c: float(flat_intensities[flat_labels == c].std())
+                  if int((flat_labels == c).sum()) > _MIN_DPRIME_PTS else float("nan")
                   for c in range(n_classes)}
         per_slice_stds = {c: [] for c in range(n_classes)}
         for i in range(x1c.shape[0]):
@@ -139,7 +145,8 @@ class SynthFidelity:
             for c in range(n_classes):
                 if int((slice_labels == c).sum()) > _MIN_DPRIME_PTS:
                     per_slice_stds[c].append(float(slice_intensities[slice_labels == c].std()))
-        per_slice_means = {c: round(float(np.nanmean(values)), 3) if values else float("nan") for c, values in per_slice_stds.items()}
+        per_slice_means = {c: round(float(np.nanmean(values)), 3) if values else float("nan")
+                           for c, values in per_slice_stds.items()}
         return {"pooled": {_NAMES[c]: round(pooled[c], 3) for c in range(n_classes)},
                 "per_slice": {_NAMES[c]: per_slice_means[c] for c in range(n_classes)}}
 
@@ -186,7 +193,8 @@ class SynthFidelity:
             distances[_NAMES[c]] = round(self.wasserstein1d(real_class, synth_class, q), 3)
             if real_class.numel() and synth_class.numel():
                 loc[_NAMES[c]] = round(abs(float(real_class.mean()) - float(synth_class.mean())), 3)
-                shape[_NAMES[c]] = round(self.wasserstein1d(real_class - real_class.mean(), synth_class - synth_class.mean(), q), 3)
+                shape[_NAMES[c]] = round(
+                    self.wasserstein1d(real_class - real_class.mean(), synth_class - synth_class.mean(), q), 3)
             else:
                 loc[_NAMES[c]] = shape[_NAMES[c]] = float("nan")
         values = [value for value in distances.values() if not np.isnan(value)]              # drop NaN (absent classes)
@@ -195,7 +203,8 @@ class SynthFidelity:
                 "mean_w1": round(sum(values) / len(values), 3) if values else float("nan"),
                 "worst_class": worst}
 
-    def variance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], field: float | None = None) -> dict:
+    def variance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."],
+                 field: float | None = None) -> dict:
         """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
         pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
         generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
@@ -215,10 +224,13 @@ class SynthFidelity:
             for field_name, value in overrides.items():
                 setattr(knob_cfg, field_name, value)
             off_spread = synth_spread(knob_cfg)
-            deltas[name] = {level: {class_name: round(result["synth_baseline"][level][class_name] - off_spread[level][class_name], 3)
-                                  for class_name in off_spread[level] if result["synth_baseline"][level][class_name] == result["synth_baseline"][level][class_name]
-                                  and off_spread[level][class_name] == off_spread[level][class_name]}
-                            for level in ("pooled", "per_slice")}
+            deltas[name] = {
+                level: {class_name: round(
+                            result["synth_baseline"][level][class_name] - off_spread[level][class_name], 3)
+                        for class_name in off_spread[level]
+                        if result["synth_baseline"][level][class_name] == result["synth_baseline"][level][class_name]
+                        and off_spread[level][class_name] == off_spread[level][class_name]}
+                for level in ("pooled", "per_slice")}
         result["knob_delta"] = deltas
         return result
 
@@ -250,7 +262,8 @@ class SynthFidelity:
     @staticmethod
     def add_args(ap):
         ap.add_argument("--mode", choices=("distance", "separability", "variance"), default="distance")
-        ap.add_argument("--set", nargs="*", default=[], dest="overrides", help="synth cfg overrides, e.g. synth.bg_tiers=8")
+        ap.add_argument("--set", nargs="*", default=[], dest="overrides",
+                        help="synth cfg overrides, e.g. synth.bg_tiers=8")
         ap.add_argument("--by-vendor", action="store_true", help="distance mode: break down per scanner vendor")
         ap.add_argument("--by-field", action="store_true", help="variance mode: stratify by field (1.5/3T) too")
         ap.add_argument("--val-only", action="store_true", help="target = acdc-val only (default: ALL labelled "
@@ -288,7 +301,8 @@ class SynthFidelity:
         elif args.mode == "variance":
             fields = (None, 1.5, 3.0) if args.by_field else (None,)
             result = {str(field or "sweep"): fidelity.variance(X, Y, field=field) for field in fields}
-            result["real_vendor_bands"] = SynthFidelity.real_spread_bands(meta.filter(pl.col("labelled")), n_classes, data_cfg.size)
+            result["real_vendor_bands"] = SynthFidelity.real_spread_bands(
+                meta.filter(pl.col("labelled")), n_classes, data_cfg.size)
         else:
             result = fidelity.distance(X, Y)
         log.info(json.dumps(result, indent=2))

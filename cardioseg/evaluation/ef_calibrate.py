@@ -80,14 +80,17 @@ class EfCalibrate:
             resolved = Splits.resolve_cfg(data_cfg, meta)
             val, test = resolved.val.frame, resolved.test.frame
         else:
-            _, val, test = splits.Splits.make_split(meta, data_cfg.test_datasets, data_cfg.test_vendors, data_cfg.val_frac, 0,
-                                             val_datasets=data_cfg.val_datasets, val_vendors=data_cfg.val_vendors)
+            _, val, test = splits.Splits.make_split(
+                meta, data_cfg.test_datasets, data_cfg.test_vendors, data_cfg.val_frac, 0,
+                val_datasets=data_cfg.val_datasets, val_vendors=data_cfg.val_vendors)
         evaluator = Evaluator(model, device, EvalCfg(size=data_cfg.size, boundary=False))   # EF-only -> skip EDT
 
         _, val_ef_rows, _ = evaluator.validate(splits.Splits.paths(val))
         val_gt, val_pred = EfCalibrate._ef_pairs(val_ef_rows)
         cal = Measure.fit_ef_calibration(val_gt, val_pred)
-        log.info(f"fitted EF calibration on val (n={len(val_ef_rows)}): ef_corr = {cal.slope:.3f}*ef_pred + {cal.intercept:.2f}")
+        log.info(
+            f"fitted EF calibration on val (n={len(val_ef_rows)}): "
+            f"ef_corr = {cal.slope:.3f}*ef_pred + {cal.intercept:.2f}")
 
         axes = {"val": val_ef_rows}
         for vendor in data_cfg.test_vendors:
@@ -111,6 +114,7 @@ class EfCalibrate:
         tracked_run = tracker.track_run(run_dir=run)
         tracked_run.metric("ef_cal_slope", cal.slope); tracked_run.metric("ef_cal_intercept", cal.intercept)
         for name, ax in report["axes"].items():
-            tracked_run.metric(f"{name}_ef_mae_uncal", ax["mae"][0]); tracked_run.metric(f"{name}_ef_mae_cal", ax["mae"][1])
+            tracked_run.metric(f"{name}_ef_mae_uncal", ax["mae"][0])
+            tracked_run.metric(f"{name}_ef_mae_cal", ax["mae"][1])
         tracked_run.artifact(run / "plots" / "ef_calibration.json")
         tracked_run.end()

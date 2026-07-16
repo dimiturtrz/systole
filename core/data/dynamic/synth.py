@@ -168,7 +168,8 @@ class SynthCfg(BaseModel):
             for k in ("bg_tiers", "bg_blobs"):
                 if k in v:
                     val = v.pop(k)
-                    if not (k == "bg_tiers" and bg["mode"] == "procedural"):   # procedural dropped bg_tiers (fixed torso composition)
+                    # procedural dropped bg_tiers (fixed torso composition)
+                    if not (k == "bg_tiers" and bg["mode"] == "procedural"):
                         bg[k] = val
             v["bg"] = bg
         return v
@@ -232,7 +233,7 @@ class SynthCfg(BaseModel):
     blur: tuple[float, float] = (0.0, 1.0)          # extra Gaussian blur σ (resolution)
     noise: float = Field(0.05, ge=0)               # Rician noise std (post-paint, pre-z-score)
     noise_bandlimited: bool = False                # add noise BEFORE blur/k-space (acquisition band-limits it) vs white
-    contrast_random: float = Field(0.0, ge=0, le=1)  # unconstrain heart-class contrast (SynthSeg GMM); 0=physics 1=random
+    contrast_random: float = Field(0.0, ge=0, le=1)  # unconstrain heart contrast (SynthSeg GMM); 0=physics 1=random
 
 
 class Background(ABC):
@@ -244,7 +245,8 @@ class Background(ABC):
 
     @abstractmethod                                          #         must line up with the real hole)
     def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev,
-               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
+               ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         """-> (ext [B,H,W] long, n_paint). bg pixels (label 0) may be relabeled to n_classes+tier."""
 
     def compose(self, img: Float[torch.Tensor, "*b 1 *h *w"], mask: Integer[torch.Tensor, "*b *grid"],
@@ -508,7 +510,8 @@ class SynthPainter:
         if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
             for c in MriPhysics.blood_classes(n_classes):
                 mu[:, c] = mu[:, c] * cfg.blood_scale
-        if cfg.contrast_random > 0:                   # SynthSeg-style: unconstrain heart contrast (break physics ordering)
+        # SynthSeg-style: unconstrain heart contrast (break physics ordering)
+        if cfg.contrast_random > 0:
             lo, hi = float(mu.abs().amin()), float(mu.abs().amax())
             rand = torch.rand(b, n_classes - 1, device=dev) * (hi - lo) + lo
             mu[:, 1:n_classes] = (1 - cfg.contrast_random) * mu[:, 1:n_classes] + cfg.contrast_random * rand
@@ -555,7 +558,8 @@ class SynthPainter:
             img = img * field
     
         if cfg.noise > 0 and cfg.noise_bandlimited:
-            img = SynthPainter._rician(img, cfg.noise)     # co-limited: blur/k-space below band-limit it like the signal
+            # co-limited: blur/k-space below band-limit it like the signal
+            img = SynthPainter._rician(img, cfg.noise)
 
         # --- random Gaussian blur (resolution variation); single σ per call (varies every batch) ---
         bl_lo, bl_hi = cfg.blur

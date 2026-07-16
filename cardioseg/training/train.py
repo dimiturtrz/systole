@@ -118,7 +118,9 @@ class Train:
 
     @staticmethod
     @shapecheck
-    def val_dice(model, Ximg: Float[torch.Tensor, "n c h w"], Ymsk: Integer[torch.Tensor, "n h w"], batch: int, device) -> float:
+    def val_dice(
+        model, Ximg: Float[torch.Tensor, "n c h w"], Ymsk: Integer[torch.Tensor, "n h w"], batch: int, device,
+    ) -> float:
         """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
         Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
         inter = dict.fromkeys(FOREGROUND, 0.0)
@@ -163,7 +165,9 @@ class Train:
                     Xr, Yr = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(train_df), d.size, data_device)
                     Xr = SynthPainter.excise_heart(Xr, Yr)
                     Xtr = Xr[torch.randint(Xr.shape[0], (Ytr.shape[0],), device=Xr.device)]
-                    log.info("ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode)
+                    log.info(
+                        "ANATOMY POOL: %d Rodero on real bg (excised, %s)", Ytr.shape[0], cfg.generator.synth.bg.mode,
+                    )
         else:
             Xtr, Ytr = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(train_df), d.size, data_device)
         Xva, Yva = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_df), d.size, data_device)
@@ -171,7 +175,7 @@ class Train:
         return gen, Xva, Yva
 
     @staticmethod
-    def _run_seeds(cfg: TrainCfg, seeds: list, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover  (per-seed GPU train loop)
+    def _run_seeds(cfg: TrainCfg, seeds: list, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover
         """Train each seed on the shared bundle. Between seeds (multi-seed A/B only) move the finished seed's
         weights to host + reclaim its CUDA pool, so a later seed's memory-heavy TTA test doesn't OOM (bd fpav)."""
         res = []
@@ -184,7 +188,7 @@ class Train:
         return res[0] if len(seeds) == 1 else res
 
     @staticmethod
-    def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):  # pragma: no cover  (composition root: store.load + split + VRAM preload + per-seed GPU training)
+    def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):  # pragma: no cover
         """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
         list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
         ONCE and shared across seeds (`SeedTrainer` does the per-seed work) — N seeds cost 1×data + N×model,
@@ -217,7 +221,8 @@ class Train:
                 train_src, val_src = r.train, r.val      # Sources (static OR dynamic) -> the train_gen seam
                 test_df = r.test.frame                   # test + val are always StaticSource (frozen real)
                 val_df = r.val.frame                     # val is real -> its frame drives scoring/export/params
-                train_df = r.train.frame if r.train.kind == "static" else None   # dynamic train has no frame (counts via tensors)
+                # dynamic train has no frame (counts via tensors)
+                train_df = r.train.frame if r.train.kind == "static" else None
                 log.info("split=%s@%s test_hash=%s | train=%s val=%s test n=%d",
                          d.split.split("@")[0], r.version, r.test_hash[:19], r.train.kind, r.val.kind, len(test_df))
             else:
@@ -279,7 +284,7 @@ class SeedTrainer:
     shared data (resident tensors, val, aux EF lanes) comes via `sh`. Construct per seed, call .run().
     N seeds cost 1xdata + Nxmodel. (bd 01fh: former _train_loop/_finalize threaded ~10 args -> methods.)"""
 
-    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover  (builds a GPU model/optimizer/tracker on the resident data bundle)
+    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover
         self.cfg, self.seed, self.sh, self.alias, self.quick = cfg, seed, sh, alias, quick
         self.d = cfg.generator.data
         self.device, self.pin, self.gen, self.aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
@@ -330,7 +335,7 @@ class SeedTrainer:
         self.trk.end()
         return self.model, results
 
-    def _train_loop(self):  # pragma: no cover  (the GPU forward/backward epoch loop — needs a real model + resident batches)
+    def _train_loop(self):  # pragma: no cover
         """The epoch loop for one seed — a long but LINEAR procedure (the training step, by nature): each
         epoch forward/loss/backward over the resident batches (+ the EF aux-lane nudge folded into one seg
         step), then a fast batched val-Dice for early stopping. Returns the best-val `state_dict` (or None)."""
@@ -343,7 +348,7 @@ class SeedTrainer:
         for ep in range(cfg.epochs):                            # cfg.epochs is a ceiling — early stopping bails sooner
             t0 = time.perf_counter()
             model.train()
-            loss_fn.epoch = ep                                 # drives the HD-warmup ramp (dice_ce_hd); no-op for others
+            loss_fn.epoch = ep     # drives the HD-warmup ramp (dice_ce_hd); no-op for others
             tot = 0.0
             perm = torch.randperm(gen.n, device=gen.device)   # shuffle on the data's device
             for bi in Obs.progress(range(nb), f"epoch {ep}", total=nb):
@@ -453,7 +458,7 @@ class SeedTrainer:
 if __name__ == "__main__":
     # Defaults = the generalization split (hold out ACDC + Canon). Change the split via the criteria
     # on DataCfg with --set, e.g. legacy train M&M-2 -> test ACDC:
-    #   --set generator.data.sources=('mnm2','acdc') generator.data.test_datasets=('acdc',) generator.data.test_vendors=()
+    #   --set generator.data.sources=('mnm2','acdc') generator.data.test_datasets=('acdc',) generator.data.test_vendors=()  # noqa: E501
     ap = argparse.ArgumentParser(description="train a 2D U-Net from a TrainCfg (split = DataCfg criteria)")
     ap.add_argument("--epochs", type=int); ap.add_argument("--batch", type=int)
     ap.add_argument("--patience", type=int); ap.add_argument("--workers", type=int)
@@ -480,7 +485,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     cfg = TrainCfg()
-    if args.split:                                      # coded-filter family owns the partition (core.data.ingest.splits)
+    if args.split:     # coded-filter family owns the partition (core.data.ingest.splits)
         name = args.split.split("@", 1)[0]
         if name not in Splits.list_splits():
             raise SystemExit(f"unknown split {name!r}; known: {Splits.list_splits()}")

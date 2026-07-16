@@ -333,7 +333,8 @@ class Mrxcat:
         bs.add_argument("--size", type=int, default=DEFAULT_SIZE)
         bs.add_argument("--scale", type=float, default=3.0)
 
-        tf = sub.add_parser("torso-fractions", help="fov pool -> TORSO_BG bg-tissue area fractions (reproduces mri_physics.TORSO_BG)")
+        tf = sub.add_parser("torso-fractions",
+                            help="fov pool -> TORSO_BG bg-tissue area fractions (reproduces mri_physics.TORSO_BG)")
         tf.add_argument("--pool", required=True, help="whole-FOV pool npz (from build-fov-pool)")
 
     @classmethod

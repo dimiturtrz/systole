@@ -30,7 +30,8 @@ _MAP = {
     "HCM": PathologyClass.HYPERTROPHIC, "HHD": PathologyClass.HYPERTROPHIC,   # HHD = hypertensive -> hypertrophic
     "MINF": PathologyClass.ISCHEMIC, "IHD": PathologyClass.ISCHEMIC,     # infarct / ischemic
     "RV": PathologyClass.RV_CONGENITAL, "ARV": PathologyClass.RV_CONGENITAL, "ARR": PathologyClass.RV_CONGENITAL,
-    "FALL": PathologyClass.RV_CONGENITAL, "TRI": PathologyClass.RV_CONGENITAL,   # Fallot / tricuspid / arrhythmogenic-RV
+    # Fallot / tricuspid / arrhythmogenic-RV
+    "FALL": PathologyClass.RV_CONGENITAL, "TRI": PathologyClass.RV_CONGENITAL,
     # ambiguous -> other: CIA, AHS, LVNC, Other
 }
 

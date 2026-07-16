@@ -42,8 +42,10 @@ class Build:
     load_arrays = staticmethod(Store.load_arrays)
 
     @staticmethod
-    def build(name: str, recipe: Recipe | None = None, *, workers: int | None = None,  # pragma: no cover  npz writes over real adapter volumes (preprocess_case reads NIfTI/DICOM); meta core = MetaBuilder, tested
-              rebuild: bool = False, nyul_standard=None) -> Path:
+    def build(  # pragma: no cover  npz writes over real adapter volumes (preprocess_case reads NIfTI/DICOM)
+        name: str, recipe: Recipe | None = None, *, workers: int | None = None,
+        rebuild: bool = False, nyul_standard=None,
+    ) -> Path:
         """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
 
         Process-if-missing: skips subjects already written; re-emits meta.csv each call. Parallel
@@ -66,7 +68,8 @@ class Build:
 
         if todo:
             workers = workers or max(1, (os.cpu_count() or 4) - 2)
-            log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)", name, len(todo), out, workers, recipe.n4)
+            log.info("consolidating %s: %d subjects -> %s (%d threads, n4=%s)",
+                     name, len(todo), out, workers, recipe.n4)
             with ThreadPoolExecutor(max_workers=workers) as ex:
                 for _ in Obs.progress(ex.map(_one, todo), f"consolidate {name}", total=len(todo)):
                     pass
@@ -92,7 +95,7 @@ class Build:
         for name in names:
             out = store.dataset_dir(name)
             if not (out / "meta.csv").exists():
-                Build.build(name, recipe, workers=workers, nyul_standard=std)  # pragma: no cover  triggers a real consolidation build (reads adapter data from disk)
+                Build.build(name, recipe, workers=workers, nyul_standard=std)  # pragma: no cover  real build from disk
             # Pin `labelled` to Boolean — don't rely on polars schema inference (newer polars reads the
             # "true"/"false" column as String, breaking the `pl.col('labelled')` filter cross-platform).
             df = pl.read_csv(out / "meta.csv", infer_schema_length=10000,

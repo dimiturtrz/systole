@@ -73,7 +73,9 @@ def test_render_card_reads_flat_config_data():
 
 def test_render_card_appends_reference_section():
     """Ref class: a passed ref_section list is appended verbatim (the reference-ranges block)."""
-    md = ModelCard.render_card("r", _cfg(), _metrics(), ref_section=["", "## Reference ranges (derived from our GT, for context)"])
+    md = ModelCard.render_card(
+        "r", _cfg(), _metrics(), ref_section=["", "## Reference ranges (derived from our GT, for context)"],
+    )
     assert "## Reference ranges" in md
 
 

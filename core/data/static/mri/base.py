@@ -131,7 +131,8 @@ class Base:
                 for row in csv.DictReader(f):
                     k = (row.get(key_col) or (row.get(alt_key_col) if alt_key_col else None) or "").strip()
                     if k:
-                        info[key_transform(k) if key_transform else k] = {kk: (vv or "").strip() for kk, vv in row.items()}
+                        kt = key_transform(k) if key_transform else k
+                        info[kt] = {kk: (vv or "").strip() for kk, vv in row.items()}
         _CSV_CACHE[cache_key] = info
         return info
 
@@ -178,7 +179,8 @@ class Base:
         return out
 
     @staticmethod
-    def identify_lv_cavity(mask: Integer[np.ndarray, "*grid"], myo_label: int = LV_MYO) -> tuple[int | None, dict[int, float]]:
+    def identify_lv_cavity(mask: Integer[np.ndarray, "*grid"], myo_label: int = LV_MYO,
+                           ) -> tuple[int | None, dict[int, float]]:
         """Geometrically identify the LV-cavity label: the non-myo foreground label most enclosed
         by the myocardium ring. Trusts geometry, not a remembered int. mask [D,H,W] or [H,W].
         Returns (lv_label, scores) where score = fraction of a label's shell touching myocardium."""

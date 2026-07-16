@@ -35,7 +35,8 @@ class SplitDef:
 class Split(Protocol):
     name: str
     versions: dict[str, SplitDef]
-    sources: tuple[str, ...] = ()      # extra store sources the family needs beyond DataCfg.sources (StaticAll adds scd)
+    # extra store sources the family needs beyond DataCfg.sources (StaticAll adds scd)
+    sources: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

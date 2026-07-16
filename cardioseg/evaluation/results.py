@@ -71,7 +71,9 @@ class Results:
         correction) adds the disclosed `ef_*_cal` companions alongside the raw EF — never replaces them."""
         dice, hd95, assd = {}, {}, {}
         for cl, (name, _) in CLASSES.items():
-            pooled = np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
+            pooled = (
+                np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
+            )
             nan = float("nan")
             surf = Evaluate.surface_metrics(pooled) if pooled.size else SurfaceMetrics(nan, nan, nan)
             dice[name] = round(float(np.mean(dice_acc[cl])), 3)
@@ -87,7 +89,7 @@ class Results:
         return out
 
     @staticmethod
-    def _collect(run: Path, device: str, df, *, with_strata: bool) -> "_Collected":  # pragma: no cover  (collect = GPU inference over the val/test frame)
+    def _collect(run: Path, device: str, df, *, with_strata: bool) -> "_Collected":  # pragma: no cover
         """GPU shell for one axis: pooled boundary dists + per-class dice + EF pairs (+ pathology strata).
         Returns raw pieces so `build` can fit the calibration on VAL before assembling any axis."""
         rows = Distribution.collect(run, device, df.iter_rows(named=True))

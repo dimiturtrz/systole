@@ -56,7 +56,8 @@ class ACDCSliceDataset(Dataset):
         self.owners: list[int] = []                      # per-slice index into npz_paths (for per-slice meta)
         self.frames = frames
         self.augment = augment
-        for pi, p in enumerate(Obs.progress(npz_paths, f"load {'aug' if augment else 'val'} npz", total=len(npz_paths))):
+        desc = f"load {'aug' if augment else 'val'} npz"
+        for pi, p in enumerate(Obs.progress(npz_paths, desc, total=len(npz_paths))):
             case = load_arrays(p)
             for tag in frames:
                 img = case.get(f"{tag.lower()}_img")     # [D, H, W]

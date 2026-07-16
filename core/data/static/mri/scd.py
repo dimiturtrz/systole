@@ -128,17 +128,19 @@ class ScdAdapter(DatasetAdapter):
             dcm = next(iter(sax.glob(f"*-{inst}.dcm")), None)
             if dcm is None:
                 continue
-            img, (sy, sx), meta = Dicom.read_image(dcm)      # pragma: no cover  reads a real SCD DICOM slice; mask/ED-ES cores (_rasterize, select_ed_es, _read_contour) tested with synthetic arrays/files
+            img, (sy, sx), meta = Dicom.read_image(dcm)      # pragma: no cover  reads a real SCD DICOM slice
             loc = round(float(meta.get("slice_loc", "0")), 1)  # pragma: no cover
             endo = self._read_contour(ic)                    # pragma: no cover
             ocf = ic.with_name(ic.name.replace("icontour", "ocontour"))  # pragma: no cover
             epi = self._read_contour(ocf) if ocf.exists() else None   # pragma: no cover
             mask = self._rasterize(endo, epi, img.shape)     # pragma: no cover
-            by_slice[loc].append({"loc": loc, "area": int((mask == 3).sum()), "img": img, "mask": mask, "px": (sy, sx)})  # noqa: PLR2004 (3 = LV-cav)  # pragma: no cover
+            by_slice[loc].append(  # pragma: no cover
+                {"loc": loc, "area": int((mask == 3).sum()),  # noqa: PLR2004 (3 = LV-cav)
+                 "img": img, "mask": mask, "px": (sy, sx)})
 
         if not by_slice:
             return out
-        ed_i, es_i, spacing = self.select_ed_es(by_slice)    # pragma: no cover  only reached with real gathered DICOM recs; select_ed_es tested directly
+        ed_i, es_i, spacing = self.select_ed_es(by_slice)    # pragma: no cover  needs real gathered DICOM recs
         out["spacing"] = spacing                             # pragma: no cover
         for tag, recs in ((Phase.ED, ed_i), (Phase.ES, es_i)):       # pragma: no cover
             out[tag] = {"img": np.stack([r["img"] for r in recs]).astype(np.float32),  # pragma: no cover
@@ -154,7 +156,7 @@ class ScdAdapter(DatasetAdapter):
              "centre": "Sunnybrook Health Sciences Centre", "country": "Canada"}   # single-centre Toronto
         sax = self._sax_series_dir(case)                                  # real acquisition + scanner from DICOM —
         dcm = next(iter(sax.glob("*.dcm")), None) if sax else None        # the TR/TE/flip/model the NIfTI sets lack
-        if dcm is not None:                                              # pragma: no cover  reads a real SCD DICOM header for acquisition tags
+        if dcm is not None:  # pragma: no cover  reads a real SCD DICOM header for acquisition tags
             _, _, d = Dicom.read_image(dcm)
             m.update(tr_ms=d.get("tr_ms"), te_ms=d.get("te_ms"), flip_deg=d.get("flip_deg"),
                      field_T=d.get("field_T"), scanner=d.get("scanner"), institution=d.get("institution"))

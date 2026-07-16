@@ -288,7 +288,7 @@ Publishing to GitHub Pages — one repo = one Pages site, so pick ONE of:
   - uses: astral-sh/setup-uv@v5
   - name: Architecture view (/architecture/)
     run: |
-      uv run --no-project --with "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.10.0#subdirectory=sdlc-devtools" \
+      uv run --no-project --with "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.12.0#subdirectory=sdlc-devtools" \
         python -c "from devtools.archmap import Archmap; Archmap(['core', 'cardioseg']).write_viewer(project='cardioseg')"
       mkdir -p _site/architecture
       cp docs/architecture/graph.json docs/architecture/index.html _site/architecture/
@@ -309,6 +309,20 @@ import as `devtools`, so gates run as `uv run --extra devtools python -m devtool
 shape_contracts|lcom> <packages>`; the ast-grep shape rules and jscpd config ship inside the package and
 are located with `python -m devtools.config sgconfig|jscpd`. The `[tool.structure]` / `[tool.magic_literals]`
 / `[tool.shape_contracts]` blocks in `pyproject.toml` tune them.
+
+### Local hooks
+
+The same gates CI enforces are bound to git events via pre-commit. Install **both** stages:
+
+```bash
+pre-commit install                        # commit stage — fast static gates (ruff/vulture/arch-fitness/…)
+pre-commit install --hook-type pre-push   # push stage — fast unit suite (tests/unit)
+```
+
+The pre-push hook runs `pytest tests/unit` so a change that lints clean but breaks a test **contract** (a
+signature change a mirror test still calls the old way) is caught before the push, not after CI goes red. It
+is deliberately push-only (not every commit) and unit-only (no integration/e2e); the coverage floor stays a
+CI job. The default `pre-commit install` does **not** wire pre-push — run the second line once per clone.
 
 ## References
 - **ACDC** — Bernard et al., *Deep Learning Techniques for Automatic MRI Cardiac Multi-structures

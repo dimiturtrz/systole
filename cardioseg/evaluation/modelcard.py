@@ -60,7 +60,7 @@ class ModelCard:
         return rows
 
     @staticmethod
-    def _reference_section() -> list[str]:  # pragma: no cover  (probes the on-disk <data>/reference/ store; row formatting is reference_rows)
+    def _reference_section() -> list[str]:  # pragma: no cover
         """Surface the derived reference ranges (with cohort provenance) IF the local reference store is
         present; omitted entirely when absent (graceful fallback — the card still generates on a fresh
         clone with no <data>/reference/). Shows provenance regardless of verified, but only verified
@@ -104,7 +104,8 @@ class ModelCard:
         ]
         if "val" in res:
             parts += ["### Validation (in-domain)", ModelCard._perf_table(res["val"]),
-                      f"\nEF vs GT: **MAE {res['val'].get('ef_mae', float('nan')):.1f}%** (n={len(res['val'].get('ef_rows', []))})."]
+                      f"\nEF vs GT: **MAE {res['val'].get('ef_mae', float('nan')):.1f}%** "
+                      f"(n={len(res['val'].get('ef_rows', []))})."]
         test_key = next((k for k in res if k.startswith("test")), None)
         if test_key:
             t = res[test_key]
@@ -130,7 +131,7 @@ class ModelCard:
         return "\n".join(parts) + "\n"
 
     @staticmethod
-    def generate(run_dir: str | Path) -> Path:  # pragma: no cover  (reads config.json/metrics.json + reference store, writes MODEL_CARD.md — render_card is the pure core)
+    def generate(run_dir: str | Path) -> Path:  # pragma: no cover
         run = Path(run_dir)
         cfg = json.loads((run / "config.json").read_text())
         m = json.loads((run / "metrics.json").read_text())

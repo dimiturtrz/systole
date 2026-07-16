@@ -76,7 +76,7 @@ class _ClassScores:
         if not self.boundary:                                           # Dice/EF-only sweep — skip the EDT cost
             return
         for cl in CLASS_NAMES:
-            surface_dist = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm) — inherently per-label
+            surface_dist = Evaluate.surface_distances(pred, gt, cl, spacing)   # 3D boundary distances (mm), per-label
             if surface_dist.size:
                 metrics = Evaluate.surface_metrics(surface_dist)
                 self.surf[cl]["hd95"].append(metrics.hd95); self.surf[cl]["assd"].append(metrics.assd)
@@ -104,7 +104,9 @@ class Evaluator:
 
     @staticmethod
     @shapecheck
-    def _foreground_samples(logits: Float[np.ndarray, "*n c"], y: Integer[np.ndarray, "*n"], per_vol, rng) -> tuple[Float[np.ndarray, "*m c"], Integer[np.ndarray, "*m"]]:
+    def _foreground_samples(
+        logits: Float[np.ndarray, "*n c"], y: Integer[np.ndarray, "*n"], per_vol, rng
+    ) -> tuple[Float[np.ndarray, "*m c"], Integer[np.ndarray, "*m"]]:
         """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
         (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
         pred = logits.argmax(1)
@@ -156,7 +158,10 @@ class Evaluator:
             for tag in (phase.lower() for phase in Phase):
                 if f"{tag}_img" not in case:
                     continue
-                squared_slices = np.stack([Preprocess.fit_square(slice_img.astype(np.float32), size, 0.0) for slice_img in case[f"{tag}_img"]])
+                squared_slices = np.stack([
+                    Preprocess.fit_square(slice_img.astype(np.float32), size, 0.0)
+                    for slice_img in case[f"{tag}_img"]
+                ])
                 gt = Preprocess.stack_slices(case[f"{tag}_gt"], size, dtype=np.int64)
                 with torch.no_grad():
                     logits = self.model(torch.from_numpy(squared_slices)[:, None].to(self.device))   # [D,C,H,W]

@@ -44,8 +44,9 @@ class Eda:
             img, gt = case_data[tag]["img"], case_data[tag]["gt"]
             anisotropy = max(spacing) / min(spacing)
             lv, scores = Base.identify_lv_cavity(gt)
+            spacing_mm = tuple(round(float(spacing_value), 2) for spacing_value in spacing)
             log.info(f"  {tag}: shape={img.shape} spacing(z,y,x)="
-                  f"{tuple(round(float(spacing_value),2) for spacing_value in spacing)} mm  anisotropy={anisotropy:.1f}x")
+                  f"{spacing_mm} mm  anisotropy={anisotropy:.1f}x")
             log.info(f"      labels={np.unique(gt).tolist()}  img range=[{img.min():.0f},{img.max():.0f}]")
             log.info(f"      myo-enclosure score={ {label: round(score,2) for label,score in scores.items()} }"
                   f"  -> LV cavity = label {lv}")
