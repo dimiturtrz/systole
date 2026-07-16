@@ -5,8 +5,11 @@ Two modes, one entry (`python -m cardioseg.evaluation rv_omission --run <zero-re
 - **probe** (nttu.5 root-cause): on every slice where GT-RV is present but argmax omits it (<OMIT_PX RV
   pixels, PRE-largest-CC), is there raw RV softmax to recover (recall/threshold-fixable) or is it truly
   zero (coverage/detection-absent)? Splits the tail and names the winning class in the GT-RV region.
-- **bias** (nttu.7 lever): sweep a constant added to the RV logit pre-softmax; report per-class Dice on
-  VAL (selection, leak-free) + a test set (transfer). Confirms TARGETED recall recovers the tail for free.
+- **bias** (nttu.7/we55 lever): fit a constant added to the RV logit pre-softmax on VAL (leak-free dose-
+  response → `select_bias`, best mean Dice with a cav-regression guard), then apply that one b* to the
+  model's own cross-vendor TEST, reported pooled + PER-VENDOR. The verdict (49b7) predicts the biggest
+  lift on the unseen vendors (GE/Canon), where RV collapses under OOD color. `core.inference.Inference`
+  carries the fitted b* as an opt-in `logit_bias` for the real pipeline.
 
 Zero-real models live in staging (unregistered), so `--run` is explicit (a run dir / alias / id resolvable
 by the registry), e.g. `--run .staging/refac_proc`.
@@ -82,11 +85,28 @@ class RvOmission:
         return torch.stack(flips).mean(0).argmax(1).to(torch.uint8).cpu().numpy()
 
     @staticmethod
+    def select_bias(sweep: dict[float, dict[str, float]], *, cav_guard: float = 0.01) -> float:
+        """Val-best RV bias by mean foreground Dice, guarding cav against regressing more than `cav_guard`
+        below the unbiased (b=0) cav — nttu.7: over-biasing RV steals softmax mass from the cavity (the
+        other blood pool). b=0 is always eligible, so a lever that only hurts falls back to no bias. Pure —
+        the leak-free selection (fit on VAL only), testable off-GPU."""
+        base_cav = sweep[0.0]["cav"]
+        best_b, best_mean = 0.0, -1.0
+        for b, d in sorted(sweep.items()):
+            if d["cav"] < base_cav - cav_guard:
+                continue
+            m = float(np.mean(list(d.values())))
+            if m > best_mean:
+                best_mean, best_b = m, b
+        return best_b
+
+    @staticmethod
     def add_args(ap):
         ap.add_argument("--run", required=True,
                         help="zero-real model (run dir / alias / id), e.g. .staging/refac_proc")
         ap.add_argument("--mode", choices=("probe", "bias"), default="probe")
-        ap.add_argument("--testset", default="cmrxmotion", help="eval set for probe / bias-transfer")
+        ap.add_argument("--testset", default="cmrxmotion",
+                        help="probe eval set (bias uses the model's own val/test split)")
 
     @staticmethod
     def _load(run_ref: str):  # pragma: no cover  (registry resolve + torch model load)
@@ -132,42 +152,67 @@ class RvOmission:
         return verdict
 
     @staticmethod
-    def _bias(model, cfg, device, val_frame, test_frame):  # pragma: no cover  (GPU sweep over two frames)
+    def _mean(d: dict[str, float]) -> float:
+        return float(np.mean([d[c] for c in FOREGROUND]))
+
+    @staticmethod
+    def _score_cases(model, cfg, device, frame, biases):  # pragma: no cover  (GPU forward per case)
+        """Per-case foreground Dice at each bias, keeping the case vendor. Forward runs ONCE per case;
+        the bias is a cheap logit add on the cached logits. Returns [(vendor, {b: {class: dice}})]."""
         size = cfg.generator.data.size
+        cases = []
+        for r in frame.iter_rows(named=True):
+            case = Store.load_arrays(r["path"])
+            gt = Preprocess.stack_slices(case["ed_gt"], size)
+            lg, d = RvOmission._logits(model, case["ed_img"], size, device)
+            per = {}
+            for b in biases:
+                pred = Postprocess.largest_cc_per_class(RvOmission.biased_pred(lg, d, b))
+                per[b] = {c: float(Evaluate.dice(pred, gt, lab)) for c, lab in FOREGROUND.items()}
+            cases.append((r.get("vendor"), per))
+        return cases
 
-        def score(frame):
-            cache = []
-            for r in frame.iter_rows(named=True):
-                case = Store.load_arrays(r["path"])
-                gt = Preprocess.stack_slices(case["ed_gt"], size)
-                lg, d = RvOmission._logits(model, case["ed_img"], size, device)
-                cache.append((lg, d, gt))
-            out = {}
-            for b in BIASES:
-                per = {c: [] for c in FOREGROUND}
-                for lg, d, gt in cache:
-                    pred = Postprocess.largest_cc_per_class(RvOmission.biased_pred(lg, d, b))
-                    for c, lab in FOREGROUND.items():
-                        per[c].append(Evaluate.dice(pred, gt, lab))
-                out[b] = {c: float(np.mean(v)) for c, v in per.items()}
-            return out
+    @staticmethod
+    def _agg(cases, biases) -> dict[float, dict[str, float]]:
+        """Pooled mean per-bias per-class over [(vendor, {b:{class:dice}})]."""
+        return {b: {c: float(np.mean([pc[b][c] for _, pc in cases])) for c in FOREGROUND} for b in biases}
 
-        for name, frame in (("VAL (selection)", val_frame), ("TEST (transfer)", test_frame)):
-            res = score(frame)
-            log.info("=== %s n=%d ===  bias  RV     myo    cav    mean", name, len(frame))
-            for b in BIASES:
-                dd = res[b]
-                log.info("  b=%-4.1f %.3f  %.3f  %.3f  %.3f", b, dd["RV"], dd["myo"], dd["cav"],
-                         float(np.mean([dd[c] for c in FOREGROUND])))
-        return None
+    @staticmethod
+    def _report(agg, label, b_star):  # pragma: no cover  (logging)
+        base, biased = agg[0.0], agg[b_star]
+        log.info("=== %s ===  RV     myo    cav    mean", label)
+        for tag, dd in ((f"b=0.0 {'':4}", base), (f"b={b_star:<4.1f}", biased)):
+            log.info("  %s %.3f  %.3f  %.3f  %.3f", tag, dd["RV"], dd["myo"], dd["cav"], RvOmission._mean(dd))
+        log.info("  Δ       %+.3f %+.3f %+.3f %+.3f", biased["RV"] - base["RV"], biased["myo"] - base["myo"],
+                 biased["cav"] - base["cav"], RvOmission._mean(biased) - RvOmission._mean(base))
+
+    @staticmethod
+    def _bias(model, cfg, device, val_frame, test_frame):  # pragma: no cover  (GPU sweep + fit + transfer)
+        # fit on VAL (leak-free): full dose-response, then select b* (best mean, cav-guarded)
+        val_sweep = RvOmission._agg(RvOmission._score_cases(model, cfg, device, val_frame, BIASES), BIASES)
+        log.info("=== VAL dose-response (selection) n=%d ===  bias  RV     myo    cav    mean", len(val_frame))
+        for b in BIASES:
+            dd = val_sweep[b]
+            log.info("  b=%-4.1f %.3f  %.3f  %.3f  %.3f", b, dd["RV"], dd["myo"], dd["cav"], RvOmission._mean(dd))
+        b_star = RvOmission.select_bias(val_sweep)
+        log.info(">>> selected RV logit-bias b*=%.1f (val mean %.3f vs b=0 %.3f)", b_star,
+                 RvOmission._mean(val_sweep[b_star]), RvOmission._mean(val_sweep[0.0]))
+        if b_star == 0.0:
+            log.info("no bias improves val mean without cav regression — lever declined (keep b=0)")
+            return
+        # apply ONCE to test: pooled + per-vendor (the verdict predicts the biggest lift on unseen vendors)
+        test_cases = RvOmission._score_cases(model, cfg, device, test_frame, (0.0, b_star))
+        RvOmission._report(RvOmission._agg(test_cases, (0.0, b_star)), f"TEST pooled n={len(test_cases)}", b_star)
+        for v in sorted({str(v) for v, _ in test_cases}):
+            sub = [(vv, pc) for vv, pc in test_cases if str(vv) == v]
+            RvOmission._report(RvOmission._agg(sub, (0.0, b_star)), f"TEST {v} n={len(sub)}", b_star)
 
     @staticmethod
     def run(args):  # pragma: no cover  (loads a zero-real model + GPU inference over eval frames)
         model, cfg, device = RvOmission._load(args.run)
-        test_frame = splits.Splits.eval_set(args.testset)
         if args.mode == "probe":
-            RvOmission._probe(model, cfg, device, test_frame)
+            RvOmission._probe(model, cfg, device, splits.Splits.eval_set(args.testset))
         else:
             meta = store.load(list(cfg.generator.data.sources))
-            val_frame = ModelSplit(cfg.generator.data, meta).val
-            RvOmission._bias(model, cfg, device, val_frame, test_frame)
+            model_split = ModelSplit(cfg.generator.data, meta)
+            RvOmission._bias(model, cfg, device, model_split.val, model_split.test)

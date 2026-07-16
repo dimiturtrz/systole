@@ -53,6 +53,30 @@ def test_split_verdict_empty():
     assert np.isnan(v["med"])
 
 
+def test_select_bias_picks_best_mean_when_cav_held():
+    # RV rises with b, cav flat -> pick the b with the best foreground mean (b=2.0 here).
+    sweep = {0.0: {"RV": 0.40, "myo": 0.60, "cav": 0.70},
+             1.0: {"RV": 0.46, "myo": 0.60, "cav": 0.70},
+             2.0: {"RV": 0.50, "myo": 0.59, "cav": 0.70}}
+    assert RvOmission.select_bias(sweep) == 2.0
+
+
+def test_select_bias_guards_cav_regression():
+    # b=2.0 has the best mean BUT cav drops 0.70->0.66 (> guard 0.01) -> declined; b=1.0 kept.
+    sweep = {0.0: {"RV": 0.40, "myo": 0.60, "cav": 0.70},
+             1.0: {"RV": 0.47, "myo": 0.60, "cav": 0.70},
+             2.0: {"RV": 0.60, "myo": 0.60, "cav": 0.66}}
+    assert RvOmission.select_bias(sweep) == 1.0
+
+
+def test_select_bias_declines_when_lever_only_hurts():
+    # every b < b=0 mean (or breaks the cav guard) -> fall back to no bias.
+    sweep = {0.0: {"RV": 0.50, "myo": 0.60, "cav": 0.70},
+             1.0: {"RV": 0.48, "myo": 0.59, "cav": 0.69},
+             2.0: {"RV": 0.45, "myo": 0.58, "cav": 0.62}}
+    assert RvOmission.select_bias(sweep) == 0.0
+
+
 def test_biased_pred_tilts_rv_over_bg():
     # one slice, 2 classes-of-interest: RV logit just under bg -> a large positive bias flips argmax to RV.
     d, c, h, w = 1, 4, 2, 2

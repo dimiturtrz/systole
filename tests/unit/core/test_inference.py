@@ -52,6 +52,20 @@ def test_predict_volume_no_tta_shape(model):
     assert pred.shape == (2, SIZE, SIZE) and pred.dtype == np.uint8
 
 
+def test_logit_bias_shifts_prediction(model):
+    """The opt-in per-class logit prior (we55) tilts argmax; a huge bias forces a class everywhere on
+    BOTH the TTA and non-TTA paths, and logit_bias=None is identical to the unbiased path."""
+    vol = np.random.RandomState(3).randn(2, 32, 32).astype(np.float32)
+    base = Inference(model, SIZE, "cpu").predict_volume(vol, tta=True)
+    assert np.array_equal(base, Inference(model, SIZE, "cpu", logit_bias=None).predict_volume(vol, tta=True))
+    forced = Inference(model, SIZE, "cpu", logit_bias=[0.0, 0.0, 0.0, 100.0]).predict_volume(vol, tta=True)
+    assert (forced == 3).all()                                    # huge cav bias -> all cav (TTA path)
+    assert (Inference(model, SIZE, "cpu", logit_bias=[0.0, 0.0, 0.0, 100.0])
+            .predict_volume(vol, tta=False) == 3).all()           # ... and the non-TTA path
+    more_rv = Inference(model, SIZE, "cpu", logit_bias=[0.0, 5.0, 0.0, 0.0]).predict_volume(vol, tta=True)
+    assert (more_rv == 1).sum() >= (base == 1).sum()              # +RV bias only grows RV (recall lever)
+
+
 def test_members_and_bald_decomposition(model):
     """4 flip-members -> mean; BALD decomposition: total = aleatoric + epistemic, epistemic >= 0."""
     vol = np.random.RandomState(4).randn(2, 32, 32).astype(np.float32)
