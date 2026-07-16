@@ -1,4 +1,9 @@
-# The −0.17 repaint color gap is a spectrum gap — and it is irreducible (xmcf)
+# The −0.17 repaint color gap: a spectrum gap, most likely the randomization tax (xmcf)
+
+> **Read-after note.** First drafted claiming the gap "irreducible." That is over-claimed — see the Verdict and
+> "What is actually owed" sections. The honest state: physics-randomized *appearance* moves are exhausted, but
+> the *why* points to the domain-randomization tax (synthesis doc), and the model's own errors were never
+> examined. Kept the spectrum measurements; retracted the verdict.
 
 **Date:** 2026-07-16 · **Lane:** color-fault attribution (xmcf) · **Follows:** nk70 (appearance-correctness refuted)
 
@@ -92,17 +97,28 @@ Matching real's colored roll-off *means* removing mid-band energy — which is e
 at held energy (the only leak-free move that keeps the energy) leaves the mid-band untouched → Dice-flat. There
 is no configuration of the physical noise model that closes the spectral gap without killing the augmentation.
 
-All three suspects are ruled out as Dice levers. **The −0.17 is not a fixable generator fault — it is the
-ceiling of physics-randomized color.** A physically-randomized appearance model needs broadband perturbation to
-be robust to unseen real texture; real texture is spectrally narrow. That tension is structural.
+All three suspects are ruled out as Dice levers **within the moves tried**. Stronger caveat added after review
+(owner pushback): "irreducible" is over-claimed. It rests on ONE arm (band-limit, confounded with a k-space PSF
+on the signal) plus the nk70 noise-lowering collapse — that is *"the levers I tried failed,"* not a proof of
+impossibility. And the whole epic stayed in the **input-distribution-statistics** frame (PSD / histograms /
+z-means) — the exact fidelity-metric frame nk70.1 showed does **not** predict Dice. We kept matching the
+generator's output distribution and never once looked at the **model's actual errors**. See the cross-task
+synthesis `interpretations/converging/2026-07-16_what_is_wrong_with_our_synth.md` for the reframe: the 0.17 is
+most likely the **domain-randomization tax** (a stable intensity→tissue mapping the test shares with real train
+and randomization forfeits by design), of which the spectrum gap is a *symptom*, not the cause.
 
-## Pivot
+## What is actually owed (not done here)
 
-To beat 0.68 repaint, color must stop being physically-randomized and become **learned/inverse**: adversarial
-appearance matching (a discriminator closes the spectrum the physical model can't without losing the aug), or
-the **digital-twin inverse direction** (fit color to a specific scan — tight fidelity, not diversity). The
-physical generator has delivered its color ceiling; further color gains are a learned-color problem. Or bank the
-triad as-is — 0.68 color-only / 0.613 full-generation is an honest, well-attributed number.
+- **Failure analysis of the 0.68 repaint model** — per-slice / per-structure / per-vendor Dice + the 20 worst
+  overlays. Never done. Decides whether 0.17 is a uniform low-contrast-boundary loss (the randomization tax) or
+  a targetable defect (a vendor / slice-band / structure).
+- **A truly-OOD test** (a domain absent from the real train set) — the discriminating experiment for the
+  stable-mapping hypothesis. If the real↔synth gap narrows OOD, the 0.17 is the shared mapping, not a synth
+  fault. Both experiments are in the synthesis doc.
+
+The pivot to **learned / inverse color** (adversarial appearance matching, or the digital-twin fit-to-scan) is a
+*candidate*, not a conclusion — and it was reaching past what we understand. Do the failure analysis + OOD test
+first; they are cheaper and they test the mechanism before another generator change.
 
 ## Kept infrastructure
 
