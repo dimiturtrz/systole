@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import torch
@@ -431,6 +432,30 @@ _MIN_TRABEC_GRID = 8     # floor on the coarse trabecular-field grid
 _SMOOTH_GRID = 4         # coarse grid for the smooth bias / B0 off-resonance fields
 
 
+@dataclass
+class _Paint:
+    """Mutable painter state threaded through the corruption phases (bd 3xzr) so each stays a single-arg
+    helper — the bSSFP signal model split into signal (per-class) -> class-maps (per-pixel) -> image-
+    degrade, not fragmented into per-effect shards. Fields evolve in place: mu/sg in _blood_texture,
+    mu_map/sg_map in _class_maps, img in _degrade."""
+    cfg: SynthCfg
+    n_classes: int
+    n_paint: int
+    b: int
+    dev: torch.device
+    mask: torch.Tensor
+    oh: torch.Tensor
+    tr: torch.Tensor
+    fl: torch.Tensor
+    pd: torch.Tensor
+    t2: torch.Tensor
+    mu: torch.Tensor
+    sg: torch.Tensor | None = None
+    mu_map: torch.Tensor | None = None
+    sg_map: torch.Tensor | None = None
+    img: torch.Tensor | None = None
+
+
 class SynthPainter:
     """Physics-based synth PAINTER: label mask -> z-scored bSSFP image (`synthesize_from_labels`), plus the
     two pipeline helpers it composes — the diffeomorphic label warp (`_deform_grid`) and heart excision
@@ -482,11 +507,88 @@ class SynthPainter:
         return torch.sqrt(re * re + im * im)
 
     @staticmethod
+    def _kspace_psf(img: torch.Tensor, keep: float) -> torch.Tensor:
+        """k-space low-pass PSF: keep the central `keep` fraction of frequencies (sinc PSF + slight Gibbs
+        ringing) — a more physical resolution model than a Gaussian blur."""
+        h, w = img.shape[-2:]
+        f = torch.fft.fftshift(torch.fft.fft2(img), dim=(-2, -1))
+        ch, cw = int(h * keep / 2), int(w * keep / 2)
+        win = torch.zeros_like(f.real)
+        win[..., h // 2 - ch:h // 2 + ch + 1, w // 2 - cw:w // 2 + cw + 1] = 1.0
+        return torch.fft.ifft2(torch.fft.ifftshift(f * win, dim=(-2, -1))).real
+
+    @staticmethod
+    def _blood_texture(p: _Paint) -> None:
+        """Per-class [B,n_paint] signal corruption: inflow enhancement / legacy blood-scale / SynthSeg
+        contrast-random, then the within-class texture std (+ flow spread on the blood pools)."""
+        cfg, mu, b, dev, n = p.cfg, p.mu, p.b, p.dev, p.n_classes
+        if cfg.inflow:                       # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
+            v = _uniform(cfg.blood_v_cms[0], cfg.blood_v_cms[1], (b, 1), dev)
+            thk = _uniform(cfg.slice_mm[0], cfg.slice_mm[1], (b, 1), dev)
+            f = (v * p.tr / (100.0 * thk)).clamp(max=1.0)                # v cm/s, tr ms, thk mm -> frac
+            s_fresh = p.pd * torch.sin(p.fl * math.pi / 180.0)           # [B, n_paint] fully-relaxed excite
+            for c in MriPhysics.blood_classes(n):
+                mu[:, c] = (1 - f[:, 0]) * mu[:, c] + f[:, 0] * s_fresh[:, c]
+        if cfg.blood_scale != 1.0:           # legacy empirical blood-pool mean scale (superseded by inflow)
+            for c in MriPhysics.blood_classes(n):
+                mu[:, c] = mu[:, c] * cfg.blood_scale
+        if cfg.contrast_random > 0:          # SynthSeg-style: unconstrain heart contrast (break physics)
+            lo, hi = float(mu.abs().amin()), float(mu.abs().amax())
+            rand = _uniform(lo, hi, (b, n - 1), dev)
+            mu[:, 1:n] = (1 - cfg.contrast_random) * mu[:, 1:n] + cfg.contrast_random * rand
+        sg = mu.abs() * cfg.texture                                      # within-class texture
+        if cfg.flow > 0:                                                 # flow: blood pools spread
+            for c in MriPhysics.blood_classes(n):
+                sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
+        p.sg = sg
+
+    @staticmethod
+    def _class_maps(p: _Paint) -> None:
+        """Assemble the per-pixel [B,1,H,W] mean/std maps from the one-hot map, applying the physical
+        effects that live at map scale: off-resonance bSSFP banding + papillary/trabecular partial volume.
+        Banding is the RATIO band(φ)/band(0) so per-class jitter/flow in mu_map are preserved; trabecular PV
+        mixes a cited blood-pool fraction (RV >> LV) toward myo -> lowers blood mean + adds interior texture."""
+        cfg, oh, b, dev = p.cfg, p.oh, p.b, p.dev
+        mu_map = _class_map(oh, p.mu)
+        if cfg.b0_hz > 0:
+            t2m = _class_map(oh, p.t2)                                   # per-pixel T2
+            df = cfg.b0_hz * _smooth_field(b, _SMOOTH_GRID, p.mask.shape[-2:], dev, signed=True)
+            phi = 2 * math.pi * df * (p.tr[:, :, None, None] / 1000.0)   # off-resonance per TR (rad)
+            mu_map = mu_map * MriPhysics.banding(t2m, p.tr[:, :, None, None], phi)
+        if cfg.trabec_lv > 0 or cfg.trabec_rv > 0:
+            myo_sig = p.mu[:, MYO].view(b, 1, 1, 1) if p.n_paint > MYO else mu_map
+            tgrid = max(_MIN_TRABEC_GRID, p.mask.shape[-1] // 2)         # ~3mm trabecular scale @1.5mm grid
+            tfield = _smooth_field(b, tgrid, p.mask.shape[-2:], dev)
+            for c in MriPhysics.blood_classes(p.n_classes):
+                trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
+                mu_map = mu_map * (1 - trab) + myo_sig * trab
+        p.mu_map = mu_map
+        p.sg_map = _class_map(oh, p.sg)
+
+    @staticmethod
+    def _degrade(p: _Paint) -> None:
+        """Image-domain acquisition degradation: paint the texture, partial-volume blur, smooth bias field,
+        then the resolution/noise chain (band-limited-vs-white Rician, Gaussian blur, k-space PSF)."""
+        cfg, b, dev = p.cfg, p.b, p.dev
+        mu_map = _gauss_blur(p.mu_map, cfg.pv_sigma, dev) if cfg.pv_sigma > 0 else p.mu_map
+        img = mu_map + p.sg_map * torch.randn(b, 1, *p.mask.shape[-2:], device=dev)   # painted texture
+        if cfg.bias_strength > 0:                       # smooth multiplicative B1/coil bias (the N4 dual)
+            img = img * (1.0 + cfg.bias_strength * _smooth_field(b, _SMOOTH_GRID, img.shape[-2:], dev, signed=True))
+        if cfg.noise > 0 and cfg.noise_bandlimited:     # band-limited: blur/k-space low-pass it like signal
+            img = SynthPainter._rician(img, cfg.noise)
+        sigma = float(_uniform(cfg.blur[0], cfg.blur[1], (1,), dev))     # random Gaussian blur (resolution)
+        if sigma > _MIN_BLUR_SIGMA:
+            img = _gauss_blur(img, sigma, dev)
+        if 0 < cfg.kspace < 1:
+            img = SynthPainter._kspace_psf(img, cfg.kspace)
+        if cfg.noise > 0 and not cfg.noise_bandlimited:  # white Rician (MRI magnitude noise)
+            img = SynthPainter._rician(img, cfg.noise)
+        p.img = img
+
+    @staticmethod
     @shapecheck
-    def synthesize_from_labels(mask: Integer[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,  # noqa: C901, PLR0912, PLR0915
+    def synthesize_from_labels(mask: Integer[torch.Tensor, "*b h w"], cfg: SynthCfg, n_classes: int,
                                real_img: Float[torch.Tensor, "*b 1 h w"] | None = None, *, return_meta: bool = False):
-        # complexity noqa above: a linear bSSFP pipeline of optional physical effects (mu/sg/oh threaded), not
-        # control-flow complexity — splitting would fragment one signal model into ~8-tensor helpers. Kept whole.
         """Generate a synthetic z-scored image (and its label map) from an integer label mask.
 
         mask [B,H,W] long (labels 0..n_classes-1) -> (img [B,1,H,W] z-scored, mask [B,H,W] long).
@@ -526,89 +628,15 @@ class SynthPainter:
                 "field": torch.tensor(cfg.fields, device=dev)[fi], "tr": tr[:, 0], "flip": fl[:, 0]}
         mu = MriPhysics.bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)       # [B, n_paint] steady-state
         mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
-        if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
-            v = _uniform(cfg.blood_v_cms[0], cfg.blood_v_cms[1], (b, 1), dev)
-            thk = _uniform(cfg.slice_mm[0], cfg.slice_mm[1], (b, 1), dev)
-            f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
-            s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
-            for c in MriPhysics.blood_classes(n_classes):
-                mu[:, c] = (1 - f[:, 0]) * mu[:, c] + f[:, 0] * s_fresh[:, c]     # blend blood toward fresh
-        if cfg.blood_scale != 1.0:                    # legacy empirical blood-pool mean scale (superseded by inflow)
-            for c in MriPhysics.blood_classes(n_classes):
-                mu[:, c] = mu[:, c] * cfg.blood_scale
-        # SynthSeg-style: unconstrain heart contrast (break physics ordering)
-        if cfg.contrast_random > 0:
-            lo, hi = float(mu.abs().amin()), float(mu.abs().amax())
-            rand = torch.rand(b, n_classes - 1, device=dev) * (hi - lo) + lo
-            mu[:, 1:n_classes] = (1 - cfg.contrast_random) * mu[:, 1:n_classes] + cfg.contrast_random * rand
-        sg = mu.abs() * cfg.texture                                              # within-class texture
-        if cfg.flow > 0:                                                         # flow: blood pools spread
-            for c in MriPhysics.blood_classes(n_classes):
-                sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
-        mu_map = _class_map(oh, mu)                                              # [B,1,H,W] class mean
-        # off-resonance bSSFP banding: a smooth Δf (B0) field -> per-pixel signal drop near dphi=±π,
-        # strongest for long-T2 blood -> lowers+spreads the over-bright cavity (the cav-fidelity fix).
-        # Applied as the signal RATIO band(φ)/band(0) so per-class jitter/flow in mu_map are preserved.
-        if cfg.b0_hz > 0:
-            t2m = _class_map(oh, t2)                                             # per-pixel T2
-            df = cfg.b0_hz * _smooth_field(b, _SMOOTH_GRID, mask.shape[-2:], dev, signed=True)
-            phi = 2 * math.pi * df * (tr[:, :, None, None] / 1000.0)             # off-resonance per TR (rad)
-            mu_map = mu_map * MriPhysics.banding(t2m, tr[:, :, None, None], phi)
-        # --- papillary/trabecular partial volume: papillary muscles + trabeculae are myo-signal structures
-        #     inside the blood pools. A cited blood-pool volume fraction (RV >> LV) mixes toward myo -> both
-        #     lowers blood MEAN (real +1.66 < steady +2.04) and adds within-class blood TEXTURE (interior
-        #     heterogeneity pv can't reach). Spatially-correlated at a physical trabecular scale. ---
-        if cfg.trabec_lv > 0 or cfg.trabec_rv > 0:
-            myo_sig = mu[:, MYO].view(b, 1, 1, 1) if n_paint > MYO else mu_map
-            tgrid = max(_MIN_TRABEC_GRID, mask.shape[-1] // 2)                   # ~3mm trabecular scale @1.5mm grid
-            tfield = _smooth_field(b, tgrid, mask.shape[-2:], dev)
-            for c in MriPhysics.blood_classes(n_classes):
-                trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
-                mu_map = mu_map * (1 - trab) + myo_sig * trab
-        sg_map = _class_map(oh, sg)                                             # [B,1,H,W] class std
-        # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
-        # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
-        if cfg.pv_sigma > 0:
-            mu_map = _gauss_blur(mu_map, cfg.pv_sigma, dev)
-        img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
-    
-        # --- smooth multiplicative bias field (coarse 4x4 -> bilinear upsample; the N4 dual) ---
-        if cfg.bias_strength > 0:
-            field = 1.0 + cfg.bias_strength * _smooth_field(b, _SMOOTH_GRID, img.shape[-2:], dev, signed=True)
-            img = img * field
-    
-        if cfg.noise > 0 and cfg.noise_bandlimited:
-            # co-limited: blur/k-space below band-limit it like the signal
-            img = SynthPainter._rician(img, cfg.noise)
+        p = _Paint(cfg, n_classes, n_paint, b, dev, mask, oh, tr, fl, pd, t2, mu)
+        SynthPainter._blood_texture(p)           # per-class signal: inflow/blood-scale/contrast-random/texture/flow
+        SynthPainter._class_maps(p)              # per-pixel mean/std maps: B0 banding + trabecular PV
+        SynthPainter._degrade(p)                 # image domain: pv-blur/bias/blur/k-space/Rician
+        img = bg.compose(p.img, mask, real_img)  # hybrid pastes synth heart into real; else no-op (bd mirs)
 
-        # --- random Gaussian blur (resolution variation); single σ per call (varies every batch) ---
-        bl_lo, bl_hi = cfg.blur
-        sigma = float(_uniform(bl_lo, bl_hi, (1,), dev))
-        if sigma > _MIN_BLUR_SIGMA:
-            img = _gauss_blur(img, sigma, dev)
-    
-        # --- k-space PSF: real MRI resolution = finite k-space sampling. Low-pass by keeping the central
-        #     cfg.kspace fraction of frequencies (fft -> window -> ifft) = sinc PSF + slight Gibbs ringing,
-        #     more physical than a Gaussian blur. ---
-        if 0 < cfg.kspace < 1:
-            H, W = img.shape[-2:]
-            f = torch.fft.fftshift(torch.fft.fft2(img), dim=(-2, -1))
-            ch, cw = int(H * cfg.kspace / 2), int(W * cfg.kspace / 2)
-            win = torch.zeros_like(f.real)
-            win[..., H // 2 - ch:H // 2 + ch + 1, W // 2 - cw:W // 2 + cw + 1] = 1.0
-            img = torch.fft.ifft2(torch.fft.ifftshift(f * win, dim=(-2, -1))).real
-    
-        # --- Rician noise (MRI magnitude noise: sqrt of two independent Gaussian channels) ---
-        if cfg.noise > 0 and not cfg.noise_bandlimited:
-            img = SynthPainter._rician(img, cfg.noise)
-    
-        # post-paint composite (strategy-specific: hybrid pastes the synth heart into the real image;
-        # every other strategy is a no-op). real_img must be heart-excised for this to be clean (bd mirs).
-        img = bg.compose(img, mask, real_img)
-    
-        # --- z-score per sample (match the real preprocessed input distribution) ---
+        # z-score per sample (match the real preprocessed input distribution)
         m = img.mean((1, 2, 3), keepdim=True)
         s = img.std((1, 2, 3), keepdim=True).clamp_min(1e-6)
         img = (img - m) / s
-        mask = bg.seg_target(mask)                                 # decouple paint map from seg target (FovBg)
-        return (img, mask, meta) if return_meta else (img, mask)   # opt-in provenance (vendor/field/tr/flip)
+        mask = bg.seg_target(mask)               # decouple paint map from seg target (FovBg)
+        return (img, mask, meta) if return_meta else (img, mask)
