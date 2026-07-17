@@ -7,12 +7,12 @@ frames are labelled. ED/ES frame indices + vendor/centre/age/sex/h+w in the CSV.
 
 Labels: same flip as M&M-2 (raw 1=LV-cav) -> canonical via label_map.
 """
-import os
 from pathlib import Path
 
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    AdapterBase,
     Base,
     Dataset,
     DatasetAdapter,
@@ -36,15 +36,12 @@ CENTRES = {
 _SPLITS = ("Training/Labeled", "Validation", "Testing")
 
 
-class Mnms1Adapter(DatasetAdapter):
+class Mnms1Adapter(AdapterBase, DatasetAdapter):
     """M&Ms-1: 6-centre / 4-vendor (incl. Canon); richest demographics (age/sex/BSA). Owns its M&Ms-1
     marker detection, root resolution, CSV keying, SA path resolution, frame-index parsing, and meta
-    assembly (the free helpers folded in as staticmethods)."""
+    assembly (staticmethods); root override via AdapterBase."""
     name = Dataset.MNMS1
     label_map = LABEL_MAP
-
-    def __init__(self, root: str | Path | None = None):
-        self.root = root                                     # MnM-root override (default env/config search)
 
     @staticmethod
     def _is_mnms1(base: Path) -> bool:
@@ -64,14 +61,10 @@ class Mnms1Adapter(DatasetAdapter):
     def _root(root: str | Path | None = None) -> Path:
         """Resolve the MnM/ root (holds Training/Validation/Testing). Override CARDIAC_MNMS1_ROOT.
         Prefers an explicit MnM dir + validates it's actually M&Ms-1 (not a case-insensitive match)."""
-        env = os.environ.get("CARDIAC_MNMS1_ROOT")
         raw = Path(Mnms1Adapter.data_root_raw())
-        bases = ([Path(env)] if env else []) + ([Path(root)] if root else [])
-        bases += [raw.parent / "MnM", raw / "MnM", raw.parent, raw]
-        for base in bases:
-            if base.is_dir() and Mnms1Adapter._is_mnms1(base):
-                return base
-        return raw.parent / "MnM"
+        cands = Base.candidate_dirs("CARDIAC_MNMS1_ROOT", root,
+                                    [raw.parent / "MnM", raw / "MnM", raw.parent, raw])
+        return Base.first_dir(cands, lambda b: b.is_dir() and Mnms1Adapter._is_mnms1(b), raw.parent / "MnM")
 
     @staticmethod
     def data_root_raw() -> str:

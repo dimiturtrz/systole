@@ -12,12 +12,12 @@ Labels: same flip as M&Ms (raw 1=LV-cav, 2=myo, 3=RV) -> canonical via label_map
 geometrically on P001/P010). `motion_grade` is surfaced in meta() — a new stratification axis
 the unified store grew a column for (null on the other datasets).
 """
-import os
 from pathlib import Path
 
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    AdapterBase,
     Base,
     Dataset,
     DatasetAdapter,
@@ -34,31 +34,20 @@ VENDOR, FIELD_T, SCANNER = Vendor.SIEMENS, 3.0, "MAGNETOM Vida"
 CENTRE, COUNTRY = "Fudan (Shanghai)", "China"
 
 
-class CmrxMotionAdapter(DatasetAdapter):
+class CmrxMotionAdapter(AdapterBase, DatasetAdapter):
     """CMRxMotion: single-vendor motion-robustness axis; owns its acquisition-dir search, IQA-grade
-    lookup, and 4D-singleton frame load (folded in as staticmethods). Labels remapped to canonical."""
+    lookup, and 4D-singleton frame load (staticmethods); root override via AdapterBase. Labels canonical."""
     name = Dataset.CMRXMOTION
     label_map = LABEL_MAP
-
-    def __init__(self, root: str | Path | None = None):
-        self.root = root                                     # acquisition-dir override (default env/config search)
 
     @staticmethod
     def _root(root: str | Path | None = None) -> Path:
         """Resolve the dir holding the P###-n/ folders. Override with CARDIAC_CMRX_ROOT."""
-        env = os.environ.get("CARDIAC_CMRX_ROOT")
-        bases = [Path(env)] if env else []
-        if root is not None:
-            bases.append(Path(root))
         raw = Path(Config.data_root("raw"))
-        bases += [raw / Dataset.CMRXMOTION, raw, raw.parent]
-        subs = ("data", ".", "cmrxmotion/data")
-        for base in bases:
-            for sub in subs:
-                cand = base if sub == "." else base / sub
-                if cand.is_dir() and any(cand.glob("P[0-9][0-9][0-9]-[0-9]")):
-                    return cand
-        return raw / Dataset.CMRXMOTION / "data"
+        cands = Base.candidate_dirs("CARDIAC_CMRX_ROOT", root, [raw / Dataset.CMRXMOTION, raw, raw.parent],
+                                    subs=("data", ".", "cmrxmotion/data"))
+        return Base.first_dir(cands, lambda c: c.is_dir() and any(c.glob("P[0-9][0-9][0-9]-[0-9]")),
+                              raw / Dataset.CMRXMOTION / "data")
 
     @staticmethod
     def _iqa(root: str | Path | None = None) -> dict[str, dict[str, str]]:
