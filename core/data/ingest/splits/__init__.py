@@ -14,9 +14,10 @@ from core.data.ingest.splits.parametric import Parametric
 from core.data.ingest.splits.static_all import StaticAll
 from core.data.ingest.splits.static_main import StaticMain
 from core.data.ingest.splits.synth_composite import SynthComposite
+from core.data.ingest.splits.synth_fov import SynthFov
 from core.data.ingest.splits.synth_main import SynthMain
 
-_FAMILIES = {c.name: c for c in (StaticMain, StaticAll, SynthMain, SynthComposite, Parametric)}
+_FAMILIES = {c.name: c for c in (StaticMain, StaticAll, SynthMain, SynthComposite, SynthFov, Parametric)}
 
 
 class Splits:
