@@ -10,6 +10,7 @@ from pathlib import Path
 
 from core.config import Config
 from core.data.static.mri.base import (
+    AdapterBase,
     Base,
     Dataset,
     DatasetAdapter,
@@ -23,14 +24,12 @@ DATA_ROOT = str(Path(Config.data_root("raw")) / Dataset.ACDC)
 LABEL_MAP = {0: 0, 1: 1, 2: 2, 3: 3}   # ACDC is the canonical convention (identity)
 
 
-class AcdcAdapter(DatasetAdapter):
+class AcdcAdapter(AdapterBase, DatasetAdapter):
     """ACDC: single-centre Siemens (Dijon), the canonical-label held-out test set. Owns its patient
-    discovery + Info.cfg parsing + frame-path resolution (folded in as staticmethods)."""
+    discovery + Info.cfg parsing + frame-path resolution (staticmethods); root override via AdapterBase.
+    Default root is DATA_ROOT when self.root is None (see cases())."""
     name = Dataset.ACDC
     label_map = LABEL_MAP
-
-    def __init__(self, root: str | Path | None = None):
-        self.root = root                                     # data root override (default DATA_ROOT)
 
     @staticmethod
     def parse_info_cfg(patient_dir: str | Path) -> dict[str, str]:

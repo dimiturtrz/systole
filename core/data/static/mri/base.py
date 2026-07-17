@@ -7,6 +7,8 @@ labels to this via `label_map`, so one model's labels mean the same thing across
 Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm.
 """
 import csv
+import os
+from collections.abc import Callable, Iterator, Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, TypedDict, runtime_checkable
@@ -137,6 +139,25 @@ class Base:
         return info
 
     @staticmethod
+    def candidate_dirs(env_var: str, root: str | Path | None, bases: Sequence[Path],
+                       subs: Sequence[str] = (".",)) -> Iterator[Path]:
+        """Yield search-candidate dirs in the shared adapter order: an env-var override, an explicit
+        root override, then each base crossed with `subs` ('.' = the base itself)."""
+        env = os.environ.get(env_var)
+        heads = ([Path(env)] if env else []) + ([Path(root)] if root is not None else [])
+        for base in heads + list(bases):
+            for sub in subs:
+                yield base if sub == "." else base / sub
+
+    @staticmethod
+    def first_dir(candidates: Iterator[Path], accept: Callable[[Path], bool], fallback: Path) -> Path:
+        """First candidate dir satisfying `accept`, else `fallback` — the shared adapter root-search tail."""
+        for cand in candidates:
+            if accept(cand):
+                return cand
+        return fallback
+
+    @staticmethod
     def load_nifti(path: str | Path, frame: int | None = None) -> tuple[Volume, Spacing]:
         """Load a NIfTI volume -> (array [D, H, W], spacing (z, y, x) mm). For a 4D cine, pass
         `frame` to extract one time-index ([x,y,z,t] -> [D,H,W]); 3D inputs ignore `frame`."""
@@ -193,6 +214,14 @@ class Base:
             scores[lab] = float((shell & myo).sum()) / float(shell.sum()) if shell.sum() else 0.0
         lv = max(scores, key=scores.get) if scores else None
         return lv, scores
+
+
+class AdapterBase:
+    """Concrete base for the dataset adapters: the shared root-override __init__ (a data-root override;
+    default is the env/config search). Adapters inherit this and satisfy the DatasetAdapter Protocol."""
+
+    def __init__(self, root: str | Path | None = None):
+        self.root = root
 
 
 @runtime_checkable

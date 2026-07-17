@@ -8,12 +8,12 @@ Per-subject DISEASE/VENDOR/SCANNER/FIELD in dataset_information.csv.
 Labels: raw 1=LV-cav, 2=myo, 3=RV — opposite of ACDC. `label_map` remaps to canonical
 (verified geometrically: myo=2 -> LV=1 in raw). The flip is interface data, not buried logic.
 """
-import os
 from pathlib import Path
 
 from core.config import Config
 from core.data.static.mri.base import (
     MNM_LABEL_MAP,
+    AdapterBase,
     Base,
     Dataset,
     DatasetAdapter,
@@ -24,33 +24,21 @@ from core.data.static.mri.base import (
 LABEL_MAP = MNM_LABEL_MAP   # raw -> canonical (LV-cav 1->3, RV 3->1); shared M&Ms flip
 
 
-class Mnm2Adapter(DatasetAdapter):
+class Mnm2Adapter(AdapterBase, DatasetAdapter):
     """M&M-2: multi-vendor training source; owns its dataset-dir search, subject-code CSV keying, and
-    meta assembly (folded in as staticmethods). Labels remapped to canonical via label_map."""
+    meta assembly (staticmethods); root override via AdapterBase. Labels remapped to canonical via label_map."""
     name = Dataset.MNM2
     label_map = LABEL_MAP
-
-    def __init__(self, root: str | Path | None = None):
-        self.root = root                                     # dataset-dir override (default env/config search)
 
     @staticmethod
     def _dataset_dir(root: str | Path | None = None) -> Path:
         """Resolve the dir holding the NNN/ subject folders, tolerating nesting.
         Searches the raw root + parent + common nestings. Override with CARDIAC_MNM2_ROOT."""
-        env = os.environ.get("CARDIAC_MNM2_ROOT")
-        bases = [Path(env)] if env else []
-        if root is not None:
-            bases.append(Path(root))
         raw = Path(Config.data_root("raw"))
-        bases += [raw, raw.parent]
-        subs = (".", "mnm2/MnM2/dataset", "MnM2/dataset", "mnm2/dataset", "dataset",
-                "mri/mnm2/MnM2/dataset")
-        for base in bases:
-            for sub in subs:
-                cand = base if sub == "." else base / sub
-                if cand.is_dir() and any(cand.glob("[0-9][0-9][0-9]")):
-                    return cand
-        return raw
+        cands = Base.candidate_dirs("CARDIAC_MNM2_ROOT", root, [raw, raw.parent],
+                                    subs=(".", "mnm2/MnM2/dataset", "MnM2/dataset", "mnm2/dataset",
+                                          "dataset", "mri/mnm2/MnM2/dataset"))
+        return Base.first_dir(cands, lambda c: c.is_dir() and any(c.glob("[0-9][0-9][0-9]")), raw)
 
     @staticmethod
     def _info(root: str | Path | None = None) -> dict[str, dict[str, str]]:
