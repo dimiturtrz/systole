@@ -11,7 +11,6 @@ from core.data.ingest.source import StaticSource
 from core.data.ingest.split import SplitResolver
 from core.data.ingest.splits import Splits, synth_fov
 from core.data.ingest.splits.synth_fov import POOL
-from core.data.ingest.testsets import SYNTH_MAIN_TEST
 
 V = pl.col
 
