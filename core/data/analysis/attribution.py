@@ -65,7 +65,8 @@ class Attribution:
         return confusion
 
     @staticmethod
-    def _predict(model, X: torch.Tensor, device: str, batch: int = 64) -> torch.Tensor:
+    def _predict(model, X: Float[torch.Tensor, "*batch *c *h *w"], device: str,
+                 batch: int = 64) -> Integer[torch.Tensor, "*batch *h *w"]:
         model.eval()
         with torch.no_grad():
             return torch.cat([model(X[i:i + batch].to(device)).argmax(1).cpu()

@@ -86,7 +86,7 @@ class SynthFidelity:
         return float((a.mean() - b.mean()).abs() / pooled_std) if float(pooled_std) > 0 else float("nan")
 
     @staticmethod
-    def _pair_dprime(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
+    def _pair_dprime(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict:
         dprimes = {}
         for i, j in _PAIRS:
             if i < n_classes and j < n_classes:
@@ -133,7 +133,7 @@ class SynthFidelity:
         return result
 
     @staticmethod
-    def _spread(x1c: torch.Tensor, ym: torch.Tensor, n_classes: int) -> dict:
+    def _spread(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict:
         """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
         flat_intensities, flat_labels = x1c.reshape(-1), ym.reshape(-1)
         pooled = {c: float(flat_intensities[flat_labels == c].std())

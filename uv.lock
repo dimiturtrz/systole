@@ -449,8 +449,8 @@ requires-dist = [
     { name = "scikit-image" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "sdlc-devtools", marker = "extra == 'all'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.13.1" },
-    { name = "sdlc-devtools", marker = "extra == 'devtools'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.13.1" },
+    { name = "sdlc-devtools", marker = "extra == 'all'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.14.0" },
+    { name = "sdlc-devtools", marker = "extra == 'devtools'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.14.0" },
     { name = "simpleitk" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "tqdm" },
@@ -4241,8 +4241,8 @@ wheels = [
 
 [[package]]
 name = "sdlc-devtools"
-version = "1.13.1"
-source = { git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.13.1#4d58c427f101ae1230bc27e8d89f486649360938" }
+version = "1.14.0"
+source = { git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.14.0#0d3489160820692ee17032ad07e9aa354c14b3b4" }
 dependencies = [
     { name = "grimp" },
     { name = "networkx" },

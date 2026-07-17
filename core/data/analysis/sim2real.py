@@ -36,7 +36,7 @@ class Sim2Real:
     STANDARDIZED heart contrast."""
 
     @staticmethod
-    def _standardize(v: torch.Tensor) -> torch.Tensor:
+    def _standardize(v: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 
     @staticmethod

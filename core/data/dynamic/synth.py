@@ -41,12 +41,12 @@ from .mrxcat import FOV_TISSUE
 
 
 # --- shared painter tensor primitives (the repeated micro-shapes across the pipeline, bd je13) ---
-def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev) -> torch.Tensor:
+def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev) -> Float[torch.Tensor, "..."]:
     """Uniform sample in [lo, hi) of `shape` — the rand*(hi-lo)+lo lerp used across acq/inflow/blur."""
     return torch.rand(*shape, device=dev) * (hi - lo) + lo
 
 
-def _smooth_field(b: int, grid: int, out_hw, dev, *, signed: bool = False) -> torch.Tensor:
+def _smooth_field(b: int, grid: int, out_hw, dev, *, signed: bool = False) -> Float[torch.Tensor, "b 1 h w"]:
     """Coarse [b,1,grid,grid] random field bilinear-upsampled to `out_hw` ([b,1,H,W]). signed -> [-1,1]
     (the bias/B0 fields); else [0,1) (the procedural/trabecular fields)."""
     low = torch.rand(b, 1, grid, grid, device=dev)
@@ -55,12 +55,13 @@ def _smooth_field(b: int, grid: int, out_hw, dev, *, signed: bool = False) -> to
     return F.interpolate(low, size=out_hw, mode="bilinear", align_corners=False)
 
 
-def _class_map(oh: torch.Tensor, per_class: torch.Tensor) -> torch.Tensor:
+def _class_map(oh: Float[torch.Tensor, "b c h w"],
+               per_class: Float[torch.Tensor, "b c"]) -> Float[torch.Tensor, "b 1 h w"]:
     """Scatter a per-class [B,C] value onto the one-hot map -> [B,1,H,W] per-pixel field."""
     return (oh * per_class[:, :, None, None]).sum(1, keepdim=True)
 
 
-def _gauss_blur(x: torch.Tensor, sigma: float, dev) -> torch.Tensor:
+def _gauss_blur(x: Float[torch.Tensor, "b 1 h w"], sigma: float, dev) -> Float[torch.Tensor, "b 1 h w"]:
     """Gaussian blur via an Augmentor.gaussian_kernel conv2d (partial-volume + resolution stages)."""
     k = Augmentor.gaussian_kernel(sigma).to(dev)
     k = k.view(1, 1, *k.shape)
@@ -501,13 +502,13 @@ class SynthPainter:
         return out
 
     @staticmethod
-    def _rician(img: torch.Tensor, sigma: float) -> torch.Tensor:
+    def _rician(img: Float[torch.Tensor, "..."], sigma: float) -> Float[torch.Tensor, "..."]:
         re = img + sigma * torch.randn_like(img)
         im = sigma * torch.randn_like(img)
         return torch.sqrt(re * re + im * im)
 
     @staticmethod
-    def _kspace_psf(img: torch.Tensor, keep: float) -> torch.Tensor:
+    def _kspace_psf(img: Float[torch.Tensor, "... h w"], keep: float) -> Float[torch.Tensor, "... h w"]:
         """k-space low-pass PSF: keep the central `keep` fraction of frequencies (sinc PSF + slight Gibbs
         ringing) — a more physical resolution model than a Gaussian blur."""
         h, w = img.shape[-2:]

@@ -60,7 +60,7 @@ class ShapeCoverage:
         ], dtype=np.float64)
 
     @staticmethod
-    def _feats_from_masks(masks) -> np.ndarray:
+    def _feats_from_masks(masks) -> Float[np.ndarray, "n 7"]:
         rows = [features for features in (ShapeCoverage.shape_features(mask) for mask in masks) if features is not None]
         return np.stack(rows) if rows else np.zeros((0, 7))
 
