@@ -59,7 +59,7 @@ class Inverse:
         return (oh * mu[:, :, None, None]).sum(1, keepdim=True)                           # [B,1,H,W]
 
     @staticmethod
-    def _standardize(v: torch.Tensor) -> torch.Tensor:
+    def _standardize(v: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
         """Zero-mean unit-std — compares the CONTRAST pattern, not absolute gain/bias (already normalized)."""
         return (v - v.mean()) / v.std().clamp_min(1e-6)
 

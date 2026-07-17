@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
+from jaxtyping import Bool, Float, UInt8
 from skimage.draw import polygon
 
 from core.config import Config
@@ -59,11 +60,11 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
         return None
 
     @staticmethod
-    def _read_contour(path: Path) -> np.ndarray:
+    def _read_contour(path: Path) -> Float[np.ndarray, "n 2"]:
         return np.loadtxt(path)                               # [N,2] float (x=col, y=row) pixel coords
 
     @staticmethod
-    def _fill(pts: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
+    def _fill(pts: Float[np.ndarray, "n 2"], shape: tuple[int, int]) -> Bool[np.ndarray, "h w"]:
         """Rasterize a closed polygon (x=col, y=row pixel coords) to a boolean mask on `shape` [rows,cols].
         skimage.draw (a core dep) — matplotlib.path circular-imports in spawn workers on Windows."""
         m = np.zeros(shape, dtype=bool)
@@ -72,7 +73,8 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
         return m
 
     @staticmethod
-    def _rasterize(endo: np.ndarray | None, epi: np.ndarray | None, shape) -> np.ndarray:
+    def _rasterize(endo: Float[np.ndarray, "n 2"] | None, epi: Float[np.ndarray, "m 2"] | None,
+                   shape) -> UInt8[np.ndarray, "h w"]:
         """endo/epi polygons -> canonical mask: 2 = LV myo (epi ring minus endo), 3 = LV cav (endo interior)."""
         m = np.zeros(shape, np.uint8)
         if epi is not None:

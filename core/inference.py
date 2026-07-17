@@ -10,7 +10,7 @@ import torch
 from jaxtyping import Float, UInt8
 
 from core.preprocessing.preprocess import Preprocess
-from core.types import Volume, shapecheck
+from core.types import shapecheck
 
 _FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
 
@@ -34,7 +34,7 @@ class Inference:
         """Add the per-class logit prior (a no-op when unset). Broadcast [1,C,1,1] over [N,C,H,W]."""
         return logits if self.logit_bias is None else logits + self.logit_bias
 
-    def _stack_slices(self, vol_img: Volume) -> np.ndarray:
+    def _stack_slices(self, vol_img: Float[np.ndarray, "d h w"]) -> Float[np.ndarray, "d size size"]:
         """Square-fit every slice of a [D, H, W] volume -> [D, size, size] float array (model input grid)."""
         return np.stack([Preprocess.fit_square(vol_img[z].astype(np.float32), self.size, 0.0)
                          for z in range(vol_img.shape[0])])
