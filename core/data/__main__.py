@@ -3,6 +3,7 @@
 router is command-agnostic — no per-command branching."""
 import argparse
 
+from core.data.analysis.directed import Directed
 from core.data.dynamic.anatomy import Anatomy
 from core.data.dynamic.inverse import Inverse
 from core.data.dynamic.mrxcat import Mrxcat
@@ -17,6 +18,7 @@ COMMANDS = {
     "build-pool": Anatomy,
     "mrxcat": Mrxcat,
     "twin": Inverse,
+    "directed": Directed,
     "reference": ReferenceBuild,
     "lock-testsets": TestSets,
     "kaggle-ef": KaggleDsbAdapter,
