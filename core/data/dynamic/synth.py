@@ -39,6 +39,33 @@ from .mri_physics import TORSO_BG, TR_RANGE_MS, MriPhysics
 from .mrxcat import FOV_TISSUE
 
 
+# --- shared painter tensor primitives (the repeated micro-shapes across the pipeline, bd je13) ---
+def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev) -> torch.Tensor:
+    """Uniform sample in [lo, hi) of `shape` — the rand*(hi-lo)+lo lerp used across acq/inflow/blur."""
+    return torch.rand(*shape, device=dev) * (hi - lo) + lo
+
+
+def _smooth_field(b: int, grid: int, out_hw, dev, *, signed: bool = False) -> torch.Tensor:
+    """Coarse [b,1,grid,grid] random field bilinear-upsampled to `out_hw` ([b,1,H,W]). signed -> [-1,1]
+    (the bias/B0 fields); else [0,1) (the procedural/trabecular fields)."""
+    low = torch.rand(b, 1, grid, grid, device=dev)
+    if signed:
+        low = low * 2 - 1
+    return F.interpolate(low, size=out_hw, mode="bilinear", align_corners=False)
+
+
+def _class_map(oh: torch.Tensor, per_class: torch.Tensor) -> torch.Tensor:
+    """Scatter a per-class [B,C] value onto the one-hot map -> [B,1,H,W] per-pixel field."""
+    return (oh * per_class[:, :, None, None]).sum(1, keepdim=True)
+
+
+def _gauss_blur(x: torch.Tensor, sigma: float, dev) -> torch.Tensor:
+    """Gaussian blur via an Augmentor.gaussian_kernel conv2d (partial-volume + resolution stages)."""
+    k = Augmentor.gaussian_kernel(sigma).to(dev)
+    k = k.view(1, 1, *k.shape)
+    return F.conv2d(x, k, padding=k.shape[-1] // 2)
+
+
 # Acquisition strategy as a discriminated union: each variant BUILDS its Acquisition (cfg.acq.build()).
 # build() bodies resolve the strategy classes (defined lower) at call-time.
 class AcquisitionCfg(BaseModel):
@@ -299,9 +326,7 @@ class ProceduralBg(_TierBg):
         self.blobs = blobs
 
     def _field(self, mask, dev, real_img=None):
-        b = mask.shape[0]
-        coarse = torch.rand(b, 1, self.blobs, self.blobs, device=dev)
-        fb = F.interpolate(coarse, size=mask.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
+        fb = _smooth_field(mask.shape[0], self.blobs, mask.shape[-2:], dev)[:, 0]
         return torch.bucketize(fb.contiguous(), MriPhysics.torso_thresholds(dev))  # physical area fractions
 
     def paint_params(self, n_classes, n_paint, field, dev):
@@ -365,8 +390,8 @@ class LegacyAcq(Acquisition):
     """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg). Field/vendor uniform-random."""
     def sample(self, b, cfg, dev):
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
-        tr = torch.rand(b, 1, device=dev) * (cfg.tr_ms[1] - cfg.tr_ms[0]) + cfg.tr_ms[0]
-        fl = torch.rand(b, 1, device=dev) * (cfg.flip_deg[1] - cfg.flip_deg[0]) + cfg.flip_deg[0]
+        tr = _uniform(cfg.tr_ms[0], cfg.tr_ms[1], (b, 1), dev)
+        fl = _uniform(cfg.flip_deg[0], cfg.flip_deg[1], (b, 1), dev)
         vi = torch.randint(len(cfg.vendors), (b,), device=dev)
         return fi, tr, fl, vi
 
@@ -377,7 +402,7 @@ class RandomizedAcq(Acquisition):
     def sample(self, b, cfg, dev):
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
         rng = torch.tensor([MriPhysics.derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
-        tr = TR_RANGE_MS[0] + (TR_RANGE_MS[1] - TR_RANGE_MS[0]) * torch.rand(b, 1, device=dev)
+        tr = _uniform(TR_RANGE_MS[0], TR_RANGE_MS[1], (b, 1), dev)
         lo, hi = rng[fi, 0:1], rng[fi, 1:2]
         fl = lo + (hi - lo) * torch.rand(b, 1, device=dev)
         vi = torch.randint(len(cfg.vendors), (b,), device=dev)
@@ -403,6 +428,7 @@ class MatchedAcq(Acquisition):
 
 _MIN_BLUR_SIGMA = 0.05   # below this a Gaussian blur is a no-op -> skip the conv
 _MIN_TRABEC_GRID = 8     # floor on the coarse trabecular-field grid
+_SMOOTH_GRID = 4         # coarse grid for the smooth bias / B0 off-resonance fields
 
 
 class SynthPainter:
@@ -501,8 +527,8 @@ class SynthPainter:
         mu = MriPhysics.bssfp_signal(t1, t2, pd, tr, fl * math.pi / 180.0)       # [B, n_paint] steady-state
         mu = mu + cfg.jitter * mu.abs().mean() * torch.randn(b, n_paint, device=dev)   # residual jitter
         if cfg.inflow:                               # entry-slice inflow: f_fresh = min(1, v*TR/thk) PER SAMPLE
-            v = torch.rand(b, 1, device=dev) * (cfg.blood_v_cms[1] - cfg.blood_v_cms[0]) + cfg.blood_v_cms[0]
-            thk = torch.rand(b, 1, device=dev) * (cfg.slice_mm[1] - cfg.slice_mm[0]) + cfg.slice_mm[0]
+            v = _uniform(cfg.blood_v_cms[0], cfg.blood_v_cms[1], (b, 1), dev)
+            thk = _uniform(cfg.slice_mm[0], cfg.slice_mm[1], (b, 1), dev)
             f = (v * tr / (100.0 * thk)).clamp(max=1.0)                          # v cm/s, tr ms, thk mm -> frac
             s_fresh = pd * torch.sin(fl * math.pi / 180.0)                       # [B, n_paint] fully-relaxed excite
             for c in MriPhysics.blood_classes(n_classes):
@@ -519,14 +545,13 @@ class SynthPainter:
         if cfg.flow > 0:                                                         # flow: blood pools spread
             for c in MriPhysics.blood_classes(n_classes):
                 sg[:, c] = sg[:, c] + cfg.flow * mu[:, c].abs()
-        mu_map = (oh * mu[:, :, None, None]).sum(1, keepdim=True)                # [B,1,H,W] class mean
+        mu_map = _class_map(oh, mu)                                              # [B,1,H,W] class mean
         # off-resonance bSSFP banding: a smooth Δf (B0) field -> per-pixel signal drop near dphi=±π,
         # strongest for long-T2 blood -> lowers+spreads the over-bright cavity (the cav-fidelity fix).
         # Applied as the signal RATIO band(φ)/band(0) so per-class jitter/flow in mu_map are preserved.
         if cfg.b0_hz > 0:
-            t2m = (oh * t2[:, :, None, None]).sum(1, keepdim=True)               # per-pixel T2
-            low = torch.rand(b, 1, 4, 4, device=dev) * 2 - 1
-            df = cfg.b0_hz * F.interpolate(low, size=mask.shape[-2:], mode="bilinear", align_corners=False)
+            t2m = _class_map(oh, t2)                                             # per-pixel T2
+            df = cfg.b0_hz * _smooth_field(b, _SMOOTH_GRID, mask.shape[-2:], dev, signed=True)
             phi = 2 * math.pi * df * (tr[:, :, None, None] / 1000.0)             # off-resonance per TR (rad)
             mu_map = mu_map * MriPhysics.banding(t2m, tr[:, :, None, None], phi)
         # --- papillary/trabecular partial volume: papillary muscles + trabeculae are myo-signal structures
@@ -536,25 +561,20 @@ class SynthPainter:
         if cfg.trabec_lv > 0 or cfg.trabec_rv > 0:
             myo_sig = mu[:, MYO].view(b, 1, 1, 1) if n_paint > MYO else mu_map
             tgrid = max(_MIN_TRABEC_GRID, mask.shape[-1] // 2)                   # ~3mm trabecular scale @1.5mm grid
-            tfield = F.interpolate(torch.rand(b, 1, tgrid, tgrid, device=dev),
-                                   size=mask.shape[-2:], mode="bilinear", align_corners=False)
+            tfield = _smooth_field(b, tgrid, mask.shape[-2:], dev)
             for c in MriPhysics.blood_classes(n_classes):
                 trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
                 mu_map = mu_map * (1 - trab) + myo_sig * trab
-        sg_map = (oh * sg[:, :, None, None]).sum(1, keepdim=True)               # [B,1,H,W] class std
+        sg_map = _class_map(oh, sg)                                             # [B,1,H,W] class std
         # partial volume: blur the class-MEAN map so boundary voxels are tissue mixes (real finite-voxel
         # averaging), not hard label edges. Texture (sg) added after, so interiors keep their grain.
         if cfg.pv_sigma > 0:
-            kpv = Augmentor.gaussian_kernel(cfg.pv_sigma).to(dev)
-            kpv = kpv.view(1, 1, *kpv.shape)
-            mu_map = F.conv2d(mu_map, kpv, padding=kpv.shape[-1] // 2)
+            mu_map = _gauss_blur(mu_map, cfg.pv_sigma, dev)
         img = mu_map + sg_map * torch.randn(b, 1, *mask.shape[-2:], device=dev)  # painted texture
     
         # --- smooth multiplicative bias field (coarse 4x4 -> bilinear upsample; the N4 dual) ---
         if cfg.bias_strength > 0:
-            low = torch.rand(b, 1, 4, 4, device=dev) * 2 - 1
-            field = 1.0 + cfg.bias_strength * F.interpolate(low, size=img.shape[-2:], mode="bilinear",
-                                                            align_corners=False)
+            field = 1.0 + cfg.bias_strength * _smooth_field(b, _SMOOTH_GRID, img.shape[-2:], dev, signed=True)
             img = img * field
     
         if cfg.noise > 0 and cfg.noise_bandlimited:
@@ -563,11 +583,9 @@ class SynthPainter:
 
         # --- random Gaussian blur (resolution variation); single σ per call (varies every batch) ---
         bl_lo, bl_hi = cfg.blur
-        sigma = float(torch.rand(1, device=dev) * (bl_hi - bl_lo) + bl_lo)
+        sigma = float(_uniform(bl_lo, bl_hi, (1,), dev))
         if sigma > _MIN_BLUR_SIGMA:
-            k = Augmentor.gaussian_kernel(sigma).to(dev)
-            k = k.view(1, 1, *k.shape)
-            img = F.conv2d(img, k, padding=k.shape[-1] // 2)
+            img = _gauss_blur(img, sigma, dev)
     
         # --- k-space PSF: real MRI resolution = finite k-space sampling. Low-pass by keeping the central
         #     cfg.kspace fraction of frequencies (fft -> window -> ifft) = sinc PSF + slight Gibbs ringing,
