@@ -19,7 +19,7 @@ def _meta():
 def _cfg(**kw):
     """A DataCfg-like stub carrying only the fields ModelSplit / make_split read."""
     base = {"test_datasets": (), "test_vendors": (), "val_frac": 0.25,
-            "val_datasets": (), "val_vendors": (), "train_vendors": (),
+            "val_datasets": (), "val_vendors": (), "train_vendors": (), "train_subjects": 0,
             "split": None, "sources": ("mnm2", "mnms1", "acdc")}
     return types.SimpleNamespace(**{**base, **kw})
 
@@ -49,6 +49,27 @@ def test_train_vendors_restricts_train_only():
     assert set(scarce[0]["vendor"].unique()) == {"Siemens"}    # train = Siemens only
     assert len(scarce[0]) < len(full[0])                       # dropped Philips from train
     assert scarce[1].equals(full[1]) and scarce[2].equals(full[2])   # val/test unchanged
+
+
+def test_train_subjects_caps_train_subject_disjoint_size_k():
+    """train_subjects=K -> TRAIN is exactly K subjects, subject-disjoint (rows one-per-subject, no
+    by-slice leak); val/test unaffected (bd wqmh scarcity knob)."""
+    full = Splits.make_split(_meta(), test_vendors=("Canon", "GE"), val_datasets=("acdc",), seed=0)
+    k = 3
+    capped = Splits.make_split(_meta(), test_vendors=("Canon", "GE"), val_datasets=("acdc",),
+                               seed=0, train_subjects=k)
+    assert len(capped[0]) == k                                   # exactly K rows = K subjects
+    assert capped[0]["subject_id"].n_unique() == k               # subject-disjoint (no repeats)
+    assert set(capped[0]["subject_id"]) <= set(full[0]["subject_id"])   # a subset of the full train
+    assert capped[1].equals(full[1]) and capped[2].equals(full[2])     # val/test unchanged
+
+
+def test_cap_subjects_noop_when_k_zero_or_ge_len():
+    """cap_subjects is identity for k<=0 (use all) and k>=len (nothing to drop) — seeded, deterministic."""
+    tr = Splits.make_split(_meta(), test_vendors=("Canon",))[0]
+    assert Splits.cap_subjects(tr, 0).equals(tr)                 # 0 = use all
+    assert Splits.cap_subjects(tr, len(tr) + 5).equals(tr)       # k>=len -> unchanged
+    assert Splits.cap_subjects(tr, 2, seed=0).equals(Splits.cap_subjects(tr, 2, seed=0))   # deterministic
 
 
 def test_modelsplit_split_criteria():
