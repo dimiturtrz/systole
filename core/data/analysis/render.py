@@ -4,6 +4,7 @@ blobs, cartoon backgrounds, blood-too-bright). Saves a PNG grid. Companion to sy
 and sim2real (per-vendor fit)."""
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -67,9 +68,9 @@ class Render:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         pass
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         Render.render_synth_vs_real()

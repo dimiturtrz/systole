@@ -8,10 +8,12 @@ All flagship numbers pool ED+ES (the honest read). nnU-Net numbers are read from
 baselines/nnunet/results.json (emitted by baselines/nnunet/score.py --out, ED+ES) — single source,
 no hand-copy; refresh by re-running that baseline's score.py.
 """
+import argparse
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import mlflow
 import numpy as np
@@ -49,11 +51,11 @@ _NAMES = [CLASSES[c][0] for c in CLASSES]  # RV, LV-myo, LV-cav
 class _Collected:
     """One axis' GPU-collected pieces, held raw so the VAL calibration can be fit before assembly."""
     n: int
-    dists: dict
-    dice_acc: dict
+    dists: dict[int, list[np.ndarray]]
+    dice_acc: dict[int, list[float]]
     ef_gt: np.ndarray
     ef_pred: np.ndarray
-    strata: dict | None
+    strata: dict[str, Any] | None
 
 
 class Results:
@@ -61,15 +63,17 @@ class Results:
     `_axis`/`build` that feed it. Grouped so the published-JSON shape lives with the eval that fills it."""
 
     @staticmethod
-    def axis_dict(n_rows: int, dists: dict, dice_acc: dict, ef_stats: AgreementStats,
-                  cal_stats: AgreementStats | None = None) -> dict:
+    def axis_dict(n_rows: int, dists: dict[int, list[np.ndarray]], dice_acc: dict[int, list[float]], ef_stats: AgreementStats,
+                  cal_stats: AgreementStats | None = None) -> dict[str, Any]:
         """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
         stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
         EF MAE/bias/LoA). No model, no store — extracted from `_collect` so the exact JSON shape + rounding
         (the thing the docs read) is testable off synthetic pooled arrays; `build` supplies these from the
         GPU `collect` (the shell) and appends `strata` after. `cal_stats` (EF stats after the VAL-fit linear
         correction) adds the disclosed `ef_*_cal` companions alongside the raw EF — never replaces them."""
-        dice, hd95, assd = {}, {}, {}
+        dice: dict[str, float] = {}
+        hd95: dict[str, float] = {}
+        assd: dict[str, float] = {}
         for cl, (name, _) in CLASSES.items():
             pooled = (
                 np.concatenate([d for d in dists[cl] if d.size]) if any(d.size for d in dists[cl]) else np.array([])
@@ -89,7 +93,7 @@ class Results:
         return out
 
     @staticmethod
-    def _collect(run: Path, device: str, df, *, with_strata: bool) -> "_Collected":  # pragma: no cover
+    def _collect(run: Path, device: str, df: pl.DataFrame, *, with_strata: bool) -> "_Collected":  # pragma: no cover
         """GPU shell for one axis: pooled boundary dists + per-class dice + EF pairs (+ pathology strata).
         Returns raw pieces so `build` can fit the calibration on VAL before assembling any axis."""
         rows = Distribution.collect(run, device, df.iter_rows(named=True))
@@ -98,7 +102,7 @@ class Results:
         return _Collected(len(rows), dists, dice_acc, np.asarray(ef_gt), np.asarray(ef_pred), strata)
 
     @staticmethod
-    def _axis(c: "_Collected", cal: EfCalibration) -> dict:
+    def _axis(c: "_Collected", cal: EfCalibration) -> dict[str, Any]:
         """Assemble one axis dict from collected pieces + the VAL-fit calibration (raw EF stats plus the
         disclosed calibrated companions). Pure over `_Collected` — the GPU cost lives in `_collect`."""
         ef = Measure.ef_statistics(c.ef_gt, c.ef_pred)
@@ -109,7 +113,7 @@ class Results:
         return out
 
     @staticmethod
-    def build(run: Path) -> dict:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
+    def build(run: Path) -> dict[str, Any]:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
         """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
         TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
         the run actually held out. EF calibration is fit on VAL only (leak rule) and applied to every axis;
@@ -142,12 +146,12 @@ class Results:
         }
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF)
         ap.add_argument("--out", default="cardioseg/RESULTS.json")
 
     @staticmethod
-    def run(args):  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
         res = Results.build(Registry.resolve(args.run))
         Path(args.out).write_text(json.dumps(res, indent=2))
         f = res["flagship"]

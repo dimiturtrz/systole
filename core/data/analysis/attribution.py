@@ -13,14 +13,17 @@ so every run ships an attribution.png + confusion next to its card. captum is an
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 import torch
 from captum.attr import Saliency
 from jaxtyping import Float, Integer
+from monai.networks.nets import UNet
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -45,7 +48,7 @@ class Attribution:
     out_dir) takes only the data + output location that vary. The model-free helpers (class_confusion, _predict)
     are folded in as staticmethods."""
 
-    def __init__(self, model, device: str, n_classes: int):
+    def __init__(self, model: UNet, device: str, n_classes: int) -> None:
         self.model, self.device, self.n_classes = model, device, n_classes
 
     @staticmethod
@@ -65,7 +68,7 @@ class Attribution:
         return confusion
 
     @staticmethod
-    def _predict(model, X: Float[torch.Tensor, "*batch *c *h *w"], device: str,
+    def _predict(model: UNet, X: Float[torch.Tensor, "*batch *c *h *w"], device: str,
                  batch: int = 64) -> Integer[torch.Tensor, "*batch *h *w"]:
         model.eval()
         with torch.no_grad():
@@ -73,7 +76,7 @@ class Attribution:
                               for i in range(0, X.shape[0], batch)])
 
     def attribute(self, X: Float[torch.Tensor, "*batch *c *h *w"], Y: Integer[torch.Tensor, "*batch *h *w"],
-                  out_dir: str | Path) -> dict:
+                  out_dir: str | Path) -> dict[str, Any]:
         """Compute class confusion (always) + render attribution.png (saliency if captum). Writes
         attribution.json (confusion + per-class foreground-recall) to out_dir. Returns the summary dict."""
         out_dir_path = Path(out_dir)
@@ -92,14 +95,15 @@ class Attribution:
         (out_dir_path / "attribution.json").write_text(json.dumps(summary, indent=2))
         return summary
 
-    def _render(self, X, Y, pred, out_png: Path, k: int = 4) -> bool:
+    def _render(self, X: Float[torch.Tensor, "*batch *c *h *w"], Y: Integer[torch.Tensor, "*batch *h *w"],
+                 pred: Integer[torch.Tensor, "*batch *h *w"], out_png: Path, k: int = 4) -> bool:
         """real | GT | pred | saliency(cav) for k all-class slices. Saliency needs captum; returns whether
         it was drawn. Always writes the real/GT/pred panel."""
         all_class_slices = [i for i in range(Y.shape[0])
                             if set(Y[i].unique().tolist()) >= set(range(1, self.n_classes))][:k]
         if not all_class_slices:
             all_class_slices = list(range(min(k, Y.shape[0])))
-        def _fwd(x):
+        def _fwd(x: torch.Tensor) -> torch.Tensor:
             return self.model(x).sum(dim=(2, 3))             # spatial-sum logits -> [B,C] for attribution
         saliency = Saliency(_fwd)
 
@@ -107,7 +111,7 @@ class Attribution:
         vmax = self.n_classes - 1
         fig, ax = plt.subplots(rows, len(all_class_slices), figsize=(3 * len(all_class_slices), 3 * rows),
                                squeeze=False)
-        def _panel(row, c, img, title, **kw):
+        def _panel(row: int, c: int, img: Any, title: str, **kw: Any) -> None:
             ax[row, c].imshow(img, **kw); ax[row, c].set_title(title); ax[row, c].axis("off")
         for c, i in enumerate(all_class_slices):
             slice_input = X[i:i + 1].to(self.device)
@@ -122,12 +126,12 @@ class Attribution:
         return saliency is not None
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF, help="registry ref (alias|version|run-id) or run dir")
         ap.add_argument("--out", default=None, help="output dir (default: the resolved run dir)")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         run_dir = Registry.resolve(args.run)
         model, cfg, device = Run.load_run(run_dir)
         data_cfg = (cfg.generator.data if cfg else TrainCfg().generator.data)

@@ -6,6 +6,7 @@ recipe and delegates per-case, never importing `core.preprocessing` itself.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -25,11 +26,11 @@ class Normalizer:
     store never imports `preprocess_case` directly. The Nyúl STANDARD (a normalization axis fit to
     reference data) is fit/loaded via the staticmethods `fit_standard`/`load_standard`."""
 
-    def __init__(self, recipe: Recipe | None = None, nyul_standard=None):
+    def __init__(self, recipe: Recipe | None = None, nyul_standard: Any = None) -> None:
         self.recipe = recipe or Recipe()
         self.nyul_standard = nyul_standard
 
-    def apply_case(self, case: Path, loader) -> dict:
+    def apply_case(self, case: Path, loader: Any) -> dict[str, Any]:
         """Consolidate ONE raw case to the recipe's processed arrays (resample [+N4] [+Nyúl] + norm)."""
         r = self.recipe
         return Preprocess.preprocess_case(case, target_inplane=r.inplane, loader=loader,

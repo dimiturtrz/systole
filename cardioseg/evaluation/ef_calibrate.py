@@ -10,8 +10,10 @@ on VAL only; TEST is scored once, uncalibrated vs calibrated, for the report (le
 
     python -m cardioseg.evaluation ef_calibrate --run runs/gen
 """
+import argparse
 import json
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -35,19 +37,19 @@ class EfCalibrate:
     (MAE/bias/LoA) uncalibrated vs calibrated on val + each test axis. Fit lives on VAL only."""
 
     @staticmethod
-    def _ef_pairs(ef_rows) -> tuple[np.ndarray, np.ndarray]:
+    def _ef_pairs(ef_rows: list[dict[str, Any]]) -> tuple[np.ndarray, np.ndarray]:
         """(ef_gt, ef_pred) arrays from an Evaluator.validate ef_rows list."""
         gt = np.array([r["ef_gt"] for r in ef_rows], dtype=float)
         pred = np.array([r["ef_pred"] for r in ef_rows], dtype=float)
         return gt, pred
 
     @staticmethod
-    def _round2(pair) -> list[float]:
+    def _round2(pair: tuple[float, float] | list[float]) -> list[float]:
         """Round a [lo, hi] CI bracket to 1 dp for the report."""
         return [round(pair[0], 1), round(pair[1], 1)]
 
     @staticmethod
-    def axis_report(cal: EfCalibration, ef_rows) -> dict:
+    def axis_report(cal: EfCalibration, ef_rows: list[dict[str, Any]]) -> dict[str, Any]:
         """Agreement stats before/after applying `cal` to one axis' EF pairs, each with a bootstrap 95% CI
         on MAE + bias (the defensible error bar a single held-out split otherwise lacks). Pure — the
         testable core. Lists are [uncalibrated, calibrated]; `*_ci` entries are [[lo, hi], [lo, hi]]."""
@@ -67,11 +69,11 @@ class EfCalibrate:
         }
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF)
 
     @staticmethod
-    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
         run = Registry.resolve(args.run)
         model, cfg, device = Run.load_run(run)
         data_cfg = cfg.generator.data

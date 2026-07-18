@@ -19,7 +19,7 @@ class VolLoss:
 
     @staticmethod
     @shapecheck
-    def vol_loss(edv_pred: Float[torch.Tensor, "*k"], esv_pred: Float[torch.Tensor, "*k"], edv_gt, esv_gt,
+    def vol_loss(edv_pred: Float[torch.Tensor, "*k"], esv_pred: Float[torch.Tensor, "*k"], edv_gt: torch.Tensor | float, esv_gt: torch.Tensor | float,
                  delta: float = 0.1) -> Float[torch.Tensor, ""]:
         """DIMENSIONLESS volume-consistency loss — both volumes normalized by the (stable, >0) GT EDV, so
         the mL scale cancels: spacing / heart-size / dataset invariant, and ~the same magnitude as Dice+CE

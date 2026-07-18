@@ -4,6 +4,7 @@ extraction that removes core.model's back-dependency on core.hparams (the former
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import torch
 
@@ -15,7 +16,7 @@ class Run:
     """Trained-run loader (the free helper folded in as a staticmethod, public name kept)."""
 
     @staticmethod
-    def load_run(run, device: str | None = None):
+    def load_run(run: str | Path | Any, device: str | None = None):
         """Load a trained run into eval mode. The architecture is rebuilt from the run's saved
         config.json (so weights can't mismatch a wrong default arch); older runs without a config
         fall back to the default ModelCfg. Returns (model, cfg | None, device)."""

@@ -11,8 +11,10 @@ import argparse
 import json
 import logging
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import nibabel as nib
 import numpy as np
@@ -96,7 +98,7 @@ class ExportCtx:
     model_name: str
 
 
-def shared_crop(masks: dict, spacing, margin_mm: float = MARGIN_MM):
+def shared_crop(masks: dict[str, Any], spacing: Sequence[float], margin_mm: float = MARGIN_MM) -> tuple[dict[str, Any], float]:
     """Crop every phase to the union heart bbox + margin (kept anisotropic — the mesher
     resamples per-chamber with linear interp for smooth surfaces). Returns crops + iso step."""
     union = np.zeros_like(next(iter(masks.values())), dtype=bool)
@@ -108,7 +110,7 @@ def shared_crop(masks: dict, spacing, margin_mm: float = MARGIN_MM):
 
 
 
-def volumes(masks: dict, spacing) -> dict:
+def volumes(masks: dict[str, Any], spacing: Sequence[float]) -> dict[str, Any]:
     """EDV (ml full), ESV (ml empty), EF (%) from the LV cavity — full-res, real spacing."""
     if "ED" in masks and "ES" in masks:
         ef, edv, esv = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
@@ -126,17 +128,17 @@ class ManifestEntry:
     group: str | None
     held_out: bool
     source: str
-    pred: dict
-    gt: dict
-    glb: dict
+    pred: dict[str, Any]
+    gt: dict[str, Any]
+    glb: dict[str, Any]
     frames: list[str] | None = None      # beating-cycle only (None on a static entry)
     ed_idx: int | None = None
     es_idx: int | None = None
     slices: list[str] | None = None
     slice_d: int | None = None           # serialized as the viewer's `sliceD` key
 
-    def to_dict(self) -> dict:
-        entry = {"patient": self.patient, "group": self.group, "held_out": self.held_out,
+    def to_dict(self) -> dict[str, Any]:
+        entry: dict[str, Any] = {"patient": self.patient, "group": self.group, "held_out": self.held_out,
                  "source": self.source, "pred": self.pred, "gt": self.gt, "glb": self.glb}
         if self.frames is not None:      # a beating entry carries the cine strips + phase indices
             entry.update(frames=self.frames, ed_idx=self.ed_idx, es_idx=self.es_idx,
@@ -144,7 +146,7 @@ class ManifestEntry:
         return entry
 
 
-def manifest_with(data, entry: dict, model_name: str) -> dict:
+def manifest_with(data: dict[str, Any] | None, entry: dict[str, Any], model_name: str) -> dict[str, Any]:
     """Pure insert/replace of one patient into a manifest dict -> the new {model, hearts} dict.
     `data` is the prior manifest (dict, the old bare-array form, or None); the entry replaces any
     same-patient row and the hearts list stays sorted by patient. (write is the shell around this.)"""
@@ -166,7 +168,7 @@ def upsert_manifest(entry: ManifestEntry, model_name: str) -> None:  # pragma: n
     path.write_text(json.dumps(manifest_with(data, entry.to_dict(), model_name), indent=2))
 
 
-def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — IO shell)
+def load_4d(pdir: Path, name: str) -> tuple[Any, tuple[Any, ...]]:  # pragma: no cover  (nibabel NIfTI disk load — IO shell)
     """Load the cine as [t, z, y, x] + spacing (z, y, x) mm."""
     img = nib.load(str(pdir / f"{name}_4d.nii.gz"))
     arr = np.transpose(np.asanyarray(img.dataobj), (3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
@@ -174,13 +176,13 @@ def load_4d(pdir, name: str):  # pragma: no cover  (nibabel NIfTI disk load — 
     return arr, (zs, ys, xs)
 
 
-def frame_indices(pdir):  # pragma: no cover  (Info.cfg disk parse — IO shell)
+def frame_indices(pdir: Path) -> tuple[int, int]:  # pragma: no cover  (Info.cfg disk parse — IO shell)
     """0-based ED, ES frame indices (Info.cfg parsing reused from core)."""
     cfg = AcdcAdapter.parse_info_cfg(pdir)
     return int(cfg["ED"]) - 1, int(cfg["ES"]) - 1
 
 
-def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (export orchestration shell)
+def run(patients: Sequence[str], source: str, ctx: ExportCtx) -> None:  # pragma: no cover  (export orchestration shell)
     held = heldout_set(ctx.model_name)
     for p in patients:
         pdir = patient_dir(p)  # p may be an ID or a full path
@@ -201,19 +203,20 @@ def run(patients, source, ctx: ExportCtx):  # pragma: no cover  (export orchestr
                  entry.pred.get("ef"), entry.gt.get("ef"))
 
 
-def run_animate(patients, ctx: ExportCtx, stride=1):  # pragma: no cover  (export orchestration shell)
+def run_animate(patients: Sequence[str], ctx: ExportCtx, stride: int = 1) -> None:  # pragma: no cover  (export orchestration shell)
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry, per patient."""
     held = heldout_set(ctx.model_name)
     for p in patients:
         _animate_patient(p, ctx, held, stride)
 
 
-def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (inference shell)
+def _segment_cine(pdir: Path, name: str, ctx: ExportCtx, stride: int) -> tuple[list[int], dict[int, Any], dict[int, Any], tuple[Any, ...]]:  # pragma: no cover  (inference shell)
     """Segment every strided cine frame -> (frames_t, masks{k}, grays{k} aligned, rspacing)."""
     vol, spacing = load_4d(pdir, name)
     rspacing = (spacing[0], INPLANE_MM, INPLANE_MM)
     frames_t = list(range(0, vol.shape[0], stride))
-    masks, grays = {}, {}
+    masks: dict[int, Any] = {}
+    grays: dict[int, Any] = {}
     for k, t in enumerate(frames_t):
         img = Preprocess.zscore(Preprocess.resample_inplane(vol[t].astype(np.float32), spacing, INPLANE_MM)[0])
         masks[k] = Postprocess.largest_cc_per_class(
@@ -222,7 +225,7 @@ def _segment_cine(pdir, name, ctx: ExportCtx, stride):  # pragma: no cover  (inf
     return frames_t, masks, grays, rspacing
 
 
-def _heart_bbox(masks, margin=CINE_BBOX_MARGIN):
+def _heart_bbox(masks: dict[int, Any], margin: int = CINE_BBOX_MARGIN) -> tuple[int, int, int, int]:
     """In-plane (r0,r1,c0,c1) of the heart union over the whole cine (+margin) — one stable crop."""
     union = np.zeros((SIZE, SIZE), bool)
     for k in masks:
@@ -234,7 +237,7 @@ def _heart_bbox(masks, margin=CINE_BBOX_MARGIN):
             max(0, int(xs.min()) - margin), min(SIZE, int(xs.max()) + margin + 1))
 
 
-def _animate_patient(p, ctx: ExportCtx, held, stride):  # pragma: no cover  (export orchestration shell)
+def _animate_patient(p: str, ctx: ExportCtx, held: set[str], stride: int) -> None:  # pragma: no cover  (export orchestration shell)
     """One patient: segment the cine, write per-frame slice strips + chamber glbs, upsert the entry."""
     pdir = patient_dir(p)
     name = pdir.name

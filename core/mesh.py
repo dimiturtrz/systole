@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pyvista as pv
@@ -91,7 +92,7 @@ class Mesh:
 
     @staticmethod
     @shapecheck
-    def export_meshes(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, subject: str, formats=("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
+    def export_meshes(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, subject: str, formats: Any = ("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
                       iso: float = MESH_MM, root: str | Path | None = None) -> Path:
         """Write chamber meshes for one subject to <data>/meshes/<subject>/ (or `root`). GLB (colored
         scene) + STL (per chamber) by default. Returns the subject dir."""
@@ -104,7 +105,7 @@ class Mesh:
         return out
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: Any) -> None:
         ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
         ap.add_argument("--frame", default=Phase.ED, type=Phase, choices=list(Phase))
         ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
@@ -112,7 +113,7 @@ class Mesh:
         ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
 
     @staticmethod
-    def run(args):
+    def run(args: Any) -> None:
         z = np.load(args.npz, allow_pickle=True)
         mask, spacing = z[f"{args.frame}_gt"], tuple(float(s) for s in z["spacing"])
         subject = args.subject or Path(args.npz).stem

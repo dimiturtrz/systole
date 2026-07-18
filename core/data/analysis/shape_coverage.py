@@ -12,9 +12,11 @@ numpy-only (SVD for PCA); no sklearn/umap dependency.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 import numpy as np
@@ -60,7 +62,7 @@ class ShapeCoverage:
         ], dtype=np.float64)
 
     @staticmethod
-    def _feats_from_masks(masks) -> Float[np.ndarray, "n 7"]:
+    def _feats_from_masks(masks: Any) -> Float[np.ndarray, "n 7"]:
         rows = [features for features in (ShapeCoverage.shape_features(mask) for mask in masks) if features is not None]
         return np.stack(rows) if rows else np.zeros((0, 7))
 
@@ -74,12 +76,12 @@ class ShapeCoverage:
         return out
 
     @staticmethod
-    def coverage(real: Float[np.ndarray, "*n d"], synth: Float[np.ndarray, "*n d"]) -> dict:
+    def coverage(real: Float[np.ndarray, "*n d"], synth: Float[np.ndarray, "*n d"]) -> dict[str, Any]:
         """Standardize by REAL stats; for each real point the nearest synth point (does synth cover real),
         and the reverse (does synth extrapolate beyond real). Distances in std-units of the real cloud."""
         real_mean, real_std = real.mean(0), real.std(0) + 1e-9
         real_standardized, synth_standardized = (real - real_mean) / real_std, (synth - real_mean) / real_std
-        def nn(a, b):                                        # nearest-neighbour distance a->b, per row of a
+        def nn(a: Float[np.ndarray, "n d"], b: Float[np.ndarray, "m d"]) -> Float[np.ndarray, "n"]:  # nearest-neighbour distance a->b, per row of a
             distances = np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
             return distances.min(1)
         real_to_synth = nn(real_standardized, synth_standardized)   # real -> nearest synth (coverage)
@@ -100,13 +102,13 @@ class ShapeCoverage:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
         ap.add_argument("--pool", required=True, help="synth anatomy pool .npz (build_pool)")
         ap.add_argument("--out", default=None, help="PCA scatter PNG (real vs synth)")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         real = ShapeCoverage._feats_from_masks(ShapeCoverage.real_masks(args.real))
         synth = ShapeCoverage._feats_from_masks(Anatomy.load_pool(args.pool))
         log.info(json.dumps(ShapeCoverage.coverage(real, synth), indent=2))

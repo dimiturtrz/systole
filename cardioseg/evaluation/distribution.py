@@ -12,10 +12,13 @@ Also prints pooled HD95 / ASSD / Dice / EF-MAE. Writes PNGs to <run>/plots/.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 
@@ -47,7 +50,7 @@ SMALL_N = 10   # groups below this are flagged — per-group stats are noisy
 
 class Distribution:
     @staticmethod
-    def collect(run: Path, device: str, meta_rows, *, tta: bool = True):  # pragma: no cover
+    def collect(run: Path, device: str, meta_rows: Iterable[dict[str, Any]], *, tta: bool = True) -> list[dict[str, Any]]:  # pragma: no cover
         """One record per subject: dice + boundary distances per class, EF gt/pred, and the
         stratification keys (vendor/pathology/field) straight from the store's meta — for the
         stratified views. Pure eval on the existing model (no retrain).
@@ -93,7 +96,7 @@ class Distribution:
         return rows
 
     @staticmethod
-    def pooled(rows):
+    def pooled(rows: list[dict[str, Any]]) -> tuple[dict[int, list[np.ndarray]], dict[int, list[float]], np.ndarray, np.ndarray]:
         """Pooled dists/dice/ef arrays from per-case rows (for the total plots)."""
         dists = {c: [r["sd"][c] for r in rows if "sd" in r] for c in CLASSES}
         dice_acc = {c: [r["dice"][c] for r in rows if "dice" in r] for c in CLASSES}
@@ -103,7 +106,7 @@ class Distribution:
         return dists, dice_acc, ef_gt, ef_pred
 
     @staticmethod
-    def plot_kde(dists, out: Path, label: str):  # pragma: no cover  (matplotlib KDE render + savefig)
+    def plot_kde(dists: dict[int, list[np.ndarray]], out: Path, label: str) -> None:  # pragma: no cover  (matplotlib KDE render + savefig)
         fig, ax = plt.subplots(figsize=(7, 4))
         # data-driven x-range so the outlier tail (the point of the plot) isn't clipped at 12 mm
         pooled = [d for cl in CLASSES for d in dists[cl] if d.size]
@@ -126,7 +129,7 @@ class Distribution:
         plt.close(fig)
 
     @staticmethod
-    def plot_bland_altman(ef_gt, ef_pred, out: Path, label: str):  # pragma: no cover
+    def plot_bland_altman(ef_gt: Sequence[float], ef_pred: Sequence[float], out: Path, label: str) -> Any:  # pragma: no cover
         """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
         upright on top; bias + 95% LoA as vertical lines (and in the title)."""
         gt = np.asarray(ef_gt, dtype=float)
@@ -181,7 +184,7 @@ class Distribution:
         return stats
 
     @staticmethod
-    def _groups(rows, key):
+    def _groups(rows: list[dict[str, Any]], key: str) -> dict[str, list[dict[str, Any]]]:
         """{group_value -> rows with EF} for a stratify key, dropping rows missing the key/EF."""
         g = defaultdict(list)
         for r in rows:
@@ -191,7 +194,7 @@ class Distribution:
         return dict(sorted(g.items(), key=lambda kv: -len(kv[1])))   # largest group first
 
     @staticmethod
-    def strata_table(rows, key) -> dict:
+    def strata_table(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
         """Per-group mean Dice (per class + mean), EF MAE + bias, n. Printed + returned for JSON."""
         g = Distribution._groups(rows, key)
         if not g:
@@ -217,7 +220,7 @@ class Distribution:
         return out
 
     @staticmethod
-    def plot_strata(rows, key, out: Path, label: str):  # pragma: no cover  (matplotlib grouped-bar render + savefig)
+    def plot_strata(rows: list[dict[str, Any]], key: str, out: Path, label: str) -> None:  # pragma: no cover  (matplotlib grouped-bar render + savefig)
         """Two panels: per-group mean Dice (bars) + per-group EF MAE (bars), n annotated,
         small-n groups hatched. The 'where does it fail' figure."""
         g = Distribution._groups(rows, key)
@@ -249,11 +252,11 @@ class Distribution:
         plt.close(fig)
 
     @staticmethod
-    def lo_hi(bias, sd):
+    def lo_hi(bias: float, sd: float) -> str:
         return f"{bias - LOA_Z * sd:+.1f}, {bias + LOA_Z * sd:+.1f}"
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir with model.pth")
         ap.add_argument("--eval", default=Dataset.ACDC, choices=[*SEG_DATASETS, "canon"],
                         help="eval set: a dataset, or 'canon' (mnms1 vendor==Canon) — a criteria filter")
@@ -262,7 +265,7 @@ class Distribution:
         ap.add_argument("--no-tta", dest="tta", action="store_false", help="disable test-time flips (default: on)")
 
     @staticmethod
-    def run(args):  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
         run = Registry.resolve(args.run)
         device = Model.resolve_device()
 

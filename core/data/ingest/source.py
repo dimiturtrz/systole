@@ -12,7 +12,7 @@ The Source's identity for lineage/comparability is a CONTENT HASH of its subject
 from __future__ import annotations
 
 import hashlib
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 import torch
@@ -46,7 +46,7 @@ class Source(Protocol):
     """Yields samples to the pipe. Static exposes a fixed subject set (paths); dynamic streams from a
     generator. Both carry `provenance()` (the lineage link) and, where finite, an `ids_hash()`."""
 
-    def provenance(self) -> dict: ...
+    def provenance(self) -> dict[str, Any]: ...
 
 
 class StaticSource:
@@ -80,7 +80,7 @@ class StaticSource:
         and as a train_gen's seed."""
         return _dataset.ACDCSliceDataset.load_to_gpu(self.paths(), size, device)
 
-    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+    def train_gen(self, size: int, device: str, gen_cfg: Any, n_classes: int) -> Generator:
         """The source's own batch engine (owns its resident tensors + transform chain). Static = real
         pixels + the configured aug/DR-synth (gen_cfg.synth as-is: synth_p>0 -> physics-recontrast DR on
         real labels; the flagship recipe). No force_synth. Carries a per-slice partial-label mask when
@@ -102,5 +102,5 @@ class StaticSource:
     def __len__(self) -> int:
         return self._f.height
 
-    def provenance(self) -> dict:
+    def provenance(self) -> dict[str, Any]:
         return {"kind": self.kind, "n": len(self), "note": self._note, "ids_hash": self.ids_hash()}

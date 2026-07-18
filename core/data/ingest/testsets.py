@@ -15,6 +15,7 @@ import logging
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -81,12 +82,12 @@ class TestSets:
         return {ts.name: StaticSource(cloud.filter(V("labelled") & ts.predicate)).ids_hash() for ts in _ALL}
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: Any) -> None:
         ap.add_argument("--freeze", action="store_true", help="recompute + WRITE testsets.lock.json")
         ap.add_argument("--check", action="store_true", help="recompute + compare to lockfile; exit 1 on drift")
 
     @staticmethod
-    def run(args):
+    def run(args: Any) -> None:
         fresh = TestSets.compute_locks(store.load(EVAL_SOURCES))
         if args.freeze:
             _LOCKFILE.write_text(json.dumps(fresh, indent=2) + "\n")

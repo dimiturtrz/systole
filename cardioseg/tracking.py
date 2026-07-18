@@ -12,10 +12,15 @@ from __future__ import annotations
 
 import contextlib
 import os
+import types
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import mlflow
 import mlflow.pytorch
+
+if TYPE_CHECKING:
+    import torch.nn
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MLRUNS = _ROOT / "mlruns"                          # artifact store (default root)
@@ -23,23 +28,23 @@ _DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"   # metadata + registr
 
 
 class _Noop:
-    def metric(self, *a, **k): pass
-    def summary(self, *a, **k): pass
-    def artifact(self, *a, **k): pass
-    def tag(self, *a, **k): pass
-    def log_model(self, *a, **k): pass
-    def end(self): pass
+    def metric(self, key: str, value: int | float, step: int | None = None) -> None: pass
+    def summary(self, results: dict[str, Any]) -> None: pass
+    def artifact(self, path: str | Path) -> None: pass
+    def tag(self, key: str, value: str | int | float | bool) -> None: pass
+    def log_model(self, model: torch.nn.Module, registered_name: str, alias: str | None = None, description: str | None = None, version_tags: dict[str, Any] | None = None) -> None: pass
+    def end(self) -> None: pass
 
 
 class _Live:
-    def __init__(self, mlflow):
+    def __init__(self, mlflow: types.ModuleType) -> None:
         self._m = mlflow
 
-    def metric(self, key: str, value, step: int | None = None):
+    def metric(self, key: str, value: int | float, step: int | None = None) -> None:
         with contextlib.suppress(Exception):
             self._m.log_metric(key, float(value), step=step)
 
-    def summary(self, results: dict):
+    def summary(self, results: dict[str, Any]) -> None:
         """Log the TRAIN-TIME per-axis scalars as fit_<axis>_<k> (e.g. fit_val_dice_mean). The 'fit_'
         prefix marks these as in-loop validate() numbers — distinct from the authoritative canonical
         metrics (acdc/canon/ge_*) that results.py logs. Don't let them masquerade as the test number."""
@@ -49,17 +54,17 @@ class _Live:
                     if isinstance(d.get(k), (int, float)):
                         self.metric(f"fit_{axis}_{k}", d[k])
 
-    def artifact(self, path):
+    def artifact(self, path: str | Path) -> None:
         try:
             if Path(path).exists():
                 self._m.log_artifact(str(path))
         except Exception: pass
 
-    def tag(self, key, value):
+    def tag(self, key: str, value: str | int | float | bool) -> None:
         with contextlib.suppress(Exception):
             self._m.set_tag(key, str(value))
 
-    def log_model(self, model, registered_name, alias=None, description=None, version_tags=None):
+    def log_model(self, model: torch.nn.Module, registered_name: str, alias: str | None = None, description: str | None = None, version_tags: dict[str, Any] | None = None) -> None:
         """Log the torch model + register a version (catalog). `alias` (e.g. 'production') points at it;
         `description`/`version_tags` make the auto-numbered version readable. Guarded."""
         try:
@@ -74,7 +79,7 @@ class _Live:
                 c.set_registered_model_alias(registered_name, alias, v)
         except Exception: pass
 
-    def end(self):
+    def end(self) -> None:
         with contextlib.suppress(Exception):
             self._m.end_run()
 
@@ -87,8 +92,8 @@ class Tracker:
 
     MODEL_NAME = "cardioseg-2dunet"        # the one deployable model line (registry lives in core.registry)
 
-    def __init__(self, experiment: str, run_name: str, params: dict | None = None,
-                 tags: dict | None = None):
+    def __init__(self, experiment: str, run_name: str, params: dict[str, Any] | None = None,
+                 tags: dict[str, Any] | None = None) -> None:
         self.experiment, self.run_name = experiment, run_name
         self.params, self.tags = params, tags
 
@@ -100,7 +105,7 @@ class Tracker:
         return mlflow
 
     @staticmethod
-    def _flat(d: dict, prefix: str = "") -> dict:
+    def _flat(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
         """Flatten nested config dicts to dotted keys (mlflow params are scalar)."""
         out = {}
         for k, v in d.items():
@@ -111,7 +116,7 @@ class Tracker:
                 out[key] = v
         return out
 
-    def _configure(self, mlflow):
+    def _configure(self, mlflow: types.ModuleType) -> None:
         """Shared open: point mlflow at the local store + this session's experiment + system metrics.
         Raises propagate to the caller's outer guard (a fatal setup error -> no-op handle)."""
         _MLRUNS.mkdir(exist_ok=True)
@@ -120,11 +125,11 @@ class Tracker:
         with contextlib.suppress(Exception):
             mlflow.enable_system_metrics_logging()           # GPU/CPU/mem if psutil+pynvml present
 
-    def _apply_tags(self, mlflow):
+    def _apply_tags(self, mlflow: types.ModuleType) -> None:
         for k, v in (self.tags or {}).items():
             mlflow.set_tag(k, str(v))
 
-    def start(self):
+    def start(self) -> _Noop | _Live:
         """Begin a fresh tracked run (local mlruns/). Returns a handle; no-op if tracking is off."""
         mlflow = Tracker._mlflow()
         if mlflow is None:
@@ -139,7 +144,7 @@ class Tracker:
         except Exception:
             return _Noop()      # tracking must never break a run
 
-    def track_run(self, run_dir=None):
+    def track_run(self, run_dir: str | Path | None = None) -> _Noop | _Live:
         """Resume the run tied to `run_dir` (via runs/<name>/.mlflow_run_id) if it exists, else start a
         fresh one and persist its id there. Lets the post-hoc eval (results/uncertainty/calibrate) log the
         CANONICAL numbers into the SAME run train.py created — so the UI compares real numbers, not just

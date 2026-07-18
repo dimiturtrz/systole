@@ -13,6 +13,7 @@ Change the criteria → change the split. No registry, no name, no flag.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -69,8 +70,8 @@ class Splits:
         return train.sample(n=k, shuffle=True, seed=seed)
 
     @staticmethod
-    def make_split(meta: pl.DataFrame, test_datasets=(), test_vendors=(), val_frac: float = 0.2,  # noqa: PLR0913  low-level split primitive; config-object path is split_from_cfg(DataCfg)
-                   seed: int = 0, val_datasets=(), val_vendors=(), train_vendors=(), train_subjects: int = 0
+    def make_split(meta: pl.DataFrame, test_datasets: Any = (), test_vendors: Any = (), val_frac: float = 0.2,  # noqa: PLR0913  low-level split primitive; config-object path is split_from_cfg(DataCfg)
+                   seed: int = 0, val_datasets: Any = (), val_vendors: Any = (), train_vendors: Any = (), train_subjects: int = 0
                    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         """(train, val, test) from criteria. test = rows whose dataset ∈ test_datasets OR vendor ∈
         test_vendors (+ labelled). VAL: if val_datasets/val_vendors given, val = rows matching those
@@ -106,7 +107,7 @@ class ModelSplit:
     slices' MUST go through this, not raw `Splits.make_split`: make_split reads only the criteria and
     silently ignores a coded split (a trap this removes)."""
 
-    def __init__(self, d, meta: pl.DataFrame):
+    def __init__(self, d: Any, meta: pl.DataFrame) -> None:
         self.d, self.meta = d, meta
 
     def _criteria_split(self, meta: pl.DataFrame, seed: int = 0

@@ -16,6 +16,7 @@ Split is PATIENT-LEVEL: every slice of a patient lands in the same fold, else
 near-identical neighbouring slices leak across train/val and inflate Dice.
 """
 from pathlib import Path
+from typing import override
 
 import numpy as np
 import torch
@@ -34,7 +35,7 @@ from core.types import Slice2D
 load_arrays = Store.load_arrays
 
 
-class ACDCSliceDataset(Dataset):
+class ACDCSliceDataset(Dataset[tuple[Tensor, Tensor]]):
     """All ED+ES short-axis slices from the given consolidated subjects, as (img, mask).
 
     Takes a list of npz paths from the data store (data/store.py) — each holds one subject's
@@ -74,8 +75,9 @@ class ACDCSliceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
-        img, m = self.items[i]
+    @override
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+        img, m = self.items[index]
         img = Preprocess.fit_square(img, self.size, pad_value=0.0)          # [size, size]
         m = Preprocess.fit_square(m, self.size, pad_value=0)                # [size, size]
         # Augmentation is applied GPU-batched in the training loop (see training.augment), not
@@ -84,7 +86,7 @@ class ACDCSliceDataset(Dataset):
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
     @staticmethod
-    def load_to_gpu(npz_paths, size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
+    def load_to_gpu(npz_paths: list[str | Path], size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
         """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
 
         The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training

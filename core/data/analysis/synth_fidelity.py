@@ -11,9 +11,11 @@ Companion to attribution.py (what the MODEL learns) — this is what the DATA lo
 """
 from __future__ import annotations
 
+import argparse
 import copy
 import json
 import logging
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -21,7 +23,7 @@ import torch
 from jaxtyping import Float, Integer
 
 from core.data.dynamic.dataset import ACDCSliceDataset
-from core.data.dynamic.synth import MatchedAcqCfg, SynthPainter
+from core.data.dynamic.synth import MatchedAcqCfg, SynthCfg, SynthPainter
 from core.data.static import splits
 from core.data.static.labels import CLASSES
 from core.data.static.store.build import Build as store
@@ -60,7 +62,7 @@ class SynthFidelity:
     per class. Holds the generation cfg + n_classes + device + size (shared STATE); methods take only
     the real (X,Y) set / meta that varies. (bd 01fh: cfg/n_classes/device/size were threaded as args.)"""
 
-    def __init__(self, cfg, n_classes: int, device: str, size: int):
+    def __init__(self, cfg: SynthCfg, n_classes: int, device: str, size: int) -> None:
         self.cfg, self.n_classes, self.device, self.size = cfg, n_classes, device, size
 
     @staticmethod
@@ -71,7 +73,7 @@ class SynthFidelity:
             return float("nan")
         cap = 100_000                                       # torch.quantile caps input size; subsample above
 
-        def subsample(v):
+        def subsample(v: Float[torch.Tensor, "*n"]) -> Float[torch.Tensor, "*n"]:
             return v[torch.randperm(v.numel(), device=v.device)[:cap]] if v.numel() > cap else v
         quantiles = torch.linspace(0, 1, q, device=a.device)
         return float((torch.quantile(subsample(a).float(), quantiles)
@@ -86,15 +88,15 @@ class SynthFidelity:
         return float((a.mean() - b.mean()).abs() / pooled_std) if float(pooled_std) > 0 else float("nan")
 
     @staticmethod
-    def _pair_dprime(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict:
-        dprimes = {}
+    def _pair_dprime(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict[str, float]:
+        dprimes: dict[str, float] = {}
         for i, j in _PAIRS:
             if i < n_classes and j < n_classes:
                 dprimes[f"{_NAMES[i]}|{_NAMES[j]}"] = round(SynthFidelity.dprime(x1c[ym == i], x1c[ym == j]), 3)
         return dprimes
 
     @staticmethod
-    def _paint(mask: Integer[torch.Tensor, "..."], cfg, n_classes: int,
+    def _paint(mask: Integer[torch.Tensor, "..."], cfg: SynthCfg, n_classes: int,
                real_img: Float[torch.Tensor, "..."] | None = None) -> Float[torch.Tensor, "*b 1 h w"]:
         """Paint synth for an APPEARANCE comparison — deform forced OFF so the heart stays aligned to the
         measurement mask / real image. With deform on, the warped anatomy slips off the mask and the thin
@@ -106,16 +108,16 @@ class SynthFidelity:
         return img
 
     @staticmethod
-    def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg, n_classes: int,
-                     device: str) -> dict:
+    def separability(X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], cfg: SynthCfg, n_classes: int,
+                     device: str) -> dict[str, dict[str, dict[str, float] | dict[str, float | str]]]:
         """Per-class-pair d' for REAL vs SYNTH (synth painted from the same masks). Both POOLED (all pixels)
         and PER-SLICE (mean of per-slice d' — the within-image, net's-eye axis). ratio synth/real < 1 =
         synth under-separates that boundary. Real is the achievable bar (real images ARE segmentable)."""
         Xs = SynthFidelity._paint(Y.to(device), cfg, n_classes, real_img=X.to(device))
         Xr, Xs = X[:, 0].to(device), Xs[:, 0]
         labels = Y.to(device)
-        def per_slice(x1c):
-            dprime_lists = {}
+        def per_slice(x1c: Float[torch.Tensor, "..."]) -> dict[str, float]:
+            dprime_lists: dict[str, list[float]] = {}
             for i in range(x1c.shape[0]):
                 for pair_name, value in SynthFidelity._pair_dprime(
                         x1c[i].reshape(-1), labels[i].reshape(-1), n_classes).items():
@@ -133,25 +135,25 @@ class SynthFidelity:
         return result
 
     @staticmethod
-    def _spread(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict:
+    def _spread(x1c: Float[torch.Tensor, "..."], ym: Integer[torch.Tensor, "..."], n_classes: int) -> dict[str, dict[str, float]]:
         """Per-class (pooled std across all pixels, mean per-slice std) — DIVERSITY vs within-image TEXTURE."""
         flat_intensities, flat_labels = x1c.reshape(-1), ym.reshape(-1)
-        pooled = {c: float(flat_intensities[flat_labels == c].std())
+        pooled: dict[int, float] = {c: float(flat_intensities[flat_labels == c].std())
                   if int((flat_labels == c).sum()) > _MIN_DPRIME_PTS else float("nan")
                   for c in range(n_classes)}
-        per_slice_stds = {c: [] for c in range(n_classes)}
+        per_slice_stds: dict[int, list[float]] = {c: [] for c in range(n_classes)}
         for i in range(x1c.shape[0]):
             slice_intensities, slice_labels = x1c[i].reshape(-1), ym[i].reshape(-1)
             for c in range(n_classes):
                 if int((slice_labels == c).sum()) > _MIN_DPRIME_PTS:
                     per_slice_stds[c].append(float(slice_intensities[slice_labels == c].std()))
-        per_slice_means = {c: round(float(np.nanmean(values)), 3) if values else float("nan")
+        per_slice_means: dict[int, float] = {c: round(float(np.nanmean(values)), 3) if values else float("nan")
                            for c, values in per_slice_stds.items()}
         return {"pooled": {_NAMES[c]: round(pooled[c], 3) for c in range(n_classes)},
                 "per_slice": {_NAMES[c]: per_slice_means[c] for c in range(n_classes)}}
 
     @staticmethod
-    def real_spread_bands(meta, n_classes: int, size: int, max_per_vendor: int = 800) -> dict:
+    def real_spread_bands(meta: pl.DataFrame, n_classes: int, size: int, max_per_vendor: int = 800) -> dict[str, Any]:
         """Per-VENDOR real per-class pooled σ, and the σ BAND (min..max across vendors) + all-pooled. The
         fair target for a DIVERSITY synth: real spread isn't one number, it's a RANGE across scanners. Synth
         σ ABOVE the band's max on a class = genuinely wider than any real vendor (candidate over-spread);
@@ -169,14 +171,14 @@ class SynthFidelity:
                 sample_indices = torch.randperm(n, generator=generator)[:max_per_vendor]
                 X, Y = X[sample_indices], Y[sample_indices]
             per_vendor[vendor] = SynthFidelity._spread(X[:, 0], Y, n_classes)["pooled"]
-        band = {}
+        band: dict[str, dict[str, float]] = {}
         for c in range(n_classes):
             values = [per_vendor[vendor][_NAMES[c]] for vendor in per_vendor
                     if per_vendor[vendor][_NAMES[c]] == per_vendor[vendor][_NAMES[c]]]
-            band[_NAMES[c]] = {"min": round(min(values), 3), "max": round(max(values), 3)} if values else {}
+            band[_NAMES[c]] = {"min": round(min(values), 3), "max": round(max(values), 3)} if values else cast(dict[str, float], {})
         return {"per_vendor": per_vendor, "band_across_vendors": band}
 
-    def distance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], q: int = 100) -> dict:
+    def distance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."], q: int = 100) -> dict[str, Any]:
         """Per-class Wasserstein-1 between real and synth intensity distributions. Synth is painted from the
         SAME real masks (so regions match); compares what each class LOOKS like. Returns per-class distances
         (z-units) + the mean and worst class — the break localized."""
@@ -186,7 +188,9 @@ class SynthFidelity:
         # W1 decomposed: LOCATION = |mean diff| (a z-shift, e.g. from bg composition / normalization),
         # SHAPE = W1 of the mean-centered distributions (genuine signal-model mismatch). Tells whether the
         # gap is fixable by matching composition (location) or needs better blood physics (shape).
-        distances, loc, shape = {}, {}, {}
+        distances: dict[str, float] = {}
+        loc: dict[str, float] = {}
+        shape: dict[str, float] = {}
         for c in range(self.n_classes):
             class_mask = labels == c
             real_class, synth_class = real_intensities[class_mask], synth_intensities[class_mask]
@@ -204,7 +208,7 @@ class SynthFidelity:
                 "worst_class": worst}
 
     def variance(self, X: Float[torch.Tensor, "..."], Y: Integer[torch.Tensor, "..."],
-                 field: float | None = None) -> dict:
+                 field: float | None = None) -> dict[str, Any]:
         """Per-class spread: REAL (target) vs SYNTH baseline vs each knob toggled OFF (marginal Δ). `field`
         pins a single field strength (1.5/3.0) to stratify out the field axis; None = full sweep. Reuses the
         generator — no fitting, no training. The lens for 'is jitter's variance physical-replaceable?'."""
@@ -212,7 +216,7 @@ class SynthFidelity:
         base = copy.deepcopy(self.cfg)
         if field is not None:
             base.fields = (field,)
-        def synth_spread(c):
+        def synth_spread(c: SynthCfg) -> dict[str, dict[str, float]]:
             Xs = SynthFidelity._paint(Y_device, c, self.n_classes, real_img=X.to(self.device))
             return self._spread(Xs[:, 0], Y_device, self.n_classes)
         result = {"field": field or "sweep",
@@ -234,7 +238,7 @@ class SynthFidelity:
         result["knob_delta"] = deltas
         return result
 
-    def by_vendor(self, meta, q: int = 100, min_slices: int = 200, max_slices: int = 1200) -> dict:
+    def by_vendor(self, meta: pl.DataFrame, q: int = 100, min_slices: int = 200, max_slices: int = 1200) -> dict[str, Any]:
         """Per-vendor synth-vs-real distance — does the blood-level (location) gap differ by SCANNER?
         Groups the (labelled) real cases by vendor, paints synth from each vendor's masks, measures the
         per-class W1 / location / shape for each. A vendor-dependent blood location gap says the fix must
@@ -260,7 +264,7 @@ class SynthFidelity:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--mode", choices=("distance", "separability", "variance"), default="distance")
         ap.add_argument("--set", nargs="*", default=[], dest="overrides",
                         help="synth cfg overrides, e.g. synth.bg_tiers=8")
@@ -274,7 +278,7 @@ class SynthFidelity:
         ap.add_argument("--seed", type=int, default=0, help="paint seed -> reproducible d'/W1 readout")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         torch.manual_seed(args.seed)   # deterministic paint -> config deltas are the signal, not run-noise
         cfg = TrainCfg()
         Hparams.apply_overrides(cfg, [f"generator.{o}" if o.startswith("synth.") else o for o in args.overrides])

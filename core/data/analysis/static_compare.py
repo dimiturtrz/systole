@@ -10,8 +10,10 @@ ED->ES DEFORMATION. Those require a contraction model to generate ES from ED (fl
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
+from typing import Any
 
 import numpy as np
 import torch
@@ -37,7 +39,7 @@ class StaticCompare:
     assembly, and the W1 + median comparison panel."""
 
     @staticmethod
-    def geom_metrics(mask: Integer[np.ndarray, "*grid"]) -> dict | None:
+    def geom_metrics(mask: Integer[np.ndarray, "*grid"]) -> dict[str, float] | None:
         """Interpretable geometry/biomarkers for one 2D label map (px units), or None if ~empty."""
         foreground = mask > 0
         if int(foreground.sum()) < _MIN_FG_PX:
@@ -61,13 +63,13 @@ class StaticCompare:
         return metrics
 
     @staticmethod
-    def _dist(masks) -> dict:
+    def _dist(masks: Any) -> dict[str, np.ndarray]:
         rows = [metrics for metrics in (StaticCompare.geom_metrics(mask) for mask in masks) if metrics is not None]
         keys = rows[0].keys()
         return {metric: np.array([row[metric] for row in rows], dtype=np.float64) for metric in keys}
 
     @staticmethod
-    def compare(real_masks, synth_masks) -> dict:
+    def compare(real_masks: Any, synth_masks: Any) -> dict[str, dict[str, Any]]:
         """Per-metric W1(real, synth) + real/synth medians — the geometry/biomarker panel."""
         real_distributions, synth_distributions = StaticCompare._dist(real_masks), StaticCompare._dist(synth_masks)
         comparison = {}
@@ -81,12 +83,12 @@ class StaticCompare:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--real", required=True, help="processed ACDC data dir (patient*.npz)")
         ap.add_argument("--pool", required=True, help="synth anatomy pool .npz")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         results = StaticCompare.compare(ShapeCoverage.real_masks(args.real), Anatomy.load_pool(args.pool))
         log.info(json.dumps(results, indent=2))
         worst = max(results, key=lambda metric: results[metric]["w1"])

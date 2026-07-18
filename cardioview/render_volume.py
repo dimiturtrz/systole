@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from core.data.static.mri.acdc import AcdcAdapter
 log = logging.getLogger("cardioview.render_volume")
 
 
-def crop_to_heart(vol_zyx, gt_zyx, spacing_zyx, margin_mm: float = 15.0):
+def crop_to_heart(vol_zyx: np.ndarray, gt_zyx: np.ndarray | None, spacing_zyx: Sequence[float], margin_mm: float = 15.0) -> tuple[np.ndarray, np.ndarray | None]:
     """Crop to the labeled-heart bounding box + a mm margin, so we show the heart not the chest."""
     if gt_zyx is None or not np.any(gt_zyx > 0):
         return vol_zyx, gt_zyx

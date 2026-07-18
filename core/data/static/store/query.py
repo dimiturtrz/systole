@@ -16,6 +16,7 @@ datasets you ask for *is* the data cloud — no separate inventory.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -23,7 +24,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
 from core.config import _VALIDATE, DEFAULT_INPLANE, DEFAULT_SIZE, Config
-from core.data.static.mri.base import Dataset, Phase, Vendor
+from core.data.static.mri.base import Dataset, DatasetAdapter, Phase, Vendor
 from core.data.static.mri.pathology import Pathology
 from core.data.static.mri.registry import SEG_DATASETS, AdapterRegistry
 from core.data.static.reference import Reference
@@ -165,7 +166,7 @@ class Store:
         return Path(Config.data_root("processed")) / dataset / self.param_key()
 
     @staticmethod
-    def load_arrays(path: str | Path) -> dict:
+    def load_arrays(path: str | Path) -> dict[str, Any]:
         """Load one consolidated subject npz -> dict (ed_img/ed_gt/es_img/es_gt/spacing/group)."""
         z = np.load(path, allow_pickle=True)
         return {k: (z[k].item() if k == "group" else z[k]) for k in z.files}   # group -> plain py scalar (0-d npz)
@@ -177,15 +178,15 @@ class MetaBuilder:
     written npz via `adapter.meta()` (sidecar parse, no image reload). `migrate` refreshes every built
     store to the current schema (run after adding a column / fixing an adapter's meta())."""
 
-    def __init__(self, name: str, adapter):
+    def __init__(self, name: str, adapter: DatasetAdapter) -> None:
         self.name, self.adapter = name, adapter
 
     @staticmethod
-    def region_of(country):
+    def region_of(country: str | None) -> str | None:
         return _REGION.get(country) if country else None
 
     @staticmethod
-    def _bsa(height, weight):
+    def _bsa(height: Any, weight: Any) -> float | None:
         """Body surface area (m^2, Mosteller) from height(cm)+weight(kg). None if either missing."""
         try:
             h, w = float(height), float(weight)
@@ -194,7 +195,7 @@ class MetaBuilder:
             return None
 
     @staticmethod
-    def _age_band(age):
+    def _age_band(age: Any) -> str | None:
         try:
             a = float(age)
         except (TypeError, ValueError):
@@ -203,7 +204,7 @@ class MetaBuilder:
                 else "60-75" if a < _AGE_75 else "75+")
 
     @staticmethod
-    def norm_vendor(v):
+    def norm_vendor(v: Any) -> str | None:
         if not v:
             return None
         s = str(v).upper()
@@ -213,7 +214,7 @@ class MetaBuilder:
         return str(v)
 
     @staticmethod
-    def _is_labelled(arrays: dict) -> bool:
+    def _is_labelled(arrays: dict[str, Any]) -> bool:
         """Usable masks = both ED and ES present with non-empty GT (M&Ms-1 zero-fills withheld GT)."""
         ok = []
         for tag in (p.lower() for p in Phase):
@@ -221,7 +222,7 @@ class MetaBuilder:
             ok.append(gt is not None and bool((gt > 0).any()))
         return all(ok)
 
-    def _row(self, case: Path, arrays: dict, meta: dict, file: str) -> dict:
+    def _row(self, case: Path, arrays: dict[str, Any], meta: dict[str, Any], file: str) -> dict[str, Any]:
         f = meta.get("field_T")
         return {
             "subject_id": case.name, "dataset": self.name, "file": file, "raw_path": str(case),
@@ -249,10 +250,10 @@ class MetaBuilder:
             try:
                 meta = self.adapter.meta(case)
             except (KeyError, ValueError, OSError, AttributeError):   # missing/odd metadata field -> no meta, not fatal
-                meta = {}
+                meta: dict[str, Any] = {}
             arrays = dict(np.load(data_dir / f, allow_pickle=True))
             rows.append(self._row(case, arrays, meta, f))
-        def _column_dtype(column):
+        def _column_dtype(column: str) -> type[pl.DataType]:
             if column in ("age", "height", "weight", "bsa"):
                 return pl.Float64
             return pl.Boolean if column == "labelled" else pl.Utf8
@@ -286,7 +287,7 @@ class AcqReference:
     physics derivation with measured values where present, derivation covering the null majority."""
 
     @staticmethod
-    def from_frame(df: "pl.DataFrame") -> dict:
+    def from_frame(df: "pl.DataFrame") -> dict[str, Any]:
         """PURE core: a cloud meta frame -> per-(vendor,field) TR/TE/flip medians with provenance leaves.
         bSSFP-TR sanity gate rejects mixed-sequence DICOM (TR outside 2-6 ms) and null vendor/TR; field
         normalized to 1 dp so '1.5'/'1.500000' fold into ONE group. {} if no tr_ms column / no rows survive."""
@@ -299,13 +300,13 @@ class AcqReference:
                          & (tr >= _MIN_BSSFP_TR_MS) & (tr <= _MAX_BSSFP_TR_MS))
         # normalize field to a float so "1.5" and "1.500000" (DICOM formatting) are ONE group, not two
         real = real.with_columns(pl.col("field_T").cast(pl.Float64, strict=False).round(1).alias("_field"))
-        acq: dict[str, dict] = {}
+        acq: dict[str, dict[str, Any]] = {}
         for (vendor, field), g in real.group_by(["vendor", "_field"]):
-            def med(col, frame=g):
+            def med(col: str, frame: pl.DataFrame = g) -> float:
                 return round(float(frame[col].cast(pl.Float64).median()), 3)
             based = f"{g.height} DICOM subjects @{field}T"
 
-            def leaf(value, provenance=based):
+            def leaf(value: float, provenance: str = based) -> dict[str, Any]:
                 return {"value": value, "source": "DICOM-measured", "based_on": provenance,
                         "extracted_by": "computed", "verified": True}      # per-leaf provenance schema
             e = acq.setdefault(str(vendor), {})
@@ -315,7 +316,7 @@ class AcqReference:
         return acq
 
     @staticmethod
-    def fit(root: str | Path | None = None) -> dict:  # pragma: no cover  globs meta.csv + writes acquisition.yaml
+    def fit(root: str | Path | None = None) -> dict[str, Any]:  # pragma: no cover  globs meta.csv + writes acquisition.yaml
         """Aggregate REAL DICOM acquisition from the built stores -> reference/acquisition.yaml. Only rows
         with real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are
         skipped, so the domain-randomization sweep survives for everything we lack real values for."""

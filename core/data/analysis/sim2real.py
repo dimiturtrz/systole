@@ -12,8 +12,10 @@ acquisition calibration is NOT the fidelity lever (the gap is composition/z-norm
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import math
+from typing import Any
 
 import polars as pl
 import torch
@@ -41,7 +43,7 @@ class Sim2Real:
 
     @staticmethod
     def fit_acquisition(real_means: Float[torch.Tensor, "*n"], n_classes: int,
-                        tr_grid=(2.5, 6.0, 36), fl_grid=(20.0, 80.0, 31), fields=(1.5, 3.0)) -> dict:
+                        tr_grid: tuple[float, float, int] = (2.5, 6.0, 36), fl_grid: tuple[float, float, int] = (20.0, 80.0, 31), fields: tuple[float, ...] = (1.5, 3.0)) -> dict[str, Any]:
         """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
         real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
         Standardized so it fits the CONTRAST SHAPE (bSSFP scale is arbitrary)."""
@@ -64,11 +66,11 @@ class Sim2Real:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--n", type=int, default=20, help="subjects per vendor")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         data_cfg = TrainCfg().generator.data
         n_classes = len(CLASSES) + 1
         meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)

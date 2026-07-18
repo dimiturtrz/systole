@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pyvista as pv
@@ -50,7 +52,7 @@ MIN_MESH_VOXELS = 8        # skip a chamber whose binary mask is smaller than th
 MYO_LABEL = 2              # LV myocardium — rendered semi-transparent so cavities stay visible
 
 
-def crop_and_iso(img_zyx, mask_zyx, spacing_zyx, margin_mm=12.0):
+def crop_and_iso(img_zyx: np.ndarray, mask_zyx: np.ndarray, spacing_zyx: Sequence[float], margin_mm: float = 12.0) -> tuple[Any, Any, tuple[float, float, float]]:
     """Crop both to the heart bbox + margin, then resample both to isotropic voxels."""
     crop = bbox_slices(mask_zyx > 0, spacing_zyx, margin_mm)
     img, mask = img_zyx[crop], mask_zyx[crop]
@@ -61,7 +63,7 @@ def crop_and_iso(img_zyx, mask_zyx, spacing_zyx, margin_mm=12.0):
     return img_i, mask_i, (iso, iso, iso)
 
 
-def chamber_mesh(mask_zyx, label, iso):  # pragma: no cover  (marching_cubes + pyvista PolyData — mesh/render shell)
+def chamber_mesh(mask_zyx: np.ndarray, label: int, iso: float) -> pv.PolyData | None:  # pragma: no cover  (marching_cubes + pyvista PolyData — mesh/render shell)
     """Marching-cubes surface for one label, in (x,y,z) world mm to match the volume."""
     binary = (mask_zyx == label).astype(np.float32)
     if binary.sum() < MIN_MESH_VOXELS:
@@ -95,7 +97,7 @@ def _split_tag(patient: str) -> str:
     return "  held-out" if held else "  TRAIN-seen"
 
 
-def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
+def _ef_title(masks: dict[str, Any], case: dict[str, Any], spacing: Sequence[float], source: str) -> str:
     """EF (both phases) for the scene title — pred vs GT."""
     if "ED" not in masks or "ES" not in masks:
         return ""
@@ -105,7 +107,7 @@ def _ef_title(masks: dict, case: dict, spacing, source: str) -> str:
     return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 
 
-def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:  # pragma: no cover  (file-write shell)
+def _write_scene(pl: pv.Plotter, cfg: OverlayCfg, mask_i: np.ndarray, iso: Sequence[float], ef_txt: str) -> None:  # pragma: no cover  (file-write shell)
     """Dispatch the built plotter to gltf / html / interactive / screenshot per cfg."""
     if cfg.gltf:
         Path(cfg.gltf).parent.mkdir(parents=True, exist_ok=True)
@@ -126,7 +128,7 @@ def _write_scene(pl, cfg: OverlayCfg, mask_i, iso, ef_txt: str) -> None:  # prag
     log.info("saved %s  (iso %s @ %s mm)%s", out, mask_i.shape, round(iso[0], 2), ef_txt)
 
 
-def _build_plotter(cfg: OverlayCfg, img_i, mask_i, iso, title: str):  # pragma: no cover  (render shell)
+def _build_plotter(cfg: OverlayCfg, img_i: np.ndarray, mask_i: np.ndarray, iso: Sequence[float], title: str) -> pv.Plotter:  # pragma: no cover  (render shell)
     """Assemble the pyvista scene: dim intensity backdrop (screenshot only) + chamber surfaces."""
     pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
     pl.set_background("#0e1116")

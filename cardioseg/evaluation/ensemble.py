@@ -10,8 +10,10 @@ it — the gap is how much reducible headroom the weak estimate was hiding.
 
     python -m cardioseg.evaluation.ensemble --runs runs/gen runs/seed1 runs/seed2 runs/seed3 --eval canon
 """
+import argparse
 import logging
 from pathlib import Path
+from typing import Any, Sequence
 
 import numpy as np
 import polars as pl
@@ -23,6 +25,7 @@ from core.data.static.labels import FOREGROUND
 from core.data.static.mri.base import Phase
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe
+from core.hparams import TrainCfg
 from core.inference import Inference
 from core.measure import Measure
 from core.model import Model
@@ -45,7 +48,7 @@ class Ensemble:
 
     @staticmethod
     @shapecheck
-    def decompose(models, vol_img: Float[np.ndarray, "d h w"], size, device):
+    def decompose(models: Sequence[torch.nn.Module], vol_img: Float[np.ndarray, "d h w"], size: int, device: str):
         """Members = each model's TTA-mean softmax. Returns (pred, total, aleatoric, epistemic) maps in
         [0,1] (normalized by log C). epistemic = mutual information across the weight-diverse members."""
         mems = [Inference(m, size, device).predict_volume_probs(vol_img)[1] for m in models]   # each [D,C,H,W]
@@ -60,28 +63,28 @@ class Ensemble:
 
     @staticmethod
     @shapecheck
-    def _dice_fold(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], inter, den):
+    def _dice_fold(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], inter: dict[Any, float], den: dict[Any, float]) -> None:
         """Fold one (pred, gt) label-map pair into the running per-class Dice inter/den accumulators."""
         for cl in FOREGROUND:
             p, g = pred == cl, gt == cl
             inter[cl] += 2.0 * np.logical_and(p, g).sum(); den[cl] += p.sum() + g.sum()
 
     @staticmethod
-    def _score_summary(inter, den, diffs):
+    def _score_summary(inter: dict[Any, float], den: dict[Any, float], diffs: list[float]) -> dict[str, float | int]:
         """Finalize the ensemble accumulators: mean per-class Dice + EF MAE over the collected EF diffs."""
         dice = {cl: (inter[cl] / den[cl] if den[cl] else float("nan")) for cl in FOREGROUND}
         return {"dice_mean": round(float(np.nanmean(list(dice.values()))), 3),
                 "ef_mae": round(float(np.mean(np.abs(diffs))), 1) if diffs else float("nan")}
 
     @staticmethod
-    def score(models, df, size, device):
+    def score(models: Sequence[torch.nn.Module], df: pl.DataFrame, size: int, device: str) -> dict[str, float | int]:
         """Canonical Dice (pooled ED+ES, per class) + EF MAE for the ensemble prediction (largest-CC,
         like the single-model pipeline). K=1 model -> the single-model score, so the same fn compares both."""
         inter = dict.fromkeys(FOREGROUND, 0.0); den = dict.fromkeys(FOREGROUND, 0.0)
-        diffs = []
+        diffs: list[float] = []
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"]); sp = tuple(float(s) for s in case["spacing"])
-            preds, gts = {}, {}
+            preds: dict[str, Integer[np.ndarray, "d h w"]] = {}; gts: dict[str, Integer[np.ndarray, "d h w"]] = {}
             for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
                     continue
@@ -97,7 +100,7 @@ class Ensemble:
         return Ensemble._score_summary(inter, den, diffs)
 
     @staticmethod
-    def _eval_df(cfg, which):  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
+    def _eval_df(cfg: TrainCfg | None, which: str) -> pl.DataFrame:  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
         d = cfg.generator.data
         meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
         ms = splits.ModelSplit(d, meta)
@@ -107,16 +110,16 @@ class Ensemble:
         return test.filter(pl.col("vendor").str.to_lowercase() == which.lower())
 
     @staticmethod
-    def reducible_frac(aleatoric, epistemic):
+    def reducible_frac(aleatoric: list[Float[np.ndarray, "..."]], epistemic: list[Float[np.ndarray, "..."]]) -> float:
         """epistemic / (aleatoric + epistemic) over pooled foreground samples (lists of arrays) —
         the reducible (model) fraction of total uncertainty. Guards the all-zero denominator."""
         a = float(np.concatenate(aleatoric).mean()); e = float(np.concatenate(epistemic).mean())
         return e / max(a + e, 1e-9)
 
     @staticmethod
-    def _headroom(models, df, size, device):
+    def _headroom(models: Sequence[torch.nn.Module], df: pl.DataFrame, size: int, device: str) -> tuple[float, float]:
         """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
-        ea, ee, ta, te = [], [], [], []
+        ea: list[Float[np.ndarray, "..."]] = []; ee: list[Float[np.ndarray, "..."]] = []; ta: list[Float[np.ndarray, "..."]] = []; te: list[Float[np.ndarray, "..."]] = []
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
             for tag in (p.lower() for p in Phase):
@@ -131,12 +134,12 @@ class Ensemble:
         return Ensemble.reducible_frac(ea, ee), Ensemble.reducible_frac(ta, te)   # ensemble, single(TTA)
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--runs", nargs="+", required=True, help="K run dirs (different seeds)")
         ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
 
     @staticmethod
-    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
         device = Model.resolve_device()
         loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
         models = [m for m, _, _ in loaded]

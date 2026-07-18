@@ -9,6 +9,7 @@ Pure: returns arrays, no disk I/O. The consolidated store (data/store.py) calls 
 on-disk processed/<dataset>/<paramkey>/ layout + caching.
 """
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Integer, Shaped
@@ -49,7 +50,7 @@ class Preprocess:
 
     @staticmethod
     @shapecheck
-    def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> Shaped[np.ndarray, "d s s"]:
+    def stack_slices(slices: Any, size: int, pad_value: float = 0, dtype: Any = None) -> Shaped[np.ndarray, "d s s"]:
         """fit_square each [H,W] slice to the model grid and stack -> [D, size, size]. The one-liner the
         eval modules repeat for GT/label volumes; `dtype` casts the stack (uint8/int64 label maps)."""
         out = np.stack([Preprocess.fit_square(s, size, pad_value) for s in slices])
@@ -58,7 +59,7 @@ class Preprocess:
     @staticmethod
     @shapecheck
     def blood_anchor(img: Float[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
-                     blood=(1, 3), eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
+                     blood: Any = (1, 3), eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
         """Two-point affine intensity normalization: background-air -> 0, blood pool -> 1. Composition-robust
         harmonization anchored on PHYSICAL references (air + blood, present on every scan, meaning the same
         thing) instead of z-score's FOV-sensitive mean/std. Measured to halve cross-vendor tissue-level
@@ -100,9 +101,9 @@ class Preprocess:
 
     @staticmethod
     def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
-        patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE, *,
-        n4: bool = False, n4_params=None, nyul_standard=None, norm: str = "zscore",
-    ) -> dict:
+        patient_dir: str | Path, loader: Any, target_inplane: float = TARGET_INPLANE, *,
+        n4: bool = False, n4_params: Any = None, nyul_standard: Any = None, norm: str = "zscore",
+    ) -> dict[str, Any]:
         """Load + resample + (N4) + (Nyúl) + z-score one subject's ED/ES. PURE (no disk I/O).
 
         Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.

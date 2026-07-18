@@ -34,7 +34,7 @@ class Dicom:
         return list(sitk.ImageSeriesReader.GetGDCMSeriesIDs(str(dicom_dir)))
 
     @staticmethod
-    def read_image(dcm_path: str | Path) -> tuple["object", tuple, dict]:
+    def read_image(dcm_path: str | Path) -> tuple[Volume, tuple[float, float], dict[str, str]]:
         """Read ONE DICOM file -> (array [H,W], (row_mm, col_mm) in-plane spacing, meta tags). For datasets
         keyed by individual instances (e.g. SCD contours reference a specific slice/phase image), not a stack."""
         r = sitk.ImageFileReader()
@@ -53,7 +53,7 @@ class Dicom:
         return arr, (sy, sx), meta
 
     @staticmethod
-    def read_series(dicom_dir: str | Path, series_id: str | None = None) -> tuple[Volume, Spacing, dict]:
+    def read_series(dicom_dir: str | Path, series_id: str | None = None) -> tuple[Volume, Spacing, dict[str, str]]:
         """Read ONE DICOM series from `dicom_dir` -> (array [D,H,W], spacing (z,y,x) mm, meta). With several
         series present, `series_id` picks one; default = the series with the most slices (the full stack).
         Slices are geometry-sorted. `meta` carries acquisition/demographic tags (vendor/field/TR/flip/…)

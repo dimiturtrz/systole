@@ -8,8 +8,12 @@ small paper-cited layer is hand-curated (and visibly flagged verified / unverifi
     python -m cardioseg.preprocessing.normalization.persist --dataset acdc
     python -m cardioseg.preprocessing.normalization.persist            # all
 """
+from __future__ import annotations
+
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 from omegaconf import OmegaConf
 
@@ -27,11 +31,11 @@ class Persist:
     serialize provenance-tagged fields (the free helpers folded in as staticmethods)."""
 
     @staticmethod
-    def _overlay() -> dict:
+    def _overlay() -> dict[str, Any]:
         return OmegaConf.to_container(OmegaConf.load(_SOURCES)) if _SOURCES.exists() else {}
 
     @staticmethod
-    def _prov(field: str, auto_src: dict, paper: dict) -> dict:
+    def _prov(field: str, auto_src: dict[str, Any], paper: dict[str, Any]) -> dict[str, str | bool]:
         """Provenance for one field: the paper overlay wins (cited + verified flag), else the adapter's
         _source map (parsed = deterministic = verified)."""
         p = paper.get(field)
@@ -57,10 +61,10 @@ class Persist:
         return out
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--dataset", default="all", choices=("all", *_DATASETS))
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> None:
         for ds in (_DATASETS if args.dataset == "all" else [args.dataset]):
             Persist.persist_meta(ds)

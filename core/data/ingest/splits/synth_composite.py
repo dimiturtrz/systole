@@ -38,7 +38,7 @@ _CAP = _RESIDENT_BUDGET // 2            # per-source slice cap (SSM + pathology)
 
 class SynthComposite:
     name = "synth_composite"
-    sources = ()                        # synth train adds no real store sources
+    sources: tuple[()] = ()                        # synth train adds no real store sources
 
     @staticmethod
     def _synth_source(pool: str, note: str) -> DynamicSource:

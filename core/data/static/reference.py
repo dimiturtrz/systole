@@ -21,6 +21,7 @@ Data is scarce here, so reference values are ideally DERIVED from `processed/` a
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from omegaconf import OmegaConf
 
@@ -40,13 +41,13 @@ class Reference:
         return Path(Config.data_root("reference"))
 
     @staticmethod
-    def _is_prov(node) -> bool:
+    def _is_prov(node: Any) -> bool:
         """A leaf provenance entry = a mapping with a 'value' key (plus the provenance fields)."""
         return isinstance(node, dict) and "value" in node
 
-    def __init__(self, *, strict: bool = True, root: str | Path | None = None):
+    def __init__(self, *, strict: bool = True, root: str | Path | None = None) -> None:
         self.strict = strict
-        self._d: dict = {}
+        self._d: dict[str, Any] = {}
         base = Path(root) if root is not None else self.reference_dir()
         if base.is_dir():
             # Merge every reference/*.yaml at the top level — files are just organization
@@ -59,7 +60,7 @@ class Reference:
         """Whether any reference file was loaded (else everything falls back)."""
         return bool(self._d)
 
-    def get(self, *keys, default=None):
+    def get(self, *keys: str, default: Any = None) -> Any:
         """Value at nested `keys` if present + (strict) verified, else `default`.
         e.g. ref.get('normal_ranges', 'ef_normal')."""
         node = self._d
@@ -73,7 +74,7 @@ class Reference:
             return default                                   # unverified -> never used
         return node.get("value", default)
 
-    def provenance(self, *keys) -> dict | None:
+    def provenance(self, *keys: str) -> dict[str, Any] | None:
         """The full {value, source, based_on, ...} entry at `keys` (None if absent) — for the
         model card / audit, regardless of verified."""
         node = self._d

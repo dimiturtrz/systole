@@ -12,9 +12,11 @@ NIH + Children's National, normal + diseased.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import logging
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -45,21 +47,21 @@ class KaggleDsbAdapter:
         return KaggleDsbAdapter._base(root) / split / split       # nested <split>/<split>/
 
     @staticmethod
-    def _ef(edv: float, esv: float) -> dict:
+    def _ef(edv: float, esv: float) -> dict[str, Any]:
         return {"edv": edv, "esv": esv, "ef": round(100.0 * (edv - esv) / edv, 2) if edv else None}
 
     @staticmethod
-    def kaggle_ef(split: str, root: str | Path | None = None) -> dict[str, dict]:
+    def kaggle_ef(split: str, root: str | Path | None = None) -> dict[str, dict[str, Any]]:
         """{case_id: {edv, esv, ef}} in mL / %. train/validate from `<split>.csv` (Diastole=EDV, Systole=ESV);
         test from `solution.csv` (`<case>_Diastole` / `<case>_Systole` rows)."""
         base = KaggleDsbAdapter._base(root)
-        out: dict[str, dict] = {}
+        out: dict[str, dict[str, Any]] = {}
         if split in ("train", "validate"):
             with (base / f"{split}.csv").open(newline="", encoding="utf-8-sig") as f:
                 for r in csv.DictReader(f):
                     out[r["Id"]] = KaggleDsbAdapter._ef(float(r["Diastole"]), float(r["Systole"]))
         else:                                                     # test — solution.csv, two rows per case
-            vols: dict[str, dict] = {}
+            vols: dict[str, dict[str, float]] = {}
             with (base / "solution.csv").open(newline="", encoding="utf-8-sig") as f:
                 for r in csv.DictReader(f):
                     cid, phase = r["Id"].rsplit("_", 1)
@@ -75,7 +77,7 @@ class KaggleDsbAdapter:
         return sorted((p for p in d.glob("*") if p.is_dir()), key=lambda p: int(p.name))
 
     @staticmethod
-    def load_sax(case: str | Path) -> list[tuple]:  # pragma: no cover  real Kaggle SAX DICOM series (read_series)
+    def load_sax(case: str | Path) -> list[tuple[Any, Any, dict[str, str]]]:  # pragma: no cover  real Kaggle SAX DICOM series (read_series)
         """SAX cine of one case: list of (volume [phases,H,W], spacing (z,y,x), meta) — one entry per `sax_*`
         series (slice location), sorted apex→base by SliceLocation. Each series is the ~30-phase cine loop at
         that slice. Uses `Dicom.read_series`; broken/odd series skipped."""
@@ -90,7 +92,7 @@ class KaggleDsbAdapter:
         return [(v, s, m) for v, s, m, _ in rows]
 
     @staticmethod
-    def kaggle_meta(case: str | Path, ef_targets: dict | None = None) -> dict:
+    def kaggle_meta(case: str | Path, ef_targets: dict[str, Any] | None = None) -> dict[str, Any]:
         """Per-case metadata: location constants (adapter = process layer) + real vendor/scanner/acquisition
         from a sample SAX DICOM + the EF target. NB Kaggle is MIXED sequences (segmented cine/GRE) -> its TR
         is NOT the ~3ms per-frame bSSFP TR; captured as-recorded, but the bSSFP acquisition reference filters
@@ -124,13 +126,13 @@ class KaggleDsbAdapter:
         return out / "meta.csv"
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         sub = ap.add_subparsers(dest="cmd", required=True)
         bm = sub.add_parser("build-meta", help="write processed/kaggle/<split>/meta.csv over a split's cases")
         bm.add_argument("--split", required=True, choices=("train", "validate", "test"))
         bm.add_argument("--root", default=None, help="override the raw kaggle_dsb2015 root")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         out = KaggleDsbAdapter.build_kaggle_meta(args.split, args.root)
         log.info(f"wrote {out}")

@@ -83,10 +83,10 @@ class CompositeGenerator:
     its own via its own pipeline. Sampling is proportional to child size (a bigger pool → more batches).
     `valid` is None (composite is for synth sources — partial-label real isn't composed here)."""
 
-    def __init__(self, gens: list):
+    def __init__(self, gens: list[Generator]) -> None:
         self.gens = gens
         self.device = gens[0].device
-        self.valid = None
+        self.valid: Bool[torch.Tensor, "n c"] | None = None
         sizes = torch.tensor([g.n for g in gens])
         self.n = int(sizes.sum())
         self.offsets = torch.cat([torch.zeros(1, dtype=torch.long), sizes.cumsum(0)])   # [len+1] boundaries
@@ -95,7 +95,8 @@ class CompositeGenerator:
     def batch(self, idx: Integer[torch.Tensor, "*b"], *, pin: bool = False):
         """Route the global indices to their child generators, paint each child's rows with its own
         pipeline, and concatenate — one collapsed batch of mixed-source samples."""
-        xs, ys = [], []
+        xs: list[torch.Tensor] = []
+        ys: list[torch.Tensor] = []
         for c, g in enumerate(self.gens):
             lo, hi = int(self.offsets[c]), int(self.offsets[c + 1])
             m = (idx >= lo) & (idx < hi)

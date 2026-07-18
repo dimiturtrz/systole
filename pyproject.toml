@@ -160,7 +160,8 @@ ignore-names = ["X*", "Y*", "B", "C", "H", "W", "T1", "T2", "TR", "PD", "F", "si
 [tool.pyrefly]
 preset = "strict"
 check-unannotated-defs = true
-search-path = ["."]
+search-path = [".", "cardioview"]   # cardioview is a script-style lane: its modules import siblings by
+#                                   bare name (`from common import …`), so its own dir is an import root
 # Untyped third-party imports ERROR by default (stricter than mypy's silent Any). A dep that ships no
 # py.typed / stubs goes here to be treated as Any — a per-repo FACT vocab, parallel to the deptry/vulture
 # slots. jaxtyping shape strings (`Float[Array, "b n"]`) are a runtime-checked DSL
@@ -174,8 +175,10 @@ ignore-missing-imports = []
 # strict annotation requirement doesn't force a type onto every fixture signature. Scope is packages
 # (`lint_paths`) anyway, but this keeps a bare `pyrefly check` clean too.
 [[tool.pyrefly.sub-config]]
-matches = "**/tests/**"
+matches = "tests/**"
 check-unannotated-defs = false
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = false
 
 # Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg+cardioview
 # (NOT tests): a prod symbol referenced solely by a test then surfaces as dead here, instead of being

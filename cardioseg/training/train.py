@@ -16,6 +16,7 @@ from pathlib import Path
 import mlflow
 import numpy as np
 import torch
+import torch.nn as nn
 from jaxtyping import Float, Integer
 from mlflow.exceptions import MlflowException
 
@@ -66,13 +67,13 @@ class Train:
         return [int(s) for s in seeds_arg.split(",")] if seeds_arg else None
 
     @staticmethod
-    def resolve_seeds(cfg_seed: int, seeds) -> list[int]:
+    def resolve_seeds(cfg_seed: int, seeds: list[int] | None) -> list[int]:
         """The effective seed list for a run: explicit `seeds` if given, else the single cfg seed. Mirrors
         train_seg's `seeds = list(seeds) if seeds else [cfg.seed]`, pulled out so it's testable off-GPU."""
         return list(seeds) if seeds else [cfg_seed]
 
     @staticmethod
-    def check_multiseed_split(seeds: list, split) -> None:
+    def check_multiseed_split(seeds: list[int], split: str | None) -> None:
         """Multi-seed A/B needs a coded --split (legacy criteria splits key their partition on the seed, so
         they can't share one loaded dataset). Raises ValueError on the invalid combination; else no-op."""
         if len(seeds) > 1 and not split:
@@ -85,19 +86,19 @@ class Train:
         return base_out if single else base_out.parent / f"{base_out.name}_s{seed}"
 
     @staticmethod
-    def split_tag_of(d) -> str:
+    def split_tag_of(d: object) -> str:
         """The tracker's split tag from a DataCfg: coded split name, else joined test vendors, else 'legacy'."""
         return d.split or ("+".join(d.test_vendors) or "legacy")
 
     @staticmethod
-    def n_train_of(train_src, gen, train_df) -> int:
+    def n_train_of(train_src: object, gen: Generator, train_df: object) -> int:
         """n_train is the resident slice count (gen.X) when the train source is dynamic (no patient frame);
         else the patient-row count of the train frame."""
         return gen.n if (train_src is not None and getattr(train_src, "kind", None) in ("dynamic", "composite")) \
             else len(train_df)
 
     @staticmethod
-    def apply_cli_args(cfg: TrainCfg, args) -> TrainCfg:
+    def apply_cli_args(cfg: TrainCfg, args: dict[str, object] | object) -> TrainCfg:
         """Map the argparse Namespace onto a TrainCfg IN PLACE (then returned): scalar attrs copied when
         set, the store-flags folded in, then the deep `--set` overrides applied last (so --set wins). The
         coded --split is applied by the caller (it needs list_splits validation) before this. Pure mapping —
@@ -119,7 +120,7 @@ class Train:
     @staticmethod
     @shapecheck
     def val_dice(
-        model, Ximg: Float[torch.Tensor, "n c h w"], Ymsk: Integer[torch.Tensor, "n h w"], batch: int, device,
+        model: nn.Module, Ximg: Float[torch.Tensor, "n c h w"], Ymsk: Integer[torch.Tensor, "n h w"], batch: int, device: str,
     ) -> float:
         """Fast batched mean foreground Dice (pooled over val slices, no TTA) — the early-stop signal.
         Ximg/Ymsk are the resident val tensors; .to(device) is a no-op when they're already on the GPU."""
@@ -138,7 +139,7 @@ class Train:
         return float(np.mean([inter[c] / denom[c] if denom[c] else 0.0 for c in FOREGROUND]))
 
     @staticmethod
-    def _legacy_resident(cfg: TrainCfg, train_df, val_df, data_device: str, device: str, log):  # noqa: PLR0913  # pragma: no cover  (loads slice tensors to VRAM + builds the Generator — needs the real store)
+    def _legacy_resident(cfg: TrainCfg, train_df: object, val_df: object, data_device: str, device: str, log: object):  # noqa: PLR0913  # pragma: no cover  (loads slice tensors to VRAM + builds the Generator — needs the real store)
         """LEGACY criteria path (no coded --split): build the resident TRAIN tensors + shared Generator +
         val tensors. Optional synth-anatomy (Rodero SSM label maps; val/test stay REAL held-out): 'mix' =
         real + synth-anatomy UNION with synth rows force-painted (bd pwih); 'replace' = synth anatomy only,
@@ -175,7 +176,7 @@ class Train:
         return gen, Xva, Yva
 
     @staticmethod
-    def _run_seeds(cfg: TrainCfg, seeds: list, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover
+    def _run_seeds(cfg: TrainCfg, seeds: list[int], sh: dict[str, object], alias: str | None, *, quick: bool):  # pragma: no cover
         """Train each seed on the shared bundle. Between seeds (multi-seed A/B only) move the finished seed's
         weights to host + reclaim its CUDA pool, so a later seed's memory-heavy TTA test doesn't OOM (bd fpav)."""
         res = []
@@ -188,7 +189,7 @@ class Train:
         return res[0] if len(seeds) == 1 else res
 
     @staticmethod
-    def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds=None):  # pragma: no cover
+    def train_seg(cfg: TrainCfg, alias: str | None = None, *, quick: bool = False, seeds: list[int] | None = None):  # pragma: no cover
         """Train from one TrainCfg over one or more seeds. Returns (model, results) for a single seed, or a
         list of them for many. The resident data (store, split, preloaded tensors, aux EF lanes) is built
         ONCE and shared across seeds (`SeedTrainer` does the per-seed work) — N seeds cost 1×data + N×model,
@@ -284,7 +285,7 @@ class SeedTrainer:
     shared data (resident tensors, val, aux EF lanes) comes via `sh`. Construct per seed, call .run().
     N seeds cost 1xdata + Nxmodel. (bd 01fh: former _train_loop/_finalize threaded ~10 args -> methods.)"""
 
-    def __init__(self, cfg: TrainCfg, seed: int, sh: dict, alias: str | None, *, quick: bool):  # pragma: no cover
+    def __init__(self, cfg: TrainCfg, seed: int, sh: dict[str, object], alias: str | None, *, quick: bool):  # pragma: no cover
         self.cfg, self.seed, self.sh, self.alias, self.quick = cfg, seed, sh, alias, quick
         self.d = cfg.generator.data
         self.device, self.pin, self.gen, self.aux = sh["device"], sh["pin"], sh["gen"], sh["aux"]
@@ -304,7 +305,7 @@ class SeedTrainer:
                           params={**cfg.model_dump(), "n_train": sh["n_train"], "n_val": len(sh["val_df"])},
                           tags={"split": split_tag, "seed": seed})
         self.trk = tracker.track_run(run_dir=self.out)
-        self.log_sig = None
+        self.log_sig: torch.Tensor | None = None
         if cfg.ef_learn and self.aux:
             self.log_sig = torch.zeros(1 + len(self.aux), device=self.device, requires_grad=True)
             self.opt.add_param_group({"params": [self.log_sig]})
@@ -389,7 +390,7 @@ class SeedTrainer:
         trk.metric("train_minutes", (time.perf_counter() - fit_t0) / 60)   # trustworthy compute time
         return best_state
 
-    def _evaluate(self) -> dict:  # pragma: no cover  (Evaluator runs GPU inference over the val/test frames)
+    def _evaluate(self) -> dict[str, object]:  # pragma: no cover  (Evaluator runs GPU inference over the val/test frames)
         """VALIDATION + HELD-OUT TEST: one Evaluator, score val + the criteria test split, summarize."""
         model, device, d, log = self.model, self.device, self.d, self.log
         test_df = self.sh["test_df"]
@@ -404,7 +405,7 @@ class SeedTrainer:
             results["test"] = Evaluator.summarize(tdice, tef, tsurf)
         return results
 
-    def _save(self, results: dict):  # pragma: no cover  (torch.save model.pth + metrics.json write + tracker summary)
+    def _save(self, results: dict[str, object]):  # pragma: no cover  (torch.save model.pth + metrics.json write + tracker summary)
         """Persist model.pth + metrics.json, then log the final per-axis summary to the tracker."""
         model, out, cfg, val_df = self.model, self.out, self.cfg, self.sh["val_df"]
         torch.save(model.state_dict(), out / "model.pth")  # out already created by to_json(config) above
@@ -445,7 +446,7 @@ class SeedTrainer:
     _ARTIFACT_FAILURES = (OSError, RuntimeError, ValueError, MlflowException)
 
     @contextmanager
-    def _artifact_step(self, name):  # pragma: no cover  (best-effort wrapper around the finalize artifact steps)
+    def _artifact_step(self, name: str):  # pragma: no cover  (best-effort wrapper around the finalize artifact steps)
         """Run one post-training artifact step best-effort. By the time _finalize runs the model.pth is
         ALREADY saved, so a card / attribution / ONNX / registry hiccup (a missing optional dep, one bad
         val slice, a locked mlflow db) is logged and swallowed — the trained run is never lost."""

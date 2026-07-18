@@ -36,7 +36,7 @@ POOL = "pool_1000_bal"
 
 class SynthMain:
     name = "synth_main"
-    sources = ()                        # synth train adds no real store sources
+    sources: tuple[()] = ()                        # synth train adds no real store sources
 
     @staticmethod
     def pool(name: str) -> str:

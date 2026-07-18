@@ -11,7 +11,7 @@ pydantic discriminator that tags the variant in config.json.
 """
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, override
 
 import torch
 import torch.nn.functional as F
@@ -26,12 +26,12 @@ class Losses:
     public names kept): the MONAI Dice+CE builder + Kendall uncertainty weighting."""
 
     @staticmethod
-    def dice_ce_loss(*, to_onehot_y=True, softmax=True, **kw):
+    def dice_ce_loss(*, to_onehot_y: bool = True, softmax: bool = True, **kw: Any) -> DiceCELoss:
         """MONAI compound Dice + CE for integer label maps (0/1/2/3)."""
         return DiceCELoss(to_onehot_y=to_onehot_y, softmax=softmax, **kw)
 
     @staticmethod
-    def uncertainty_weighted(loss_terms, log_vars):
+    def uncertainty_weighted(loss_terms: Any, log_vars: Any) -> torch.Tensor:
         """Kendall (2018) homoscedastic-uncertainty weighting: Σ exp(-s_i)·L_i + s_i, with s_i = log σ_i²
         LEARNABLE. The net auto-balances the tasks (lower s_i -> higher weight on L_i); the +s_i penalty
         stops s_i -> ∞ (which would zero every weight). Retires hand-set loss weights -> self-balancing,
@@ -53,7 +53,7 @@ class DiceCEHD:
         self.hd = HausdorffDTLoss(to_onehot_y=True, softmax=True, include_background=False)
         self.hd_weight, self.warmup, self.ramp, self.epoch = hd_weight, warmup, ramp, 0
 
-    def __call__(self, logits, y):
+    def __call__(self, logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         loss = self.dce(logits, y)
         if self.hd_weight > 0 and self.epoch >= self.warmup:        # skip HD compute during warmup
             ramp = min(1.0, (self.epoch - self.warmup + 1) / max(1, self.ramp))
@@ -72,7 +72,7 @@ class DiceCETversky:
         self.tv = TverskyLoss(to_onehot_y=True, softmax=True, include_background=False, alpha=alpha, beta=beta)
         self.lam = lam
 
-    def __call__(self, logits, y):
+    def __call__(self, logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return self.dce(logits, y) + self.lam * self.tv(logits, y)
 
 
@@ -93,7 +93,7 @@ class HausdorffERLoss:
         self.alpha, self.erosions, self.include_background = alpha, erosions, include_background
         self._cross = torch.tensor([[0., 1., 0.], [1., 1., 1.], [0., 1., 0.]]) * 0.2  # sum=1
 
-    def __call__(self, logits, y):
+    def __call__(self, logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         # Force fp32 for the whole loss: under AMP autocast, F.conv2d would re-cast to fp16 and the
         # min-max renormalize's 1e-8 clamp underflows to 0 -> divide-by-zero -> NaN.
         with torch.autocast(device_type=logits.device.type, enabled=False):
@@ -125,12 +125,12 @@ class DiceCEHER:
     """Dice+CE + λ·Hausdorff-ER, HER ramped in after a pure-Dice warmup (same schedule as DiceCEHD,
     but HER is GPU-cheap)."""
 
-    def __init__(self, her_weight=0.5, alpha=2.0, erosions=10, warmup=5, ramp=5):
+    def __init__(self, her_weight: float = 0.5, alpha: float = 2.0, erosions: int = 10, warmup: int = 5, ramp: int = 5):
         self.dce = Losses.dice_ce_loss()
         self.her = HausdorffERLoss(alpha=alpha, erosions=erosions)
         self.her_weight, self.warmup, self.ramp, self.epoch = her_weight, warmup, ramp, 0
 
-    def __call__(self, logits, y):
+    def __call__(self, logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         loss = self.dce(logits, y)
         if self.her_weight > 0 and self.epoch >= self.warmup:
             r = min(1.0, (self.epoch - self.warmup + 1) / max(1, self.ramp))
@@ -151,7 +151,7 @@ class SoftDiceCE:
         self.dice = DiceLoss(softmax=True, to_onehot_y=False, include_background=include_background)
         self.ld, self.lce = lambda_dice, lambda_ce
 
-    def __call__(self, logits, target):
+    def __call__(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=logits.device.type, enabled=False):
             logits, target = logits.float(), target.float()
             ce = -(target * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
@@ -175,7 +175,7 @@ class PartialLabelDiceCE:
     def __init__(self, lambda_dice: float = 1.0, lambda_ce: float = 1.0, eps: float = 1e-5):
         self.ld, self.lce, self.eps = lambda_dice, lambda_ce, eps
 
-    def __call__(self, logits, target, valid=None):
+    def __call__(self, logits: torch.Tensor, target: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
         B, C = logits.shape[:2]
         with torch.autocast(device_type=logits.device.type, enabled=False):
             logits = logits.float()
@@ -221,6 +221,7 @@ class DiceCECfg(LossCfg):
     kind: Literal["dice_ce"] = "dice_ce"
     ce_weight: tuple[float, ...] = (1.0, 1.0, 1.0, 1.0)
 
+    @override
     def _build(self):
         w = torch.as_tensor(self.ce_weight, dtype=torch.float32)
         kw = {} if bool((w == w[0]).all()) else {"weight": w}
@@ -234,6 +235,7 @@ class DiceCETverskyCfg(LossCfg):
     tversky_beta: float = Field(0.7, ge=0, le=1)   # FN weight; > alpha -> punish omission (recall)
     tversky_lambda: float = Field(1.0, ge=0)
 
+    @override
     def _build(self):
         return DiceCETversky(self.tversky_alpha, self.tversky_beta, self.tversky_lambda)
 
@@ -247,6 +249,7 @@ class DiceCEHERCfg(LossCfg):
     her_warmup: int = Field(5, ge=0)
     her_ramp: int = Field(5, ge=1)
 
+    @override
     def _build(self):
         return DiceCEHER(self.her_weight, self.her_alpha, self.her_erosions, self.her_warmup, self.her_ramp)
 
@@ -258,6 +261,7 @@ class DiceCEHDCfg(LossCfg):
     hd_warmup: int = Field(15, ge=0)
     hd_ramp: int = Field(5, ge=1)
 
+    @override
     def _build(self):
         return DiceCEHD(hd_weight=self.hd_weight, warmup=self.hd_warmup, ramp=self.hd_ramp)
 

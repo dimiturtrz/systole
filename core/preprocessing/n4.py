@@ -10,6 +10,8 @@ spatial (fixes *where* the brightness drifts); intensity-norm is global (fixes t
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import SimpleITK as sitk
 from jaxtyping import Float, Shaped
@@ -30,14 +32,14 @@ class N4Cfg(BaseModel):
     @staticmethod
     @shapecheck
     def n4_bias(vol: Shaped[np.ndarray, "d h w"], spacing: Spacing | None = None, shrink: int = 4,
-                iters=(50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
+                iters: Any = (50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
         """N4-correct one [D,H,W] volume — SimpleITK (the reference, correct implementation)."""
         return N4Cfg._n4_sitk(vol, spacing, shrink, iters, fwhm)
 
     @staticmethod
     @shapecheck
     def _n4_sitk(vol: Shaped[np.ndarray, "d h w"], spacing: Spacing | None = None, shrink: int = 4,
-                 iters=(50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
+                 iters: Any = (50, 50, 50), fwhm: float = 0.15) -> Float[np.ndarray, "d h w"]:
         """N4-correct one [D, H, W] volume. Returns the corrected volume (same shape/dtype-ish float32).
 
         `shrink` downsamples for the fit (speed); the estimated field is applied at full resolution.

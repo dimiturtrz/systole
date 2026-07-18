@@ -16,6 +16,7 @@ the cached dir. `ref` = alias ('production') | version number | run-id.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import mlflow
 from mlflow.exceptions import MlflowException
@@ -74,9 +75,9 @@ class Registry:
         return inner if (inner / "model.pth").exists() else dst
 
     @staticmethod
-    def save_model(staging_dir, *, run_name: str, params: dict | None = None,  # noqa: PLR0913  already keyword-only (*); legit registry inputs
+    def save_model(staging_dir: str | Path, *, run_name: str, params: dict[str, Any] | None = None,  # noqa: PLR0913  already keyword-only (*); legit registry inputs
                    alias: str | None = None, description: str | None = None,
-                   tags: dict | None = None, run_id: str | None = None) -> str:
+                   tags: dict[str, Any] | None = None, run_id: str | None = None) -> str:
         """Log a trained model's artifacts (everything in `staging_dir`: model.pth/config.json/onnx/card)
         to mlflow under artifact_path 'model', register a version of MODEL_NAME, optionally set `alias`.
         Reuses `run_id` if given (the train run), else starts one. Returns the run-id."""
@@ -107,8 +108,8 @@ class Registry:
         return rid
 
     @staticmethod
-    def _flat(d: dict, prefix: str = "") -> dict:
-        out = {}
+    def _flat(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+        out: dict[str, Any] = {}
         for k, v in d.items():
             key = f"{prefix}{k}"
             if isinstance(v, dict):

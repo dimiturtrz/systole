@@ -17,12 +17,15 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from jaxtyping import Float, Int, Shaped
 
+from core.data.ingest.splits import Splits
 from core.data.static.labels import LV_CAV
 from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import Store
+from core.hparams import TrainCfg
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
 from core.types import shapecheck
@@ -61,7 +64,7 @@ class EfLane:
     @staticmethod
     @shapecheck
     def ef_ratio_loss(
-        ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets, delta: float = 0.1,
+        ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets: torch.Tensor | list[float], delta: float = 0.1,
     ) -> Float[torch.Tensor, ""]:
         """Huber loss of predicted EF-ratio vs csv EF targets, both in [0,1] (÷100). Dimensionless, spacing-
         invariant — the KaggleEF objective. `targets` in percent; a [K] tensor/list. Pulled out of .loss so
@@ -75,7 +78,7 @@ class EfLane:
     @staticmethod
     @shapecheck
     def cav_volume(
-        model, stacks: Float[torch.Tensor, "n 1 h w"], sizes: Int[torch.Tensor, "*k"], lv: int, *, amp: bool,
+        model: nn.Module, stacks: Float[torch.Tensor, "n 1 h w"], sizes: Int[torch.Tensor, "*k"], lv: int, *, amp: bool,
     ) -> Float[torch.Tensor, "*k"]:
         """One batched forward over `stacks` [ΣDi,1,H,W]; soft LV-cav pixel-count per slice, segment-summed
         by the per-item slice-counts `sizes` -> per-item cavity pixel totals [K] (fp32, grad-carrying)."""
@@ -87,14 +90,14 @@ class EfLane:
         ).index_add_(0, owner, cavity_pixels)
 
     @staticmethod
-    def build_aux(cfg, splits, train_df, device: str, *, is_static: bool) -> list:
+    def build_aux(cfg: TrainCfg, splits: type[Splits], train_df: object, device: str, *, is_static: bool) -> list[object]:
         """Assemble the active auxiliary lanes from a TrainCfg. Empty list when the EF lane is off or the
         train source isn't static (EDV/ESV need labeled patient frames). The train loop iterates the list;
         it never inspects cfg.ef_* itself. `size` is config (cfg.generator.data.size), not an arg."""
         if cfg.ef_lambda <= 0 or not is_static:
             return []
         size = cfg.generator.data.size
-        lanes: list = [VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects)]
+        lanes: list[object] = [VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects)]
         if cfg.ef_kaggle:
             lanes.append(KaggleEF(
                 KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
@@ -110,10 +113,13 @@ class VolConsistency:
     forward per phase, segment-sum -> dimensionless vol_loss vs the GT volumes. Subjects missing ED/ES
     or with no cavity are skipped at build."""
 
-    def __init__(self, npz_paths, size: int, device: str, k: int, lv_label: int = LV_CAV):
+    def __init__(self, npz_paths: list[str], size: int, device: str, k: int, lv_label: int = LV_CAV):
         self.device, self.lv, self.k = device, lv_label, k
-        self.ed, self.es = [], []                       # per-subject [Di,1,H,W] GPU stacks (aligned)
-        edv_gt, esv_gt, voxel_volumes = [], [], []
+        self.ed: list[torch.Tensor] = []                       # per-subject [Di,1,H,W] GPU stacks (aligned)
+        self.es: list[torch.Tensor] = []
+        edv_gt: list[float] = []
+        esv_gt: list[float] = []
+        voxel_volumes: list[float] = []
         for path in npz_paths:
             case = load_arrays(path)
             if "ed_img" not in case or "es_img" not in case:
@@ -132,7 +138,7 @@ class VolConsistency:
         self.edv_gt = torch.tensor(edv_gt, device=device)
         self.esv_gt = torch.tensor(esv_gt, device=device)
 
-    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
+    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> torch.Tensor | None:
         if self.n == 0:
             return None
         subject_indices = torch.randperm(self.n, device=self.device)[:self.k]
@@ -152,10 +158,12 @@ class KaggleEF:
     cases' ES) segment-summed per case -> EF-RATIO Huber vs the csv EF. No dense mask, so the seg loss
     never touches these."""
 
-    def __init__(self, cases, ef_targets: dict, size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913
+    def __init__(self, cases: list[object], ef_targets: dict[str, dict[str, float]], size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913
                  lv_label: int = LV_CAV, seed: int = 0):
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
-        self.X, self.LP, self.ef = [], [], []          # [L*P,1,H,W] GPU / (L,P) / EF%
+        self.X: list[torch.Tensor] = []
+        self.LP: list[tuple[int, int]] = []
+        self.ef: list[float] = []          # [L*P,1,H,W] GPU / (L,P) / EF%
         for case_index in np.random.RandomState(seed).permutation(len(cases)):
             if len(self.X) >= pool:
                 break
@@ -177,7 +185,7 @@ class KaggleEF:
             self.ef.append(float(target["ef"]))
         self.n = len(self.X)
 
-    def loss(self, model, delta: float = 0.1, *, amp: bool = True):
+    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> torch.Tensor | None:
         if self.n == 0:
             return None
         case_indices = [int(i) for i in torch.randperm(self.n)[:self.k]]
@@ -186,7 +194,10 @@ class KaggleEF:
         stack_sizes = [x.shape[0] for x in sampled_cines]
         with torch.no_grad(), torch.autocast("cuda", enabled=amp):      # phase-find, batched
             cavity_pixels = model(torch.cat(sampled_cines)).softmax(1)[:, self.lv].float().sum((1, 2))
-        ed_stacks, es_stacks, slice_counts, target_efs = [], [], [], []
+        ed_stacks: list[torch.Tensor] = []
+        es_stacks: list[torch.Tensor] = []
+        slice_counts: list[int] = []
+        target_efs: list[float] = []
         offset = 0
         for cine_on_gpu, i, stack_size in zip(sampled_cines, case_indices, stack_sizes, strict=True):
             n_slices, n_phases = self.LP[i]

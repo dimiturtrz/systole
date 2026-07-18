@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import onnxruntime as ort
@@ -40,7 +41,7 @@ class ExportOnnx:
         return Run.load_run(run, "cpu")[0]
 
     @staticmethod
-    def _parity(model, onnx_path: Path, npz_path) -> float:
+    def _parity(model: Any, onnx_path: Path, npz_path: Any) -> float:
         """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
         sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
         case = store.load_arrays(npz_path)
@@ -85,7 +86,7 @@ class ExportOnnx:
         return path
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: Any) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
         ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
         ap.add_argument("--no-quantize", dest="quantize", action="store_false")
@@ -94,7 +95,7 @@ class ExportOnnx:
                         help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
 
     @staticmethod
-    def run(args):
+    def run(args: Any) -> None:
         verify = args.verify if args.verify else store.load([Dataset.ACDC]).get_column("path")[0]
-        ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize,
+        ExportOnnx.export(Registry.resolve(args.run), verify, quantize=args.quantize,
                           opset=args.opset, parity_min=args.parity_min)

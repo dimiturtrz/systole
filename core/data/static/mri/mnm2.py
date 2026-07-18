@@ -8,7 +8,10 @@ Per-subject DISEASE/VENDOR/SCANNER/FIELD in dataset_information.csv.
 Labels: raw 1=LV-cav, 2=myo, 3=RV — opposite of ACDC. `label_map` remaps to canonical
 (verified geometrically: myo=2 -> LV=1 in raw). The flip is interface data, not buried logic.
 """
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any, override
 
 from core.config import Config
 from core.data.static.mri.base import (
@@ -48,7 +51,7 @@ class Mnm2Adapter(AdapterBase, DatasetAdapter):
                              key_transform=lambda c: c.zfill(3))
 
     @staticmethod
-    def _meta_from_info(info: dict) -> PatientMeta:
+    def _meta_from_info(info: dict[str, str]) -> PatientMeta:
         """PURE M&M-2 meta from one CSV row: disease/vendor/scanner pass through, FIELD float-parsed;
         centre null (not published) + country fixed Spain (3 Spanish hospitals, paper)."""
         return {
@@ -61,23 +64,26 @@ class Mnm2Adapter(AdapterBase, DatasetAdapter):
             "_source": {"all": "dataset_information.csv", "country": "paper (3 Spanish hospitals)"},
         }
 
+    @override
     def cases(self) -> list[Path]:
         """List subject dirs (M&M-2: NNN/)."""
         d = self._dataset_dir(self.root)
         return sorted((p for p in d.glob("[0-9][0-9][0-9]") if p.is_dir()), key=lambda p: p.name)
 
+    @override
     def load_ed_es(self, case: Path, view: str = "SA") -> PatientData:
         """Load ED + ES short-axis frames + canonical-remapped masks for one M&M-2 subject."""
         patient_dir = Path(case)
         pid = patient_dir.name
         grp = self._info(patient_dir.parent.parent).get(pid, {}).get("DISEASE")
 
-        def resolve(tag):
+        def resolve(tag: str) -> tuple[Path, Path, None]:
             return (patient_dir / f"{pid}_{view}_{tag}.nii.gz",
                     patient_dir / f"{pid}_{view}_{tag}_gt.nii.gz", None)
 
         return Base.load_frames(grp, resolve, LABEL_MAP)
 
-    def meta(self, case: Path) -> dict:
+    @override
+    def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + disease — AUTO from dataset_information.csv."""
         return self._meta_from_info(self._info(case.parent.parent).get(case.name, {}))

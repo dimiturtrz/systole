@@ -147,7 +147,7 @@ class Augmentor:
         if cfg.translate > 0:
             theta[:, 0, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
             theta[:, 1, 2] = (torch.rand(b, device=dev) * 2 - 1) * cfg.translate * 2.0
-        grid = F.affine_grid(theta, img.shape, align_corners=False)
+        grid = F.affine_grid(theta, list(img.shape), align_corners=False)
         img = F.grid_sample(img, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
         mask = F.grid_sample(mask[:, None].to(dt), grid, mode="nearest", padding_mode="zeros",
                              align_corners=False)[:, 0].long()

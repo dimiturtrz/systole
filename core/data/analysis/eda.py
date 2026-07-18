@@ -11,8 +11,12 @@ Usage:
     python -m core.data.static.mri.eda                 # summarize N patients + viz
     python -m core.data.static.mri.eda --patient patient001
 """
+from __future__ import annotations
+
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 import numpy as np
@@ -34,7 +38,7 @@ class Eda:
     ED/ES base/mid/apex overlay figure."""
 
     @staticmethod
-    def summarize_patient(patient_dir):
+    def summarize_patient(patient_dir: Path) -> dict[str, Any]:
         case_data = AcdcAdapter().load_ed_es(patient_dir)
         spacing = case_data["spacing"]
         log.info(f"\n=== {patient_dir.name} | group={case_data.get('group','?')} ===")
@@ -53,7 +57,7 @@ class Eda:
         return case_data
 
     @staticmethod
-    def save_viz(patient_dir, d, out_png):
+    def save_viz(patient_dir: Path, d: dict[str, Any], out_png: Path) -> None:
         rows = [tag for tag in Phase if tag in d]
         if not rows:
             return
@@ -76,13 +80,13 @@ class Eda:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--patient", default=None, help="e.g. patient001")
         ap.add_argument("--n", type=int, default=3)
         ap.add_argument("--root", default=None)
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         cases = AcdcAdapter(root=args.root).cases()
         log.info(f"DATA_ROOT = {args.root or DATA_ROOT}  ({len(cases)} patients)")
         if not cases:

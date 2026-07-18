@@ -15,9 +15,11 @@ Task per TestSet: seg4 -> all three classes; seg_lv (SCD, no RV in GT) -> myo+ca
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -39,12 +41,12 @@ class Matrix:
 
     @staticmethod
     def score_matrix(model_refs: list[str], testset_names: list[str] | None = None,
-                     *, tta: bool = True) -> list[dict]:
+                     *, tta: bool = True) -> list[dict[str, Any]]:
         """Score each model on each TestSet -> flat rows (model, testset, ood, dice/class, ef_mae, n). Each
         model is loaded once with its own preprocessing; the eval cloud is loaded per (model-preprocessing)
         so npz match the weights."""
         tsets = [TESTSETS[n] for n in testset_names] if testset_names else list(MATRIX_TESTSETS)
-        rows: list[dict] = []
+        rows: list[dict[str, Any]] = []
         for ref in model_refs:
             model, cfg, device = run_mod.Run.load_run(registry_mod.Registry.resolve(ref))
             d = cfg.generator.data if cfg else None
@@ -67,7 +69,7 @@ class Matrix:
         return rows
 
     @staticmethod
-    def _print(rows: list[dict]):
+    def _print(rows: list[dict[str, Any]]) -> None:
         log.info(f"\n=== generalization matrix ({len(rows)} cells) — OOD=honest, in-domain=leak ===")
         for r in rows:
             flag = "OOD " if r.get("ood") else ("LEAK" if r.get("ood") is False else "?   ")
@@ -75,7 +77,7 @@ class Matrix:
                   f"Dice {r['dice_mean']:.3f}  EF {r['ef_mae']:>5}%")
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--models", nargs="+", required=True, help="registry refs (alias|version|run-id)")
         ap.add_argument("--testsets", nargs="*", default=None,
                         help=f"TestSet names (default: the granular battery). known: {sorted(TESTSETS)}")
@@ -83,7 +85,7 @@ class Matrix:
         ap.add_argument("--out", default=None, help="write rows to this json")
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         rows = Matrix.score_matrix(args.models, args.testsets, tta=not args.no_tta)
         Matrix._print(rows)
         if args.out:

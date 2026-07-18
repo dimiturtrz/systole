@@ -6,7 +6,10 @@ ACDC layout: training/patientXXX/ with cine frames (patientXXX_frameNN.nii.gz) +
 Labels are already the canonical convention (0 bg, 1 RV, 2 LV-myo, 3 LV-cav) — verified
 geometrically (see base.identify_lv_cavity). Scanner: Siemens Aera 1.5T / Trio Tim 3T (Dijon).
 """
+from __future__ import annotations
+
 from pathlib import Path
+from typing import override
 
 from core.config import Config
 from core.data.static.mri.base import (
@@ -50,6 +53,7 @@ class AcdcAdapter(AdapterBase, DatasetAdapter):
         stem = f"{patient_dir.name}_frame{int(frame_no):02d}"
         return patient_dir / f"{stem}.nii.gz", patient_dir / f"{stem}_gt.nii.gz"
 
+    @override
     def cases(self) -> list[Path]:
         """ALL labelled ACDC patients — both training/ (100) and testing/ (50, also has GT). We pull
         everything and make our own splits downstream (don't inherit the challenge split)."""
@@ -64,18 +68,20 @@ class AcdcAdapter(AdapterBase, DatasetAdapter):
                 out += [p for p in cand.glob("patient*") if p.is_dir()]
         return sorted(out, key=lambda p: p.name)
 
+    @override
     def load_ed_es(self, case: Path) -> PatientData:
         """Load ED + ES frames + masks for one patient (labels already canonical). img/gt [D,H,W],
         spacing (z,y,x) mm. Frame indices come from Info.cfg."""
         patient_dir = Path(case)
         cfg = self.parse_info_cfg(patient_dir)
 
-        def resolve(tag):
+        def resolve(tag: str) -> tuple[Path, Path, None] | None:
             fno = cfg.get(tag)
             return (*self._frame_paths(patient_dir, fno), None) if fno is not None else None
 
         return Base.load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
+    @override
     def meta(self, case: Path) -> PatientMeta:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
         cfg = self.parse_info_cfg(case)

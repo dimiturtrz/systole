@@ -9,6 +9,8 @@ A family = a class with `name` + `versions` (see core.data.ingest.split.Split). 
 """
 from __future__ import annotations
 
+from typing import Any
+
 from core.data.ingest.split import SplitResolver
 from core.data.ingest.splits.parametric import Parametric
 from core.data.ingest.splits.static_all import StaticAll
@@ -41,7 +43,7 @@ class Splits:
         return name, ver
 
     @staticmethod
-    def resolve_cfg(d, meta):
+    def resolve_cfg(d: Any, meta: Any) -> Any:
         """Resolve a DataCfg's coded split (`d.split`) over `meta` -> Resolution(train, val, test, …).
         The one place the name@version parse + load_split + resolve dance lives."""
         name, ver = Splits.parse_ref(d.split)

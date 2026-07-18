@@ -9,12 +9,15 @@ Generator.batch. Same order + math as before -> bit-identical batches.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import torch
 
 from .augment import AugCfg, Augmentor
 from .synth import SynthCfg, SynthPainter
+
+if TYPE_CHECKING:
+    from .generator import GeneratorCfg
 
 
 @dataclass
@@ -80,6 +83,6 @@ class Pipeline:
     """The ordered Transform recipe the Generator composes (the build lives here as a staticmethod)."""
 
     @staticmethod
-    def build(cfg, n_classes: int) -> list[Transform]:
+    def build(cfg: GeneratorCfg, n_classes: int) -> list[Transform]:
         """The default recipe: synth-replace -> augment -> soften. cfg = GeneratorCfg (synth + aug)."""
         return [SynthReplace(cfg.synth, n_classes), Augment(cfg.aug), Soften(cfg.aug.soft_label_sigma, n_classes)]

@@ -7,7 +7,10 @@ frames are labelled. ED/ES frame indices + vendor/centre/age/sex/h+w in the CSV.
 
 Labels: same flip as M&M-2 (raw 1=LV-cav) -> canonical via label_map.
 """
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any, override
 
 from core.config import Config
 from core.data.static.mri.base import (
@@ -103,14 +106,14 @@ class Mnms1Adapter(AdapterBase, DatasetAdapter):
         return out
 
     @staticmethod
-    def _frame_idx(idx) -> int | None:
+    def _frame_idx(idx: Any) -> int | None:
         """CSV ED/ES frame cell -> int index (float-string tolerant), or None when blank/missing."""
         if idx is None or idx == "":
             return None
         return int(float(idx))
 
     @staticmethod
-    def meta_from_row(row: dict) -> PatientMeta:
+    def meta_from_row(row: dict[str, str]) -> PatientMeta:
         """PURE M&Ms-1 meta from one CSV row: centre code -> (readable site, country) via the paper map,
         vendor from either spelling, demographics float-parsed. Unknown centre -> (raw code, None country)."""
         name, country = CENTRES.get(str(row.get("Centre")).strip(), (row.get("Centre"), None))
@@ -124,21 +127,24 @@ class Mnms1Adapter(AdapterBase, DatasetAdapter):
             "_source": {"all": "csv", "centre+country": "paper centre map", "field_T": "paper(unfilled)"},
         }
 
+    @override
     def cases(self) -> list[Path]:
         return Mnms1Adapter.mnms1_cases(self.root)
 
+    @override
     def load_ed_es(self, case: str | Path) -> PatientData:
         """Load ED + ES frames (from the 4D cine at CSV indices) + canonical-remapped masks."""
         case = Path(case)
         row = Mnms1Adapter.mnms1_info().get(case.name, {})
         img_p, gt_p = Mnms1Adapter._sa(case)
 
-        def resolve(tag):
+        def resolve(tag: str) -> tuple[Path, Path, int] | None:
             idx = Mnms1Adapter._frame_idx(row.get(tag))
             return None if idx is None else (img_p, gt_p, idx)   # 4D cine -> frame index from the CSV
 
         return Base.load_frames(row.get("Pathology"), resolve, LABEL_MAP)
 
-    def meta(self, case: Path) -> dict:
+    @override
+    def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + demographics — AUTO from the CSV (richest of the three)."""
         return Mnms1Adapter.meta_from_row(Mnms1Adapter.mnms1_info().get(case.name, {}))
