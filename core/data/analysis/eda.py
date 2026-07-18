@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Any
 
 import matplotlib as mpl
 import numpy as np
@@ -25,7 +24,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from core.data.static.mri.acdc import DATA_ROOT, AcdcAdapter
-from core.data.static.mri.base import Base, Phase
+from core.data.static.mri.base import Base, PatientData, Phase
 
 log = logging.getLogger("cardioseg.eda")
 
@@ -38,7 +37,7 @@ class Eda:
     ED/ES base/mid/apex overlay figure."""
 
     @staticmethod
-    def summarize_patient(patient_dir: Path) -> dict[str, Any]:
+    def summarize_patient(patient_dir: Path) -> PatientData:
         case_data = AcdcAdapter().load_ed_es(patient_dir)
         spacing = case_data["spacing"]
         log.info(f"\n=== {patient_dir.name} | group={case_data.get('group','?')} ===")
@@ -46,6 +45,8 @@ class Eda:
             if tag not in case_data:
                 continue
             img, gt = case_data[tag]["img"], case_data[tag]["gt"]
+            if not (spacing is not None):
+                raise AssertionError  # a present frame guarantees load_frames set spacing
             anisotropy = max(spacing) / min(spacing)
             lv, scores = Base.identify_lv_cavity(gt)
             spacing_mm = tuple(round(float(spacing_value), 2) for spacing_value in spacing)
@@ -57,7 +58,7 @@ class Eda:
         return case_data
 
     @staticmethod
-    def save_viz(patient_dir: Path, d: dict[str, Any], out_png: Path) -> None:
+    def save_viz(patient_dir: Path, d: PatientData, out_png: Path) -> None:
         rows = [tag for tag in Phase if tag in d]
         if not rows:
             return

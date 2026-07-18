@@ -73,6 +73,8 @@ class Generator:
                   valid=None if self.valid is None else self.valid[idx].to(self.device))
         for t in self.pipeline:
             b = t(b)
+        if not (b.yt is not None):
+            raise AssertionError("pipeline must set yt (the Soften step always does)")
         return b.x, b.yt, b.valid
 
 

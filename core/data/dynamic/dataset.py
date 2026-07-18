@@ -15,8 +15,9 @@ Shapes through this file:
 Split is PATIENT-LEVEL: every slice of a patient lands in the same fold, else
 near-identical neighbouring slices leak across train/val and inflate Dice.
 """
+from collections.abc import Sequence
 from pathlib import Path
-from typing import override
+from typing import Literal, overload, override
 
 import numpy as np
 import torch
@@ -45,7 +46,7 @@ class ACDCSliceDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def __init__(
         self,
-        npz_paths: list[str | Path],
+        npz_paths: Sequence[str | Path],
         size: int = SIZE,
         frames: tuple[str, ...] = tuple(Phase),
         *,
@@ -63,7 +64,7 @@ class ACDCSliceDataset(Dataset[tuple[Tensor, Tensor]]):
             for tag in frames:
                 img = case.get(f"{tag.lower()}_img")     # [D, H, W]
                 gt = case.get(f"{tag.lower()}_gt")       # [D, H, W]
-                if img is None:
+                if img is None or gt is None:            # a frame needs both image AND paired GT
                     continue
                 for z in range(img.shape[0]):
                     m = gt[z]                             # [H, W]
@@ -85,8 +86,17 @@ class ACDCSliceDataset(Dataset[tuple[Tensor, Tensor]]):
         # img -> [1, size, size] (add channel); mask -> [size, size] int64
         return torch.from_numpy(img)[None], torch.from_numpy(m.astype(np.int64))
 
+    @overload
     @staticmethod
-    def load_to_gpu(npz_paths: list[str | Path], size: int = SIZE, device: str = "cuda", *, return_owners: bool = False):
+    def load_to_gpu(npz_paths: Sequence[str | Path], size: int = SIZE, device: str = "cuda",
+                    *, return_owners: Literal[False] = False) -> tuple[Tensor, Tensor]: ...
+    @overload
+    @staticmethod
+    def load_to_gpu(npz_paths: Sequence[str | Path], size: int = SIZE, device: str = "cuda",
+                    *, return_owners: Literal[True]) -> tuple[Tensor, Tensor, Tensor]: ...
+    @staticmethod
+    def load_to_gpu(npz_paths: Sequence[str | Path], size: int = SIZE, device: str = "cuda",
+                    *, return_owners: bool = False):
         """Preload ALL slices into device memory as (imgs [N,1,size,size] f32, masks [N,size,size] uint8).
 
         The all-on-`device` dual of ACDCSliceDataset: slices are grid-fit ONCE here, then the training

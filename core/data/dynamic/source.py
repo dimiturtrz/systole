@@ -21,7 +21,7 @@ import torch
 from core.data.dynamic import anatomy as _anatomy
 from core.data.dynamic.generator import CompositeGenerator, Generator
 from core.data.dynamic.synth import AnyBgCfg, ProceduralBgCfg
-from core.data.ingest.source import Source
+from core.data.ingest.source import StaticSource
 
 if TYPE_CHECKING:
     from core.data.dynamic.generator import GeneratorCfg
@@ -31,7 +31,7 @@ class DynamicSource:
     kind = "dynamic"
 
     def __init__(self, pool: str, bg: AnyBgCfg | None = None, synth_p: float = 1.0,  # noqa: PLR0913
-                 seed: Source | None = None, note: str = "", cap: int | None = None):
+                 seed: StaticSource | None = None, note: str = "", cap: int | None = None):
         self.pool = str(pool)
         self.bg = bg or ProceduralBgCfg()      # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
         self.synth_p = synth_p

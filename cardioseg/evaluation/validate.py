@@ -60,7 +60,8 @@ class _ClassScores:
         self.boundary = boundary
         self.inter = dict.fromkeys(CLASS_NAMES, 0.0)
         self.denom = dict.fromkeys(CLASS_NAMES, 0.0)
-        self.surf: dict[int, dict[str, list[float]]] = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
+        # per-volume boundary distances (mm)
+        self.surf: dict[int, dict[str, list[float]]] = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}
 
     @shapecheck
     def add(self, pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], spacing: Spacing):
@@ -117,7 +118,9 @@ class Evaluator:
             foreground_indices = rng.choice(foreground_indices, per_vol, replace=False)
         return logits[foreground_indices], y[foreground_indices]
 
-    def validate(self, npz_paths: Sequence[str | Path]) -> tuple[dict[int, float], list[dict[str, Any]], dict[int, dict[str, float]] | None]:
+    def validate(
+        self, npz_paths: Sequence[str | Path],
+    ) -> tuple[dict[int, float], list[dict[str, Any]], dict[int, dict[str, float]] | None]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
         all val slices}. ef_rows: {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}. `npz_paths` are
         consolidated-subject npz files (data/store.py) — resampled+z-scored ed/es img+gt, spacing,
@@ -128,7 +131,8 @@ class Evaluator:
         ef_rows = []
         for npz_path in npz_paths:
             case = load_arrays(npz_path)
-            spacing = tuple(float(s) for s in case["spacing"])   # per-patient (z,y,x)
+            spc = np.asarray(case["spacing"], dtype=float)
+            spacing: Spacing = (spc[0], spc[1], spc[2])   # per-patient (z,y,x)
             vols = {}
             for tag in ("ED", "ES"):
                 if f"{tag.lower()}_img" not in case:
@@ -146,7 +150,9 @@ class Evaluator:
                                 "ef_gt": ef_gt, "ef_pred": ef_pred, "edv_gt": edv_gt, "edv_pred": edv_pred})
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
 
-    def gather(self, npz_paths: Sequence[str | Path], per_vol: int = 4000, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    def gather(
+        self, npz_paths: Sequence[str | Path], per_vol: int = 4000, seed: int = 0,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Foreground (logits[N,C], labels[N]) over subjects — single forward, NO TTA/postproc —
         subsampled to ~per_vol voxels/volume (bounded memory, plenty for a 1-param temperature fit +
         ECE). For calibration. (Was calibrate._gather(model, paths, size, device, …); model/size/device
@@ -175,7 +181,10 @@ class Evaluator:
 
 
     @staticmethod
-    def summarize(dice_per_class: dict[int, float], ef_rows: list[dict[str, Any]], surf_per_class: dict[int, dict[str, float]] | None = None) -> dict[str, Any]:
+    def summarize(
+        dice_per_class: dict[int, float], ef_rows: list[dict[str, Any]],
+        surf_per_class: dict[int, dict[str, float]] | None = None,
+    ) -> dict[str, Any]:
         """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
         log.info("\n=== VAL Dice (per class, pooled over slices) ===")
         for cl, name in CLASS_NAMES.items():

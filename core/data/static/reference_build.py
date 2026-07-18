@@ -20,6 +20,7 @@ from core.data.static.reference import Reference
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe, Store
 from core.measure import Measure
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.reference_build")
 
@@ -63,12 +64,13 @@ class ReferenceBuild:
             case = store.load_arrays(r["path"])
             if "ed_gt" not in case or "es_gt" not in case:
                 continue
-            sp = tuple(float(s) for s in case["spacing"])
+            z, y, x = case["spacing"]
+            sp: Spacing = (z, y, x)
             ef, edv, esv = Measure.ejection_fraction(case["ed_gt"], case["es_gt"], sp)
             path = (r.get("pathology") or "unknown")
             g = by_path.setdefault(path, {"ef": [], "edv": [], "esv": []})
             g["ef"].append(ef); g["edv"].append(edv); g["esv"].append(esv)
-            datasets.setdefault(path, set()).add(r.get("dataset"))
+            datasets.setdefault(path, set()).add(r["dataset"])
 
         out: dict[str, Any] = {"ef_by_pathology": {}, "volumes": {}}
         for path, g in sorted(by_path.items()):
@@ -225,7 +227,7 @@ class ReferenceBuild:
         for v in _VENDORS:
             cav = ref.provenance("real_class_levels", v, "LV-cav")
             rv = ref.provenance("real_class_levels", v, "RV")
-            if cav:
+            if cav and rv:
                 log.info(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
 
     @staticmethod

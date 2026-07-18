@@ -54,7 +54,9 @@ class Reference:
             # (reference.yaml / acquisition.yaml / conventions.yaml); content keys are the namespace,
             # so consumers query by category (get('normal_ranges', ...)), not by filename.
             for f in sorted(base.glob("*.yaml")):
-                self._d.update(OmegaConf.to_container(OmegaConf.load(f), resolve=True) or {})
+                loaded = OmegaConf.to_container(OmegaConf.load(f), resolve=True)
+                if isinstance(loaded, dict):
+                    self._d.update({str(k): v for k, v in loaded.items()})
 
     def present(self) -> bool:
         """Whether any reference file was loaded (else everything falls back)."""

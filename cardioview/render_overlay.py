@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -45,6 +44,7 @@ from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import Splits
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
+from core.types import Spacing
 
 log = logging.getLogger("cardioview.render_overlay")
 
@@ -52,7 +52,8 @@ MIN_MESH_VOXELS = 8        # skip a chamber whose binary mask is smaller than th
 MYO_LABEL = 2              # LV myocardium — rendered semi-transparent so cavities stay visible
 
 
-def crop_and_iso(img_zyx: np.ndarray, mask_zyx: np.ndarray, spacing_zyx: Sequence[float], margin_mm: float = 12.0) -> tuple[Any, Any, tuple[float, float, float]]:
+def crop_and_iso(img_zyx: np.ndarray, mask_zyx: np.ndarray, spacing_zyx: tuple[float, float, float],
+                 margin_mm: float = 12.0) -> tuple[Any, Any, tuple[float, float, float]]:
     """Crop both to the heart bbox + margin, then resample both to isotropic voxels."""
     crop = bbox_slices(mask_zyx > 0, spacing_zyx, margin_mm)
     img, mask = img_zyx[crop], mask_zyx[crop]
@@ -63,15 +64,15 @@ def crop_and_iso(img_zyx: np.ndarray, mask_zyx: np.ndarray, spacing_zyx: Sequenc
     return img_i, mask_i, (iso, iso, iso)
 
 
-def chamber_mesh(mask_zyx: np.ndarray, label: int, iso: float) -> pv.PolyData | None:  # pragma: no cover  (marching_cubes + pyvista PolyData — mesh/render shell)
+def chamber_mesh(mask_zyx: np.ndarray, label: int, iso: float) -> pv.PolyData | None:  # pragma: no cover
     """Marching-cubes surface for one label, in (x,y,z) world mm to match the volume."""
     binary = (mask_zyx == label).astype(np.float32)
     if binary.sum() < MIN_MESH_VOXELS:
         return None
     verts, faces, _, _ = marching_cubes(binary, level=0.5, spacing=(iso, iso, iso))
     verts = verts[:, [2, 1, 0]]  # (z,y,x) -> (x,y,z), the volume's world order
-    faces_pv = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
-    return pv.PolyData(verts, faces_pv).smooth_taubin(n_iter=20, pass_band=0.05)
+    faces_pv = np.hstack([np.full((len(faces), 1), 3), faces]).astype(int).ravel()
+    return pv.PolyData(verts, faces_pv).smooth_taubin(n_iter=20, pass_band=0.05)  # pyrefly: ignore[bad-return]  pyvista smooth_taubin has no return stub; it returns PolyData
 
 
 @dataclass
@@ -97,17 +98,18 @@ def _split_tag(patient: str) -> str:
     return "  held-out" if held else "  TRAIN-seen"
 
 
-def _ef_title(masks: dict[str, Any], case: dict[str, Any], spacing: Sequence[float], source: str) -> str:
+def _ef_title(masks: dict[str, Any], case: dict[str, Any], spacing: Spacing, source: str) -> str:
     """EF (both phases) for the scene title — pred vs GT."""
     if "ED" not in masks or "ES" not in masks:
         return ""
     ef, _, _ = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
     ef_g, _, _ = Measure.ejection_fraction(
-        *(square_stack(case[f"{t}_gt"], np.uint8) for t in ("ed", "es")), spacing, lv_label=3)
+        square_stack(case["ed_gt"], np.uint8), square_stack(case["es_gt"], np.uint8), spacing, lv_label=3)
     return f"   EF {source} {ef:.0f}%  (GT {ef_g:.0f}%)"
 
 
-def _write_scene(pl: pv.Plotter, cfg: OverlayCfg, mask_i: np.ndarray, iso: Sequence[float], ef_txt: str) -> None:  # pragma: no cover  (file-write shell)
+def _write_scene(pl: pv.Plotter, cfg: OverlayCfg, mask_i: np.ndarray, iso: tuple[float, float, float],
+                 ef_txt: str) -> None:  # pragma: no cover  (file-write shell)
     """Dispatch the built plotter to gltf / html / interactive / screenshot per cfg."""
     if cfg.gltf:
         Path(cfg.gltf).parent.mkdir(parents=True, exist_ok=True)
@@ -128,15 +130,16 @@ def _write_scene(pl: pv.Plotter, cfg: OverlayCfg, mask_i: np.ndarray, iso: Seque
     log.info("saved %s  (iso %s @ %s mm)%s", out, mask_i.shape, round(iso[0], 2), ef_txt)
 
 
-def _build_plotter(cfg: OverlayCfg, img_i: np.ndarray, mask_i: np.ndarray, iso: Sequence[float], title: str) -> pv.Plotter:  # pragma: no cover  (render shell)
+def _build_plotter(cfg: OverlayCfg, img_i: np.ndarray, mask_i: np.ndarray, iso: tuple[float, float, float],
+                   title: str) -> pv.Plotter:  # pragma: no cover  (render shell)
     """Assemble the pyvista scene: dim intensity backdrop (screenshot only) + chamber surfaces."""
-    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
+    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=[1000, 1000])
     pl.set_background("#0e1116")
     # Volume backdrop doesn't export to vtk.js/glTF cleanly — skip it for web export.
     if not (cfg.html or cfg.gltf):
         grid = to_imagedata(normalize(img_i) * 255.0, iso)
         pl.add_volume(grid, scalars="intensity", cmap="bone",
-                      opacity=[0.0, 0.0, 0.02, 0.04, 0.08, 0.14, 0.25],  # dim backdrop
+                      opacity=np.array([0.0, 0.0, 0.02, 0.04, 0.08, 0.14, 0.25]),  # dim backdrop
                       shade=False, show_scalar_bar=False, blending="composite")
     for label, (name, color) in CHAMBERS.items():
         mesh = chamber_mesh(mask_i, label, iso[0])
@@ -153,7 +156,7 @@ def _build_plotter(cfg: OverlayCfg, img_i: np.ndarray, mask_i: np.ndarray, iso: 
 
 def render(cfg: OverlayCfg) -> None:  # pragma: no cover  (render shell)
     case = Preprocess.preprocess_case(patient_dir(cfg.patient), loader=AcdcAdapter().load_ed_es)
-    spacing = tuple(float(s) for s in case["spacing"])
+    spacing = case["spacing"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = None if cfg.source == "gt" else load_model(MODELS[cfg.model_name], device)
     split_tag = _split_tag(cfg.patient) if cfg.source == "pred" else ""

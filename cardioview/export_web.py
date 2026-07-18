@@ -14,7 +14,7 @@ import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import nibabel as nib
 import numpy as np
@@ -36,17 +36,21 @@ from geometry import bbox_slices, nearest_index
 from PIL import Image
 
 from core.config import Config
-from core.data.static import splits, store
+from core.data.static import splits
 from core.data.static.mri.acdc import AcdcAdapter
 from core.data.static.splits import Splits
+from core.data.static.store.build import Build as store
 from core.hparams import Hparams
 from core.inference import Inference
 from core.measure import Measure
 from core.mesh import Mesh  # reusable chamber-mesh tool (bd 7c9.1)
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
+from core.types import Spacing
 
 log = logging.getLogger("cardioview.export_web")
+
+_K = TypeVar("_K")
 
 MARGIN_MM = 12.0            # heart-bbox crop margin (shared-crop, keeps chambers aligned)
 INPLANE_MM = 1.5           # in-plane resample step the 2D model runs at
@@ -93,12 +97,13 @@ def heldout_set(model_name: str) -> set[str]:
 @dataclass
 class ExportCtx:
     """Plumbing shared across an export run: the loaded model, its device, and registry name."""
-    model: object
+    model: torch.nn.Module | None
     device: str
     model_name: str
 
 
-def shared_crop(masks: dict[str, Any], spacing: Sequence[float], margin_mm: float = MARGIN_MM) -> tuple[dict[str, Any], float]:
+def shared_crop(masks: dict[_K, Any], spacing: Sequence[float],
+                margin_mm: float = MARGIN_MM) -> tuple[dict[_K, Any], float]:
     """Crop every phase to the union heart bbox + margin (kept anisotropic — the mesher
     resamples per-chamber with linear interp for smooth surfaces). Returns crops + iso step."""
     union = np.zeros_like(next(iter(masks.values())), dtype=bool)
@@ -110,7 +115,7 @@ def shared_crop(masks: dict[str, Any], spacing: Sequence[float], margin_mm: floa
 
 
 
-def volumes(masks: dict[str, Any], spacing: Sequence[float]) -> dict[str, Any]:
+def volumes(masks: dict[str, Any], spacing: Spacing) -> dict[str, Any]:
     """EDV (ml full), ESV (ml empty), EF (%) from the LV cavity — full-res, real spacing."""
     if "ED" in masks and "ES" in masks:
         ef, edv, esv = Measure.ejection_fraction(masks["ED"], masks["ES"], spacing, lv_label=3)
@@ -168,9 +173,9 @@ def upsert_manifest(entry: ManifestEntry, model_name: str) -> None:  # pragma: n
     path.write_text(json.dumps(manifest_with(data, entry.to_dict(), model_name), indent=2))
 
 
-def load_4d(pdir: Path, name: str) -> tuple[Any, tuple[Any, ...]]:  # pragma: no cover  (nibabel NIfTI disk load — IO shell)
+def load_4d(pdir: Path, name: str) -> tuple[Any, tuple[Any, ...]]:  # pragma: no cover  (nibabel disk load — IO shell)
     """Load the cine as [t, z, y, x] + spacing (z, y, x) mm."""
-    img = nib.load(str(pdir / f"{name}_4d.nii.gz"))
+    img = nib.Nifti1Image.from_filename(str(pdir / f"{name}_4d.nii.gz"))
     arr = np.transpose(np.asanyarray(img.dataobj), (3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
     xs, ys, zs = img.header.get_zooms()[:3]
     return arr, (zs, ys, xs)
@@ -188,7 +193,7 @@ def run(patients: Sequence[str], source: str, ctx: ExportCtx) -> None:  # pragma
         pdir = patient_dir(p)  # p may be an ID or a full path
         name = pdir.name
         case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
-        spacing = tuple(float(s) for s in case["spacing"])
+        spacing = case["spacing"]
         masks = build_masks(case, source, ctx.model, ctx.device)
         crop_masks, iso = shared_crop(masks, spacing)
         glb = {}
@@ -203,15 +208,18 @@ def run(patients: Sequence[str], source: str, ctx: ExportCtx) -> None:  # pragma
                  entry.pred.get("ef"), entry.gt.get("ef"))
 
 
-def run_animate(patients: Sequence[str], ctx: ExportCtx, stride: int = 1) -> None:  # pragma: no cover  (export orchestration shell)
+def run_animate(patients: Sequence[str], ctx: ExportCtx, stride: int = 1) -> None:  # pragma: no cover  (export shell)
     """Segment every cine frame -> per-frame chamber glb -> a beating-cycle entry, per patient."""
     held = heldout_set(ctx.model_name)
     for p in patients:
         _animate_patient(p, ctx, held, stride)
 
 
-def _segment_cine(pdir: Path, name: str, ctx: ExportCtx, stride: int) -> tuple[list[int], dict[int, Any], dict[int, Any], tuple[Any, ...]]:  # pragma: no cover  (inference shell)
+def _segment_cine(pdir: Path, name: str, ctx: ExportCtx, stride: int,
+                  ) -> tuple[list[int], dict[int, Any], dict[int, Any], tuple[Any, ...]]:  # pragma: no cover
     """Segment every strided cine frame -> (frames_t, masks{k}, grays{k} aligned, rspacing)."""
+    if ctx.model is None:
+        raise ValueError("cine segmentation requires a model")
     vol, spacing = load_4d(pdir, name)
     rspacing = (spacing[0], INPLANE_MM, INPLANE_MM)
     frames_t = list(range(0, vol.shape[0], stride))
@@ -237,7 +245,7 @@ def _heart_bbox(masks: dict[int, Any], margin: int = CINE_BBOX_MARGIN) -> tuple[
             max(0, int(xs.min()) - margin), min(SIZE, int(xs.max()) + margin + 1))
 
 
-def _animate_patient(p: str, ctx: ExportCtx, held: set[str], stride: int) -> None:  # pragma: no cover  (export orchestration shell)
+def _animate_patient(p: str, ctx: ExportCtx, held: set[str], stride: int) -> None:  # pragma: no cover  (export shell)
     """One patient: segment the cine, write per-frame slice strips + chamber glbs, upsert the entry."""
     pdir = patient_dir(p)
     name = pdir.name
@@ -259,7 +267,7 @@ def _animate_patient(p: str, ctx: ExportCtx, held: set[str], stride: int) -> Non
     es_k = nearest_index(frames_t, esi)
     ef, edv, esv = Measure.ejection_fraction(masks[ed_k], masks[es_k], rspacing, lv_label=3)
     case = Preprocess.preprocess_case(pdir, loader=AcdcAdapter().load_ed_es)
-    gt = volumes(build_masks(case, "gt"), tuple(float(s) for s in case["spacing"]))
+    gt = volumes(build_masks(case, "gt"), case["spacing"])
     entry = ManifestEntry(patient=name, group=case.get("group"), held_out=(name in held), source="pred",
                           pred={"ef": round(ef, 1), "edv": round(edv, 1), "esv": round(esv, 1)}, gt=gt,
                           glb={"ED": files[ed_k], "ES": files[es_k]},

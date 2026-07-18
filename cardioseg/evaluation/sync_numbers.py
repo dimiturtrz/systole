@@ -154,7 +154,8 @@ class SyncNumbers:
         pass
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # per-file read/write loop over the doc TARGETS; inject_blocks is the pure core
         total = 0
         for f in TARGETS:
             p = ROOT / f

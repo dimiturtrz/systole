@@ -33,6 +33,7 @@ from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.soft_eval")
 
@@ -64,7 +65,8 @@ class SoftEval:
             case = store.load_arrays(r["path"])
             if "ed_img" not in case or "es_img" not in case:
                 continue
-            spacing = tuple(float(v) for v in case["spacing"])
+            spc = np.asarray(case["spacing"], dtype=float)
+            spacing: Spacing = (spc[0], spc[1], spc[2])
             volumes = {}
             for tag in (phase.lower() for phase in Phase):
                 _, mean = Inference(model, SIZE, dev).predict_volume_probs(case[f"{tag}_img"])   # [D,C,H,W] softmax

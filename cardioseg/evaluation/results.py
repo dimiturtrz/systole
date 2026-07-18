@@ -63,8 +63,13 @@ class Results:
     `_axis`/`build` that feed it. Grouped so the published-JSON shape lives with the eval that fills it."""
 
     @staticmethod
-    def axis_dict(n_rows: int, dists: dict[int, list[np.ndarray]], dice_acc: dict[int, list[float]], ef_stats: AgreementStats,
-                  cal_stats: AgreementStats | None = None) -> dict[str, Any]:
+    def axis_dict(
+        n_rows: int,
+        dists: dict[int, list[np.ndarray]],
+        dice_acc: dict[int, list[float]],
+        ef_stats: AgreementStats,
+        cal_stats: AgreementStats | None = None,
+    ) -> dict[str, Any]:
         """The pure axis-record assembler: pooled per-class boundary dists + per-class dice lists + the EF
         stats dict -> the published axis dict (per-class Dice/HD95/ASSD at their fixed rounding + mean Dice +
         EF MAE/bias/LoA). No model, no store — extracted from `_collect` so the exact JSON shape + rounding
@@ -113,7 +118,8 @@ class Results:
         return out
 
     @staticmethod
-    def build(run: Path) -> dict[str, Any]:  # pragma: no cover  (store.load + make_split need the real data tree on disk)
+    def build(run: Path) -> dict[str, Any]:  # pragma: no cover
+        # store.load + make_split need the real data tree on disk
         """Axes derived from the run's own split: VAL = ACDC (held-out centre, with pathology strata);
         TEST = each held-out vendor (Canon, GE) separately. So the published numbers always match what
         the run actually held out. EF calibration is fit on VAL only (leak rule) and applied to every axis;
@@ -151,7 +157,8 @@ class Results:
         ap.add_argument("--out", default="cardioseg/RESULTS.json")
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: resolve registry ref + GPU build + mlflow metric logging + file write)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # CLI: resolve registry ref + GPU build + mlflow metric logging + file write
         res = Results.build(Registry.resolve(args.run))
         Path(args.out).write_text(json.dumps(res, indent=2))
         f = res["flagship"]

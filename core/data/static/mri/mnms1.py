@@ -147,4 +147,4 @@ class Mnms1Adapter(AdapterBase, DatasetAdapter):
     @override
     def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + demographics — AUTO from the CSV (richest of the three)."""
-        return Mnms1Adapter.meta_from_row(Mnms1Adapter.mnms1_info().get(case.name, {}))
+        return dict(Mnms1Adapter.meta_from_row(Mnms1Adapter.mnms1_info().get(case.name, {})))

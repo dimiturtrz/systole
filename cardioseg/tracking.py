@@ -31,8 +31,17 @@ class _Noop:
     def metric(self, key: str, value: int | float, step: int | None = None) -> None: pass
     def summary(self, results: dict[str, Any]) -> None: pass
     def artifact(self, path: str | Path) -> None: pass
-    def tag(self, key: str, value: str | int | float | bool) -> None: pass
-    def log_model(self, model: torch.nn.Module, registered_name: str, alias: str | None = None, description: str | None = None, version_tags: dict[str, Any] | None = None) -> None: pass
+    def tag(self, key: str, value: str | int | float | bool) -> None: pass  # noqa: FBT001
+
+    def log_model(
+        self,
+        model: torch.nn.Module,
+        registered_name: str,
+        alias: str | None = None,
+        description: str | None = None,
+        version_tags: dict[str, Any] | None = None,
+    ) -> None:
+        pass
     def end(self) -> None: pass
 
 
@@ -60,11 +69,18 @@ class _Live:
                 self._m.log_artifact(str(path))
         except Exception: pass
 
-    def tag(self, key: str, value: str | int | float | bool) -> None:
+    def tag(self, key: str, value: str | int | float | bool) -> None:  # noqa: FBT001
         with contextlib.suppress(Exception):
             self._m.set_tag(key, str(value))
 
-    def log_model(self, model: torch.nn.Module, registered_name: str, alias: str | None = None, description: str | None = None, version_tags: dict[str, Any] | None = None) -> None:
+    def log_model(
+        self,
+        model: torch.nn.Module,
+        registered_name: str,
+        alias: str | None = None,
+        description: str | None = None,
+        version_tags: dict[str, Any] | None = None,
+    ) -> None:
         """Log the torch model + register a version (catalog). `alias` (e.g. 'production') points at it;
         `description`/`version_tags` make the auto-numbered version readable. Guarded."""
         try:
@@ -162,8 +178,9 @@ class Tracker:
                 mlflow.start_run(run_name=self.run_name)
                 if self.params:
                     mlflow.log_params(Tracker._flat(self.params))
-                if idf:
-                    idf.write_text(mlflow.active_run().info.run_id)
+                active = mlflow.active_run()
+                if idf and active is not None:
+                    idf.write_text(active.info.run_id)
             self._apply_tags(mlflow)
             return _Live(mlflow)
         except Exception:

@@ -53,6 +53,8 @@ class Evaluate:
     @shapecheck
     def _surface(m: Bool[np.ndarray, "*grid"]) -> Bool[np.ndarray, "*grid"]:
         """Boundary voxels of a binary mask (region minus its erosion)."""
+        if binary_erosion is None:
+            raise ImportError("scipy required for surface distances")
         return m & ~binary_erosion(m)
 
     @staticmethod
@@ -67,8 +69,8 @@ class Evaluate:
         p, g = (pred == label), (gt == label)
         if not p.any() or not g.any():
             return np.array([])
-        dt_g = distance_transform_edt(~g, sampling=spacing)
-        dt_p = distance_transform_edt(~p, sampling=spacing)
+        dt_g = np.asarray(distance_transform_edt(~g, sampling=spacing))
+        dt_p = np.asarray(distance_transform_edt(~p, sampling=spacing))
         return np.concatenate([dt_g[Evaluate._surface(p)], dt_p[Evaluate._surface(g)]]).astype(float)
 
     @staticmethod

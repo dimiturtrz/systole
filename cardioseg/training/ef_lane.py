@@ -15,20 +15,23 @@ assembles the active ones. Adding a lane = one class + one registry line, no new
 """
 from __future__ import annotations
 
+from pathlib import Path
+from types import ModuleType
+
 import numpy as np
+import polars as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from jaxtyping import Float, Int, Shaped
 
-from core.data.ingest.splits import Splits
 from core.data.static.labels import LV_CAV
 from core.data.static.mri.kaggle_dsb import KaggleDsbAdapter
 from core.data.static.store import Store
 from core.hparams import TrainCfg
 from core.measure import Measure
 from core.preprocessing.preprocess import Preprocess
-from core.types import shapecheck
+from core.types import Spacing, shapecheck
 
 from .volumes import VolLoss
 
@@ -64,7 +67,8 @@ class EfLane:
     @staticmethod
     @shapecheck
     def ef_ratio_loss(
-        ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"], targets: torch.Tensor | list[float], delta: float = 0.1,
+        ed: Float[torch.Tensor, "*k"], es: Float[torch.Tensor, "*k"],
+        targets: Float[torch.Tensor, "*k"] | list[float], delta: float = 0.1,
     ) -> Float[torch.Tensor, ""]:
         """Huber loss of predicted EF-ratio vs csv EF targets, both in [0,1] (÷100). Dimensionless, spacing-
         invariant — the KaggleEF objective. `targets` in percent; a [K] tensor/list. Pulled out of .loss so
@@ -90,14 +94,20 @@ class EfLane:
         ).index_add_(0, owner, cavity_pixels)
 
     @staticmethod
-    def build_aux(cfg: TrainCfg, splits: type[Splits], train_df: object, device: str, *, is_static: bool) -> list[object]:
+    def build_aux(
+        cfg: TrainCfg, splits: ModuleType, train_df: pl.DataFrame | None, device: str, *, is_static: bool,
+    ) -> list[VolConsistency | KaggleEF]:
         """Assemble the active auxiliary lanes from a TrainCfg. Empty list when the EF lane is off or the
         train source isn't static (EDV/ESV need labeled patient frames). The train loop iterates the list;
         it never inspects cfg.ef_* itself. `size` is config (cfg.generator.data.size), not an arg."""
         if cfg.ef_lambda <= 0 or not is_static:
             return []
+        if not (train_df is not None):
+            raise AssertionError("is_static guarantees a real train frame")
         size = cfg.generator.data.size
-        lanes: list[object] = [VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects)]
+        lanes: list[VolConsistency | KaggleEF] = [
+            VolConsistency(splits.Splits.paths(train_df), size, device, cfg.ef_subjects),
+        ]
         if cfg.ef_kaggle:
             lanes.append(KaggleEF(
                 KaggleDsbAdapter.kaggle_cases("train"), KaggleDsbAdapter.kaggle_ef("train"), size, device,
@@ -124,7 +134,8 @@ class VolConsistency:
             case = load_arrays(path)
             if "ed_img" not in case or "es_img" not in case:
                 continue
-            spacing = tuple(float(s) for s in case["spacing"])
+            spc = np.asarray(case["spacing"], dtype=float)
+            spacing: Spacing = (spc[0], spc[1], spc[2])
             edv = Measure.label_volume_ml(case["ed_gt"], lv_label, spacing)
             esv = Measure.label_volume_ml(case["es_gt"], lv_label, spacing)
             if edv <= 0:
@@ -138,7 +149,7 @@ class VolConsistency:
         self.edv_gt = torch.tensor(edv_gt, device=device)
         self.esv_gt = torch.tensor(esv_gt, device=device)
 
-    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> torch.Tensor | None:
+    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> Float[torch.Tensor, ""] | None:
         if self.n == 0:
             return None
         subject_indices = torch.randperm(self.n, device=self.device)[:self.k]
@@ -158,8 +169,10 @@ class KaggleEF:
     cases' ES) segment-summed per case -> EF-RATIO Huber vs the csv EF. No dense mask, so the seg loss
     never touches these."""
 
-    def __init__(self, cases: list[object], ef_targets: dict[str, dict[str, float]], size: int, device: str, k: int, pool: int = 96,  # noqa: PLR0913
-                 lv_label: int = LV_CAV, seed: int = 0):
+    def __init__(  # noqa: PLR0913
+        self, cases: list[Path], ef_targets: dict[str, dict[str, float]], size: int, device: str,
+        k: int, pool: int = 96, lv_label: int = LV_CAV, seed: int = 0,
+    ):
         self.device, self.lv, self.size, self.k = device, lv_label, size, k
         self.X: list[torch.Tensor] = []
         self.LP: list[tuple[int, int]] = []
@@ -185,7 +198,7 @@ class KaggleEF:
             self.ef.append(float(target["ef"]))
         self.n = len(self.X)
 
-    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> torch.Tensor | None:
+    def loss(self, model: nn.Module, delta: float = 0.1, *, amp: bool = True) -> Float[torch.Tensor, ""] | None:
         if self.n == 0:
             return None
         case_indices = [int(i) for i in torch.randperm(self.n)[:self.k]]
@@ -208,7 +221,7 @@ class KaggleEF:
             ed_stacks.append(cine[:, int(phase_volumes.argmax())])
             es_stacks.append(cine[:, int(phase_volumes.argmin())])
             slice_counts.append(n_slices); target_efs.append(self.ef[i])
-        slice_counts = torch.tensor(slice_counts, device=self.device)
-        ed = EfLane.cav_volume(model, torch.cat(ed_stacks), slice_counts, self.lv, amp=amp)  # [K] ED cavity vol (px)
-        es = EfLane.cav_volume(model, torch.cat(es_stacks), slice_counts, self.lv, amp=amp)
+        counts = torch.tensor(slice_counts, device=self.device)
+        ed = EfLane.cav_volume(model, torch.cat(ed_stacks), counts, self.lv, amp=amp)  # [K] ED cavity vol (px)
+        es = EfLane.cav_volume(model, torch.cat(es_stacks), counts, self.lv, amp=amp)
         return EfLane.ef_ratio_loss(ed, es, target_efs, delta)                  # spacing-cancelling EF Huber

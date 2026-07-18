@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,7 +28,9 @@ from core.data.static.mri.acdc import AcdcAdapter
 log = logging.getLogger("cardioview.render_volume")
 
 
-def crop_to_heart(vol_zyx: np.ndarray, gt_zyx: np.ndarray | None, spacing_zyx: Sequence[float], margin_mm: float = 15.0) -> tuple[np.ndarray, np.ndarray | None]:
+def crop_to_heart(vol_zyx: np.ndarray, gt_zyx: np.ndarray | None,
+                  spacing_zyx: tuple[float, float, float],
+                  margin_mm: float = 15.0) -> tuple[np.ndarray, np.ndarray | None]:
     """Crop to the labeled-heart bounding box + a mm margin, so we show the heart not the chest."""
     if gt_zyx is None or not np.any(gt_zyx > 0):
         return vol_zyx, gt_zyx
@@ -37,12 +38,13 @@ def crop_to_heart(vol_zyx: np.ndarray, gt_zyx: np.ndarray | None, spacing_zyx: S
     return vol_zyx[crop], gt_zyx[crop]
 
 
-def to_isotropic(vol_zyx: np.ndarray, spacing_zyx: tuple[float, float, float]):
+def to_isotropic(vol_zyx: np.ndarray,
+                 spacing_zyx: tuple[float, float, float]) -> tuple[np.ndarray, tuple[float, float, float]]:
     """Resample a [z,y,x] volume to isotropic voxels at the finest in-plane spacing."""
     iso = float(min(spacing_zyx))
     factors = tuple(s / iso for s in spacing_zyx)
     out = zoom(vol_zyx.astype(np.float32), factors, order=1)
-    return out, (iso, iso, iso)
+    return np.asarray(out), (iso, iso, iso)
 
 
 def normalize(vol: np.ndarray, lo_pct: float = 1.0, hi_pct: float = 99.5) -> np.ndarray:
@@ -75,18 +77,22 @@ def render(cfg: RenderCfg) -> None:  # pragma: no cover  (render shell)
     d = AcdcAdapter().load_ed_es(patient_dir(patient))
     if phase not in d:
         raise SystemExit(f"phase {phase} not available for {patient} (have {list(d)})")
-    vol = d[phase]["img"]
-    gt = d[phase].get("gt")
-    spacing = d["spacing"]
+    frame = d["ED"] if phase == "ED" else d["ES"]
+    vol = frame["img"]
+    gt = frame.get("gt")
+    raw_spacing = d["spacing"]
+    if raw_spacing is None:
+        raise SystemExit(f"no spacing recorded for {patient}")
+    spacing = (float(raw_spacing[0]), float(raw_spacing[1]), float(raw_spacing[2]))
     crop_vol, _ = crop_to_heart(vol, gt, spacing, cfg.margin_mm) if cfg.crop else (vol, gt)
     iso_vol, iso_spacing = to_isotropic(crop_vol, spacing)
     grid = to_imagedata(normalize(iso_vol) * 255.0, iso_spacing)
 
-    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=(1000, 1000))
+    pl = pv.Plotter(off_screen=not cfg.interactive, window_size=[1000, 1000])
     pl.set_background("#0e1116")
     # Translucent ramp — fade the dark background, stay see-through at the bright end so
     # the chambers/blood pool read instead of a solid opaque shell.
-    opacity = [0.0, 0.0, 0.03, 0.07, 0.14, 0.26, 0.5]
+    opacity = np.array([0.0, 0.0, 0.03, 0.07, 0.14, 0.26, 0.5])
     pl.add_volume(
         grid,
         scalars="intensity",

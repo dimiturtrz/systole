@@ -83,7 +83,7 @@ class Attribution:
         pred = self._predict(self.model, X, self.device)          # on cpu
         confusion = self.class_confusion(pred, Y.cpu(), self.n_classes)
         # foreground recall per class (diagonal) + the dominant leak (most-confused-with)
-        summary = {
+        summary: dict[str, Any] = {
             "names": _NAMES[:self.n_classes],
             "confusion": [[round(float(confusion[gt_class, pred_class]), 3) for pred_class in range(self.n_classes)]
                           for gt_class in range(self.n_classes)],
@@ -137,6 +137,6 @@ class Attribution:
         data_cfg = (cfg.generator.data if cfg else TrainCfg().generator.data)
         meta = store.load_cfg(data_cfg)                          # ALL preprocessing params (nyul/norm too)
         val_split = splits.ModelSplit(data_cfg, meta).val                   # coded split's val if set, else criteria
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, device)
+        X, Y, *_ = ACDCSliceDataset.load_to_gpu([p for p in splits.Splits.paths(val_split)], data_cfg.size, device)
         summary = Attribution(model, device, cfg.model.out_channels if cfg else 4).attribute(X, Y, args.out or run_dir)
         log.info(json.dumps(summary, indent=2))

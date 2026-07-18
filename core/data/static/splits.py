@@ -70,8 +70,9 @@ class Splits:
         return train.sample(n=k, shuffle=True, seed=seed)
 
     @staticmethod
-    def make_split(meta: pl.DataFrame, test_datasets: Any = (), test_vendors: Any = (), val_frac: float = 0.2,  # noqa: PLR0913  low-level split primitive; config-object path is split_from_cfg(DataCfg)
-                   seed: int = 0, val_datasets: Any = (), val_vendors: Any = (), train_vendors: Any = (), train_subjects: int = 0
+    def make_split(meta: pl.DataFrame, test_datasets: tuple[str, ...] = (), test_vendors: tuple[str, ...] = (),  # noqa: PLR0913
+                   val_frac: float = 0.2, seed: int = 0, val_datasets: tuple[str, ...] = (),
+                   val_vendors: tuple[str, ...] = (), train_vendors: tuple[str, ...] = (), train_subjects: int = 0,
                    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         """(train, val, test) from criteria. test = rows whose dataset ∈ test_datasets OR vendor ∈
         test_vendors (+ labelled). VAL: if val_datasets/val_vendors given, val = rows matching those

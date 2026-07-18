@@ -31,7 +31,7 @@ from core.model import Model
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
-from core.types import shapecheck
+from core.types import Spacing, shapecheck
 
 log = logging.getLogger("cardioseg.overlay")
 
@@ -77,7 +77,8 @@ class Overlay:
     @staticmethod
     def _case(model: Any, path: str | Path, size: int, device: str) -> dict[str, Any]:
         case = load_arrays(path)
-        spacing = tuple(float(s) for s in case["spacing"])
+        spc = np.asarray(case["spacing"], dtype=float)
+        spacing: Spacing = (spc[0], spc[1], spc[2])
         inf = Inference(model, size, device)
         pred_ed = Postprocess.largest_cc_per_class(inf.predict_volume(case["ed_img"], tta=True))
         pred_es = Postprocess.largest_cc_per_class(inf.predict_volume(case["es_img"], tta=True))
@@ -96,7 +97,7 @@ class Overlay:
         ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (model load + GPU inference + savefig)
         run = Registry.resolve(args.run)
         cfg = Hparams.from_json(run / "config.json")
         device = "cuda" if torch.cuda.is_available() else "cpu"

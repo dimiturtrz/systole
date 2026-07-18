@@ -13,7 +13,7 @@ import os
 from collections.abc import Callable, Iterator, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, override, runtime_checkable
+from typing import Any, ClassVar, Protocol, TypedDict, override, runtime_checkable
 
 import nibabel as nib
 import numpy as np
@@ -174,7 +174,9 @@ class Base:
         return arr, (zz, zy, zx)
 
     @staticmethod
-    def load_frames(group: str | None, resolve: Callable[[Any], tuple[str | Path, str | Path, int | None] | None], label_map: dict[int, int]) -> PatientData:
+    def load_frames(group: str | None,
+                    resolve: Callable[[Any], tuple[str | Path, str | Path, int | None] | None],
+                    label_map: dict[int, int]) -> PatientData:
         """Shared ED/ES loader skeleton for the adapters. `resolve(tag)` returns (img_path, gt_path,
         frame|None) for that cardiac phase, or None to skip it; the adapter-specific bit is just that
         closure. Loads each frame (4D-aware via `frame`), remaps the mask to canonical, carries spacing."""
@@ -189,7 +191,11 @@ class Base:
             img, sp = Base.load_nifti(img_p, frame=frame)
             gt, _ = Base.load_nifti(gt_p, frame=frame)
             out["spacing"] = sp
-            out[tag] = {"img": img, "gt": Base.apply_label_map(gt, label_map)}
+            frame_data: Frame = {"img": img, "gt": Base.apply_label_map(gt, label_map)}
+            if tag is Phase.ED:
+                out["ED"] = frame_data
+            else:
+                out["ES"] = frame_data
         return out
 
     @staticmethod
@@ -216,7 +222,7 @@ class Base:
             cav = mask == lab
             shell = ndimage.binary_dilation(cav) & ~cav
             scores[lab] = float((shell & myo).sum()) / float(shell.sum()) if shell.sum() else 0.0
-        lv = max(scores, key=scores.get) if scores else None
+        lv = max(scores, key=lambda lab: scores[lab]) if scores else None
         return lv, scores
 
 
@@ -236,8 +242,8 @@ class DatasetAdapter(Protocol):
     `meta()` is the normalization hook: acquisition/demographics parsed from the dataset's own
     shipped files (the AUTO tier), feeding stratified eval + the reference store.
     """
-    name: str                   # also the processed/<name>/ folder in the store
-    label_map: dict[int, int]   # raw int -> canonical (0 bg, 1 RV, 2 myo, 3 LV-cav)
+    name: str                              # also the processed/<name>/ folder in the store
+    label_map: ClassVar[dict[int, int]]    # raw int -> canonical (0 bg, 1 RV, 2 myo, 3 LV-cav)
 
     def cases(self) -> list[Path]: ...
     def load_ed_es(self, case: Path) -> PatientData: ...   # labels already canonical

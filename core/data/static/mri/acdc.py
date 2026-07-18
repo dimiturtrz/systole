@@ -9,7 +9,7 @@ geometrically (see base.identify_lv_cavity). Scanner: Siemens Aera 1.5T / Trio T
 from __future__ import annotations
 
 from pathlib import Path
-from typing import override
+from typing import Any, override
 
 from core.config import Config
 from core.data.static.mri.base import (
@@ -18,7 +18,6 @@ from core.data.static.mri.base import (
     Dataset,
     DatasetAdapter,
     PatientData,
-    PatientMeta,
     Vendor,
 )
 
@@ -82,7 +81,7 @@ class AcdcAdapter(AdapterBase, DatasetAdapter):
         return Base.load_frames(cfg.get("Group"), resolve, LABEL_MAP)   # identity map -> masks unchanged
 
     @override
-    def meta(self, case: Path) -> PatientMeta:
+    def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + demographics (AUTO from Info.cfg; vendor/field cited constants)."""
         cfg = self.parse_info_cfg(case)
         return {

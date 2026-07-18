@@ -17,7 +17,6 @@ import argparse
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
-from numbers import Integral
 from pathlib import Path
 
 import numpy as np
@@ -94,7 +93,7 @@ class Anatomy:
     offline pool builders (`build_pool`, `build_pathology_pool`, `load_pool`)."""
 
     @staticmethod
-    def _tag_name(mesh: pv.PolyData) -> str:
+    def _tag_name(mesh: pv.DataSet) -> str:
         """The per-cell region-tag array. Two Rodero packagings: real-patient cohort (4590294) tags it
         'ID' + ships 'Z.dat' universal coords; the 1000 SSM-sampled cohort (4506930) tags it 'elemTag'
         with NO point data. Same 1..24 scheme (1=LV, 2=RV myo)."""
@@ -116,7 +115,7 @@ class Anatomy:
         return np.eye(3) + skew_matrix + skew_matrix @ skew_matrix * ((1 - cosine) / (sine * sine))
 
     @staticmethod
-    def _sax_align(mesh: pv.PolyData) -> pv.PolyData:
+    def _sax_align(mesh: pv.DataSet) -> pv.DataSet:
         """Rotate the mesh so the LV long axis (apex->base) points +z, so plain axial slices of the
         voxelized volume are short-axis. Uses the 'Z.dat' apico-basal coord when present (real cohort);
         else derives the axis geometrically (PCA long-axis of the LV myocardium, oriented apex->base by
@@ -152,7 +151,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def _wall_mask(mesh: pv.PolyData, region_id: int, grid: pv.ImageData, tag: str) -> Bool[np.ndarray, "*n"]:
+    def _wall_mask(mesh: pv.DataSet, region_id: int, grid: pv.ImageData, tag: str) -> Bool[np.ndarray, "*n"]:
         """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
         grid points that lie in the myocardium)."""
         region_mesh = mesh.threshold([region_id, region_id], scalars=tag)
@@ -194,7 +193,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def voxelize(mesh: pv.PolyData, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
+    def voxelize(mesh: pv.DataSet, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
                  rv_close: int = 3) -> Integer[np.ndarray, "d h w"]:
         """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
         Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
@@ -218,7 +217,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def _scale_to_target(vol: Integer[np.ndarray, "d h w"], target_px: Integral) -> Integer[np.ndarray, "d h2 w2"]:
+    def _scale_to_target(vol: Integer[np.ndarray, "d h w"], target_px: int) -> Integer[np.ndarray, "d h2 w2"]:
         """Uniformly in-plane rescale a [D,H,W] label volume so its GLOBAL max fg-bbox longest side hits
         `target_px` (nearest-neighbour, label-preserving). No-op if the heart has no foreground."""
         fg = vol > 0
@@ -229,16 +228,19 @@ class Anatomy:
         scale_factor = target_px / max(current_side, 1)
         if abs(scale_factor - 1.0) < _ZOOM_NOOP_EPS:
             return vol
-        return _zoom(vol, (1.0, scale_factor, scale_factor), order=0)   # in-plane only; slices (z) untouched
+        # in-plane only; slices (z) untouched
+        return np.asarray(_zoom(vol, (1.0, scale_factor, scale_factor), order=0))
 
     @staticmethod
-    def load(path: str | Path):
+    def load(path: str | Path) -> pv.DataSet:
         """Read a Rodero mesh (pyvista); sets the region tag active for thresholding. Prefers a sibling
         BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
         p = Path(path)
         vtu = p.with_suffix(".vtu")
         try:
             m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
+            if not isinstance(m, pv.DataSet):
+                raise MeshError(f"expected a single-mesh dataset from {p}, got {type(m).__name__}")
             m.set_active_scalars(Anatomy._tag_name(m), preference="cell")
         except (OSError, ValueError, KeyError, RuntimeError) as e:
             # pyvista read/parse failures (missing/corrupt file, no region tag) surface as these — wrap as

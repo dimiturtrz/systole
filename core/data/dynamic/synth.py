@@ -46,7 +46,8 @@ def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev: torch.device) ->
     return torch.rand(*shape, device=dev) * (hi - lo) + lo
 
 
-def _smooth_field(b: int, grid: int, out_hw: tuple[int, ...], dev: torch.device, *, signed: bool = False) -> Float[torch.Tensor, "b 1 h w"]:
+def _smooth_field(b: int, grid: int, out_hw: tuple[int, ...], dev: torch.device,
+                  *, signed: bool = False) -> Float[torch.Tensor, "b 1 h w"]:
     """Coarse [b,1,grid,grid] random field bilinear-upsampled to `out_hw` ([b,1,H,W]). signed -> [-1,1]
     (the bias/B0 fields); else [0,1) (the procedural/trabecular fields)."""
     low = torch.rand(b, 1, grid, grid, device=dev)
@@ -317,7 +318,8 @@ class _TierBg(Background):
         self.k_tiers = k_tiers
 
     @abstractmethod
-    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device, real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Integer[torch.Tensor, "*b *grid"]:
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Integer[torch.Tensor, "*b *grid"]:
         ...
 
     @override
@@ -342,7 +344,8 @@ class ProceduralBg(_TierBg):
         self.blobs = blobs
 
     @override
-    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device, real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
         fb = _smooth_field(mask.shape[0], self.blobs, mask.shape[-2:], dev)[:, 0]
         return torch.bucketize(fb.contiguous(), MriPhysics.torso_thresholds(dev))  # physical area fractions
 
@@ -357,7 +360,8 @@ class PartitionBg(_TierBg):
     needs_real_img = True
 
     @override
-    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device, real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
         thr = torch.linspace(-1.0, 1.0, self.k_tiers - 1, device=dev)       # K-1 thresholds -> K bins
         return torch.bucketize(real_img[:, 0].contiguous(), thr)  # type: ignore[union-attr]
 
@@ -411,7 +415,8 @@ class Acquisition(ABC):
     """Per-sample SCANNER SETTINGS strategy: pick field index (into cfg.fields), TR (ms), flip (deg),
     and vendor index (into cfg.vendors). One impl per mode — the painter holds no acq if/else."""
     @abstractmethod
-    def sample(self, b: int, cfg: SynthCfg, dev: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def sample(self, b: int, cfg: SynthCfg,
+               dev: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """-> (fi [b] long, tr [b,1], fl [b,1], vi [b] long)."""
 
 
@@ -494,7 +499,8 @@ class SynthPainter:
 
     @staticmethod
     @shapecheck
-    def _deform_grid(b: int, h: int, w: int, amp: float, dev: torch.device, steps: int = 6) -> Float[torch.Tensor, "b h w 2"]:  # noqa: PLR0913  geometry params (b,h,w,amp,steps — independent)
+    def _deform_grid(b: int, h: int, w: int, amp: float,  # noqa: PLR0913
+                     dev: torch.device, steps: int = 6) -> Float[torch.Tensor, "b h w 2"]:
         """DIFFEOMORPHIC (topology-preserving) elastic warp as a grid_sample grid [B,H,W,2]. A coarse 5x5
         velocity field (U[-amp,amp], bicubic-upsampled) is INTEGRATED by scaling-and-squaring so the map
         stays invertible — it can't fold/tear the anatomy. The old `ident + disp` (non-integrated) folds at
@@ -502,7 +508,7 @@ class SynthPainter:
         (SynthSeg/VoxelMorph) fixes that. amp = velocity magnitude in normalized [-1,1] coords."""
         v = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
         v = F.interpolate(v, size=(h, w), mode="bicubic", align_corners=False)          # [B,2,H,W] velocity
-        ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), (b, 1, h, w),
+        ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), [b, 1, h, w],
                               align_corners=False)                                      # [B,H,W,2]
         d = (v / (2 ** steps)).permute(0, 2, 3, 1)                                      # [B,H,W,2] small displ
         for _ in range(steps):                                 # scaling-and-squaring: phi = phi ∘ phi
@@ -594,6 +600,8 @@ class SynthPainter:
                 trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
                 mu_map = mu_map * (1 - trab) + myo_sig * trab
         p.mu_map = mu_map
+        if not (p.sg is not None):
+            raise AssertionError  # set by _blood_texture (prior phase)
         p.sg_map = _class_map(oh, p.sg)
 
     @staticmethod
@@ -601,6 +609,8 @@ class SynthPainter:
         """Image-domain acquisition degradation: paint the texture, partial-volume blur, smooth bias field,
         then the resolution/noise chain (band-limited-vs-white Rician, Gaussian blur, k-space PSF)."""
         cfg, b, dev = p.cfg, p.b, p.dev
+        if not (p.mu_map is not None and p.sg_map is not None):
+            raise AssertionError  # set by _class_maps (prior phase)
         mu_map = _gauss_blur(p.mu_map, cfg.pv_sigma, dev) if cfg.pv_sigma > 0 else p.mu_map
         img = mu_map + p.sg_map * torch.randn(b, 1, *p.mask.shape[-2:], device=dev)   # painted texture
         if cfg.bias_strength > 0:                       # smooth multiplicative B1/coil bias (the N4 dual)
@@ -636,7 +646,8 @@ class SynthPainter:
         mask = mask.long()
         bg = cfg.bg.build()                              # bg STRATEGY (flat/procedural/partition/hybrid/mrxcat)
         if cfg.deform > 0 and not bg.keeps_heart_aligned:   # hybrid keeps heart aligned with the real hole
-            grid = SynthPainter._deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
+            h, w = int(mask.shape[-2]), int(mask.shape[-1])
+            grid = SynthPainter._deform_grid(b, h, w, cfg.deform, dev)
             mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                                  padding_mode="border", align_corners=False)[:, 0].long()
         # extend the heart-only labels to the whole FOV (bg tissue tiers / real SHAPES / random blobs — the
@@ -663,6 +674,8 @@ class SynthPainter:
         SynthPainter._blood_texture(p)           # per-class signal: inflow/blood-scale/contrast-random/texture/flow
         SynthPainter._class_maps(p)              # per-pixel mean/std maps: B0 banding + trabecular PV
         SynthPainter._degrade(p)                 # image domain: pv-blur/bias/blur/k-space/Rician
+        if not (p.img is not None):
+            raise AssertionError  # set by _degrade (prior phase)
         img = bg.compose(p.img, mask, real_img)  # hybrid pastes synth heart into real; else no-op (bd mirs)
 
         # z-score per sample (match the real preprocessed input distribution)

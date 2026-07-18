@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -80,13 +81,14 @@ class Build:
         return out
 
     @staticmethod
-    def load(names: list[str] | str | None = None, recipe: Recipe | None = None, *,
+    def load(names: Sequence[str] | str | None = None, recipe: Recipe | None = None, *,
              workers: int | None = None) -> pl.DataFrame:
         """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
         (the data cloud, for this recipe). Adds an absolute `path` column to each npz. names=None -> all.
         A `nyul` recipe harmonizes to the cohort standard (reference/nyul.yaml; fit it first with
         `python -m core.data consolidate --fit-nyul`)."""
-        names = SOURCE_DATASETS if names is None else ([names] if isinstance(names, str) else list(names))
+        selected: Sequence[str] = (
+            SOURCE_DATASETS if names is None else [names] if isinstance(names, str) else list(names))
         recipe = recipe or Recipe()
         std = Normalizer.load_standard() if recipe.nyul else None
         if recipe.nyul and std is None:
@@ -94,7 +96,7 @@ class Build:
                                "python -m core.data consolidate --fit-nyul")
         frames = []
         store = Store(recipe)
-        for name in names:
+        for name in selected:
             out = store.dataset_dir(name)
             if not (out / "meta.csv").exists():
                 Build.build(name, recipe, workers=workers, nyul_standard=std)  # pragma: no cover  real build from disk

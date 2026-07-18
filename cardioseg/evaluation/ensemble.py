@@ -33,7 +33,7 @@ from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
-from core.types import shapecheck
+from core.types import Spacing, shapecheck
 
 from ..tracking import Tracker
 from .uncertainty import Uncertainty
@@ -63,7 +63,10 @@ class Ensemble:
 
     @staticmethod
     @shapecheck
-    def _dice_fold(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], inter: dict[Any, float], den: dict[Any, float]) -> None:
+    def _dice_fold(
+        pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
+        inter: dict[Any, float], den: dict[Any, float],
+    ) -> None:
         """Fold one (pred, gt) label-map pair into the running per-class Dice inter/den accumulators."""
         for cl in FOREGROUND:
             p, g = pred == cl, gt == cl
@@ -83,7 +86,8 @@ class Ensemble:
         inter = dict.fromkeys(FOREGROUND, 0.0); den = dict.fromkeys(FOREGROUND, 0.0)
         diffs: list[float] = []
         for r in df.iter_rows(named=True):
-            case = store.load_arrays(r["path"]); sp = tuple(float(s) for s in case["spacing"])
+            case = store.load_arrays(r["path"]); spc = np.asarray(case["spacing"], dtype=float)
+            sp: Spacing = (spc[0], spc[1], spc[2])
             preds: dict[str, Integer[np.ndarray, "d h w"]] = {}; gts: dict[str, Integer[np.ndarray, "d h w"]] = {}
             for tag in (p.lower() for p in Phase):
                 if f"{tag}_img" not in case:
@@ -100,7 +104,9 @@ class Ensemble:
         return Ensemble._score_summary(inter, den, diffs)
 
     @staticmethod
-    def _eval_df(cfg: TrainCfg | None, which: str) -> pl.DataFrame:  # pragma: no cover  store.load + split resolution (disk/metadata I/O)
+    def _eval_df(cfg: TrainCfg | None, which: str) -> pl.DataFrame:  # pragma: no cover  store.load + split resolution
+        if cfg is None:
+            raise ValueError("run has no saved config.json (cfg=None) — cannot resolve its eval split")
         d = cfg.generator.data
         meta = store.load(list(d.sources), Recipe(inplane=d.inplane, n4=d.n4)).filter(pl.col("labelled"))
         ms = splits.ModelSplit(d, meta)
@@ -119,7 +125,10 @@ class Ensemble:
     @staticmethod
     def _headroom(models: Sequence[torch.nn.Module], df: pl.DataFrame, size: int, device: str) -> tuple[float, float]:
         """Foreground aleatoric/epistemic for the ensemble + the single-model (TTA) lower bound."""
-        ea: list[Float[np.ndarray, "..."]] = []; ee: list[Float[np.ndarray, "..."]] = []; ta: list[Float[np.ndarray, "..."]] = []; te: list[Float[np.ndarray, "..."]] = []
+        ea: list[Float[np.ndarray, "..."]] = []
+        ee: list[Float[np.ndarray, "..."]] = []
+        ta: list[Float[np.ndarray, "..."]] = []
+        te: list[Float[np.ndarray, "..."]] = []
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
             for tag in (p.lower() for p in Phase):
@@ -139,7 +148,7 @@ class Ensemble:
         ap.add_argument("--eval", nargs="+", default=["canon", "ge"], help="axes: canon ge val")
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: mlflow load + GPU + tracking)
         device = Model.resolve_device()
         loaded = [Run.load_run(Registry.resolve(r), device) for r in args.runs]
         models = [m for m, _, _ in loaded]

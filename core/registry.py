@@ -42,17 +42,29 @@ class Registry:
         return Registry._mlflow().tracking.MlflowClient()
 
     @staticmethod
+    def _active_run_id() -> str:
+        """Run-id of the currently active mlflow run (fail loud if none is open)."""
+        active = Registry._mlflow().active_run()
+        if active is None:
+            raise RuntimeError("no active mlflow run to log the model to")
+        return active.info.run_id
+
+    @staticmethod
     def run_id_for(ref: str) -> str:
         """Resolve a ref (alias | version number | run-id) to an mlflow run-id."""
         c = Registry._client()
         # alias (e.g. 'production')
         try:
-            return c.get_model_version_by_alias(MODEL_NAME, ref).run_id
+            rid = c.get_model_version_by_alias(MODEL_NAME, ref).run_id
+            if rid is not None:
+                return rid
         except MlflowException:   # no such alias (ref is a version number or run-id) -> fall through
             pass
         # explicit version number
         if str(ref).isdigit():
-            return c.get_model_version(MODEL_NAME, str(ref)).run_id
+            rid = c.get_model_version(MODEL_NAME, str(ref)).run_id
+            if rid is not None:
+                return rid
         # assume it's already a run-id
         return str(ref)
 
@@ -88,7 +100,7 @@ class Registry:
             mlflow.start_run(run_name=run_name)
             if params:
                 mlflow.log_params(Registry._flat(params))
-        rid = run_id or mlflow.active_run().info.run_id
+        rid = run_id or Registry._active_run_id()
         c = Registry._client()
         # log each artifact under 'model/'
         for f in staging.iterdir():

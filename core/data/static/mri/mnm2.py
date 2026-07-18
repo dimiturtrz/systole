@@ -86,4 +86,4 @@ class Mnm2Adapter(AdapterBase, DatasetAdapter):
     @override
     def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + disease — AUTO from dataset_information.csv."""
-        return self._meta_from_info(self._info(case.parent.parent).get(case.name, {}))
+        return dict(self._meta_from_info(self._info(case.parent.parent).get(case.name, {})))

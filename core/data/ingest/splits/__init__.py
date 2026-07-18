@@ -39,8 +39,8 @@ class Splits:
     @staticmethod
     def parse_ref(ref: str) -> tuple[str, str | None]:
         """'name@version' -> (name, version); 'name' -> (name, None)."""
-        name, ver = [*ref.split("@", 1), None][:2]
-        return name, ver
+        parts = ref.split("@", 1)
+        return parts[0], (parts[1] if len(parts) > 1 else None)
 
     @staticmethod
     def resolve_cfg(d: Any, meta: Any) -> Any:

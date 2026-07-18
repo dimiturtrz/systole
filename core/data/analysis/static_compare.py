@@ -46,10 +46,10 @@ class StaticCompare:
             return None
         rv, myo, lvc = mask == _RV, mask == _MYO, mask == _LVC
         rv_area, myo_area, lvc_area = int(rv.sum()), int(myo.sum()), int(lvc.sum())
-        metrics = {"rv_area": rv_area, "myo_area": myo_area, "lvc_area": lvc_area,
+        metrics: dict[str, float] = {"rv_area": rv_area, "myo_area": myo_area, "lvc_area": lvc_area,
                    "fg_area": int(foreground.sum())}
         # myo WALL THICKNESS: mean over the myo of the distance-to-non-myo (×2 ≈ local thickness)
-        distance_transform = distance_transform_edt(myo)
+        distance_transform = np.asarray(distance_transform_edt(myo))
         # over myo pixels only (px)
         metrics["myo_thickness"] = float(distance_transform[myo].mean() * 2.0) if myo_area else 0.0
         # LV-cavity SPHERICITY (2D roundness): 4πA / P²  (1 = perfect circle). P ≈ boundary-pixel count.

@@ -303,7 +303,10 @@ class AcqReference:
         acq: dict[str, dict[str, Any]] = {}
         for (vendor, field), g in real.group_by(["vendor", "_field"]):
             def med(col: str, frame: pl.DataFrame = g) -> float:
-                return round(float(frame[col].cast(pl.Float64).median()), 3)
+                m = frame[col].cast(pl.Float64).median()
+                if not (isinstance(m, (int, float))):
+                    raise AssertionError("median of a Float64 column is a scalar")
+                return round(float(m), 3)
             based = f"{g.height} DICOM subjects @{field}T"
 
             def leaf(value: float, provenance: str = based) -> dict[str, Any]:
@@ -316,7 +319,8 @@ class AcqReference:
         return acq
 
     @staticmethod
-    def fit(root: str | Path | None = None) -> dict[str, Any]:  # pragma: no cover  globs meta.csv + writes acquisition.yaml
+    def fit(root: str | Path | None = None) -> dict[str, Any]:  # pragma: no cover
+        # globs meta.csv + writes acquisition.yaml
         """Aggregate REAL DICOM acquisition from the built stores -> reference/acquisition.yaml. Only rows
         with real acquisition contribute (DICOM datasets, e.g. SCD=GE); NIfTI datasets have nulls and are
         skipped, so the domain-randomization sweep survives for everything we lack real values for."""

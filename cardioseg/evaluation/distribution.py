@@ -25,6 +25,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from jaxtyping import Float
 from scipy.stats import gaussian_kde
 
 from core.config import FLAGSHIP_REF
@@ -42,6 +43,7 @@ from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.distribution")
 
@@ -50,7 +52,9 @@ SMALL_N = 10   # groups below this are flagged — per-group stats are noisy
 
 class Distribution:
     @staticmethod
-    def collect(run: Path, device: str, meta_rows: Iterable[dict[str, Any]], *, tta: bool = True) -> list[dict[str, Any]]:  # pragma: no cover
+    def collect(
+        run: Path, device: str, meta_rows: Iterable[dict[str, Any]], *, tta: bool = True,
+    ) -> list[dict[str, Any]]:  # pragma: no cover
         """One record per subject: dice + boundary distances per class, EF gt/pred, and the
         stratification keys (vendor/pathology/field) straight from the store's meta — for the
         stratified views. Pure eval on the existing model (no retrain).
@@ -63,7 +67,8 @@ class Distribution:
         rows = []
         for r in meta_rows:
             case = store.load_arrays(r["path"])
-            sp = tuple(float(s) for s in case["spacing"])
+            spc = np.asarray(case["spacing"], dtype=float)
+            sp: Spacing = (spc[0], spc[1], spc[2])
             ft = r.get("field_T")
             rec = {"patient": Path(r["path"]).stem,
                    "pathology": r.get("pathology"), "vendor": r.get("vendor"),
@@ -96,7 +101,9 @@ class Distribution:
         return rows
 
     @staticmethod
-    def pooled(rows: list[dict[str, Any]]) -> tuple[dict[int, list[np.ndarray]], dict[int, list[float]], np.ndarray, np.ndarray]:
+    def pooled(
+        rows: list[dict[str, Any]],
+    ) -> tuple[dict[int, list[np.ndarray]], dict[int, list[float]], np.ndarray, np.ndarray]:
         """Pooled dists/dice/ef arrays from per-case rows (for the total plots)."""
         dists = {c: [r["sd"][c] for r in rows if "sd" in r] for c in CLASSES}
         dice_acc = {c: [r["dice"][c] for r in rows if "dice" in r] for c in CLASSES}
@@ -106,7 +113,8 @@ class Distribution:
         return dists, dice_acc, ef_gt, ef_pred
 
     @staticmethod
-    def plot_kde(dists: dict[int, list[np.ndarray]], out: Path, label: str) -> None:  # pragma: no cover  (matplotlib KDE render + savefig)
+    def plot_kde(dists: dict[int, list[np.ndarray]], out: Path,
+                 label: str) -> None:  # pragma: no cover  (matplotlib KDE render + savefig)
         fig, ax = plt.subplots(figsize=(7, 4))
         # data-driven x-range so the outlier tail (the point of the plot) isn't clipped at 12 mm
         pooled = [d for cl in CLASSES for d in dists[cl] if d.size]
@@ -129,7 +137,12 @@ class Distribution:
         plt.close(fig)
 
     @staticmethod
-    def plot_bland_altman(ef_gt: Sequence[float], ef_pred: Sequence[float], out: Path, label: str) -> Any:  # pragma: no cover
+    def plot_bland_altman(
+        ef_gt: Float[np.ndarray, "n"] | Sequence[float],
+        ef_pred: Float[np.ndarray, "n"] | Sequence[float],
+        out: Path,
+        label: str,
+    ) -> Any:  # pragma: no cover
         """Transposed Bland–Altman: difference on the x-axis, the error distribution drawn
         upright on top; bias + 95% LoA as vertical lines (and in the title)."""
         gt = np.asarray(ef_gt, dtype=float)
@@ -220,7 +233,8 @@ class Distribution:
         return out
 
     @staticmethod
-    def plot_strata(rows: list[dict[str, Any]], key: str, out: Path, label: str) -> None:  # pragma: no cover  (matplotlib grouped-bar render + savefig)
+    def plot_strata(rows: list[dict[str, Any]], key: str, out: Path,
+                    label: str) -> None:  # pragma: no cover  (matplotlib grouped-bar render + savefig)
         """Two panels: per-group mean Dice (bars) + per-group EF MAE (bars), n annotated,
         small-n groups hatched. The 'where does it fail' figure."""
         g = Distribution._groups(rows, key)
@@ -265,7 +279,7 @@ class Distribution:
         ap.add_argument("--no-tta", dest="tta", action="store_false", help="disable test-time flips (default: on)")
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: registry resolve + GPU collect + all plot renders + stratified.json write)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: resolve + collect + renders + stratified.json)
         run = Registry.resolve(args.run)
         device = Model.resolve_device()
 

@@ -130,7 +130,7 @@ class Mrxcat:
         crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         f = target_px / max(*crop.shape, 1)
         if abs(f - 1.0) > _ZOOM_NOOP_EPS:
-            crop = _zoom(crop, f, order=0)
+            crop = np.asarray(_zoom(crop, f, order=0))
         return Preprocess.fit_square(crop, size, 0).astype(np.uint8)
 
     @staticmethod
@@ -179,7 +179,7 @@ class Mrxcat:
         half = int(max(ys.max() - ys.min(), xs.max() - xs.min()) * scale / 2) + 1
         y0, y1 = max(0, cy - half), min(s.shape[0], cy + half)
         x0, x1 = max(0, cx - half), min(s.shape[1], cx + half)
-        win = _zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0)
+        win = np.asarray(_zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0))
         return Preprocess.fit_square(win, size, 0).astype(np.uint8)
 
     @staticmethod
@@ -222,7 +222,7 @@ class Mrxcat:
         out = fov.copy()
         out[hm] = 6                                                     # excise phantom heart → muscle
         crop = heart[hys.min():hys.max() + 1, hxs.min():hxs.max() + 1]
-        crop = _zoom(crop, target / max(crop.shape), order=0)
+        crop = np.asarray(_zoom(crop, target / max(crop.shape), order=0))
         h, w = crop.shape
         y0, x0 = cy - h // 2, cx - w // 2
         for yy in range(max(0, -y0), min(h, out.shape[0] - y0)):        # paste non-bg heart pixels, clipped
@@ -248,7 +248,8 @@ class Mrxcat:
                     if w is not None:
                         bgs.append(w)
         rng = np.random.default_rng(seed)
-        slices: list[np.ndarray] = [Mrxcat.place_heart_in_fov(bgs[int(rng.integers(len(bgs)))], h) for h in hearts] if bgs else []
+        slices: list[np.ndarray] = (
+            [Mrxcat.place_heart_in_fov(bgs[int(rng.integers(len(bgs)))], h) for h in hearts] if bgs else [])
         arr = np.stack(slices).astype(np.uint8) if slices else np.zeros((0, size, size), np.uint8)
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(out_path, slices=arr)

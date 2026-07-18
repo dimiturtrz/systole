@@ -64,7 +64,7 @@ class Measure:
     @staticmethod
     def voxel_volume_ml(spacing: Spacing) -> float:
         """mm^3 per voxel -> mL (1 mL = 1000 mm^3). spacing = (z, y, x) mm."""
-        return float(np.prod(spacing)) / 1000.0
+        return float(np.prod(np.asarray(spacing, dtype=float))) / 1000.0
 
     @staticmethod
     @shapecheck

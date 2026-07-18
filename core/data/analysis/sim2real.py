@@ -43,14 +43,17 @@ class Sim2Real:
 
     @staticmethod
     def fit_acquisition(real_means: Float[torch.Tensor, "*n"], n_classes: int,
-                        tr_grid: tuple[float, float, int] = (2.5, 6.0, 36), fl_grid: tuple[float, float, int] = (20.0, 80.0, 31), fields: tuple[float, ...] = (1.5, 3.0)) -> dict[str, Any]:
+                        tr_grid: tuple[float, float, int] = (2.5, 6.0, 36),
+                        fl_grid: tuple[float, float, int] = (20.0, 80.0, 31),
+                        fields: tuple[float, ...] = (1.5, 3.0)) -> dict[str, Any]:
         """Grid-fit (field, TR, flip) so the bSSFP STANDARDIZED heart contrast matches `real_means` (the
         real per-class heart-class means, [n_classes-1]). Returns {field, tr, flip, residual, synth_z}.
         Standardized so it fits the CONTRAST SHAPE (bSSFP scale is arbitrary)."""
         real_standardized = Sim2Real._standardize(real_means)
         tr_values = torch.linspace(*tr_grid[:2], int(tr_grid[2]))
         flip_values = torch.linspace(*fl_grid[:2], int(fl_grid[2]))
-        best = {"residual": float("inf")}
+        best: dict[str, float | list[float]] = {"residual": float("inf")}
+        best_residual = float("inf")
         for field in fields:
             t1, t2, pd = MriPhysics.tissue_params(n_classes, 0, field, "cpu")
             for tr in tr_values:
@@ -58,7 +61,9 @@ class Sim2Real:
                     signal = MriPhysics.bssfp_signal(t1, t2, pd, tr, flip * math.pi / 180)
                     synth_standardized = Sim2Real._standardize(signal[1:n_classes])
                     residual = float(((synth_standardized - real_standardized) ** 2).mean())
-                    if residual < best["residual"]:
+                    if residual < best_residual:
+                        best_residual = round(residual, 4)   # match the stored (rounded) residual: float-noise
+                        #                                      tolerance is what keeps the grid fit scale-invariant
                         best = {"field": field, "tr": float(tr), "flip": float(flip),
                                 "residual": round(residual, 4),
                                 "synth_z": [round(value, 3) for value in synth_standardized.tolist()]}
@@ -79,7 +84,8 @@ class Sim2Real:
             df = meta.filter(pl.col("labelled") & (pl.col("vendor") == vendor))
             if df.height == 0:
                 continue
-            X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(df.head(args.n)), data_cfg.size, "cpu")
+            X, Y, *_ = ACDCSliceDataset.load_to_gpu(
+                [p for p in splits.Splits.paths(df.head(args.n))], data_cfg.size, "cpu")
             real = torch.tensor([X[:, 0][c == Y].mean() for c in range(1, n_classes)])
             best_fit = Sim2Real.fit_acquisition(real, n_classes)
             real_z = [round(value, 2) for value in Sim2Real._standardize(real).tolist()]

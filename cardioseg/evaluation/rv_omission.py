@@ -70,8 +70,12 @@ class RvOmission:
     inference-time RV logit-bias recall lever."""
 
     @staticmethod
-    def omission_row(rv_prob: Float[np.ndarray, "h w"], argmax: Integer[np.ndarray, "h w"],
-                     gt: Integer[np.ndarray, "h w"], pred: Integer[np.ndarray, "h w"]) -> dict[str, float | int | str] | None:
+    def omission_row(
+        rv_prob: Float[np.ndarray, "h w"],
+        argmax: Integer[np.ndarray, "h w"],
+        gt: Integer[np.ndarray, "h w"],
+        pred: Integer[np.ndarray, "h w"],
+    ) -> dict[str, float | int | str] | None:
         """One omitted-slice record, or None if the slice isn't an omission. Omission = GT-RV present
         (>OMIT_PX) yet argmax fired <OMIT_PX RV pixels. Reports the max/mean RV softmax INSIDE the GT-RV
         region and which class won there. Pure numpy — the recall-vs-coverage evidence, testable off-GPU."""
@@ -167,7 +171,9 @@ class RvOmission:
         return Session(model, cfg, device)
 
     @staticmethod
-    def _logits(s: Session, vol_img: Float[np.ndarray, "d h w"]) -> tuple[Float[torch.Tensor, "kd c h w"], int]:  # pragma: no cover
+    def _logits(
+        s: Session, vol_img: Float[np.ndarray, "d h w"]
+    ) -> tuple[Float[torch.Tensor, "kd c h w"], int]:  # pragma: no cover
         size = s.cfg.generator.data.size
         xs = np.stack([Preprocess.fit_square(vol_img[z].astype(np.float32), size, 0.0)
                        for z in range(vol_img.shape[0])])
@@ -191,7 +197,7 @@ class RvOmission:
                 row = RvOmission.omission_row(rv_prob[z], pred[z], gt[z], pred[z])
                 if row:
                     rows.append(row)
-        verdict = RvOmission.split_verdict([x["maxp_in_gt"] for x in rows])
+        verdict = RvOmission.split_verdict([float(x["maxp_in_gt"]) for x in rows])
         log.info("omitted slices n=%d | recoverable(>=%.2f) %d | zero-activation %d | maxP min/med/max %.3f/%.3f/%.3f",
                  verdict["n"], ACTIVATION_FLOOR, verdict["recoverable"], verdict["zero_activation"],
                  verdict["min"], verdict["med"], verdict["max"])
@@ -241,7 +247,12 @@ class RvOmission:
         return float(np.mean([d[c] for c in FOREGROUND]))
 
     @staticmethod
-    def _score_cases(s: Session, frame: Any, biases: Sequence[float], tau: float | None = None) -> list[tuple[str | None, dict[float, dict[str, float]]]]:  # pragma: no cover
+    def _score_cases(
+        s: Session,
+        frame: Any,
+        biases: Sequence[float],
+        tau: float | None = None,
+    ) -> list[tuple[str | None, dict[float, dict[str, float]]]]:  # pragma: no cover
         """Per-case foreground Dice at each bias, keeping the case vendor. Forward runs ONCE per case;
         the bias is a cheap logit add on the cached logits. `tau=None` = global bias; a float gates the
         bias to under-fired slices (ru27). Returns [(vendor, {b: {class: dice}})]."""
@@ -260,12 +271,17 @@ class RvOmission:
         return cases
 
     @staticmethod
-    def _agg(cases: list[tuple[str | None, dict[float, dict[str, float]]]], biases: Sequence[float]) -> dict[float, dict[str, float]]:  # pragma: no cover
+    def _agg(
+        cases: list[tuple[str | None, dict[float, dict[str, float]]]],
+        biases: Sequence[float],
+    ) -> dict[float, dict[str, float]]:  # pragma: no cover
         """Pooled mean per-bias per-class over [(vendor, {b:{class:dice}})]."""
         return {b: {c: float(np.mean([pc[b][c] for _, pc in cases])) for c in FOREGROUND} for b in biases}
 
     @staticmethod
-    def _score_arms(s: Session, frame: Any, b: float, tau: float) -> list[tuple[str | None, dict[str, dict[str, float]]]]:  # pragma: no cover
+    def _score_arms(
+        s: Session, frame: Any, b: float, tau: float
+    ) -> list[tuple[str | None, dict[str, dict[str, float]]]]:  # pragma: no cover
         """Per case, from ONE forward: base (b=0), global (b every slice), gated (b on under-fired
         slices only). The ru27 head-to-head. Returns [(vendor, {arm: {class: dice}})]."""
         size = s.cfg.generator.data.size
@@ -282,7 +298,11 @@ class RvOmission:
         return cases
 
     @staticmethod
-    def _agg_arm(cases: list[tuple[str | None, dict[str, dict[str, float]]]], arm: str, b: float) -> dict[float, dict[str, float]]:  # pragma: no cover
+    def _agg_arm(
+        cases: list[tuple[str | None, dict[str, dict[str, float]]]],
+        arm: str,
+        b: float,
+    ) -> dict[float, dict[str, float]]:  # pragma: no cover
         """A base-vs-`arm` agg keyed {0.0: base, b: arm} so `_report` renders the arm's Δ over base."""
         return {0.0: {c: float(np.mean([row["base"][c] for _, row in cases])) for c in FOREGROUND},
                 b: {c: float(np.mean([row[arm][c] for _, row in cases])) for c in FOREGROUND}}

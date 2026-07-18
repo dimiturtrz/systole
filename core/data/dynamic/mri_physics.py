@@ -15,10 +15,15 @@ Approximate — fine for domain randomization.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import torch
 from jaxtyping import Float, Integer
+
+if TYPE_CHECKING:
+    from core.data.static.reference import Reference
 
 
 class Tissue(StrEnum):
@@ -151,7 +156,8 @@ class MriPhysics:
         return (float(band.min()), min(float(band.max()), SAR_FLIP_CAP[f]))
 
     @staticmethod
-    def acquisition_for(vendor: str | None, field: float = 1.5, ref: object = None) -> tuple[float, float, float]:
+    def acquisition_for(vendor: str | None, field: float = 1.5,
+                        ref: Reference | None = None) -> tuple[float, float, float]:
         """(TR ms, TE ms, flip deg) for a machine = (vendor, field) cine bSSFP. Base = the physics
         DERIVATION (derive_acquisition, field-driven). A verified reference/ leaf overrides it per vendor
         (e.g. a DICOM-mined measurement): tr_ms / te_ms / flip_deg_1p5t / flip_deg_3t. `ref` = a
@@ -185,7 +191,8 @@ class MriPhysics:
         return PD * s * (1.0 - e1) / (1.0 - (e1 - e2) * c - e1 * e2)
 
     @staticmethod
-    def banding(T2: Float[torch.Tensor, "..."], TR: Float[torch.Tensor, "..."], dphi: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
+    def banding(T2: Float[torch.Tensor, "..."], TR: Float[torch.Tensor, "..."],
+                dphi: Float[torch.Tensor, "..."]) -> Float[torch.Tensor, "..."]:
         """bSSFP off-resonance banding factor in (0, 1], normalized to 1 at the passband (dphi=0). dphi =
         off-resonance precession per TR (rad, = 2π·Δf·TR). ratio = (1−E2) / |1−E2·e^{iφ}|
         = (1−E2)/√(1−2E2cosφ+E2²): =1 at φ=0, dips toward φ=±π, and the dip is DEEPER for long-T2 tissue
@@ -243,7 +250,8 @@ class MriPhysics:
         return t1, t2
 
     @staticmethod
-    def named_tissue_params(names: list[str], field: float, device: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def named_tissue_params(names: Sequence[str], field: float,
+                            device: str | torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """(T1,T2,PD) tensors for an EXPLICIT list of tissue names (each a key of TISSUE) at `field`. Generic
         builder for sources that assign every class a specific tissue — e.g. MRXCAT whole-FOV paints classes
         0..7 = air/blood/myo/blood/lung/liver/muscle/fat — instead of the heart+bg-ladder default of
@@ -255,7 +263,8 @@ class MriPhysics:
         return t1, t2, pd
 
     @staticmethod
-    def torso_paint_params(n_classes: int, field: float, device: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def torso_paint_params(n_classes: int, field: float,
+                           device: str | torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """(T1,T2,PD) for [heart classes 0..n_classes-1] + [TORSO_BG tissues] — the physical whole-FOV
         composition for the zero-real procedural bg (named torso tissues at literature bSSFP, not the
         dark->bright ladder interpolation). Index order lines up with extend()'s n_classes+tier relabel."""
@@ -263,14 +272,14 @@ class MriPhysics:
         return MriPhysics.named_tissue_params(names, field, device)
 
     @staticmethod
-    def torso_thresholds(device: str) -> Float[torch.Tensor, "*k"]:
+    def torso_thresholds(device: str | torch.device) -> Float[torch.Tensor, "*k"]:
         """Interior cumulative-area thresholds (K-1) for bucketizing a uniform [0,1) field into the
         TORSO_BG tissues at their physical area fractions (so the whole-FOV histogram is torso-like)."""
         return torch.cumsum(torch.tensor([f for _, f in TORSO_BG], device=device), 0)[:-1]
 
     @staticmethod
     def tissue_params(n_classes: int, n_bg_tiers: int, field: float,
-                      device: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                      device: str | torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """(T1, T2, PD) tensors length n_classes + n_bg_tiers at the given field. Heart labels via _HEART;
         background tiers INTERPOLATE params smoothly along _BG_LADDER (dark->bright) so K tiers give K
         distinct backgrounds (no round() collisions). Index 0 (bg) = muscle fallback."""
@@ -283,7 +292,10 @@ class MriPhysics:
             lo = int(pos)
             hi = min(lo + 1, len(ladder) - 1)
             w = pos - lo                                                # interpolation weight
-            rows.append(tuple(ladder[lo][i] * (1 - w) + ladder[hi][i] * w for i in range(3)))
+            lo_row, hi_row = ladder[lo], ladder[hi]
+            rows.append((lo_row[0] * (1 - w) + hi_row[0] * w,
+                         lo_row[1] * (1 - w) + hi_row[1] * w,
+                         lo_row[2] * (1 - w) + hi_row[2] * w))
         t1 = torch.tensor([r[0] for r in rows], device=device)
         t2 = torch.tensor([r[1] for r in rows], device=device)
         pd = torch.tensor([r[2] for r in rows], device=device)

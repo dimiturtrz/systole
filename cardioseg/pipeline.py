@@ -142,7 +142,7 @@ class ExportStage(Stage):
 
     @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (torch->ONNX + INT8 parity gate)
-        ExportOnnx.export(ctx.run, ctx.val_sample())
+        ExportOnnx.export(ctx.run, Path(ctx.val_sample()))
 
 
 class Pipeline:

@@ -90,25 +90,23 @@ def test_split_tag_legacy_when_nothing():
     assert split_tag_of(SimpleNamespace(split=None, test_vendors=())) == "legacy"
 
 
-# --- n_train_of: dynamic (slice-count) vs static/legacy (row-count) ---
+# --- n_train_of: dynamic (slice-count, train_df is None) vs static/legacy (row-count) ---
 def test_n_train_dynamic_uses_gen_slices():
-    """A dynamic OR composite train source has no patient frame -> count resident slices (gen.n)."""
+    """A dynamic/composite train source has no patient frame (train_df is None) -> resident slices (gen.n)."""
     gen = SimpleNamespace(n=128)
-    assert n_train_of(SimpleNamespace(kind="dynamic"), gen, train_df=[]) == 128
-    assert n_train_of(SimpleNamespace(kind="composite"), gen, train_df=None) == 128
+    assert n_train_of(gen, train_df=None) == 128
 
 
 def test_n_train_static_uses_frame_rows():
     """A static source -> patient-row count of the train frame."""
-    src = SimpleNamespace(kind="static")
     gen = SimpleNamespace(X=SimpleNamespace(shape=(999,)))
-    assert n_train_of(src, gen, train_df=[1, 2, 3]) == 3
+    assert n_train_of(gen, train_df=[1, 2, 3]) == 3
 
 
 def test_n_train_legacy_none_source_uses_frame():
-    """Legacy path (train_src None) -> frame rows."""
+    """Legacy path (a real frame present) -> frame rows."""
     gen = SimpleNamespace(X=SimpleNamespace(shape=(999,)))
-    assert n_train_of(None, gen, train_df=[1, 2]) == 2
+    assert n_train_of(gen, train_df=[1, 2]) == 2
 
 
 # --- apply_cli_args: set scalars win, unset skipped, --set applied last ---

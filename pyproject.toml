@@ -169,6 +169,10 @@ search-path = [".", "cardioview"]   # cardioview is a script-style lane: its mod
 # at the line with `# pyrefly: ignore[<code>]`.
 # >>> LOCAL-SLOT: pyrefly-ignore-imports — this repo's untyped-dependency modules (treated as Any)
 ignore-missing-imports = []
+# nibabel ships loose inline types: `nib.load` returns the base FileBasedImage, which lacks the concrete
+# Nifti1Image `.dataobj` / `.header.get_zooms()` members every real load actually has. It RESOLVES (so
+# ignore-missing-imports is a no-op) but is under-typed — force it to Any.
+replace-imports-with-any = ["nibabel"]
 # <<< LOCAL-SLOT: pyrefly-ignore-imports
 
 # Tests inject unannotated fixture params (pytest fills them) — mirror the ruff `tests/**` carve-out so the
@@ -179,6 +183,7 @@ matches = "tests/**"
 check-unannotated-defs = false
 [tool.pyrefly.sub-config.errors]
 implicit-any-parameter = false
+missing-override-decorator = false   # test doubles stub library methods (nn.Module, mlflow) — @override ceremony is noise here
 
 # Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg+cardioview
 # (NOT tests): a prod symbol referenced solely by a test then surfaces as dead here, instead of being

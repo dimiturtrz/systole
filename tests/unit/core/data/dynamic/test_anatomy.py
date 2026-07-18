@@ -200,7 +200,7 @@ def test_scale_to_target_noop_when_at_target():
     v = _heart_slice(40)
     fg = v[0] > 0
     ys, xs = np.where(fg)
-    cur = max(np.ptp(ys), np.ptp(xs)) + 1
+    cur = int(max(np.ptp(ys), np.ptp(xs)) + 1)
     assert _scale_to_target(v, target_px=cur) is v     # identity object, skipped
 
 

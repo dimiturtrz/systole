@@ -77,7 +77,8 @@ class KaggleDsbAdapter:
         return sorted((p for p in d.glob("*") if p.is_dir()), key=lambda p: int(p.name))
 
     @staticmethod
-    def load_sax(case: str | Path) -> list[tuple[Any, Any, dict[str, str]]]:  # pragma: no cover  real Kaggle SAX DICOM series (read_series)
+    def load_sax(case: str | Path) -> list[tuple[Any, Any, dict[str, str]]]:  # pragma: no cover
+        # real Kaggle SAX DICOM series (read_series)
         """SAX cine of one case: list of (volume [phases,H,W], spacing (z,y,x), meta) — one entry per `sax_*`
         series (slice location), sorted apex→base by SliceLocation. Each series is the ~30-phase cine loop at
         that slice. Uses `Dicom.read_series`; broken/odd series skipped."""

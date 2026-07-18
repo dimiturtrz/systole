@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from omegaconf import OmegaConf
 
@@ -26,23 +26,34 @@ _DATASETS = SEG_DATASETS
 _SOURCES = Path(__file__).parent / "sources.yaml"
 
 
+class Prov(TypedDict):
+    """Provenance record for one persisted field — the schema behind `_prov` (kwarg construction keeps the
+    field names out of magic-literal keys)."""
+    source: str
+    by: str
+    verified: bool
+
+
 class Persist:
     """Dataset acquisition-meta persistence: merge the adapter AUTO tier with the paper overlay and
     serialize provenance-tagged fields (the free helpers folded in as staticmethods)."""
 
     @staticmethod
     def _overlay() -> dict[str, Any]:
-        return OmegaConf.to_container(OmegaConf.load(_SOURCES)) if _SOURCES.exists() else {}
+        if not _SOURCES.exists():
+            return {}
+        loaded = OmegaConf.to_container(OmegaConf.load(_SOURCES))
+        return {str(k): v for k, v in loaded.items()} if isinstance(loaded, dict) else {}
 
     @staticmethod
-    def _prov(field: str, auto_src: dict[str, Any], paper: dict[str, Any]) -> dict[str, str | bool]:
+    def _prov(field: str, auto_src: dict[str, Any], paper: dict[str, Any]) -> Prov:
         """Provenance for one field: the paper overlay wins (cited + verified flag), else the adapter's
         _source map (parsed = deterministic = verified)."""
         p = paper.get(field)
         if isinstance(p, dict):
-            return {"source": p.get("source", "paper"), "by": "paper", "verified": bool(p.get("verified"))}
+            return Prov(source=p.get("source", "paper"), by="paper", verified=bool(p.get("verified")))
         src = auto_src.get(field) or auto_src.get("rest") or auto_src.get("all") or "unknown"
-        return {"source": src, "by": "auto", "verified": True}
+        return Prov(source=src, by="auto", verified=True)
 
     @staticmethod
     def persist_meta(dataset: str) -> Path:

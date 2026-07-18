@@ -107,7 +107,16 @@ class Uncertainty:
 
     @staticmethod
     @shapecheck
-    def foreground_uncertainty(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], maps: tuple[Float[np.ndarray, "*grid"], Float[np.ndarray, "*grid"], Float[np.ndarray, "*grid"], Float[np.ndarray, "*grid"]]):
+    def foreground_uncertainty(
+        pred: Integer[np.ndarray, "*grid"],
+        gt: Integer[np.ndarray, "*grid"],
+        maps: tuple[
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+        ],
+    ):
         """Pure per-case fold: select foreground voxels (pred>0 OR gt>0) from the per-voxel maps
         `maps = (ent, conf, ale, epi)` and return the pooled arrays (conf, correct, ent, ale, epi) +
         the scalar per-case uncertainty (mean fg entropy, 0 if empty)."""
@@ -122,7 +131,14 @@ class Uncertainty:
         epistemic (BALD), boundary-vs-interior, per-case scores — plus one overlay PNG (ACDC ED only).
         Returns the pooled sample lists (confs, corrects, ents, ales, epis, bnd_u, int_u, cases) for the
         caller to aggregate."""
-        confs: list[Float[np.ndarray, "..."]] = []; corrects: list[Bool[np.ndarray, "..."]] = []; ents: list[Float[np.ndarray, "..."]] = []; ales: list[Float[np.ndarray, "..."]] = []; epis: list[Float[np.ndarray, "..."]] = []; bnd_u: list[float] = []; int_u: list[float] = []; cases: list[dict[str, float | str]] = []
+        confs: list[Float[np.ndarray, "..."]] = []
+        corrects: list[Bool[np.ndarray, "..."]] = []
+        ents: list[Float[np.ndarray, "..."]] = []
+        ales: list[Float[np.ndarray, "..."]] = []
+        epis: list[Float[np.ndarray, "..."]] = []
+        bnd_u: list[float] = []
+        int_u: list[float] = []
+        cases: list[dict[str, float | str]] = []
         saved = False
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
@@ -145,7 +161,10 @@ class Uncertainty:
         return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 
     @staticmethod
-    def _reliability_plot(bins: list[tuple[float, float, float]], ece_val: float, out: Path) -> None:  # pragma: no cover  matplotlib rendering + PNG file write
+    def _reliability_plot(
+        bins: list[tuple[float, float, float]], ece_val: float, out: Path
+    ) -> None:  # pragma: no cover
+        # matplotlib rendering + PNG file write
         """Reliability diagram (foreground confidence vs accuracy per bin) -> out/reliability.png."""
         fig, ax = plt.subplots(figsize=(4.5, 4.5))
         if bins:
@@ -158,7 +177,17 @@ class Uncertainty:
         fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
     @staticmethod
-    def _save_overlay(vol: Float[np.ndarray, "d h w"], pred: Integer[np.ndarray, "h w"], ent: Float[np.ndarray, "h w"], z: int, name: str, path: Path, fit_square: Callable[..., Any], size: int, plt: Any) -> None:  # noqa: PLR0913
+    def _save_overlay(  # noqa: PLR0913
+        vol: Float[np.ndarray, "d h w"],
+        pred: Integer[np.ndarray, "h w"],
+        ent: Float[np.ndarray, "h w"],
+        z: int,
+        name: str,
+        path: Path,
+        fit_square: Callable[..., Any],
+        size: int,
+        plt: Any,
+    ) -> None:
         img = fit_square(vol[z].astype(np.float32), size, 0.0)
         cmap = Labels.overlay_cmap()
         fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
@@ -179,7 +208,8 @@ class Uncertainty:
         ap.add_argument("--eval", default=Dataset.ACDC, choices=[Dataset.ACDC, "canon"])
 
     @staticmethod
-    def run(args: argparse.Namespace) -> None:  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
         run = Registry.resolve(args.run)
         model, _, device = Run.load_run(run)
 

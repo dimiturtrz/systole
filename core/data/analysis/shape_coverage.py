@@ -81,7 +81,9 @@ class ShapeCoverage:
         and the reverse (does synth extrapolate beyond real). Distances in std-units of the real cloud."""
         real_mean, real_std = real.mean(0), real.std(0) + 1e-9
         real_standardized, synth_standardized = (real - real_mean) / real_std, (synth - real_mean) / real_std
-        def nn(a: Float[np.ndarray, "n d"], b: Float[np.ndarray, "m d"]) -> Float[np.ndarray, "n"]:  # nearest-neighbour distance a->b, per row of a
+        def nn(
+            a: Float[np.ndarray, "n d"], b: Float[np.ndarray, "m d"]
+        ) -> Float[np.ndarray, "n"]:  # nearest-neighbour distance a->b, per row of a
             distances = np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
             return distances.min(1)
         real_to_synth = nn(real_standardized, synth_standardized)   # real -> nearest synth (coverage)

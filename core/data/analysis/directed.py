@@ -85,7 +85,7 @@ class Directed:
         """Radial PSD of a synth batch painted from `masks` under `cfg`. Reseed per call so every envelope
         candidate sees the same RNG stream — the PSD delta is the envelope, not paint noise."""
         torch.manual_seed(self.seed)
-        img, _ = SynthPainter.synthesize_from_labels(masks, cfg, self.n_classes)
+        img, *_ = SynthPainter.synthesize_from_labels(masks, cfg, self.n_classes)
         return Directed.radial_psd(img)
 
     def fit(self, target_psd: Float[torch.Tensor, "b"], masks: Float[torch.Tensor, "n h w"]) -> dict[str, Any]:
@@ -112,11 +112,12 @@ class Directed:
         ap.add_argument("--out", default=None, help="write the fitted config + PSD table JSON here")
 
     @staticmethod
-    def _target_psd(args: argparse.Namespace, data_cfg: Any, size: int, device: str) -> tuple[Float[torch.Tensor, "b"], int, int]:
+    def _target_psd(args: argparse.Namespace, data_cfg: Any, size: int,
+                    device: str) -> tuple[Float[torch.Tensor, "b"], int, int]:
         """Load the target vendor's real images, take the seeded fit partition, return (target PSD, n_fit,
         n_holdout) — the hold-out count is what the xvx0 test arm gets (disjoint from the fit set)."""
         meta = store.load_cfg(data_cfg).filter(pl.col("labelled") & (pl.col("vendor") == args.vendor))
-        real, _ = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(meta), size, "cpu")
+        real, *_ = ACDCSliceDataset.load_to_gpu([p for p in splits.Splits.paths(meta)], size, "cpu")
         n = int(real.shape[0])
         if n == 0:
             raise ValueError(f"no labelled slices for vendor {args.vendor!r} in the cloud")

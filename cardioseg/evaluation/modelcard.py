@@ -71,7 +71,8 @@ class ModelCard:
         ref = Reference()
         if not ref.present():
             return []
-        rows = ModelCard.reference_rows({key: ref.provenance("normal_ranges", key) for key, _ in ModelCard._REF_KEYS})
+        rows = ModelCard.reference_rows({key: p for key, _ in ModelCard._REF_KEYS
+                                         if (p := ref.provenance("normal_ranges", key)) is not None})
         if not rows:
             return []
         return ["", "## Reference ranges (derived from our GT, for context)",
