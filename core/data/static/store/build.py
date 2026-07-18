@@ -10,10 +10,13 @@ Splits are queries over it (core.data.ingest.splits).
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import os
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -44,7 +47,7 @@ class Build:
     @staticmethod
     def build(  # pragma: no cover  npz writes over real adapter volumes (preprocess_case reads NIfTI/DICOM)
         name: str, recipe: Recipe | None = None, *, workers: int | None = None,
-        rebuild: bool = False, nyul_standard=None,
+        rebuild: bool = False, nyul_standard: Any = None,
     ) -> Path:
         """Consolidate one dataset into processed/<name>/<paramkey>/ (data/*.npz + meta.csv).
 
@@ -78,13 +81,14 @@ class Build:
         return out
 
     @staticmethod
-    def load(names: list[str] | str | None = None, recipe: Recipe | None = None, *,
+    def load(names: Sequence[str] | str | None = None, recipe: Recipe | None = None, *,
              workers: int | None = None) -> pl.DataFrame:
         """Ensure each requested dataset is consolidated, then return ONE polars frame over all of them
         (the data cloud, for this recipe). Adds an absolute `path` column to each npz. names=None -> all.
         A `nyul` recipe harmonizes to the cohort standard (reference/nyul.yaml; fit it first with
         `python -m core.data consolidate --fit-nyul`)."""
-        names = SOURCE_DATASETS if names is None else ([names] if isinstance(names, str) else list(names))
+        selected: Sequence[str] = (
+            SOURCE_DATASETS if names is None else [names] if isinstance(names, str) else list(names))
         recipe = recipe or Recipe()
         std = Normalizer.load_standard() if recipe.nyul else None
         if recipe.nyul and std is None:
@@ -92,7 +96,7 @@ class Build:
                                "python -m core.data consolidate --fit-nyul")
         frames = []
         store = Store(recipe)
-        for name in names:
+        for name in selected:
             out = store.dataset_dir(name)
             if not (out / "meta.csv").exists():
                 Build.build(name, recipe, workers=workers, nyul_standard=std)  # pragma: no cover  real build from disk
@@ -108,14 +112,14 @@ class Build:
             pl.col("country").replace_strict(COUNTRY_CONTINENT, default=None).alias("continent"))
 
     @staticmethod
-    def load_cfg(d, sources=None, workers: int | None = None) -> pl.DataFrame:
+    def load_cfg(d: Any, sources: Any = None, workers: int | None = None) -> pl.DataFrame:
         """Load the cloud a model (DataCfg `d`) trained under — ALL its preprocessing params (inplane, n4,
         nyul, norm), not just some. Callers that pass only inplane/n4 silently read zscore npz for a nyul/
         blood-norm model (a trap). `sources` overrides d.sources (e.g. the matrix's full eval cloud)."""
         return Build.load(list(sources if sources is not None else d.sources), d.recipe, workers=workers)
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--names", nargs="*", default=None, help="datasets (default: all)")
         ap.add_argument("--inplane", type=float, default=DEFAULT_INPLANE)
         ap.add_argument("--n4", action="store_true")
@@ -130,7 +134,7 @@ class Build:
                              "reference/acquisition.yaml (acquisition_for then overrides the derivation), then exit")
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> None:
         if args.fit_nyul:
             std = Normalizer.fit_standard(args.names, inplane=args.inplane)
             log.info(f"fit Nyúl standard -> {Normalizer.ref_path()}\n  {[round(float(v), 3) for v in std]}")

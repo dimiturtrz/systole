@@ -12,6 +12,7 @@ clean number.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from core.postprocess import Postprocess
 from core.preprocessing.preprocess import SIZE, Preprocess
 from core.registry import Registry
 from core.run import Run
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.soft_eval")
 
@@ -56,12 +58,15 @@ class SoftEval:
     def evaluate(run: Path):  # pragma: no cover  (loads the model + runs GPU inference over real val cases)
         dev = Model.resolve_device()
         model, _, _ = Run.load_run(run, dev)
-        rows, conf_all, corr_all = [], [], []
+        rows: list[tuple[float, float, float]] = []
+        conf_all: list[np.ndarray] = []
+        corr_all: list[np.ndarray] = []
         for r in SoftEval._val(run).iter_rows(named=True):
             case = store.load_arrays(r["path"])
             if "ed_img" not in case or "es_img" not in case:
                 continue
-            spacing = tuple(float(v) for v in case["spacing"])
+            spc = np.asarray(case["spacing"], dtype=float)
+            spacing: Spacing = (spc[0], spc[1], spc[2])
             volumes = {}
             for tag in (phase.lower() for phase in Phase):
                 _, mean = Inference(model, SIZE, dev).predict_volume_probs(case[f"{tag}_img"])   # [D,C,H,W] softmax
@@ -84,11 +89,11 @@ class SoftEval:
         return ef_triples, Uncertainty.ece(conf, corr)[0]
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", required=True)
 
     @staticmethod
-    def run(args):  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: resolve registry ref + GPU eval + log)
         ef_triples, ece = SoftEval.evaluate(Registry.resolve(args.run))
         gt, hard, soft = ef_triples[:, 0], ef_triples[:, 1], ef_triples[:, 2]
         log.info(f"\n=== {args.run}  (n={len(ef_triples)}) ===")

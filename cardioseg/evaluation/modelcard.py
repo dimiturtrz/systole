@@ -12,9 +12,11 @@ always-in-sync per-run card.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from core.data.static.labels import CLASS_NAMES
 from core.data.static.reference import Reference
@@ -31,13 +33,14 @@ class ModelCard:
     _REF_KEYS = (("ef_normal", "Normal LV EF"), ("edv_normal_ml", "Normal EDV"), ("esv_normal_ml", "Normal ESV"))
 
     @staticmethod
-    def _perf_table(r: dict) -> str:
-        dice, b = r.get("dice", {}), (r.get("boundary") or {})
+    def _perf_table(r: dict[str, Any]) -> str:
+        dice: dict[str, Any] = r.get("dice", {})
+        b: dict[str, Any] = r.get("boundary") or {}
         rows = ["| structure | Dice | HD95 (mm) | ASSD (mm) |", "|---|---|---|---|"]
         for k in ModelCard._ORDER:
             if k not in dice:
                 continue
-            bd = b.get(k, {}) if b else {}
+            bd: dict[str, Any] = b.get(k, {}) if b else {}
             hd = f"{bd['hd95']:.2f}" if bd.get("hd95") == bd.get("hd95") and "hd95" in bd else "—"
             ad = f"{bd['assd']:.2f}" if "assd" in bd and bd["assd"] == bd["assd"] else "—"
             rows.append(f"| {k} | {dice[k]:.3f} | {hd} | {ad} |")
@@ -45,7 +48,7 @@ class ModelCard:
         return "\n".join(rows)
 
     @staticmethod
-    def reference_rows(provenances: dict) -> list[str]:
+    def reference_rows(provenances: dict[str, dict[str, Any]]) -> list[str]:
         """Pure provenance -> markdown rows: `{key: provenance_dict}` -> the reference-range bullet list.
         A key whose provenance is missing or whose `value` isn't a [lo,hi] list is skipped. Extracted from
         `_reference_section` (whose `Reference()` store probe is the shell) so the row formatting +
@@ -68,7 +71,8 @@ class ModelCard:
         ref = Reference()
         if not ref.present():
             return []
-        rows = ModelCard.reference_rows({key: ref.provenance("normal_ranges", key) for key, _ in ModelCard._REF_KEYS})
+        rows = ModelCard.reference_rows({key: p for key, _ in ModelCard._REF_KEYS
+                                         if (p := ref.provenance("normal_ranges", key)) is not None})
         if not rows:
             return []
         return ["", "## Reference ranges (derived from our GT, for context)",
@@ -76,7 +80,7 @@ class ModelCard:
                 "cohort. Clinical context only — the model is not evaluated against these.*", *rows]
 
     @staticmethod
-    def render_card(run_name: str, cfg: dict, m: dict, ref_section: list[str] | None = None) -> str:
+    def render_card(run_name: str, cfg: dict[str, Any], m: dict[str, Any], ref_section: list[str] | None = None) -> str:
         """The pure card renderer: (config dict, metrics dict) -> the MODEL_CARD.md TEXT. No file IO — the
         disk read + reference-store probe live in `generate`, so the whole markdown (model block, split
         criteria, val/test perf tables, narrative) is testable off a synthetic config+metrics pair."""
@@ -140,9 +144,9 @@ class ModelCard:
         return out
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", required=True, help="run dir with config.json + metrics.json")
 
     @staticmethod
-    def run(args):  # pragma: no cover  (CLI: resolve registry ref + generate the card file)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (CLI: resolve registry ref + generate the card file)
         log.info(f"wrote {ModelCard.generate(Registry.resolve(args.run))}")

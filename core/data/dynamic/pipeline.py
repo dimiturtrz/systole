@@ -17,6 +17,14 @@ from .augment import AugCfg, Augmentor
 from .synth import SynthCfg, SynthPainter
 
 
+class GeneratorCfgLike(Protocol):
+    """What Pipeline.build reads off a GeneratorCfg — the synth + aug subtrees. A structural Protocol so
+    pipeline doesn't import generator (which imports pipeline) — breaks the module cycle; GeneratorCfg
+    satisfies it by shape."""
+    synth: SynthCfg
+    aug: AugCfg
+
+
 @dataclass
 class Batch:
     """The mutable batch flowing through the pipeline. `x` image, `y` hard mask, `force` = per-row
@@ -44,7 +52,7 @@ class SynthReplace:
         on = self.cfg.synth_p > 0 or (b.force is not None and bool(b.force.any()))
         if not on:
             return b
-        xs, ys = SynthPainter.synthesize_from_labels(b.y, self.cfg, self.n_classes, real_img=b.x)
+        xs, ys, *_ = SynthPainter.synthesize_from_labels(b.y, self.cfg, self.n_classes, real_img=b.x)
         pick = torch.rand(b.x.shape[0], device=b.x.device) < self.cfg.synth_p
         if b.force is not None:
             pick = pick | b.force
@@ -80,6 +88,6 @@ class Pipeline:
     """The ordered Transform recipe the Generator composes (the build lives here as a staticmethod)."""
 
     @staticmethod
-    def build(cfg, n_classes: int) -> list[Transform]:
+    def build(cfg: GeneratorCfgLike, n_classes: int) -> list[Transform]:
         """The default recipe: synth-replace -> augment -> soften. cfg = GeneratorCfg (synth + aug)."""
         return [SynthReplace(cfg.synth, n_classes), Augment(cfg.aug), Soften(cfg.aug.soft_label_sigma, n_classes)]

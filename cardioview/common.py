@@ -8,8 +8,10 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+import torch
 
 from core.config import FLAGSHIP_REF, Config
 from core.inference import Inference
@@ -63,33 +65,36 @@ def patient_dir(patient: str, root: str | None = None) -> Path:
     raise FileNotFoundError(f"{patient} not found (not a dir, nor under {base}/training|testing)")
 
 
-def load_model(ref: str, device):  # pragma: no cover  (load_run reads model.pth weights + GPU — registry/model shell)
+def load_model(ref: str, device: str):  # pragma: no cover  (load_run reads weights + GPU — registry/model shell)
     """Load the trained U-Net for a registry ref (arch from its config.json, so it can't mismatch a
     default). `ref` = an mlflow registry ref (alias|version|run-id) resolved to its artifact dir."""
     model, _, _ = Run.load_run(model_dir(ref), device)
     return model
 
 
-def square_stack(vol_zyx, dtype=None):
+def square_stack(vol_zyx: np.ndarray, dtype: type[Any] | None = None) -> np.ndarray:
     """Center pad/crop each slice to the SIZE square grid the model expects."""
     out = np.stack([Preprocess.fit_square(s.astype(np.float32), SIZE, 0.0) for s in vol_zyx])
     return out.astype(dtype) if dtype else out
 
 
-def masks(case: dict, source: str, model=None, device=None) -> dict:
+def masks(case: dict[str, Any], source: str, model: torch.nn.Module | None = None,
+          device: str | None = None) -> dict[str, Any]:
     """{ED, ES} chamber-label volumes on the square grid — ground truth or model prediction.
 
     Predictions get largest-CC post-processing (matches the cardioseg pipeline), so the
     displayed EF/volumes line up with the reported numbers.
     """
-    out = {}
+    out: dict[str, Any] = {}
     for tag in ("ED", "ES"):
         k = tag.lower()
         if f"{k}_img" not in case:
             continue
-        out[tag] = (
-            square_stack(case[f"{k}_gt"], np.uint8)
-            if source == "gt"
-            else Postprocess.largest_cc_per_class(Inference(model, SIZE, device).predict_volume(case[f"{k}_img"]))
-        )
+        if source == "gt":
+            out[tag] = square_stack(case[f"{k}_gt"], np.uint8)
+            continue
+        if model is None or device is None:
+            raise ValueError("prediction masks require a model and device")
+        out[tag] = Postprocess.largest_cc_per_class(
+            Inference(model, SIZE, device).predict_volume(case[f"{k}_img"]))
     return out

@@ -72,7 +72,7 @@ class TrainCfg(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _lift_flat(cls, v):
+    def _lift_flat(cls, v: object) -> object:
         """Back-compat: old config.json had data/aug/synth at the top level; lift them under
         `generator` so pre-refactor runs (registered models, cached configs) still load."""
         if isinstance(v, dict) and "generator" not in v and any(k in v for k in ("data", "aug", "synth")):
@@ -120,13 +120,16 @@ class TrainCfg(BaseModel):
 # discriminator field name -> {tag: variant cls}, for --set switching of a union field's variant.
 _UNION_VARIANTS = {"kind": LOSS_VARIANTS, "mode": {**ACQ_VARIANTS, **BG_VARIANTS}}
 
+# a TrainCfg leaf field's runtime value type — what `--set a.b=val` coerces `val` into (isinstance-branched).
+FieldValue = bool | int | float | tuple[object, ...] | list[object] | str | None
+
 
 class Hparams:
     """Run-config helpers (free functions folded in as staticmethods; public names kept): override
     parsing/application + config.json (de)serialization for TrainCfg."""
 
     @staticmethod
-    def _coerce(val: str, cur):
+    def _coerce(val: str, cur: FieldValue) -> FieldValue:
         """Parse an override string to the current field's type (tuples via literal_eval). pydantic's
         validate_assignment then enforces the bounds when we setattr the result."""
         if isinstance(cur, bool):

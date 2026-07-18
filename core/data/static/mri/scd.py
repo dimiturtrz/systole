@@ -19,15 +19,16 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 import numpy as np
 from jaxtyping import Bool, Float, UInt8
 from skimage.draw import polygon
 
 from core.config import Config
-from core.data.static.mri.base import AdapterBase, Base, Dataset, DatasetAdapter, PatientData, Phase, Vendor
+from core.data.static.mri.base import AdapterBase, Base, Dataset, DatasetAdapter, Frame, PatientData, Vendor
 from core.data.static.mri.dicom import Dicom
+from core.types import Spacing
 
 _IRCCI = "contours-manual/IRCCI-expert"
 
@@ -64,7 +65,7 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
         return np.loadtxt(path)                               # [N,2] float (x=col, y=row) pixel coords
 
     @staticmethod
-    def _fill(pts: Float[np.ndarray, "n 2"], shape: tuple[int, int]) -> Bool[np.ndarray, "h w"]:
+    def _fill(pts: Float[np.ndarray, "n 2"], shape: tuple[int, ...]) -> Bool[np.ndarray, "h w"]:
         """Rasterize a closed polygon (x=col, y=row pixel coords) to a boolean mask on `shape` [rows,cols].
         skimage.draw (a core dep) — matplotlib.path circular-imports in spawn workers on Windows."""
         m = np.zeros(shape, dtype=bool)
@@ -74,7 +75,7 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
 
     @staticmethod
     def _rasterize(endo: Float[np.ndarray, "n 2"] | None, epi: Float[np.ndarray, "m 2"] | None,
-                   shape) -> UInt8[np.ndarray, "h w"]:
+                   shape: tuple[int, ...]) -> UInt8[np.ndarray, "h w"]:
         """endo/epi polygons -> canonical mask: 2 = LV myo (epi ring minus endo), 3 = LV cav (endo interior)."""
         m = np.zeros(shape, np.uint8)
         if epi is not None:
@@ -84,19 +85,21 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
         return m
 
     @staticmethod
-    def select_ed_es(by_slice: dict) -> tuple[list, list, tuple]:
+    def select_ed_es(by_slice: dict[float, list[dict[str, Any]]],
+                     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Spacing]:
         """PURE ED/ES assignment over gathered per-slice records. `by_slice` maps sliceLoc -> list of recs
         (each {loc, area, img, mask, px}); per slice the LARGER-endo-area rec is ED, the smallest ES (one
         rec -> ED==ES). Returns (ed_recs, es_recs, spacing (z,y,x)); z = median inter-slice step (or the
         in-plane px if a single slice), never negative."""
         locs = sorted(by_slice)
-        ed_i, es_i, px = [], [], None
-        for loc in locs:
-            recs = sorted(by_slice[loc], key=lambda r: r["area"])
-            es_i.append(recs[0]); ed_i.append(recs[-1]); px = recs[0]["px"]   # 1 rec -> ED==ES for that slice
-        dz = float(np.median(np.diff(locs))) if len(locs) > 1 else float(px[0])
+        per_slice = [sorted(by_slice[loc], key=lambda r: r["area"]) for loc in locs]  # 1 rec -> ED==ES for that slice
+        ed_i = [recs[-1] for recs in per_slice]
+        es_i = [recs[0] for recs in per_slice]
+        px = per_slice[-1][0]["px"]                          # (sy, sx); by_slice non-empty by caller contract
+        dz = np.median(np.diff(np.asarray(locs, dtype=float))) if len(locs) > 1 else px[0]
         return ed_i, es_i, (abs(dz), px[0], px[1])
 
+    @override
     def cases(self) -> list[Path]:
         """Patient image dirs (SCD00001XX) that have a manual-contour folder — the labelled subset."""
         base = self._root(self.root)
@@ -108,6 +111,7 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
                 out.append(img_dir)
         return sorted(out)
 
+    @override
     def load_ed_es(self, case: Path) -> PatientData:
         """SCD patient -> ED/ES frames (img [D,H,W], canonical mask {0,2,3}). D = contoured SAX slices; each
         slice's ED/ES by endo area (larger=ED). Spacing (z,y,x): z from SliceLocation steps, y/x from px."""
@@ -121,7 +125,7 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
             return out
 
         # gather per contoured instance: (sliceLoc, endo_area, img, mask, px)
-        by_slice: dict[float, list[dict]] = defaultdict(list)
+        by_slice: dict[float, list[dict[str, Any]]] = defaultdict(list)
         for ic in sorted(cdir.glob("IM-*-icontour-manual.txt")):
             inst = ic.name.split("-")[2]                      # IM-0001-NNNN-icontour...
             dcm = next(iter(sax.glob(f"*-{inst}.dcm")), None)
@@ -141,12 +145,16 @@ class ScdAdapter(AdapterBase, DatasetAdapter):
             return out
         ed_i, es_i, spacing = self.select_ed_es(by_slice)    # pragma: no cover  needs real gathered DICOM recs
         out["spacing"] = spacing                             # pragma: no cover
-        for tag, recs in ((Phase.ED, ed_i), (Phase.ES, es_i)):       # pragma: no cover
-            out[tag] = {"img": np.stack([r["img"] for r in recs]).astype(np.float32),  # pragma: no cover
-                        "gt": np.stack([r["mask"] for r in recs])}
+
+        def _stack(recs: list[dict[str, Any]]) -> Frame:     # pragma: no cover
+            return {"img": np.stack([r["img"] for r in recs]).astype(np.float32),
+                    "gt": np.stack([r["mask"] for r in recs])}
+        out["ED"] = _stack(ed_i)                             # pragma: no cover
+        out["ES"] = _stack(es_i)                             # pragma: no cover
         return out                                            # pragma: no cover
 
-    def meta(self, case: Path) -> dict:
+    @override
+    def meta(self, case: Path) -> dict[str, Any]:
         """Demographics + pathology from the patient CSV — the stratified-eval / normalization hook."""
         case = Path(case)
         info = self._patient_csv(self._root(self.root)).get(case.name, {})

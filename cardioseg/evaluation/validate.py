@@ -7,7 +7,9 @@ spacing cancels; the per-patient spacing matters once absolute volumes (mL) are
 reported, and is the honest thing to carry through regardless.
 """
 import logging
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -54,11 +56,12 @@ class _ClassScores:
 
     _CLS = np.fromiter(CLASS_NAMES, dtype=int)                           # [C] foreground label ids (1,2,3)
 
-    def __init__(self, *, boundary: bool = True):
+    def __init__(self, *, boundary: bool = True) -> None:
         self.boundary = boundary
         self.inter = dict.fromkeys(CLASS_NAMES, 0.0)
         self.denom = dict.fromkeys(CLASS_NAMES, 0.0)
-        self.surf = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}   # per-volume boundary distances (mm)
+        # per-volume boundary distances (mm)
+        self.surf: dict[int, dict[str, list[float]]] = {c: {"hd95": [], "assd": []} for c in CLASS_NAMES}
 
     @shapecheck
     def add(self, pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], spacing: Spacing):
@@ -85,7 +88,7 @@ class _ClassScores:
         return {cl: (self.inter[cl] / self.denom[cl] if self.denom[cl] else float("nan"))
                 for cl in CLASS_NAMES}
 
-    def surface(self) -> dict:
+    def surface(self) -> dict[int, dict[str, float]]:
         # median over volumes — robust report (HD95 already drops per-volume outliers; median across
         # cases drops the odd failed volume too — "worst case decides, but report robust").
         return {cl: {"hd95": float(np.median(self.surf[cl]["hd95"])) if self.surf[cl]["hd95"] else float("nan"),
@@ -99,13 +102,13 @@ class Evaluator:
     `validate(model, paths, size, device, postproc, tta)` where size/device/model were threaded as
     args; they're state, not inputs — bd cardiac-seg-01fh.)"""
 
-    def __init__(self, model, device: str, cfg: EvalCfg | None = None):
+    def __init__(self, model: Any, device: str, cfg: EvalCfg | None = None) -> None:
         self.model, self.device, self.cfg = model, device, cfg or EvalCfg()
 
     @staticmethod
     @shapecheck
     def _foreground_samples(
-        logits: Float[np.ndarray, "*n c"], y: Integer[np.ndarray, "*n"], per_vol, rng
+        logits: Float[np.ndarray, "*n c"], y: Integer[np.ndarray, "*n"], per_vol: int, rng: Any
     ) -> tuple[Float[np.ndarray, "*m c"], Integer[np.ndarray, "*m"]]:
         """Pure core of `gather`: from flattened logits [N,C] + labels [N], keep foreground voxels
         (GT>0 OR argmax>0) and subsample to <= per_vol. Returns (logits_kept [M,C], labels_kept [M])."""
@@ -115,7 +118,9 @@ class Evaluator:
             foreground_indices = rng.choice(foreground_indices, per_vol, replace=False)
         return logits[foreground_indices], y[foreground_indices]
 
-    def validate(self, npz_paths) -> tuple[dict[int, float], list[dict], dict]:
+    def validate(
+        self, npz_paths: Sequence[str | Path],
+    ) -> tuple[dict[int, float], list[dict[str, Any]], dict[int, dict[str, float]] | None]:
         """Return (dice_per_class, ef_rows, surf_per_class). dice_per_class: {1,2,3 -> Dice pooled over
         all val slices}. ef_rows: {patient, group, ef_gt, ef_pred, edv_gt, edv_pred}. `npz_paths` are
         consolidated-subject npz files (data/store.py) — resampled+z-scored ed/es img+gt, spacing,
@@ -126,7 +131,8 @@ class Evaluator:
         ef_rows = []
         for npz_path in npz_paths:
             case = load_arrays(npz_path)
-            spacing = tuple(float(s) for s in case["spacing"])   # per-patient (z,y,x)
+            spc = np.asarray(case["spacing"], dtype=float)
+            spacing: Spacing = (spc[0], spc[1], spc[2])   # per-patient (z,y,x)
             vols = {}
             for tag in ("ED", "ES"):
                 if f"{tag.lower()}_img" not in case:
@@ -144,14 +150,17 @@ class Evaluator:
                                 "ef_gt": ef_gt, "ef_pred": ef_pred, "edv_gt": edv_gt, "edv_pred": edv_pred})
         return scores.dice(), ef_rows, (scores.surface() if self.cfg.boundary else None)
 
-    def gather(self, npz_paths, per_vol: int = 4000, seed: int = 0):
+    def gather(
+        self, npz_paths: Sequence[str | Path], per_vol: int = 4000, seed: int = 0,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Foreground (logits[N,C], labels[N]) over subjects — single forward, NO TTA/postproc —
         subsampled to ~per_vol voxels/volume (bounded memory, plenty for a 1-param temperature fit +
         ECE). For calibration. (Was calibrate._gather(model, paths, size, device, …); model/size/device
         are now state.)"""
         size = self.cfg.size
         rng = np.random.RandomState(seed)
-        logit_rows, label_rows = [], []
+        logit_rows: list[np.ndarray] = []
+        label_rows: list[np.ndarray] = []
         self.model.eval()
         for p in npz_paths:
             case = load_arrays(p)
@@ -172,7 +181,10 @@ class Evaluator:
 
 
     @staticmethod
-    def summarize(dice_per_class, ef_rows, surf_per_class=None):
+    def summarize(
+        dice_per_class: dict[int, float], ef_rows: list[dict[str, Any]],
+        surf_per_class: dict[int, dict[str, float]] | None = None,
+    ) -> dict[str, Any]:
         """Print the Dice table + (boundary table) + EF table, return a JSON-able metrics dict."""
         log.info("\n=== VAL Dice (per class, pooled over slices) ===")
         for cl, name in CLASS_NAMES.items():

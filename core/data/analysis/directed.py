@@ -15,10 +15,12 @@ seeded fit/hold-out partition keeps the fitted vendor slices disjoint from the x
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from itertools import product
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import torch
@@ -26,7 +28,7 @@ from jaxtyping import Float
 
 from core.data.dynamic.anatomy import Anatomy
 from core.data.dynamic.dataset import ACDCSliceDataset
-from core.data.dynamic.synth import SynthPainter
+from core.data.dynamic.synth import SynthCfg, SynthPainter
 from core.data.ingest.splits.synth_main import POOL, SynthMain
 from core.data.static import splits
 from core.data.static.store.build import Build as store
@@ -52,7 +54,7 @@ class Directed:
     """Fit the painter envelope to a target vendor's image PSD (bd 6i8g). Holds the base synth cfg +
     n_classes + device + paint seed (shared state); fit() takes the target PSD and a mask batch."""
 
-    def __init__(self, cfg, n_classes: int, device: str, seed: int = 0):
+    def __init__(self, cfg: SynthCfg, n_classes: int, device: str, seed: int = 0) -> None:
         self.cfg, self.n_classes, self.device, self.seed = cfg, n_classes, device, seed
 
     @staticmethod
@@ -79,17 +81,17 @@ class Directed:
         bulk. Pure -> unit-testable."""
         return float(((torch.log10(a.clamp_min(_EPS)) - torch.log10(b.clamp_min(_EPS))) ** 2).mean())
 
-    def synth_psd(self, masks: Float[torch.Tensor, "n h w"], cfg) -> Float[torch.Tensor, "b"]:
+    def synth_psd(self, masks: Float[torch.Tensor, "n h w"], cfg: SynthCfg) -> Float[torch.Tensor, "b"]:
         """Radial PSD of a synth batch painted from `masks` under `cfg`. Reseed per call so every envelope
         candidate sees the same RNG stream — the PSD delta is the envelope, not paint noise."""
         torch.manual_seed(self.seed)
-        img, _ = SynthPainter.synthesize_from_labels(masks, cfg, self.n_classes)
+        img, *_ = SynthPainter.synthesize_from_labels(masks, cfg, self.n_classes)
         return Directed.radial_psd(img)
 
-    def fit(self, target_psd: Float[torch.Tensor, "b"], masks: Float[torch.Tensor, "n h w"]) -> dict:
+    def fit(self, target_psd: Float[torch.Tensor, "b"], masks: Float[torch.Tensor, "n h w"]) -> dict[str, Any]:
         """Grid-search the envelope knobs to minimize PSD distance to `target_psd`. Returns the best
         override set + the full ranked table (deterministic, reproducible from the seed)."""
-        rows = []
+        rows: list[dict[str, Any]] = []
         for sigma, keep, noise, bandlimited in product(_BLUR_SIGMAS, _KSPACE_KEEP, _NOISE_STDS, _BANDLIMITED):
             cfg = self.cfg.model_copy(update={"blur": (sigma, sigma), "kspace": keep,
                                               "noise": noise, "noise_bandlimited": bandlimited})
@@ -100,7 +102,7 @@ class Directed:
         return {"best": rows[0], "table": rows}
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--vendor", required=True,
                         help="target vendor to fit the envelope to (GE/Canon/Siemens/Philips) — its label value")
         ap.add_argument("--fit-frac", type=float, default=0.5,
@@ -110,11 +112,12 @@ class Directed:
         ap.add_argument("--out", default=None, help="write the fitted config + PSD table JSON here")
 
     @staticmethod
-    def _target_psd(args, data_cfg, size: int, device: str):
+    def _target_psd(args: argparse.Namespace, data_cfg: Any, size: int,
+                    device: str) -> tuple[Float[torch.Tensor, "b"], int, int]:
         """Load the target vendor's real images, take the seeded fit partition, return (target PSD, n_fit,
         n_holdout) — the hold-out count is what the xvx0 test arm gets (disjoint from the fit set)."""
         meta = store.load_cfg(data_cfg).filter(pl.col("labelled") & (pl.col("vendor") == args.vendor))
-        real, _ = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(meta), size, "cpu")
+        real, *_ = ACDCSliceDataset.load_to_gpu([p for p in splits.Splits.paths(meta)], size, "cpu")
         n = int(real.shape[0])
         if n == 0:
             raise ValueError(f"no labelled slices for vendor {args.vendor!r} in the cloud")
@@ -124,7 +127,7 @@ class Directed:
         return Directed.radial_psd(fit), int(fit.shape[0]), n - n_fit
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> dict[str, Any]:
         cfg = TrainCfg()
         Hparams.apply_overrides(cfg, [])
         device = Model.resolve_device(None)

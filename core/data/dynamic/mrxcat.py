@@ -22,6 +22,7 @@ whole-FOV coverage, painted by the shared engine.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import subprocess
 from pathlib import Path
@@ -129,12 +130,12 @@ class Mrxcat:
         crop = s[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         f = target_px / max(*crop.shape, 1)
         if abs(f - 1.0) > _ZOOM_NOOP_EPS:
-            crop = _zoom(crop, f, order=0)
+            crop = np.asarray(_zoom(crop, f, order=0))
         return Preprocess.fit_square(crop, size, 0).astype(np.uint8)
 
     @staticmethod
     def build_pool(vti_dir: str | Path, out_path: str | Path,
-                   cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple]:
+                   cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple[int, ...]]:
         """Every `*.vti` in `vti_dir` → canonical label volume → SAX slices → heart-crop+scale-to-real →
         `fit_square` to `cfg.size` → stacked label pool, saved to `out_path` (npz `slices` [N,size,size]
         uint8 — the shared `anatomy.load_pool` schema, so the generator consumes it identically). Heart bbox
@@ -178,12 +179,12 @@ class Mrxcat:
         half = int(max(ys.max() - ys.min(), xs.max() - xs.min()) * scale / 2) + 1
         y0, y1 = max(0, cy - half), min(s.shape[0], cy + half)
         x0, x1 = max(0, cx - half), min(s.shape[1], cx + half)
-        win = _zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0)
+        win = np.asarray(_zoom(s[y0:y1, x0:x1], size / max(y1 - y0, x1 - x0), order=0))
         return Preprocess.fit_square(win, size, 0).astype(np.uint8)
 
     @staticmethod
     def build_fov_pool(vti_dir: str | Path, out_path: str | Path, size: int = DEFAULT_SIZE,
-                       min_fg: int = 40, scale: float = 3.0) -> tuple[Path, tuple]:
+                       min_fg: int = 40, scale: float = 3.0) -> tuple[Path, tuple[int, ...]]:
         """WHOLE-FOV pool (bd q4ww): every `*.vti` → `to_tissue_map` → per slice, crop a chest window around
         the heart (`scale`× heart bbox) → resize to `size` → stacked 8-class FOV maps (npz `slices`). Unlike
         `build_pool` (heart-only 4-class), these keep surrounding organs so the painter (bg_mode='mrxcat')
@@ -221,7 +222,7 @@ class Mrxcat:
         out = fov.copy()
         out[hm] = 6                                                     # excise phantom heart → muscle
         crop = heart[hys.min():hys.max() + 1, hxs.min():hxs.max() + 1]
-        crop = _zoom(crop, target / max(crop.shape), order=0)
+        crop = np.asarray(_zoom(crop, target / max(crop.shape), order=0))
         h, w = crop.shape
         y0, x0 = cy - h // 2, cx - w // 2
         for yy in range(max(0, -y0), min(h, out.shape[0] - y0)):        # paste non-bg heart pixels, clipped
@@ -233,7 +234,7 @@ class Mrxcat:
 
     @staticmethod
     def build_ssm_fov_pool(rodero_pool: str | Path, vti_dir: str | Path, out_path: str | Path,  # noqa: PLR0913  KEEP? FOV compositing builder — two input dirs + FOV-specific `scale`; doesn't share PoolBuildCfg's fields (no min_fg/min_cav_frac). Its own cfg would be a 3-field singleton. bd if you want the sweep.
-                           size: int = DEFAULT_SIZE, scale: float = 3.0, seed: int = 0) -> tuple[Path, tuple]:
+                           size: int = DEFAULT_SIZE, scale: float = 3.0, seed: int = 0) -> tuple[Path, tuple[int, ...]]:
         """SSM × MRXCAT pool (bd majh): each OUR Rodero heart (from `rodero_pool`, canonical) is composited
         into a random XCAT whole-FOV chest window → 8-class FOV map = our anatomy diversity + MRXCAT context.
         Paint with bg_mode='mrxcat'. Reuses `_fov_window` for the XCAT backgrounds and `place_heart_in_fov`."""
@@ -247,14 +248,15 @@ class Mrxcat:
                     if w is not None:
                         bgs.append(w)
         rng = np.random.default_rng(seed)
-        slices = [Mrxcat.place_heart_in_fov(bgs[int(rng.integers(len(bgs)))], h) for h in hearts] if bgs else []
+        slices: list[np.ndarray] = (
+            [Mrxcat.place_heart_in_fov(bgs[int(rng.integers(len(bgs)))], h) for h in hearts] if bgs else [])
         arr = np.stack(slices).astype(np.uint8) if slices else np.zeros((0, size, size), np.uint8)
         out_path = Path(out_path); out_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(out_path, slices=arr)
         return out_path, arr.shape
 
     @staticmethod
-    def _cmd_probe(args) -> None:  # pragma: no cover
+    def _cmd_probe(args: argparse.Namespace) -> None:  # pragma: no cover
         """Probe one MRXCAT `.vti`: raw + canonical label counts (sanity-check the remap before building)."""
         vol = Mrxcat.load_vti_labels(args.vti)
         raw = {int(c): int((vol == c).sum()) for c in np.unique(vol)}
@@ -263,7 +265,7 @@ class Mrxcat:
         log.info(f"vti {vol.shape}\nraw label counts: {raw}\ncanonical (0bg 1RV 2myo 3LVcav): {cc}")
 
     @staticmethod
-    def _cmd_fetch(args) -> None:  # pragma: no cover
+    def _cmd_fetch(args: argparse.Namespace) -> None:  # pragma: no cover
         """Clone + pin the external MRXCAT2.0 tool into gitignored external/mrxcat2 (idempotent)."""
         if (_MRXCAT_DIR / ".git").exists():
             log.info(f"mrxcat2 already present at {_MRXCAT_DIR}; skipping clone")
@@ -274,19 +276,19 @@ class Mrxcat:
         log.info(f"cloned mrxcat2 @ {_MRXCAT_PIN} into {_MRXCAT_DIR}")
 
     @staticmethod
-    def _cmd_build_pool(args) -> None:  # pragma: no cover
+    def _cmd_build_pool(args: argparse.Namespace) -> None:  # pragma: no cover
         """Build the heart-only canonical MRXCAT pool from a dir of `.vti` phantoms."""
         out_path, shape = Mrxcat.build_pool(args.vti_dir, args.out)
         log.info(f"wrote pool {out_path}  shape {shape}")
 
     @staticmethod
-    def _cmd_build_fov_pool(args) -> None:  # pragma: no cover
+    def _cmd_build_fov_pool(args: argparse.Namespace) -> None:  # pragma: no cover
         """Build the whole-FOV 8-class MRXCAT pool from a dir of `.vti` phantoms."""
         out_path, shape = Mrxcat.build_fov_pool(args.vti_dir, args.out, args.size, args.min_fg)
         log.info(f"wrote fov pool {out_path}  shape {shape}")
 
     @staticmethod
-    def _cmd_build_ssm_fov_pool(args) -> None:  # pragma: no cover
+    def _cmd_build_ssm_fov_pool(args: argparse.Namespace) -> None:  # pragma: no cover
         """Build the SSM×MRXCAT composite pool (our hearts in XCAT whole-FOV context)."""
         out_path, shape = Mrxcat.build_ssm_fov_pool(args.rodero_pool, args.vti_dir, args.out, args.size, args.scale)
         log.info(f"wrote ssm-fov pool {out_path}  shape {shape}")
@@ -302,13 +304,13 @@ class Mrxcat:
         return [(tissue, round(counts[tissue] / total, 3)) for tissue in _FOV_TO_TORSO.values() if counts[tissue]]
 
     @staticmethod
-    def _cmd_torso_fractions(args) -> None:  # pragma: no cover
+    def _cmd_torso_fractions(args: argparse.Namespace) -> None:  # pragma: no cover
         """Print TORSO_BG = phantom bg-tissue area fractions (reproduces mri_physics.TORSO_BG)."""
         fractions = Mrxcat.torso_fractions(args.pool)
         log.info("TORSO_BG = (%s)", ", ".join(f"(Tissue.{t.name}, {f})" for t, f in fractions))
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         sub = ap.add_subparsers(dest="cmd", required=True)
 
         pr = sub.add_parser("probe", help="raw + canonical label counts for one .vti")
@@ -338,7 +340,7 @@ class Mrxcat:
         tf.add_argument("--pool", required=True, help="whole-FOV pool npz (from build-fov-pool)")
 
     @classmethod
-    def run(cls, args):  # pragma: no cover
+    def run(cls, args: argparse.Namespace) -> None:  # pragma: no cover
         {"probe": cls._cmd_probe, "fetch": cls._cmd_fetch, "build-pool": cls._cmd_build_pool,
          "build-fov-pool": cls._cmd_build_fov_pool,
          "build-ssm-fov-pool": cls._cmd_build_ssm_fov_pool,

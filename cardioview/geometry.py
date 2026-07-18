@@ -1,15 +1,17 @@
 """Pure mask geometry for cardioview — no torch / vtk / IO, so it's cheaply unit-testable."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
 
-def nearest_index(values, target) -> int:
+def nearest_index(values: Sequence[float], target: float) -> int:
     """Index of the value closest to `target` (e.g. map an ED/ES frame to a sampled frame)."""
     return min(range(len(values)), key=lambda i: abs(values[i] - target))
 
 
-def bbox_slices(mask_bool: np.ndarray, spacing, margin_mm: float = 12.0) -> tuple[slice, ...]:
+def bbox_slices(mask_bool: np.ndarray, spacing: Sequence[float], margin_mm: float = 12.0) -> tuple[slice, ...]:
     """Tight bounding box of the True voxels + a mm margin per axis, clamped to the array."""
     sl = []
     for ax, n in enumerate(mask_bool.shape):

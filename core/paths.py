@@ -73,6 +73,8 @@ class Paths:
         if native:
             return native
         d = Paths.win_drive(raw)
+        if d is None:
+            raise ValueError(f"to_wsl expects a Windows drive path, got {raw!r}")
         rest = PureWindowsPath(raw).parts[1:]         # drop the 'D:\\' anchor
         return str(PurePosixPath("/mnt", d, *rest))
 

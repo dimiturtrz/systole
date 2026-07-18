@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from cardioseg.evaluation import matrix
-from core.data.ingest.testsets import TestSet
+from core.data.ingest.testsets import Task, TestSet
 from core.data.static.store import DataCfg
 
 V = pl.col
@@ -24,9 +24,9 @@ def _meta():
 
 # lock-free TestSets (no drift guard) over the controlled meta
 _TS = {
-    "canon": TestSet("canon", "seg4", V("vendor") == "Canon"),
-    "siemens": TestSet("siemens", "seg4", V("vendor") == "Siemens"),
-    "scd_lv": TestSet("scd_lv", "seg_lv", V("dataset") == "acdc"),   # acdc stands in as a resolvable seg_lv
+    "canon": TestSet("canon", Task.SEG4, V("vendor") == "Canon"),
+    "siemens": TestSet("siemens", Task.SEG4, V("vendor") == "Siemens"),
+    "scd_lv": TestSet("scd_lv", Task.SEG_LV, V("dataset") == "acdc"),   # acdc stands in as a resolvable seg_lv
 }
 
 

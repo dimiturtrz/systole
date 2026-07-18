@@ -18,15 +18,15 @@ class _FakeNet(nn.Module):
         self.loaded = self.evaled = None
         self.device = None
 
-    def load_state_dict(self, sd):
-        self.loaded = sd
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        self.loaded = state_dict
 
     def eval(self):
         self.evaled = True
         return self
 
-    def to(self, device):
-        self.device = device
+    def to(self, *args, **kwargs):
+        self.device = args[0] if args else kwargs.get("device")
         return self
 
 

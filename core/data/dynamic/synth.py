@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, override
 
 import torch
 import torch.nn.functional as F
@@ -41,12 +41,13 @@ from .mrxcat import FOV_TISSUE
 
 
 # --- shared painter tensor primitives (the repeated micro-shapes across the pipeline, bd je13) ---
-def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev) -> Float[torch.Tensor, "..."]:
+def _uniform(lo: float, hi: float, shape: tuple[int, ...], dev: torch.device) -> Float[torch.Tensor, "..."]:
     """Uniform sample in [lo, hi) of `shape` — the rand*(hi-lo)+lo lerp used across acq/inflow/blur."""
     return torch.rand(*shape, device=dev) * (hi - lo) + lo
 
 
-def _smooth_field(b: int, grid: int, out_hw, dev, *, signed: bool = False) -> Float[torch.Tensor, "b 1 h w"]:
+def _smooth_field(b: int, grid: int, out_hw: tuple[int, ...], dev: torch.device,
+                  *, signed: bool = False) -> Float[torch.Tensor, "b 1 h w"]:
     """Coarse [b,1,grid,grid] random field bilinear-upsampled to `out_hw` ([b,1,H,W]). signed -> [-1,1]
     (the bias/B0 fields); else [0,1) (the procedural/trabecular fields)."""
     low = torch.rand(b, 1, grid, grid, device=dev)
@@ -61,7 +62,7 @@ def _class_map(oh: Float[torch.Tensor, "b c h w"],
     return (oh * per_class[:, :, None, None]).sum(1, keepdim=True)
 
 
-def _gauss_blur(x: Float[torch.Tensor, "b 1 h w"], sigma: float, dev) -> Float[torch.Tensor, "b 1 h w"]:
+def _gauss_blur(x: Float[torch.Tensor, "b 1 h w"], sigma: float, dev: torch.device) -> Float[torch.Tensor, "b 1 h w"]:
     """Gaussian blur via an Augmentor.gaussian_kernel conv2d (partial-volume + resolution stages)."""
     k = Augmentor.gaussian_kernel(sigma).to(dev)
     k = k.view(1, 1, *k.shape)
@@ -82,6 +83,7 @@ class LegacyAcqCfg(AcquisitionCfg):
     """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg)."""
     mode: Literal["legacy"] = "legacy"
 
+    @override
     def build(self):
         return LegacyAcq()
 
@@ -90,6 +92,7 @@ class RandomizedAcqCfg(AcquisitionCfg):
     """Physics-bounded domain randomization (derive_flip_range over the SAR-bounded band)."""
     mode: Literal["randomized"] = "randomized"
 
+    @override
     def build(self):
         return RandomizedAcq()
 
@@ -102,6 +105,7 @@ class MatchedAcqCfg(AcquisitionCfg):
     match_flip_deg: float = 50.0                    # target flip angle (deg)
     match_vendor: str = ""                          # target vendor tag ("" -> first of vendors)
 
+    @override
     def build(self):
         return MatchedAcq(self.match_field, self.match_tr_ms, self.match_flip_deg, self.match_vendor)
 
@@ -123,6 +127,7 @@ class FlatBgCfg(BackgroundCfg):
     """Single background tissue tier."""
     mode: Literal["flat"] = "flat"
 
+    @override
     def build(self):
         return FlatBg()
 
@@ -132,6 +137,7 @@ class ProceduralBgCfg(BackgroundCfg):
     mode: Literal["procedural"] = "procedural"
     bg_blobs: int = Field(6, ge=2)                  # coarse random-field grid (smaller = bigger organ blobs)
 
+    @override
     def build(self):
         return ProceduralBg(self.bg_blobs)
 
@@ -141,6 +147,7 @@ class PartitionBgCfg(BackgroundCfg):
     mode: Literal["partition"] = "partition"
     bg_tiers: int = Field(6, ge=2)
 
+    @override
     def build(self):
         return PartitionBg(self.bg_tiers)
 
@@ -149,6 +156,7 @@ class HybridBgCfg(BackgroundCfg):
     """Paint heart on flat bg; composite the real (heart-excised) background back in."""
     mode: Literal["hybrid"] = "hybrid"
 
+    @override
     def build(self):
         return HybridBg()
 
@@ -157,6 +165,7 @@ class MrxcatBgCfg(BackgroundCfg):
     """Whole-FOV MRXCAT tissue map (mask IS the 8-class FOV; paint all tissues)."""
     mode: Literal["mrxcat"] = "mrxcat"
 
+    @override
     def build(self):
         return FovBg()
 
@@ -179,21 +188,21 @@ class SynthCfg(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _lift_legacy(cls, v):
+    def _lift_legacy(cls, v: Any):
         """Back-compat: old config.json had flat acq_mode/match_* and bg_mode/bg_tiers/bg_blobs; fold them
         into the `acq` / `bg` discriminated unions so pre-refactor configs (registered models) still load."""
         if not isinstance(v, dict):
             return v
         if "acq" not in v and "acq_mode" in v:
             v = dict(v)
-            acq: dict = {"mode": v.pop("acq_mode")}
+            acq: dict[str, Any] = {"mode": v.pop("acq_mode")}
             for k in ("match_field", "match_tr_ms", "match_flip_deg", "match_vendor"):
                 if k in v:
                     acq[k] = v.pop(k)
             v["acq"] = acq
         if "bg" not in v and "bg_mode" in v:
             v = dict(v)
-            bg: dict = {"mode": v.pop("bg_mode")}
+            bg: dict[str, Any] = {"mode": v.pop("bg_mode")}
             for k in ("bg_tiers", "bg_blobs"):
                 if k in v:
                     val = v.pop(k)
@@ -273,7 +282,7 @@ class Background(ABC):
     keeps_heart_aligned: bool = False                        # True -> painter must NOT deform (heart
 
     @abstractmethod                                          #         must line up with the real hole)
-    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev,
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev: torch.device,
                real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
                ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         """-> (ext [B,H,W] long, n_paint). bg pixels (label 0) may be relabeled to n_classes+tier."""
@@ -282,7 +291,7 @@ class Background(ABC):
                 real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Float[torch.Tensor, "*b 1 *h *w"]:
         return img                                           # default: painter output is final
 
-    def paint_params(self, n_classes: int, n_paint: int, field: float, dev):
+    def paint_params(self, n_classes: int, n_paint: int, field: float, dev: torch.device):
         """(T1,T2,PD) [n_paint] for the extended classes at `field`. Default = heart classes + bg-ladder
         tiers (`tissue_params`). A strategy that assigns each class an EXPLICIT tissue (FovBg) overrides."""
         return MriPhysics.tissue_params(n_classes, n_paint - n_classes, field, dev)
@@ -296,7 +305,10 @@ class Background(ABC):
 
 class FlatBg(Background):
     """Single background tissue (bg stays label 0 -> painted by the muscle fallback)."""
-    def extend(self, mask, n_classes, dev, real_img=None):
+    @override
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
+               ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         return mask, n_classes
 
 
@@ -306,10 +318,14 @@ class _TierBg(Background):
         self.k_tiers = k_tiers
 
     @abstractmethod
-    def _field(self, mask, dev, real_img):
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Integer[torch.Tensor, "*b *grid"]:
         ...
 
-    def extend(self, mask, n_classes, dev, real_img=None):
+    @override
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
+               ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         if self.needs_real_img and real_img is None:
             return mask, n_classes                           # no bg source -> fall back to flat
         tier = self._field(mask, dev, real_img)
@@ -327,11 +343,14 @@ class ProceduralBg(_TierBg):
         super().__init__(len(TORSO_BG))
         self.blobs = blobs
 
-    def _field(self, mask, dev, real_img=None):
+    @override
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
         fb = _smooth_field(mask.shape[0], self.blobs, mask.shape[-2:], dev)[:, 0]
         return torch.bucketize(fb.contiguous(), MriPhysics.torso_thresholds(dev))  # physical area fractions
 
-    def paint_params(self, n_classes, n_paint, field, dev):
+    @override
+    def paint_params(self, n_classes: int, n_paint: int, field: float, dev: torch.device):
         return MriPhysics.torso_paint_params(n_classes, field, dev)               # named torso tissues
 
 
@@ -340,9 +359,11 @@ class PartitionBg(_TierBg):
     MUST have its heart excised (excise_heart) or a different heart leaks into the tiers (bd mirs)."""
     needs_real_img = True
 
-    def _field(self, mask, dev, real_img):
+    @override
+    def _field(self, mask: Integer[torch.Tensor, "*b *grid"], dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None) -> Integer[torch.Tensor, "*b *grid"]:
         thr = torch.linspace(-1.0, 1.0, self.k_tiers - 1, device=dev)       # K-1 thresholds -> K bins
-        return torch.bucketize(real_img[:, 0].contiguous(), thr)
+        return torch.bucketize(real_img[:, 0].contiguous(), thr)  # type: ignore[union-attr]
 
 
 class HybridBg(Background):
@@ -351,10 +372,15 @@ class HybridBg(Background):
     needs_real_img = True
     keeps_heart_aligned = True
 
-    def extend(self, mask, n_classes, dev, real_img=None):
+    @override
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
+               ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         return mask, n_classes                               # paint heart + flat bg; bg replaced in compose
 
-    def compose(self, img, mask, real_img):
+    @override
+    def compose(self, img: Float[torch.Tensor, "*b 1 *h *w"], mask: Integer[torch.Tensor, "*b *grid"],
+                real_img: Float[torch.Tensor, "*b 1 *h *w"] | None) -> Float[torch.Tensor, "*b 1 *h *w"]:
         if real_img is None:
             return img
         fg = (mask > 0)[:, None]
@@ -368,13 +394,18 @@ class FovBg(Background):
     coincide with the canonical seg labels, so the training target is recovered downstream as the FOV map
     restricted to {1,2,3}. `mask` passed to the painter IS this FOV map; n_classes stays the model's 4
     (blood/inflow logic keys on cavities 1/3, unchanged)."""
-    def extend(self, mask, n_classes, dev, real_img=None):
+    @override
+    def extend(self, mask: Integer[torch.Tensor, "*b *grid"], n_classes: int, dev: torch.device,
+               real_img: Float[torch.Tensor, "*b 1 *h *w"] | None = None,
+               ) -> tuple[Integer[torch.Tensor, "*b *grid"], int]:
         return mask.long(), len(FOV_TISSUE)                  # mask is the FOV tissue map; paint all 8
 
-    def paint_params(self, n_classes, n_paint, field, dev):
+    @override
+    def paint_params(self, n_classes: int, n_paint: int, field: float, dev: torch.device):
         return MriPhysics.named_tissue_params([FOV_TISSUE[c] for c in range(n_paint)], field, dev)
 
-    def seg_target(self, mask):
+    @override
+    def seg_target(self, mask: Integer[torch.Tensor, "*b *grid"]) -> Integer[torch.Tensor, "*b *grid"]:
         return mask.where(mask <= 3, torch.zeros_like(mask))  # noqa: PLR2004  FOV 4..7 (organs)→bg; heart 1..3 kept
 
 
@@ -384,13 +415,15 @@ class Acquisition(ABC):
     """Per-sample SCANNER SETTINGS strategy: pick field index (into cfg.fields), TR (ms), flip (deg),
     and vendor index (into cfg.vendors). One impl per mode — the painter holds no acq if/else."""
     @abstractmethod
-    def sample(self, b: int, cfg: SynthCfg, dev):
+    def sample(self, b: int, cfg: SynthCfg,
+               dev: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """-> (fi [b] long, tr [b,1], fl [b,1], vi [b] long)."""
 
 
 class LegacyAcq(Acquisition):
     """TR/flip uniform over the cfg global ranges (tr_ms, flip_deg). Field/vendor uniform-random."""
-    def sample(self, b, cfg, dev):
+    @override
+    def sample(self, b: int, cfg: SynthCfg, dev: torch.device):
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
         tr = _uniform(cfg.tr_ms[0], cfg.tr_ms[1], (b, 1), dev)
         fl = _uniform(cfg.flip_deg[0], cfg.flip_deg[1], (b, 1), dev)
@@ -401,7 +434,8 @@ class LegacyAcq(Acquisition):
 class RandomizedAcq(Acquisition):
     """Physics-bounded domain randomization: TR over the cited cine band, flip across the per-field
     SAR-bounded FWHM contrast range (derive_flip_range). Breadth, not the single optimal point."""
-    def sample(self, b, cfg, dev):
+    @override
+    def sample(self, b: int, cfg: SynthCfg, dev: torch.device):
         fi = torch.randint(len(cfg.fields), (b,), device=dev)
         rng = torch.tensor([MriPhysics.derive_flip_range(float(f)) for f in cfg.fields], device=dev)   # [F,2] lo,hi
         tr = _uniform(TR_RANGE_MS[0], TR_RANGE_MS[1], (b, 1), dev)
@@ -417,7 +451,8 @@ class MatchedAcq(Acquisition):
     def __init__(self, field: float, tr_ms: float, flip_deg: float, vendor: str):
         self.field, self.tr_ms, self.flip_deg, self.vendor = field, tr_ms, flip_deg, vendor
 
-    def sample(self, b, cfg, dev):
+    @override
+    def sample(self, b: int, cfg: SynthCfg, dev: torch.device):
         fields = torch.tensor(cfg.fields, device=dev)
         fidx = int(torch.argmin((fields - self.field).abs()))               # nearest available field
         vidx = cfg.vendors.index(self.vendor) if self.vendor in cfg.vendors else 0
@@ -464,7 +499,8 @@ class SynthPainter:
 
     @staticmethod
     @shapecheck
-    def _deform_grid(b: int, h: int, w: int, amp: float, dev, steps: int = 6) -> Float[torch.Tensor, "b h w 2"]:  # noqa: PLR0913  geometry params (b,h,w,amp,steps — independent)
+    def _deform_grid(b: int, h: int, w: int, amp: float,  # noqa: PLR0913
+                     dev: torch.device, steps: int = 6) -> Float[torch.Tensor, "b h w 2"]:
         """DIFFEOMORPHIC (topology-preserving) elastic warp as a grid_sample grid [B,H,W,2]. A coarse 5x5
         velocity field (U[-amp,amp], bicubic-upsampled) is INTEGRATED by scaling-and-squaring so the map
         stays invertible — it can't fold/tear the anatomy. The old `ident + disp` (non-integrated) folds at
@@ -472,7 +508,7 @@ class SynthPainter:
         (SynthSeg/VoxelMorph) fixes that. amp = velocity magnitude in normalized [-1,1] coords."""
         v = (torch.rand(b, 2, 5, 5, device=dev) * 2 - 1) * amp
         v = F.interpolate(v, size=(h, w), mode="bicubic", align_corners=False)          # [B,2,H,W] velocity
-        ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), (b, 1, h, w),
+        ident = F.affine_grid(torch.eye(2, 3, device=dev).expand(b, 2, 3), [b, 1, h, w],
                               align_corners=False)                                      # [B,H,W,2]
         d = (v / (2 ** steps)).permute(0, 2, 3, 1)                                      # [B,H,W,2] small displ
         for _ in range(steps):                                 # scaling-and-squaring: phi = phi ∘ phi
@@ -564,6 +600,8 @@ class SynthPainter:
                 trab = (tfield < (cfg.trabec_rv if c == RV else cfg.trabec_lv)).float() * oh[:, c:c + 1]
                 mu_map = mu_map * (1 - trab) + myo_sig * trab
         p.mu_map = mu_map
+        if not (p.sg is not None):
+            raise AssertionError  # set by _blood_texture (prior phase)
         p.sg_map = _class_map(oh, p.sg)
 
     @staticmethod
@@ -571,6 +609,8 @@ class SynthPainter:
         """Image-domain acquisition degradation: paint the texture, partial-volume blur, smooth bias field,
         then the resolution/noise chain (band-limited-vs-white Rician, Gaussian blur, k-space PSF)."""
         cfg, b, dev = p.cfg, p.b, p.dev
+        if not (p.mu_map is not None and p.sg_map is not None):
+            raise AssertionError  # set by _class_maps (prior phase)
         mu_map = _gauss_blur(p.mu_map, cfg.pv_sigma, dev) if cfg.pv_sigma > 0 else p.mu_map
         img = mu_map + p.sg_map * torch.randn(b, 1, *p.mask.shape[-2:], device=dev)   # painted texture
         if cfg.bias_strength > 0:                       # smooth multiplicative B1/coil bias (the N4 dual)
@@ -606,7 +646,8 @@ class SynthPainter:
         mask = mask.long()
         bg = cfg.bg.build()                              # bg STRATEGY (flat/procedural/partition/hybrid/mrxcat)
         if cfg.deform > 0 and not bg.keeps_heart_aligned:   # hybrid keeps heart aligned with the real hole
-            grid = SynthPainter._deform_grid(b, *mask.shape[-2:], cfg.deform, dev)
+            h, w = int(mask.shape[-2]), int(mask.shape[-1])
+            grid = SynthPainter._deform_grid(b, h, w, cfg.deform, dev)
             mask = F.grid_sample(mask[:, None].float(), grid, mode="nearest",
                                  padding_mode="border", align_corners=False)[:, 0].long()
         # extend the heart-only labels to the whole FOV (bg tissue tiers / real SHAPES / random blobs — the
@@ -633,6 +674,8 @@ class SynthPainter:
         SynthPainter._blood_texture(p)           # per-class signal: inflow/blood-scale/contrast-random/texture/flow
         SynthPainter._class_maps(p)              # per-pixel mean/std maps: B0 banding + trabecular PV
         SynthPainter._degrade(p)                 # image domain: pv-blur/bias/blur/k-space/Rician
+        if not (p.img is not None):
+            raise AssertionError  # set by _degrade (prior phase)
         img = bg.compose(p.img, mask, real_img)  # hybrid pastes synth heart into real; else no-op (bd mirs)
 
         # z-score per sample (match the real preprocessed input distribution)

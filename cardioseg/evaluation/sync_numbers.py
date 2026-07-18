@@ -9,10 +9,13 @@ Run after regenerating RESULTS.json (cardioseg.evaluation results):  python -m c
 Prose-embedded numbers ("Dice 0.89" mid-sentence) are NOT templated — keep those few; the tables
 (where the drift happened) are now generated.
 """
+import argparse
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from core.data.static.mri.pathology import PathologyClass
 
@@ -70,7 +73,7 @@ class SyncNumbers:
         return "\n".join(rows)
 
     @staticmethod
-    def _cal(ax: dict) -> str:
+    def _cal(ax: dict[str, Any]) -> str:
         """The disclosed calibrated-EF cell for one axis: `raw → cal`, or `—` before RESULTS.json carries it."""
         return f"{ax['ef_mae']} → **{ax['ef_mae_cal']}**%" if "ef_mae_cal" in ax else "—"
 
@@ -107,7 +110,7 @@ class SyncNumbers:
     def nnucompare() -> str:  # nnU-Net README: per-structure rows + Δ on held-out GE (n=69, the larger vendor)
         ours, nnunet = _G["dice"], _NN["ge"]["dice"]
 
-        def dice_delta(structure):
+        def dice_delta(structure: str) -> float:
             return (nnunet[structure] - ours[structure]) * 100
         return "\n".join([
             "| segmenter (held-out GE, n=69) | mean Dice | LV-cav | myo | RV | EF MAE | notes |",
@@ -132,7 +135,7 @@ class SyncNumbers:
                 f"(bias {_A['ef_bias']:+.1f}%, LoA [{_A['ef_loa'][0]:.0f}, {_A['ef_loa'][1]:+.0f}]).")
 
     @staticmethod
-    def inject_blocks(txt: str, blocks: dict) -> tuple[str, int]:
+    def inject_blocks(txt: str, blocks: dict[str, Callable[[], str]]) -> tuple[str, int]:
         """Replace each `<!-- results:KEY -->...<!-- /results:KEY -->` span with `\\n{fn()}\\n` between the
         markers. Returns (new_text, n_blocks_substituted). Pure string transform (the file read/write is the
         shell in `main`) — so the marker-matching + idempotent re-render is testable on an in-memory string.
@@ -147,11 +150,12 @@ class SyncNumbers:
         return txt, total
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         pass
 
     @staticmethod
-    def run(args):  # pragma: no cover  (per-file read/write loop over the doc TARGETS; inject_blocks is the pure core)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # per-file read/write loop over the doc TARGETS; inject_blocks is the pure core
         total = 0
         for f in TARGETS:
             p = ROOT / f

@@ -6,12 +6,14 @@ labels to this via `label_map`, so one model's labels mean the same thing across
 
 Shapes: volumes are [D, H, W] (D slices, H×W in-plane); spacing is (z, y, x) mm.
 """
+from __future__ import annotations
+
 import csv
 import os
 from collections.abc import Callable, Iterator, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, TypedDict, runtime_checkable
+from typing import Any, ClassVar, Protocol, TypedDict, override, runtime_checkable
 
 import nibabel as nib
 import numpy as np
@@ -37,6 +39,7 @@ class Vendor(StrEnum):
     CANON = "Canon"
 
     @classmethod
+    @override
     def _missing_(cls, value: object) -> "Vendor | None":
         """Case-insensitive lookup (a CSV/DICOM field may ship 'SIEMENS'/'ge')."""
         if isinstance(value, str):
@@ -53,6 +56,7 @@ class Phase(StrEnum):
     ES = "ES"
 
     @classmethod
+    @override
     def _missing_(cls, value: object) -> "Phase | None":
         if isinstance(value, str):
             up = value.strip().upper()
@@ -109,7 +113,7 @@ class Base:
     loader skeleton, label remap, geometric LV-cavity id). Every adapter + the store call these."""
 
     @staticmethod
-    def to_float(v):
+    def to_float(v: Any) -> float | None:
         """Parse a CSV/cfg field to float; None on missing/garbage. Shared by all adapters."""
         try:
             return float(v)
@@ -117,8 +121,8 @@ class Base:
             return None
 
     @staticmethod
-    def load_csv_info(csv_path, key_col: str, *, alt_key_col: str | None = None,
-                      key_transform=None) -> dict[str, dict[str, str]]:
+    def load_csv_info(csv_path: str | Path, key_col: str, *, alt_key_col: str | None = None,
+                      key_transform: Callable[[str], str] | None = None) -> dict[str, dict[str, str]]:
         """Parse a metadata CSV -> {key -> {column: stripped value}}, cached by path.
 
         key comes from `key_col` (or `alt_key_col` if that column is absent — datasets ship both
@@ -170,7 +174,9 @@ class Base:
         return arr, (zz, zy, zx)
 
     @staticmethod
-    def load_frames(group, resolve, label_map: dict[int, int]) -> "PatientData":
+    def load_frames(group: str | None,
+                    resolve: Callable[[Any], tuple[str | Path, str | Path, int | None] | None],
+                    label_map: dict[int, int]) -> PatientData:
         """Shared ED/ES loader skeleton for the adapters. `resolve(tag)` returns (img_path, gt_path,
         frame|None) for that cardiac phase, or None to skip it; the adapter-specific bit is just that
         closure. Loads each frame (4D-aware via `frame`), remaps the mask to canonical, carries spacing."""
@@ -185,7 +191,11 @@ class Base:
             img, sp = Base.load_nifti(img_p, frame=frame)
             gt, _ = Base.load_nifti(gt_p, frame=frame)
             out["spacing"] = sp
-            out[tag] = {"img": img, "gt": Base.apply_label_map(gt, label_map)}
+            frame_data: Frame = {"img": img, "gt": Base.apply_label_map(gt, label_map)}
+            if tag is Phase.ED:
+                out["ED"] = frame_data
+            else:
+                out["ES"] = frame_data
         return out
 
     @staticmethod
@@ -212,7 +222,7 @@ class Base:
             cav = mask == lab
             shell = ndimage.binary_dilation(cav) & ~cav
             scores[lab] = float((shell & myo).sum()) / float(shell.sum()) if shell.sum() else 0.0
-        lv = max(scores, key=scores.get) if scores else None
+        lv = max(scores, key=lambda lab: scores[lab]) if scores else None
         return lv, scores
 
 
@@ -232,9 +242,9 @@ class DatasetAdapter(Protocol):
     `meta()` is the normalization hook: acquisition/demographics parsed from the dataset's own
     shipped files (the AUTO tier), feeding stratified eval + the reference store.
     """
-    name: str                   # also the processed/<name>/ folder in the store
-    label_map: dict[int, int]   # raw int -> canonical (0 bg, 1 RV, 2 myo, 3 LV-cav)
+    name: str                              # also the processed/<name>/ folder in the store
+    label_map: ClassVar[dict[int, int]]    # raw int -> canonical (0 bg, 1 RV, 2 myo, 3 LV-cav)
 
     def cases(self) -> list[Path]: ...
     def load_ed_es(self, case: Path) -> PatientData: ...   # labels already canonical
-    def meta(self, case: Path) -> dict: ...                # parsed acquisition/demographics
+    def meta(self, case: Path) -> dict[str, Any]: ...                # parsed acquisition/demographics

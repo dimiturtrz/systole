@@ -8,6 +8,7 @@ under the run dir. Gated by argmax parity vs PyTorch on a real patient; if a con
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import shutil
 from pathlib import Path
@@ -35,12 +36,12 @@ class ExportOnnx:
     PyTorch↔ONNX argmax parity, and the parity-gated export (+ INT8 quant)."""
 
     @staticmethod
-    def _load_model(run: Path):
+    def _load_model(run: Path) -> torch.nn.Module:
         """Load run weights on CPU for export — architecture from the run's saved config.json."""
         return Run.load_run(run, "cpu")[0]
 
     @staticmethod
-    def _parity(model, onnx_path: Path, npz_path) -> float:
+    def _parity(model: torch.nn.Module, onnx_path: Path, npz_path: str | Path) -> float:
         """Per-slice argmax agreement (%) between PyTorch and an ONNX file on one consolidated subject."""
         sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
         case = store.load_arrays(npz_path)
@@ -50,7 +51,7 @@ class ExportOnnx:
             x = s[None, None].astype(np.float32)
             with torch.no_grad():
                 t = model(torch.from_numpy(x)).argmax(1)[0].numpy()
-            o = sess.run(None, {"input": x})[0].argmax(1)[0]
+            o = np.asarray(sess.run(None, {"input": x})[0]).argmax(1)[0]
             agree += int((t == o).sum())
             total += t.size
         return 100 * agree / total
@@ -63,7 +64,7 @@ class ExportOnnx:
         model = ExportOnnx._load_model(run)
         path = run / "model.onnx"
         torch.onnx.export(
-            model, torch.randn(1, 1, SIZE, SIZE), str(path),
+            model, (torch.randn(1, 1, SIZE, SIZE),), str(path),
             input_names=["input"], output_names=["logits"],
             dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
             opset_version=opset,
@@ -85,7 +86,7 @@ class ExportOnnx:
         return path
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF, help="run dir holding model.pth")
         ap.add_argument("--verify", default=None, help="npz for the parity check (default: first ACDC subject)")
         ap.add_argument("--no-quantize", dest="quantize", action="store_false")
@@ -94,7 +95,7 @@ class ExportOnnx:
                         help=f"%% argmax agreement to ship INT8 (default {PARITY_MIN})")
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> None:
         verify = args.verify if args.verify else store.load([Dataset.ACDC]).get_column("path")[0]
-        ExportOnnx.export(Registry.resolve(args.run), verify, args.quantize,
+        ExportOnnx.export(Registry.resolve(args.run), verify, quantize=args.quantize,
                           opset=args.opset, parity_min=args.parity_min)

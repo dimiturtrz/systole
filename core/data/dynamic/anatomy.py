@@ -13,10 +13,10 @@ pyvista + vtk are the `viz` extra (imported lazily). ED-only, CT-derived (see bd
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
-from numbers import Integral
 from pathlib import Path
 
 import numpy as np
@@ -93,7 +93,7 @@ class Anatomy:
     offline pool builders (`build_pool`, `build_pathology_pool`, `load_pool`)."""
 
     @staticmethod
-    def _tag_name(mesh) -> str:
+    def _tag_name(mesh: pv.DataSet) -> str:
         """The per-cell region-tag array. Two Rodero packagings: real-patient cohort (4590294) tags it
         'ID' + ships 'Z.dat' universal coords; the 1000 SSM-sampled cohort (4506930) tags it 'elemTag'
         with NO point data. Same 1..24 scheme (1=LV, 2=RV myo)."""
@@ -115,7 +115,7 @@ class Anatomy:
         return np.eye(3) + skew_matrix + skew_matrix @ skew_matrix * ((1 - cosine) / (sine * sine))
 
     @staticmethod
-    def _sax_align(mesh):
+    def _sax_align(mesh: pv.DataSet) -> pv.DataSet:
         """Rotate the mesh so the LV long axis (apex->base) points +z, so plain axial slices of the
         voxelized volume are short-axis. Uses the 'Z.dat' apico-basal coord when present (real cohort);
         else derives the axis geometrically (PCA long-axis of the LV myocardium, oriented apex->base by
@@ -151,7 +151,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def _wall_mask(mesh, region_id: int, grid, tag: str) -> Bool[np.ndarray, "*n"]:
+    def _wall_mask(mesh: pv.DataSet, region_id: int, grid: pv.ImageData, tag: str) -> Bool[np.ndarray, "*n"]:
         """Boolean grid-point mask of one region's wall solid (its closed tet-shell surface encloses the
         grid points that lie in the myocardium)."""
         region_mesh = mesh.threshold([region_id, region_id], scalars=tag)
@@ -193,7 +193,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def voxelize(mesh, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
+    def voxelize(mesh: pv.DataSet, inplane: float = DEFAULT_INPLANE, slice_mm: float = 8.0,
                  rv_close: int = 3) -> Integer[np.ndarray, "d h w"]:
         """SAX-aligned 3-class label volume [D, H, W] (RV-cav 1 / LV-myo 2 / LV-cav 3) from a Rodero mesh.
         Walls rasterized via enclosed-points; cavities recovered by 2D hole-fill per SAX slice (LV ring ->
@@ -217,7 +217,7 @@ class Anatomy:
 
     @staticmethod
     @shapecheck
-    def _scale_to_target(vol: Integer[np.ndarray, "d h w"], target_px: Integral) -> Integer[np.ndarray, "d h2 w2"]:
+    def _scale_to_target(vol: Integer[np.ndarray, "d h w"], target_px: int) -> Integer[np.ndarray, "d h2 w2"]:
         """Uniformly in-plane rescale a [D,H,W] label volume so its GLOBAL max fg-bbox longest side hits
         `target_px` (nearest-neighbour, label-preserving). No-op if the heart has no foreground."""
         fg = vol > 0
@@ -228,16 +228,19 @@ class Anatomy:
         scale_factor = target_px / max(current_side, 1)
         if abs(scale_factor - 1.0) < _ZOOM_NOOP_EPS:
             return vol
-        return _zoom(vol, (1.0, scale_factor, scale_factor), order=0)   # in-plane only; slices (z) untouched
+        # in-plane only; slices (z) untouched
+        return np.asarray(_zoom(vol, (1.0, scale_factor, scale_factor), order=0))
 
     @staticmethod
-    def load(path: str | Path):
+    def load(path: str | Path) -> pv.DataSet:
         """Read a Rodero mesh (pyvista); sets the region tag active for thresholding. Prefers a sibling
         BINARY .vtu (4.5x faster load than ASCII .vtk: ~0.9s vs ~4.1s) if present — see convert_binary."""
         p = Path(path)
         vtu = p.with_suffix(".vtu")
         try:
             m = pv.read(str(vtu if (p.suffix == ".vtk" and vtu.exists()) else p))
+            if not isinstance(m, pv.DataSet):
+                raise MeshError(f"expected a single-mesh dataset from {p}, got {type(m).__name__}")
             m.set_active_scalars(Anatomy._tag_name(m), preference="cell")
         except (OSError, ValueError, KeyError, RuntimeError) as e:
             # pyvista read/parse failures (missing/corrupt file, no region tag) surface as these — wrap as
@@ -292,7 +295,7 @@ class Anatomy:
     @staticmethod
     @shapecheck
     def build_pathology_pool(pool: Integer[np.ndarray, "n h w"], out_path: str | Path,
-                             cfg: PathologyPoolCfg | None = None) -> tuple[Path, tuple]:
+                             cfg: PathologyPoolCfg | None = None) -> tuple[Path, tuple[int, ...]]:
         """Turn a healthy label pool into a PATHOLOGY pool: per slice emit DCM (LV cavity dilated ~U[k_dcm]),
         HCM (eroded ~U[k_hcm]), and abnormal-RV (RV grown ~U[rv]) variants (topology-safe pathology_deform).
         The composite source covering the DCM/HCM/RV tail the SSM misses (bd vpn5/uch6)."""
@@ -309,7 +312,7 @@ class Anatomy:
         return out_path, pool_array.shape
 
     @staticmethod
-    def _pool_worker(args) -> list[np.ndarray]:
+    def _pool_worker(args: tuple[str, float, int, int, int, float, int]) -> list[np.ndarray]:
         """One mesh -> its fit_square'd SAX label slices (the per-mesh unit of build_pool, run in a worker
         process). Seeded per-mesh (seed+index) so the pool is deterministic regardless of finish order."""
         mesh_path, inplane, size, min_fg, scale_reps, min_cav_frac, mesh_seed = args
@@ -338,7 +341,7 @@ class Anatomy:
 
     @staticmethod
     def build_pool(mesh_dir: str | Path, out_path: str | Path,
-                   cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple]:
+                   cfg: PoolBuildCfg | None = None) -> tuple[Path, tuple[int, ...]]:
         """Voxelize every *.vtk in `mesh_dir` -> scale-match to real -> SAX slices -> fit_square to `cfg.size`
         -> stacked label pool, saved to `out_path` (npz 'slices' [N,size,size] uint8). The synthetic-
         ANATOMY training pool: label maps only (the physics painter adds contrast per batch). Near-empty
@@ -376,7 +379,7 @@ class Anatomy:
         return np.load(str(path))["slices"]
 
     @staticmethod
-    def _cmd_view(args) -> None:  # pragma: no cover
+    def _cmd_view(args: argparse.Namespace) -> None:  # pragma: no cover
         """Voxelize one Rodero mesh -> SAX label volume; save a mid-slice montage to eyeball the chambers."""
         vol = Anatomy.voxelize(Anatomy.load(args.mesh), inplane=args.inplane)
         counts = {int(label): int((vol == label).sum()) for label in np.unique(vol)}
@@ -391,26 +394,26 @@ class Anatomy:
         log.info(f"wrote {out}  (slices {slice_indices})")
 
     @staticmethod
-    def _cmd_build_pool(args) -> None:  # pragma: no cover
+    def _cmd_build_pool(args: argparse.Namespace) -> None:  # pragma: no cover
         """Build the healthy SSM anatomy pool from a mesh dir (the ad-hoc REPL build, now committed)."""
         cfg = PoolBuildCfg(size=args.size, scale_reps=args.scale_reps, workers=args.workers)
         out_path, shape = Anatomy.build_pool(args.mesh_dir, args.out, cfg)
         log.info(f"wrote pool {out_path}  shape {shape}")
 
     @staticmethod
-    def _cmd_build_pathology_pool(args) -> None:  # pragma: no cover
+    def _cmd_build_pathology_pool(args: argparse.Namespace) -> None:  # pragma: no cover
         """Build the DCM/HCM/abnormal-RV pathology pool from a healthy pool npz."""
         out_path, shape = Anatomy.build_pathology_pool(Anatomy.load_pool(args.pool), args.out)
         log.info(f"wrote pathology pool {out_path}  shape {shape}")
 
     @staticmethod
-    def _cmd_convert_binary(args) -> None:  # pragma: no cover
+    def _cmd_convert_binary(args: argparse.Namespace) -> None:  # pragma: no cover
         """One-time: write a binary .vtu beside every ASCII .vtk (faster load)."""
         n = Anatomy.convert_binary(args.mesh_dir, args.workers)
         log.info(f"converted {n} meshes under {args.mesh_dir}")
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         sub = ap.add_subparsers(dest="cmd", required=True)
 
         v = sub.add_parser("view", help="voxelize one mesh -> SAX label montage PNG")
@@ -434,7 +437,7 @@ class Anatomy:
         cb.add_argument("--workers", type=int, default=0)
 
     @classmethod
-    def run(cls, args):  # pragma: no cover
+    def run(cls, args: argparse.Namespace) -> None:  # pragma: no cover
         {"view": cls._cmd_view, "build-pool": cls._cmd_build_pool,
          "build-pathology-pool": cls._cmd_build_pathology_pool,
          "convert-binary": cls._cmd_convert_binary}[args.cmd](args)

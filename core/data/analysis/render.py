@@ -4,6 +4,7 @@ blobs, cartoon backgrounds, blood-too-bright). Saves a PNG grid. Companion to sy
 and sim2real (per-vendor fit)."""
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -39,12 +40,12 @@ class Render:
         meta = store.load_cfg(data_cfg, workers=4)              # ALL preprocessing params (nyul/norm too)
         # held-out real slices (coded split's val if set)
         val_split = splits.ModelSplit(data_cfg, meta).val
-        X, Y = ACDCSliceDataset.load_to_gpu(splits.Splits.paths(val_split), data_cfg.size, "cpu")
+        X, Y, *_ = ACDCSliceDataset.load_to_gpu([p for p in splits.Splits.paths(val_split)], data_cfg.size, "cpu")
         all_class_slices = [i for i in range(Y.shape[0]) if set(Y[i].unique().tolist()) >= set(range(1, n))][:k]
         X, Y = X[all_class_slices], Y[all_class_slices]
-        torch.manual_seed(1); synth_flat, _ = SynthPainter.synthesize_from_labels(
+        torch.manual_seed(1); synth_flat, *_ = SynthPainter.synthesize_from_labels(
             Y, SynthCfg(synth_p=1.0, deform=0.0, bg=FlatBgCfg()), n)
-        torch.manual_seed(2); synth_partition, _ = SynthPainter.synthesize_from_labels(
+        torch.manual_seed(2); synth_partition, *_ = SynthPainter.synthesize_from_labels(
             Y, SynthCfg(synth_p=1.0, deform=0.0, bg=PartitionBgCfg()), n, real_img=X)
 
         rows = [("real", X[:, 0]), ("mask", Y.float()), ("synth flat", synth_flat[:, 0]),
@@ -67,9 +68,9 @@ class Render:
 
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         pass
 
     @staticmethod
-    def run(args):  # pragma: no cover
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
         Render.render_synth_vs_real()

@@ -14,19 +14,24 @@ looks up); train.py applies it to the generator cfg before building the engine.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import torch
 
 from core.data.dynamic import anatomy as _anatomy
 from core.data.dynamic.generator import CompositeGenerator, Generator
 from core.data.dynamic.synth import AnyBgCfg, ProceduralBgCfg
-from core.data.ingest.source import Source
+from core.data.ingest.source import StaticSource
+
+if TYPE_CHECKING:
+    from core.data.dynamic.generator import GeneratorCfg
 
 
 class DynamicSource:
     kind = "dynamic"
 
     def __init__(self, pool: str, bg: AnyBgCfg | None = None, synth_p: float = 1.0,  # noqa: PLR0913
-                 seed: Source | None = None, note: str = "", cap: int | None = None):
+                 seed: StaticSource | None = None, note: str = "", cap: int | None = None):
         self.pool = str(pool)
         self.bg = bg or ProceduralBgCfg()      # whole-FOV synthetic organ field (zero-real goalpost, bd bwp)
         self.synth_p = synth_p
@@ -53,7 +58,7 @@ class DynamicSource:
                         torch.ones(Ys.shape[0], dtype=torch.bool, device=device)])
         return X, Y, fs
 
-    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+    def train_gen(self, size: int, device: str, gen_cfg: GeneratorCfg, n_classes: int) -> Generator:
         """The source's own batch engine. The painter (bg_mode) + synth fraction ride on a COPY of the
         generator cfg — no global mutation. force_synth is internal (never in the public interface)."""
         X, Y, fs = self._resident(size, device)
@@ -61,7 +66,7 @@ class DynamicSource:
         cfg = gen_cfg.model_copy(update={"synth": synth})
         return Generator(cfg, X, Y, n_classes, device, force_synth=fs)
 
-    def provenance(self) -> dict:
+    def provenance(self) -> dict[str, object]:
         return {"kind": self.kind, "pool": self.pool, "cap": self.cap, "bg": self.bg.mode,
                 "synth_p": self.synth_p, "note": self._note,
                 "seed": (self.seed.provenance() if self.seed else None)}
@@ -76,15 +81,15 @@ class CompositeSource:
 
     kind = "composite"
 
-    def __init__(self, sources, note: str = ""):
+    def __init__(self, sources: list[DynamicSource], note: str = "") -> None:
         self.sources = tuple(sources)
         if not self.sources:
             raise ValueError("CompositeSource needs at least one source")
         self._note = note
 
-    def train_gen(self, size: int, device: str, gen_cfg, n_classes: int):
+    def train_gen(self, size: int, device: str, gen_cfg: GeneratorCfg, n_classes: int) -> CompositeGenerator:
         return CompositeGenerator([s.train_gen(size, device, gen_cfg, n_classes) for s in self.sources])
 
-    def provenance(self) -> dict:
+    def provenance(self) -> dict[str, object]:
         return {"kind": self.kind, "note": self._note,
                 "sources": [s.provenance() for s in self.sources]}

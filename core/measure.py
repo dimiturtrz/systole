@@ -8,6 +8,7 @@ Shapes: masks are [D, H, W] integer label maps; spacing is (z, y, x) mm. See
 cardioseg/types.py for the convention.
 """
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Integer
@@ -63,7 +64,7 @@ class Measure:
     @staticmethod
     def voxel_volume_ml(spacing: Spacing) -> float:
         """mm^3 per voxel -> mL (1 mL = 1000 mm^3). spacing = (z, y, x) mm."""
-        return float(np.prod(spacing)) / 1000.0
+        return float(np.prod(np.asarray(spacing, dtype=float))) / 1000.0
 
     @staticmethod
     @shapecheck
@@ -82,7 +83,7 @@ class Measure:
         return float(np.asarray(prob).sum()) * Measure.voxel_volume_ml(spacing)
 
     @staticmethod
-    def ef_statistics(ef_gt, ef_pred) -> AgreementStats:
+    def ef_statistics(ef_gt: Any, ef_pred: Any) -> AgreementStats:
         """Bland–Altman EF agreement over paired EF arrays (percent). Single source for the
         bias / SD / MAE / 95% limits-of-agreement quadruple that eval + results otherwise recompute
         (with drifting ddof / NaN handling). NaN pairs (EDV<=0 -> undefined EF) are dropped first.
@@ -102,7 +103,7 @@ class Measure:
                               [bias - LOA_Z * sd, bias + LOA_Z * sd], float(g.mean()))
 
     @staticmethod
-    def bootstrap_ef_ci(ef_gt, ef_pred, *, n_boot: int = _N_BOOT, seed: int = 0,
+    def bootstrap_ef_ci(ef_gt: Any, ef_pred: Any, *, n_boot: int = _N_BOOT, seed: int = 0,
                         ci: float = _CI) -> "EfInterval":
         """Percentile bootstrap 95% CI for EF-agreement MAE + bias over paired EF arrays (percent).
         Resamples the (gt, pred) PAIRS with replacement n_boot times; each draw's MAE/bias forms the
@@ -127,7 +128,7 @@ class Measure:
                           pt.bias, [float(np.percentile(biases, lo)), float(np.percentile(biases, hi))])
 
     @staticmethod
-    def fit_ef_calibration(ef_gt, ef_pred) -> EfCalibration:
+    def fit_ef_calibration(ef_gt: Any, ef_pred: Any) -> EfCalibration:
         """Least-squares linear fit ef_gt ~ slope * ef_pred + intercept over paired EF arrays (percent).
         NaN pairs (undefined EF) dropped. Selection axis: fit on VAL, apply once to TEST (leak rule).
         Degenerate (<2 pairs or no spread in ef_pred) -> identity, so a bad axis never distorts EF."""

@@ -19,6 +19,14 @@ repos:
         always_run: true
         verbose: true
 
+      - id: pyrefly-gate
+        name: pyrefly — types (strict, enforced)
+        # env-aware (`uv run --with`) so pyrefly reads installed dep stubs; scope = lint_paths (packages).
+        entry: uv run --with pyrefly==1.1.1 pyrefly check core cardioseg cardioview tests
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: vulture-gate
         name: vulture — dead code (conf>=80)
         entry: uvx vulture@2.16 --min-confidence 80

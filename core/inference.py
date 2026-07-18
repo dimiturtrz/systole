@@ -5,6 +5,8 @@ and the viewer (cardioview). Pure: model + array in, prediction out; no data-sto
 `tta=True` averages the 4 in-plane flips; predict_volume_members keeps the per-flip stack as a cheap
 K-member ensemble for the aleatoric/epistemic (BALD) split.
 """
+from typing import Any
+
 import numpy as np
 import torch
 from jaxtyping import Float, UInt8
@@ -12,7 +14,7 @@ from jaxtyping import Float, UInt8
 from core.preprocessing.preprocess import Preprocess
 from core.types import shapecheck
 
-_FLIPS = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
+_FLIPS: tuple[list[int], ...] = ([], [2], [3], [2, 3])  # the 4 in-plane flips TTA averages over (identity, H, W, HW)
 
 
 class Inference:
@@ -24,7 +26,7 @@ class Inference:
     but out-competed by background at argmax on small apical slices; bd nttu.5/nttu.7) without retraining.
     Val-fit, applied post-hoc — a labelled prior like the EF calibration (tb58), NOT a physics claim."""
 
-    def __init__(self, model, size: int, device: str, logit_bias=None):
+    def __init__(self, model: torch.nn.Module, size: int, device: str, logit_bias: Any = None):
         self.model, self.size, self.device = model, size, device
         self.logit_bias = (
             torch.as_tensor(logit_bias, dtype=torch.float32, device=device).reshape(1, -1, 1, 1)

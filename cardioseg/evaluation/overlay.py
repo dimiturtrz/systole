@@ -6,8 +6,10 @@ ED slice, chambers colored (RV blue / myo green / LV-cav red). Uses the exact sh
 
     uv run python -m cardioseg.evaluation.overlay --run runs/gen
 """
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 import numpy as np
@@ -29,7 +31,7 @@ from core.model import Model
 from core.postprocess import Postprocess
 from core.preprocessing.preprocess import Preprocess
 from core.registry import Registry
-from core.types import shapecheck
+from core.types import Spacing, shapecheck
 
 log = logging.getLogger("cardioseg.overlay")
 
@@ -55,7 +57,7 @@ class Overlay:
         return int(np.argmax([(s > 0).sum() for s in gt_vol]))
 
     @staticmethod
-    def pick_hero_cases(cases: list[dict]) -> tuple[dict, dict]:
+    def pick_hero_cases(cases: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
         """Choose the two overlay rows from scored cases (each dict has group + ef_gt/ef_pred): the
         lowest-EF-error clean case (DCM/NOR/MINF) and the WORST-EF HCM case (the honest failure). Each case
         gains an `ef_err` key. Pure selection — no model, no plot; the picture-choosing policy, testable."""
@@ -66,16 +68,17 @@ class Overlay:
         return clean, hcm
 
     @staticmethod
-    def _panel(ax, img, mask, title):  # pragma: no cover  (matplotlib imshow render)
+    def _panel(ax: Any, img: Any, mask: Any, title: str) -> None:  # pragma: no cover  (matplotlib imshow render)
         ax.imshow(img, cmap="gray")
         ax.imshow(mask, cmap=Overlay._CMAP, vmin=0, vmax=3, interpolation="nearest")
         ax.set_title(title, fontsize=11)
         ax.axis("off")
 
     @staticmethod
-    def _case(model, path, size, device):
+    def _case(model: Any, path: str | Path, size: int, device: str) -> dict[str, Any]:
         case = load_arrays(path)
-        spacing = tuple(float(s) for s in case["spacing"])
+        spc = np.asarray(case["spacing"], dtype=float)
+        spacing: Spacing = (spc[0], spc[1], spc[2])
         inf = Inference(model, size, device)
         pred_ed = Postprocess.largest_cc_per_class(inf.predict_volume(case["ed_img"], tta=True))
         pred_es = Postprocess.largest_cc_per_class(inf.predict_volume(case["es_img"], tta=True))
@@ -89,12 +92,12 @@ class Overlay:
                 "ef_gt": ef_g, "ef_pred": ef_p, "name": Path(path).stem}
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF)
         ap.add_argument("--out", default="cardioseg/docs/media/seg_overlay.png")
 
     @staticmethod
-    def run(args):  # pragma: no cover  (loads the model + GPU inference over ACDC + matplotlib savefig)
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover  (model load + GPU inference + savefig)
         run = Registry.resolve(args.run)
         cfg = Hparams.from_json(run / "config.json")
         device = "cuda" if torch.cuda.is_available() else "cpu"

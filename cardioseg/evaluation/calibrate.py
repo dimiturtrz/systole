@@ -10,6 +10,7 @@ not the unseen-vendor test — i.e. post-hoc calibration is itself domain-shift-
 
     python -m cardioseg.evaluation.calibrate --run runs/gen
 """
+import argparse
 import json
 import logging
 
@@ -69,13 +70,16 @@ class Calibrate:
         return Uncertainty.ece(confidence, (pred == labels).astype(float))[0]
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF)
 
     @staticmethod
-    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
         run = Registry.resolve(args.run)
         model, cfg, device = Run.load_run(run)
+        if cfg is None:
+            raise ValueError("run has no saved config.json (cfg=None) — cannot calibrate")
         data_cfg = cfg.generator.data
         meta = store.load_cfg(data_cfg).filter(pl.col("labelled"))   # all preprocessing params (nyul/norm too)
         if data_cfg.split:                                    # coded split -> its resolved val/test

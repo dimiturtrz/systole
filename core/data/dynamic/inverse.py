@@ -26,9 +26,11 @@ varied-flip/TR (qMRI) input, which ACDC/M&M don't provide.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import math
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 import torch
@@ -41,6 +43,27 @@ from .mri_physics import MriPhysics
 log = logging.getLogger("cardioseg.inverse")
 
 
+class TissueFit(TypedDict):
+    """Result of `fit_tissue`: per-class tissue contrast + shared acquisition + the identifiability margin."""
+    t1: list[float]
+    t2: list[float]
+    pd: list[float]
+    flip: float
+    recon_loss: float
+    margin: float
+    recon: torch.Tensor
+    k: int
+
+
+class AcqFit(TypedDict):
+    """Result of `fit_acquisition`: the recovered acquisition θ, final recon loss, and the recon image."""
+    tr: float
+    flip: float
+    recon_loss: float
+    fit_params: tuple[str, ...]
+    recon: torch.Tensor
+
+
 class Inverse:
     """The FIT operator as a namespace: differentiable heart render + acquisition fit (bd ncph/ixea)."""
 
@@ -48,7 +71,7 @@ class Inverse:
     def render_heart(  # noqa: PLR0913  physics params (independent scalars)
         seg: Integer[torch.Tensor, "*b *grid"], tr: Float[torch.Tensor, "*b 1"],
         flip_deg: Float[torch.Tensor, "*b 1"], n_classes: int,
-        field: float, device,
+        field: float, device: str,
     ) -> Float[torch.Tensor, "*b 1 *h *w"]:
         """Deterministic, differentiable bSSFP paint of the HEART classes (bg=0, excluded from any loss).
         seg [B,H,W] long; tr/flip_deg [B,1]; -> signal [B,1,H,W]. Tissue T1/T2/PD at literature values
@@ -75,7 +98,9 @@ class Inverse:
         return (oh * mu[:, :, None, None]).sum(1, keepdim=True)
 
     @staticmethod
-    def _recon_set(segs, t1, t2, pd, tr, flip):  # noqa: PLR0913
+    def _recon_set(segs: Integer[torch.Tensor, "k *h *w"], t1: Float[torch.Tensor, "n"],  # noqa: PLR0913
+                   t2: Float[torch.Tensor, "n"], pd: Float[torch.Tensor, "n"], tr: Float[torch.Tensor, "1"],
+                   flip: Float[torch.Tensor, "1"]) -> Float[torch.Tensor, "k 1 *h *w"]:
         """Per-frame differentiable render of a same-session set with shared tissue+acquisition params."""
         return torch.cat([Inverse.render_heart_params(segs[k:k + 1], t1, t2, pd, tr, flip)
                           for k in range(segs.shape[0])])
@@ -83,7 +108,7 @@ class Inverse:
     @staticmethod
     def fit_tissue(imgs: Float[torch.Tensor, "k 1 *h *w"], segs: Integer[torch.Tensor, "k *h *w"],  # noqa: PLR0913
                    n_classes: int, field: float = 1.5, *, absolute: bool = False, prior_w: float = 1.0,
-                   steps: int = 600, lr: float = 0.02, device: str = "cpu") -> dict:
+                   steps: int = 600, lr: float = 0.02, device: str = "cpu") -> TissueFit:
         """FIT per-class tissue CONTRAST (T2 + relative PD) + shared flip to a same-session frame SET (bd
         5ev5). `absolute` is the identifiability switch: True = calibrated levels (loss on raw signal, the
         5ev5 shared-absolute-scale regime where the 2 heart levels are 2 constraints → params recoverable);
@@ -130,7 +155,7 @@ class Inverse:
         n_classes: int, field: float = 1.5,
         fit_params: tuple[str, ...] = ("flip",), tr0: float = 3.0, flip0: float = 50.0,
         steps: int = 400, lr: float = 0.5, device: str = "cpu",
-    ) -> dict:
+    ) -> AcqFit:
         """FIT the acquisition θ (subset in `fit_params`, default flip only = identifiable) to ONE real scan
         given its seg, by Adam on MSE of the standardized heart-region render vs real. real_img [B,1,H,W]
         z-scored; seg [B,H,W]. Returns fitted tr/flip (deg), final recon loss, and the recon image."""
@@ -162,7 +187,7 @@ class Inverse:
                 "fit_params": fit_params, "recon": recon.detach()}
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--npz", required=True, help="processed ACDC case npz (ed_img/ed_gt/...)")
         ap.add_argument("--mode", choices=("acquisition", "tissue"), default="acquisition",
                         help="acquisition=fit TR/flip (ixea); tissue=fit per-class T2/PD on the ED+ES set (5ev5)")
@@ -171,11 +196,11 @@ class Inverse:
         ap.add_argument("--out", default=None, help="montage PNG (real | recon)")
 
     @staticmethod
-    def _largest_fg(gt):
+    def _largest_fg(gt: Integer[np.ndarray, "d h w"] | Integer[np.ndarray, "h w"]) -> int:
         return int(np.argmax([(gt[i] > 0).sum() for i in range(gt.shape[0])]))
 
     @staticmethod
-    def run_tissue(args):
+    def run_tissue(args: argparse.Namespace) -> None:
         """5ev5: fit per-class tissue contrast on the same-session {ED, ES} set (shared receiver gain, joint-
         normalized). Reports the IDENTIFIABILITY MARGIN under real (uncalibrated) vs the calibrated regime —
         on uncalibrated cardiac the margin collapses to ~0 (2 heart levels + a joint affine → the prior wins)."""
@@ -195,7 +220,7 @@ class Inverse:
         log.info("  margin~0 under real = tissue params NOT identifiable from uncalibrated cardiac (bd ixea/5ev5)")
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> None:
         if args.mode == "tissue":
             Inverse.run_tissue(args)
             return
@@ -218,7 +243,7 @@ class Inverse:
                  f"recon_loss={both_b['recon_loss']:.4f}")
         log.info("  (tr+flip: similar recon, different params => under-determined from one frame — bd 5ev5)")
         heart = (tg[0] > 0).numpy()
-        def show(t):
+        def show(t: torch.Tensor) -> np.ndarray:
             v = t[0, 0].numpy().copy()
             m = v[heart]
             v = (v - m.mean()) / (m.std() + 1e-6)

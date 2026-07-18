@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -19,6 +20,7 @@ from core.data.static.reference import Reference
 from core.data.static.store.build import Build as store
 from core.data.static.store.query import Recipe, Store
 from core.measure import Measure
+from core.types import Spacing
 
 log = logging.getLogger("cardioseg.reference_build")
 
@@ -34,7 +36,7 @@ class ReferenceBuild:
     every number to a cohort" path)."""
 
     @staticmethod
-    def _range_entry(vals, based_on: str) -> dict:
+    def _range_entry(vals: Any, based_on: str) -> dict[str, Any]:
         """A provenance leaf for a derived [p5, p95] range. verified=true: it's reproducible from the
         cohort (not an unchecked external fact)."""
         a = np.asarray([v for v in vals if v is not None and np.isfinite(v)], float)
@@ -46,7 +48,7 @@ class ReferenceBuild:
         }
 
     @staticmethod
-    def build_from_store(sources=None, inplane: float | None = None, out_dir: str | Path | None = None) -> Path:
+    def build_from_store(sources: Any = None, inplane: float | None = None, out_dir: str | Path | None = None) -> Path:
         """Derive EF / EDV / ESV reference ranges per pathology from the store's GROUND-TRUTH masks and
         write `<data>/reference/derived.yaml`. Each entry's `based_on` records the exact cohort (paramkey,
         pathology, n, datasets) so a scarce-data reference traces back to what produced it.
@@ -56,20 +58,21 @@ class ReferenceBuild:
         df = store.load(sources, Recipe(inplane=inplane)).filter(pl.col("labelled"))
         paramkey = Store(Recipe(inplane=inplane)).param_key()
         # per-case EF/EDV/ESV from GT, grouped by pathology
-        by_path: dict[str, dict[str, list]] = {}
-        datasets: dict[str, set] = {}
+        by_path: dict[str, dict[str, list[Any]]] = {}
+        datasets: dict[str, set[str]] = {}
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
             if "ed_gt" not in case or "es_gt" not in case:
                 continue
-            sp = tuple(float(s) for s in case["spacing"])
+            z, y, x = case["spacing"]
+            sp: Spacing = (z, y, x)
             ef, edv, esv = Measure.ejection_fraction(case["ed_gt"], case["es_gt"], sp)
             path = (r.get("pathology") or "unknown")
             g = by_path.setdefault(path, {"ef": [], "edv": [], "esv": []})
             g["ef"].append(ef); g["edv"].append(edv); g["esv"].append(esv)
-            datasets.setdefault(path, set()).add(r.get("dataset"))
+            datasets.setdefault(path, set()).add(r["dataset"])
 
-        out: dict = {"ef_by_pathology": {}, "volumes": {}}
+        out: dict[str, Any] = {"ef_by_pathology": {}, "volumes": {}}
         for path, g in sorted(by_path.items()):
             ds = sorted(d for d in datasets[path] if d)
             base = f"processed/{paramkey} GT, pathology={path}, n={len(g['ef'])}, datasets={ds}"
@@ -97,7 +100,7 @@ class ReferenceBuild:
         return path_out
 
     @staticmethod
-    def _level_entry(vals, based_on: str) -> dict:
+    def _level_entry(vals: Any, based_on: str) -> dict[str, Any]:
         """Provenance leaf for a measured per-vendor per-class intensity level (z-units): mean + [p5,p95]
         spread + n. verified=true — computed from the cohort's real images, reproducible."""
         a = np.asarray(vals, float)
@@ -109,7 +112,7 @@ class ReferenceBuild:
         }
 
     @staticmethod
-    def build_real_levels(sources=None, inplane: float | None = None, per_case: int = 400,
+    def build_real_levels(sources: Any = None, inplane: float | None = None, per_case: int = 400,
                           out_dir: str | Path | None = None) -> Path:
         """Derive per-vendor per-class REAL intensity levels (z-units) from the store's images and write
         `<data>/reference/real_levels.yaml`. This is the empirical target the synthetic generator's blood
@@ -124,7 +127,7 @@ class ReferenceBuild:
         names = {0: "bg", **{lbl: nm for lbl, (nm, _) in CLASSES.items()}}
         rng = np.random.RandomState(0)
         # vendor -> class label -> list of sampled pixel z-values
-        acc: dict[str, dict[int, list]] = {}
+        acc: dict[str, dict[int, list[Any]]] = {}
         counts: dict[str, int] = {}
         for r in df.iter_rows(named=True):
             v = r.get("vendor") or "unknown"
@@ -144,7 +147,7 @@ class ReferenceBuild:
                         per_cls.setdefault(lbl, []).extend(px.tolist())
             counts[v] = counts.get(v, 0) + 1
 
-        out: dict = {"real_class_levels": {}}
+        out: dict[str, Any] = {"real_class_levels": {}}
         for v, per_cls in sorted(acc.items()):
             base = f"processed/{paramkey}, vendor={v}, n_cases={counts[v]}"
             out["real_class_levels"][v] = {names[lbl]: ReferenceBuild._level_entry(px, base)
@@ -177,7 +180,7 @@ class ReferenceBuild:
                f"({SAR_FLIP_CAP[1.5]:.0f}@1.5T/{SAR_FLIP_CAP[3.0]:.0f}@3T, PubMed 26509846); "
                f"TR=mid{TR_RANGE_MS}ms, TE=TR/2")
         based = "core.data.dynamic.mri_physics.derive_acquisition (reproducible)"
-        def leaf(v):
+        def leaf(v: float) -> dict[str, Any]:
             return {"value": round(v, 3), "source": src, "based_on": based,
                     "extracted_by": "computed", "verified": True}
         # flip is field-driven (same across vendors); per-vendor blocks are override slots for future
@@ -199,7 +202,7 @@ class ReferenceBuild:
         return path_out
 
     @staticmethod
-    def _mode_acquisition(args):
+    def _mode_acquisition(args: Any) -> None:
         p = ReferenceBuild.build_acquisition()
         log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
@@ -209,7 +212,7 @@ class ReferenceBuild:
             log.info(f"  {v:8} TR {tr15} TE {te15}  flip {f15}@1.5T / {f30}@3T")
 
     @staticmethod
-    def _mode_build(args):
+    def _mode_build(args: Any) -> None:
         p = ReferenceBuild.build_from_store(sources=args.sources)
         log.info(f"wrote {p}")
         ef = Reference().provenance("normal_ranges", "ef_normal")
@@ -217,18 +220,18 @@ class ReferenceBuild:
             log.info(f"  normal EF (p5-p95): {ef['value']}%  (n={ef['n']}, {ef['based_on']})")
 
     @staticmethod
-    def _mode_real_levels(args):
+    def _mode_real_levels(args: Any) -> None:
         p = ReferenceBuild.build_real_levels(sources=args.sources)
         log.info(f"wrote {p}")
         ref = Reference(root=p.parent)
         for v in _VENDORS:
             cav = ref.provenance("real_class_levels", v, "LV-cav")
             rv = ref.provenance("real_class_levels", v, "RV")
-            if cav:
+            if cav and rv:
                 log.info(f"  {v:8} LV-cav {cav['value']:+.2f}  RV {rv['value']:+.2f}  (n_cases in based_on)")
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: Any) -> None:
         ap.add_argument("--build", action="store_true",
                         help="compute + write <data>/reference/derived.yaml (EF/volume ranges)")
         ap.add_argument("--real-levels", action="store_true", dest="real_levels",
@@ -238,7 +241,7 @@ class ReferenceBuild:
         ap.add_argument("--sources", nargs="*", default=None)
 
     @classmethod
-    def run(cls, args):
+    def run(cls, args: Any) -> None:
         # flag -> handler; add a mode by adding a row, not an elif
         modes = {"acquisition": cls._mode_acquisition, "build": cls._mode_build,
                  "real_levels": cls._mode_real_levels}

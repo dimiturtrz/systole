@@ -11,16 +11,19 @@
 MC-dropout was tried (cardiac-seg-bp4) but dropout regressed EF ~2pp with no Dice gain, so the
 flagship has no dropout; TTA-variance is the no-cost uncertainty signal instead.
 """
+import argparse
 import itertools
 import json
 import logging
 from pathlib import Path
+from typing import Any, Callable
 
 import matplotlib as mpl
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from jaxtyping import Bool, Float, Integer
 from scipy.ndimage import binary_erosion
 from sklearn.metrics import average_precision_score, roc_auc_score
@@ -48,7 +51,7 @@ class Uncertainty:
 
     @staticmethod
     @shapecheck
-    def tta_uncertainty(model, vol_img: Float[np.ndarray, "d h w"], size, device):
+    def tta_uncertainty(model: torch.nn.Module, vol_img: Float[np.ndarray, "d h w"], size: int, device: str):
         """Decompose predictive uncertainty over the 4 TTA flips (a cheap K-member ensemble).
         Returns (pred, total, conf, aleatoric, epistemic) — total/aleatoric/epistemic each [D,size,size]
         in [0,1] (normalized by log C):
@@ -75,10 +78,11 @@ class Uncertainty:
 
     @staticmethod
     @shapecheck
-    def ece(conf: Float[np.ndarray, "*n"], correct: Float[np.ndarray, "*n"], n_bins=15):
+    def ece(conf: Float[np.ndarray, "*n"], correct: Float[np.ndarray, "*n"], n_bins: int = 15):
         """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram."""
         edges = np.linspace(0, 1, n_bins + 1)
-        e, bins = 0.0, []
+        e: float = 0.0
+        bins: list[tuple[float, float, float]] = []
         for lo, hi in itertools.pairwise(edges):
             m = (conf > lo) & (conf <= hi)
             if m.sum() == 0:
@@ -93,7 +97,8 @@ class Uncertainty:
     def boundary_interior_uncertainty(pred: Integer[np.ndarray, "d h w"], ent: Float[np.ndarray, "d h w"]):
         """Per-slice mean entropy on the foreground boundary band vs the interior. Returns two lists
         (bnd means, interior means) — a slice contributes to each only where that region is non-empty."""
-        bnd_u, int_u = [], []
+        bnd_u: list[Any] = []
+        int_u: list[Any] = []
         for z in range(pred.shape[0]):
             b = Uncertainty._boundary(pred[z]); inte = (pred[z] > 0) & ~b
             if b.any(): bnd_u.append(ent[z][b].mean())
@@ -102,7 +107,16 @@ class Uncertainty:
 
     @staticmethod
     @shapecheck
-    def foreground_uncertainty(pred: Integer[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"], maps):
+    def foreground_uncertainty(
+        pred: Integer[np.ndarray, "*grid"],
+        gt: Integer[np.ndarray, "*grid"],
+        maps: tuple[
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+            Float[np.ndarray, "*grid"],
+        ],
+    ):
         """Pure per-case fold: select foreground voxels (pred>0 OR gt>0) from the per-voxel maps
         `maps = (ent, conf, ale, epi)` and return the pooled arrays (conf, correct, ent, ale, epi) +
         the scalar per-case uncertainty (mean fg entropy, 0 if empty)."""
@@ -112,12 +126,19 @@ class Uncertainty:
         return conf[fg], (pred == gt)[fg], ent[fg], ale[fg], epi[fg], score
 
     @staticmethod
-    def _collect_uncertainty(model, df, device, out, eval_name):
+    def _collect_uncertainty(model: torch.nn.Module, df: Any, device: str, out: Path, eval_name: str):
         """Per-case foreground-voxel uncertainty over ED/ES frames: TTA entropy/confidence, aleatoric/
         epistemic (BALD), boundary-vs-interior, per-case scores — plus one overlay PNG (ACDC ED only).
         Returns the pooled sample lists (confs, corrects, ents, ales, epis, bnd_u, int_u, cases) for the
         caller to aggregate."""
-        confs, corrects, ents, ales, epis, bnd_u, int_u, cases = [], [], [], [], [], [], [], []
+        confs: list[Float[np.ndarray, "..."]] = []
+        corrects: list[Bool[np.ndarray, "..."]] = []
+        ents: list[Float[np.ndarray, "..."]] = []
+        ales: list[Float[np.ndarray, "..."]] = []
+        epis: list[Float[np.ndarray, "..."]] = []
+        bnd_u: list[float] = []
+        int_u: list[float] = []
+        cases: list[dict[str, float | str]] = []
         saved = False
         for r in df.iter_rows(named=True):
             case = store.load_arrays(r["path"])
@@ -140,7 +161,10 @@ class Uncertainty:
         return confs, corrects, ents, ales, epis, bnd_u, int_u, cases
 
     @staticmethod
-    def _reliability_plot(bins, ece_val, out):  # pragma: no cover  matplotlib rendering + PNG file write
+    def _reliability_plot(
+        bins: list[tuple[float, float, float]], ece_val: float, out: Path
+    ) -> None:  # pragma: no cover
+        # matplotlib rendering + PNG file write
         """Reliability diagram (foreground confidence vs accuracy per bin) -> out/reliability.png."""
         fig, ax = plt.subplots(figsize=(4.5, 4.5))
         if bins:
@@ -153,7 +177,17 @@ class Uncertainty:
         fig.tight_layout(); fig.savefig(out / "reliability.png", dpi=110); plt.close(fig)
 
     @staticmethod
-    def _save_overlay(vol, pred, ent, z, name, path, fit_square, size, plt):  # noqa: PLR0913
+    def _save_overlay(  # noqa: PLR0913
+        vol: Float[np.ndarray, "d h w"],
+        pred: Integer[np.ndarray, "h w"],
+        ent: Float[np.ndarray, "h w"],
+        z: int,
+        name: str,
+        path: Path,
+        fit_square: Callable[..., Any],
+        size: int,
+        plt: Any,
+    ) -> None:
         img = fit_square(vol[z].astype(np.float32), size, 0.0)
         cmap = Labels.overlay_cmap()
         fig, ax = plt.subplots(1, 3, figsize=(9, 3.2))
@@ -169,12 +203,13 @@ class Uncertainty:
         fig.tight_layout(); fig.savefig(path, dpi=120); plt.close(fig)
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--run", default=FLAGSHIP_REF)
         ap.add_argument("--eval", default=Dataset.ACDC, choices=[Dataset.ACDC, "canon"])
 
     @staticmethod
-    def run(args):  # pragma: no cover  CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
+    def run(args: argparse.Namespace) -> None:  # pragma: no cover
+        # CLI entrypoint: mlflow model loading (network) + GPU + tracking + file writes
         run = Registry.resolve(args.run)
         model, _, device = Run.load_run(run)
 

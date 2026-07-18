@@ -21,7 +21,7 @@ V = pl.col
 
 class StaticMain:
     name = "static_main"
-    sources = ()                        # default seg cloud (= DataCfg.sources); no extra
+    sources: tuple[()] = ()                        # default seg cloud (= DataCfg.sources); no extra
     versions: ClassVar[dict[str, SplitDef]] = {
         "1.0.0": SplitDef(
             # unseen vendors + motion cohort (147, locked); lambda defers the global lookup (testset swap)

@@ -45,7 +45,7 @@ class Model:
             strides=tuple(cfg.strides),
             num_res_units=cfg.res_units,
             dropout=cfg.dropout,          # enables MC-dropout uncertainty at inference (iq7)
-            norm=(None if cfg.norm == "none" else cfg.norm),   # 'instance' (default) | 'batch' | 'none' (ablation)
+            norm=(None if cfg.norm == "none" else cfg.norm),  # pyrefly: ignore[bad-argument-type]  monai norm=None (no-norm ablation) is valid at runtime; the stub omits None
         )
 
     @staticmethod

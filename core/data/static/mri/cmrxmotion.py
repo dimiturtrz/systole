@@ -12,7 +12,10 @@ Labels: same flip as M&Ms (raw 1=LV-cav, 2=myo, 3=RV) -> canonical via label_map
 geometrically on P001/P010). `motion_grade` is surfaced in meta() — a new stratification axis
 the unified store grew a column for (null on the other datasets).
 """
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any, override
 
 from core.config import Config
 from core.data.static.mri.base import (
@@ -62,11 +65,13 @@ class CmrxMotionAdapter(AdapterBase, DatasetAdapter):
         gs = [g for g in gs if g]
         return max(gs) if gs else None
 
+    @override
     def cases(self) -> list[Path]:
         """List acquisition dirs (P###-n: volunteer × breathing condition)."""
         d = self._root(self.root)
         return sorted((p for p in d.glob("P[0-9][0-9][0-9]-[0-9]") if p.is_dir()), key=lambda p: p.name)
 
+    @override
     def load_ed_es(self, case: Path) -> PatientData:
         """Load ED + ES short-axis frames + canonical-remapped masks for one acquisition.
         Image is 4D with a trailing singleton -> frame=0 squeezes it; label is 3D. A frame whose
@@ -74,7 +79,7 @@ class CmrxMotionAdapter(AdapterBase, DatasetAdapter):
         case = Path(case)
         cid = case.name
 
-        def resolve(tag):
+        def resolve(tag: str) -> tuple[Path, Path, int] | None:
             gt = case / f"{cid}-{tag}-label.nii.gz"
             if not gt.exists():
                 return None                                   # severe motion: no GT -> skip frame
@@ -82,7 +87,8 @@ class CmrxMotionAdapter(AdapterBase, DatasetAdapter):
 
         return Base.load_frames(None, resolve, LABEL_MAP)          # healthy volunteers -> no pathology group
 
-    def meta(self, case: Path) -> dict:
+    @override
+    def meta(self, case: Path) -> dict[str, Any]:
         """Acquisition + the motion-grade axis — AUTO from IQA.csv (single fixed scanner)."""
         return {
             "group": None, "vendor": VENDOR, "scanner": SCANNER, "field_T": FIELD_T,

@@ -28,7 +28,7 @@ POOL = "pool_ssmfov"       # SSM x MRXCAT composite (our hearts in XCAT whole-FO
 
 class SynthFov:
     name = "synth_fov"
-    sources = ()
+    sources: tuple[()] = ()
 
     @staticmethod
     def pool(name: str) -> str:

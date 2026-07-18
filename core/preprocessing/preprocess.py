@@ -8,7 +8,9 @@ nearest-neighbour so labels stay integer (no interpolation across 0/1/2/3).
 Pure: returns arrays, no disk I/O. The consolidated store (data/store.py) calls this and owns the
 on-disk processed/<dataset>/<paramkey>/ layout + caching.
 """
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Integer, Shaped
@@ -49,7 +51,7 @@ class Preprocess:
 
     @staticmethod
     @shapecheck
-    def stack_slices(slices, size: int, pad_value: float = 0, dtype=None) -> Shaped[np.ndarray, "d s s"]:
+    def stack_slices(slices: Any, size: int, pad_value: float = 0, dtype: Any = None) -> Shaped[np.ndarray, "d s s"]:
         """fit_square each [H,W] slice to the model grid and stack -> [D, size, size]. The one-liner the
         eval modules repeat for GT/label volumes; `dtype` casts the stack (uint8/int64 label maps)."""
         out = np.stack([Preprocess.fit_square(s, size, pad_value) for s in slices])
@@ -58,7 +60,7 @@ class Preprocess:
     @staticmethod
     @shapecheck
     def blood_anchor(img: Float[np.ndarray, "*grid"], gt: Integer[np.ndarray, "*grid"],
-                     blood=(1, 3), eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
+                     blood: tuple[int, ...] = (1, 3), eps: float = ZSCORE_EPS) -> Float[np.ndarray, "*grid"]:
         """Two-point affine intensity normalization: background-air -> 0, blood pool -> 1. Composition-robust
         harmonization anchored on PHYSICAL references (air + blood, present on every scan, meaning the same
         thing) instead of z-score's FOV-sensitive mean/std. Measured to halve cross-vendor tissue-level
@@ -92,17 +94,21 @@ class Preprocess:
         zsp, ysp, xsp = spacing
         fy, fx = ysp / target_inplane, xsp / target_inplane
         order = 0 if is_mask else 1
-        out = zoom(arr, (1.0, fy, fx), order=order)
+        out = np.asarray(zoom(arr, (1.0, fy, fx), order=order))
         if is_mask:
             out = np.rint(out).astype(np.uint8)
-        new_spacing = (zsp, target_inplane, target_inplane)
+        # Spacing (tuple[Real, ...]) is sourced from a numpy array — the codebase convention for building
+        # it (cf. evaluation/*), so its elements stay Spacing-typed under strict checking.
+        sp_arr = np.asarray([zsp, target_inplane, target_inplane], dtype=np.float64)
+        new_spacing: Spacing = (sp_arr[0], sp_arr[1], sp_arr[2])
         return out, new_spacing
 
     @staticmethod
     def preprocess_case(  # noqa: PLR0913  independent preprocessing inputs
-        patient_dir: str | Path, loader, target_inplane: float = TARGET_INPLANE, *,
-        n4: bool = False, n4_params=None, nyul_standard=None, norm: str = "zscore",
-    ) -> dict:
+        patient_dir: str | Path, loader: Callable[[Path], Mapping[str, Any]], target_inplane: float = TARGET_INPLANE, *,
+        n4: bool = False, n4_params: N4Cfg | None = None, nyul_standard: Float[np.ndarray, "n"] | None = None,
+        norm: str = "zscore",
+    ) -> dict[str, Any]:
         """Load + resample + (N4) + (Nyúl) + z-score one subject's ED/ES. PURE (no disk I/O).
 
         Returns dict: ed_img, ed_gt, es_img, es_gt (each [D, H, W]), spacing (z,y,x), group, patient.

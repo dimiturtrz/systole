@@ -11,6 +11,7 @@ Ref: Lorensen & Cline (marching cubes) 1987.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -49,13 +50,13 @@ class Mesh:
         binary = Postprocess.largest_cc_binary(mask == label)
         if binary.sum() < _MIN_CHAMBER_VOXELS:
             return None
-        soft = zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1)
+        soft = np.asarray(zoom(binary.astype(np.float32), tuple(s / iso for s in spacing), order=1))
         if soft.max() < _ISO_LEVEL:
             return None
         soft = np.pad(soft, 1, mode="constant")
         verts, faces, _, _ = marching_cubes(soft, level=_ISO_LEVEL, spacing=(iso, iso, iso))
         verts = verts[:, [2, 1, 0]]                              # (z,y,x) -> (x,y,z)
-        fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel()
+        fp = np.hstack([np.full((len(faces), 1), 3), faces]).astype(np.int64).ravel().tolist()
         mesh = pv.PolyData(verts, fp).smooth_taubin(n_iter=24, pass_band=0.05)
         if decimate:
             mesh = mesh.decimate(decimate)
@@ -91,8 +92,9 @@ class Mesh:
 
     @staticmethod
     @shapecheck
-    def export_meshes(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, subject: str, formats=("glb", "stl"),  # noqa: PLR0913  independent mesh-export inputs
-                      iso: float = MESH_MM, root: str | Path | None = None) -> Path:
+    def export_meshes(mask: Integer[np.ndarray, "d h w"], spacing: Spacing, subject: str,  # noqa: PLR0913  independent mesh-export inputs
+                      formats: tuple[str, ...] = ("glb", "stl"), iso: float = MESH_MM,
+                      root: str | Path | None = None) -> Path:
         """Write chamber meshes for one subject to <data>/meshes/<subject>/ (or `root`). GLB (colored
         scene) + STL (per chamber) by default. Returns the subject dir."""
         out = Path(root or Config.data_root("meshes")) / subject
@@ -104,7 +106,7 @@ class Mesh:
         return out
 
     @staticmethod
-    def add_args(ap):
+    def add_args(ap: argparse.ArgumentParser) -> None:
         ap.add_argument("--npz", required=True, help="consolidated subject npz (has ed_gt/es_gt + spacing)")
         ap.add_argument("--frame", default=Phase.ED, type=Phase, choices=list(Phase))
         ap.add_argument("--subject", default=None, help="output stem (default: npz filename)")
@@ -112,9 +114,10 @@ class Mesh:
         ap.add_argument("--formats", nargs="+", default=["glb", "stl"], choices=["glb", "stl"])
 
     @staticmethod
-    def run(args):
+    def run(args: argparse.Namespace) -> None:
         z = np.load(args.npz, allow_pickle=True)
-        mask, spacing = z[f"{args.frame}_gt"], tuple(float(s) for s in z["spacing"])
+        mask, sp = z[f"{args.frame}_gt"], z["spacing"]
+        spacing: Spacing = (sp[0], sp[1], sp[2])
         subject = args.subject or Path(args.npz).stem
         out = Mesh.export_meshes(mask, spacing, subject, tuple(args.formats), root=args.out)
         log.info(f"wrote {args.formats} for {subject} -> {out}")

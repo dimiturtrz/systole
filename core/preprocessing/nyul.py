@@ -61,7 +61,7 @@ class Nyul:
         array."""
         lm = Nyul.image_landmarks(img, mask)
         lm = Nyul._dedup_monotone(lm)                              # np.interp needs strictly-increasing xp
-        return np.interp(img.astype(np.float64), lm, self.standard)
+        return np.asarray(np.interp(img.astype(np.float64), lm, self.standard))
 
     @staticmethod
     @shapecheck

@@ -5,7 +5,9 @@ recipe and delegates per-case, never importing `core.preprocessing` itself.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -25,11 +27,11 @@ class Normalizer:
     store never imports `preprocess_case` directly. The Nyúl STANDARD (a normalization axis fit to
     reference data) is fit/loaded via the staticmethods `fit_standard`/`load_standard`."""
 
-    def __init__(self, recipe: Recipe | None = None, nyul_standard=None):
+    def __init__(self, recipe: Recipe | None = None, nyul_standard: Any = None) -> None:
         self.recipe = recipe or Recipe()
         self.nyul_standard = nyul_standard
 
-    def apply_case(self, case: Path, loader) -> dict:
+    def apply_case(self, case: Path, loader: Any) -> dict[str, Any]:
         """Consolidate ONE raw case to the recipe's processed arrays (resample [+N4] [+Nyúl] + norm)."""
         r = self.recipe
         return Preprocess.preprocess_case(case, target_inplane=r.inplane, loader=loader,
@@ -54,21 +56,23 @@ class Normalizer:
         """Fit the Nyúl standard landmark scale from the cohort (resampled, pre-z-score images) and write
         it to reference/nyul.yaml with provenance. Samples up to per_dataset subjects/dataset (landmarks
         are stable). The standard is a normalization axis -> reference data, fit once, applied per case."""
-        names = SOURCE_DATASETS if names is None else names
+        selected: Sequence[str] = SOURCE_DATASETS if names is None else names
         rows = []
-        for name in names:
+        for name in selected:
             adapter = AdapterRegistry.get_adapter(name)
             for case in adapter.cases()[:per_dataset]:
                 d = adapter.load_ed_es(case)
-                if Phase.ED not in d:
+                sp = d["spacing"]
+                if Phase.ED not in d or sp is None:
                     continue
-                img, _ = Preprocess.resample_inplane(d[Phase.ED]["img"], d["spacing"], inplane, is_mask=False)
+                img, _ = Preprocess.resample_inplane(d[Phase.ED]["img"], sp, inplane, is_mask=False)
                 rows.append(Nyul.image_landmarks(img))
         std = Nyul.fit_standard(np.stack(rows))
         p = Normalizer.ref_path(); p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Nyúl standard landmark scale (harmonization qfz) — fit by Normalizer.fit_standard\n"
                      + OmegaConf.to_yaml(OmegaConf.create({"nyul": {"standard": {
                          "value": [round(float(v), 5) for v in std], "landmarks": list(LANDMARKS),
-                         "source": "computed", "based_on": f"resampled ED, {names}, per<={per_dataset}, n={len(rows)}",
+                         "source": "computed",
+                         "based_on": f"resampled ED, {selected}, per<={per_dataset}, n={len(rows)}",
                          "extracted_by": "computed", "verified": True}}})))
         return std

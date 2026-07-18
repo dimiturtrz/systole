@@ -17,6 +17,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any, Iterable, override
 
 from tqdm import tqdm
 
@@ -30,7 +31,8 @@ class _AppendHandler(logging.Handler):
         super().__init__()
         self.path = str(path)
 
-    def emit(self, record):
+    @override
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             with Path(self.path).open("a", encoding="utf-8") as f:
                 f.write(self.format(record) + "\n")
@@ -63,7 +65,7 @@ class Obs:
         return log
 
     @staticmethod
-    def progress(iterable, desc: str, total: int | None = None, every: float = 5.0):
+    def progress(iterable: Iterable[Any], desc: str, total: int | None = None, every: float = 5.0):
         """tqdm progress bar (degrades gracefully in non-tty).
         `every` = min seconds between bar refreshes so file logs stay readable."""
         return tqdm(iterable, desc=desc, total=total, mininterval=every, dynamic_ncols=True)

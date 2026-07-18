@@ -18,7 +18,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, override
 
 from cardioseg.evaluation.results import Results
 from cardioseg.training.train import Train
@@ -75,9 +75,11 @@ class DataStage(Stage):
 
     name = "data"
 
+    @override
     def is_done(self, ctx: Ctx) -> bool:
         return False
 
+    @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (store consolidation over the real data tree)
         store.load_cfg(ctx.cfg.generator.data, workers=ctx.cfg.workers)
 
@@ -88,9 +90,11 @@ class AnalysisStage(Stage):
     name = "analysis"
     deps = ("data",)
 
+    @override
     def is_done(self, ctx: Ctx) -> bool:
         return (ctx.run / "analysis.png").exists()
 
+    @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (GPU render of real-vs-synth panels)
         Render.render_synth_vs_real(out_png=ctx.run / "analysis.png")
 
@@ -101,9 +105,11 @@ class TrainStage(Stage):
     name = "train"
     deps = ("data",)
 
+    @override
     def is_done(self, ctx: Ctx) -> bool:
         return (ctx.run / "model.pth").exists()
 
+    @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (composition-root GPU training)
         Train.train_seg(ctx.cfg, alias=ctx.alias, quick=ctx.quick, seeds=ctx.seeds)
 
@@ -114,9 +120,11 @@ class EvaluateStage(Stage):
     name = "evaluate"
     deps = ("train",)
 
+    @override
     def is_done(self, ctx: Ctx) -> bool:
         return (ctx.run / "RESULTS.json").exists()
 
+    @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (GPU eval over the val/test frames)
         (ctx.run / "RESULTS.json").write_text(json.dumps(Results.build(ctx.run), indent=2))
 
@@ -128,11 +136,13 @@ class ExportStage(Stage):
     name = "export"
     deps = ("train",)
 
+    @override
     def is_done(self, ctx: Ctx) -> bool:
         return (ctx.run / "model.onnx").exists()
 
+    @override
     def run(self, ctx: Ctx) -> None:  # pragma: no cover  (torch->ONNX + INT8 parity gate)
-        ExportOnnx.export(ctx.run, ctx.val_sample())
+        ExportOnnx.export(ctx.run, Path(ctx.val_sample()))
 
 
 class Pipeline:
