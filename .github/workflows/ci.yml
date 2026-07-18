@@ -114,6 +114,12 @@ jobs:
       # metadata. Config (excludes + per-rule ignores) in [tool.deptry]. Blocks the merge.
       - name: Dependency hygiene — enforced (deptry)
         run: uv run --with deptry==0.25.1 deptry .
+      # Types — ENFORCED (pyrefly strict): every def annotated (implicit-any-parameter) + the annotations
+      # CHECK (bad-return / bad-argument-type). Runs in the synced env (`--with` adds pyrefly) so it resolves
+      # installed dep stubs (pydantic/numpy py.typed) — the R1 type-grade Correctness leg ruff can't reach.
+      # Config + tests carve-out + untyped-dep slot in [tool.pyrefly]; scope=lint_paths. Blocks the merge.
+      - name: Types — enforced (pyrefly strict)
+        run: uv run --with pyrefly==1.1.1 pyrefly check core cardioseg cardioview tests
       # Shape contracts — ENFORCED (GRADUATED advisory->blocking, bd vip.4): every public array/tensor
       # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor. A fresh gen has 0 boundaries
       # (passes); from the first typed boundary on, a bare one fails the merge — the ratchet at work. Aliases

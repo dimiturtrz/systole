@@ -288,7 +288,7 @@ Publishing to GitHub Pages — one repo = one Pages site, so pick ONE of:
   - uses: astral-sh/setup-uv@v5
   - name: Architecture view (/architecture/)
     run: |
-      uv run --no-project --with "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.14.0#subdirectory=sdlc-devtools" \
+      uv run --no-project --with "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.15.0#subdirectory=sdlc-devtools" \
         python -c "from devtools.archmap import Archmap; Archmap(['core', 'cardioseg']).write_viewer(project='cardioseg')"
       mkdir -p _site/architecture
       cp docs/architecture/graph.json docs/architecture/index.html _site/architecture/

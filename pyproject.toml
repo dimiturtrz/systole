@@ -38,7 +38,7 @@ dev = ["pytest", "pytest-cov"]
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.14.0#subdirectory=sdlc-devtools"]
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.15.0#subdirectory=sdlc-devtools"]
 nnunet = ["nnunetv2>=2.5"]   # external SOTA baseline (baselines/nnunet), own env — never a core dep
 mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 warper (external/mrxcat2); NOT a runtime dep — we consume its output masks and paint with our own engine
 # GPU lane — the ONE genuinely-optional runtime dep: LINUX-only (cupy/cucim ship no Windows wheels).
@@ -46,7 +46,14 @@ mrxcat = ["opencv-python-headless"]   # OFFLINE tooling: the vendored MRXCAT2.0 
 # on linux with `uv sync --extra gpu`.
 gpu = ["cupy-cuda13x; sys_platform == 'linux'", "cucim-cu13; sys_platform == 'linux'"]
 all = ["nnunetv2>=2.5", "opencv-python-headless", "pytest", "pytest-cov",
-       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.14.0#subdirectory=sdlc-devtools"]
+       "sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.15.0#subdirectory=sdlc-devtools"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "cardioseg*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -143,6 +150,32 @@ ignore-names = ["X*", "Y*", "B", "C", "H", "W", "T1", "T2", "TR", "PD", "F", "si
 "cardioseg/tracking.py" = ["S110", "BLE001"]  # best-effort telemetry: mlflow errors must never break training
 "tests/unit/devtools/**" = ["PLC0415"]  # template-shipped engine tests import-under-argv-monkeypatch; PLC0415 is cardiac-superset (not in base select), so upstream never lints it. Fold when scaffold moves the imports top-level.
 # <<< LOCAL-SLOT: per-file-ignores
+
+# Static type gate (pyrefly, ENFORCED): every def carries annotations (a bare param fails
+# implicit-any-parameter) AND the annotations must CHECK (a mismatch fails bad-return / bad-argument-type)
+# — the R1 type-grade Correctness leg ruff's lint codes can't reach. `preset = "strict"` bundles
+# strict-callable-subtyping + implicit-any + missing-override + unused-ignore. Runs env-aware
+# (`uv run --with pyrefly`) so it reads installed dep stubs (pydantic/numpy ship py.typed). A fresh gen's
+# seed is fully typed (0 errors), so it BLOCKS from day one as a regression guard — no advisory ratchet.
+[tool.pyrefly]
+preset = "strict"
+check-unannotated-defs = true
+search-path = ["."]
+# Untyped third-party imports ERROR by default (stricter than mypy's silent Any). A dep that ships no
+# py.typed / stubs goes here to be treated as Any — a per-repo FACT vocab, parallel to the deptry/vulture
+# slots. jaxtyping shape strings (`Float[Array, "b n"]`) are a runtime-checked DSL
+# pyrefly's front-end models only partially; if one surfaces a type error, add its module here or suppress
+# at the line with `# pyrefly: ignore[<code>]`.
+# >>> LOCAL-SLOT: pyrefly-ignore-imports — this repo's untyped-dependency modules (treated as Any)
+ignore-missing-imports = []
+# <<< LOCAL-SLOT: pyrefly-ignore-imports
+
+# Tests inject unannotated fixture params (pytest fills them) — mirror the ruff `tests/**` carve-out so the
+# strict annotation requirement doesn't force a type onto every fixture signature. Scope is packages
+# (`lint_paths`) anyway, but this keeps a bare `pyrefly check` clean too.
+[[tool.pyrefly.sub-config]]
+matches = "**/tests/**"
+check-unannotated-defs = false
 
 # Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+cardioseg+cardioview
 # (NOT tests): a prod symbol referenced solely by a test then surfaces as dead here, instead of being
@@ -241,10 +274,3 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["core*", "cardioseg*"]
