@@ -60,15 +60,25 @@ class Splits:
         return shuffled[n_val:], shuffled[:n_val]
 
     @staticmethod
+    def cap_subjects(train: pl.DataFrame, k: int, seed: int = 0) -> pl.DataFrame:
+        """Cap TRAIN to K subjects, seeded (the data-scarcity knob, bd wqmh). Split rows are one-per-
+        subject, so a seeded K-row sample is subject-disjoint and size-K by construction — never by-slice
+        (which would leak a subject across the cap). k<=0 or k>=len(train) -> unchanged (0 = use all)."""
+        if k <= 0 or k >= len(train):
+            return train
+        return train.sample(n=k, shuffle=True, seed=seed)
+
+    @staticmethod
     def make_split(meta: pl.DataFrame, test_datasets=(), test_vendors=(), val_frac: float = 0.2,  # noqa: PLR0913  low-level split primitive; config-object path is split_from_cfg(DataCfg)
-                   seed: int = 0, val_datasets=(), val_vendors=(), train_vendors=()
+                   seed: int = 0, val_datasets=(), val_vendors=(), train_vendors=(), train_subjects: int = 0
                    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         """(train, val, test) from criteria. test = rows whose dataset ∈ test_datasets OR vendor ∈
         test_vendors (+ labelled). VAL: if val_datasets/val_vendors given, val = rows matching those
         (a held-out *domain* for tuning that isn't test) — otherwise a random `val_frac` carved from
         train (in-domain). train = everything labelled that's neither test nor val. `train_vendors`
         (if given) restricts TRAIN to only those vendors — the scarce/single-vendor regime (bd 5r7n);
-        val/test unaffected."""
+        val/test unaffected. `train_subjects` (if >0) then caps TRAIN to K subjects (bd wqmh scarcity
+        sweep) — applied last so it composes with the vendor restriction; val/test unaffected."""
         test_expr = (pl.col("dataset").is_in(list(test_datasets))
                      | pl.col("vendor").is_in(list(test_vendors))) & pl.col("labelled")
         test = meta.filter(test_expr)
@@ -80,7 +90,7 @@ class Splits:
             train, val = Splits.patient_val(rest, val_frac, seed)
         if train_vendors:                                           # restrict TRAIN only (val/test intact)
             train = train.filter(pl.col("vendor").is_in(list(train_vendors)))
-        return train, val, test
+        return Splits.cap_subjects(train, train_subjects, seed), val, test
 
     @staticmethod
     def paths(df: pl.DataFrame) -> list[str]:
@@ -105,7 +115,7 @@ class ModelSplit:
         on a sources-filtered frame, so meta stays a param, not self.meta)."""
         d = self.d
         return Splits.make_split(meta, d.test_datasets, d.test_vendors, d.val_frac, seed,
-                                 d.val_datasets, d.val_vendors, d.train_vendors)
+                                 d.val_datasets, d.val_vendors, d.train_vendors, d.train_subjects)
 
     @property
     def val(self) -> pl.DataFrame:

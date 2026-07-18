@@ -74,6 +74,9 @@ class DataCfg(BaseModel):
     val_vendors: tuple[str, ...] = ()
     train_vendors: tuple[str, ...] = ()              # if set: restrict TRAIN to these vendors only (the
     #                                                scarce/single-vendor regime; val/test intact — bd 5r7n)
+    train_subjects: int = 0                           # if >0: cap TRAIN to K subjects (by-subject, seeded);
+    #                                                the data-scarcity sweep knob (bd wqmh). 0 = use all.
+    #                                                Composes with anatomy_mode=mix -> real-K + synth pool.
     inplane: float = Field(DEFAULT_INPLANE, gt=0)
     n4: bool = False
     n4_params: N4Cfg = Field(default_factory=N4Cfg)   # only applied when n4=True; recorded regardless
